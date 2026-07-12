@@ -37,7 +37,9 @@ describe('create', () => {
 
     expect(shader.id).toBe('hex-pulse');
     await expect(readFile(path.join(dir, 'meta.json'), 'utf8')).resolves.toContain('Hex Pulse');
-    await expect(readFile(path.join(dir, 'fragment.glsl'), 'utf8')).resolves.toBe(TEMPLATE_FRAGMENT);
+    await expect(readFile(path.join(dir, 'fragment.glsl'), 'utf8')).resolves.toBe(
+      TEMPLATE_FRAGMENT,
+    );
     await expect(readFile(path.join(dir, 'vertex.glsl'), 'utf8')).resolves.toBe(DEFAULT_VERTEX);
     await expect(readFile(path.join(dir, 'presets.json'), 'utf8')).resolves.toContain('presets');
   });
@@ -139,13 +141,15 @@ describe('update', () => {
   });
 
   it('re-projects presets when the schema changes', async () => {
-    const id = await storage.create({
-      name: 'Demo',
-      controls: [
-        { key: 'speed', type: 'number', default: 1, min: 0, max: 2 },
-        { key: 'gone', type: 'number', default: 5, min: 0, max: 10 },
-      ],
-    }).then((shader) => shader.id);
+    const id = await storage
+      .create({
+        name: 'Demo',
+        controls: [
+          { key: 'speed', type: 'number', default: 1, min: 0, max: 2 },
+          { key: 'gone', type: 'number', default: 5, min: 0, max: 10 },
+        ],
+      })
+      .then((shader) => shader.id);
 
     await storage.savePreset(id, { name: 'Fast', values: { speed: 2, gone: 9 } });
 
@@ -205,10 +209,12 @@ describe('remove', () => {
 
 describe('presets', () => {
   it('sanitizes the values it is given against the schema', async () => {
-    const id = await storage.create({
-      name: 'Demo',
-      controls: [{ key: 'speed', type: 'number', default: 1, min: 0, max: 2 }],
-    }).then((shader) => shader.id);
+    const id = await storage
+      .create({
+        name: 'Demo',
+        controls: [{ key: 'speed', type: 'number', default: 1, min: 0, max: 2 }],
+      })
+      .then((shader) => shader.id);
 
     const preset = await storage.savePreset(id, {
       name: 'Wild',
@@ -361,7 +367,10 @@ describe('seeding', () => {
   it('does not bring the examples back after they have been deleted', async () => {
     const examples = path.join(root, 'seed-examples', 'shaders', 'demo');
     await mkdir(examples, { recursive: true });
-    await writeFile(path.join(examples, 'meta.json'), JSON.stringify({ name: 'Seeded', controls: [] }));
+    await writeFile(
+      path.join(examples, 'meta.json'),
+      JSON.stringify({ name: 'Seeded', controls: [] }),
+    );
     await writeFile(path.join(examples, 'fragment.glsl'), FRAGMENT);
     await writeFile(path.join(examples, 'vertex.glsl'), DEFAULT_VERTEX);
 

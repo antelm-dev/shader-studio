@@ -117,8 +117,7 @@ export class EditorWindow {
     const state = this.state();
     this.preferences.patch({
       editorOpen: true,
-      editorWindow:
-        state.mode === 'minimized' ? { ...state, mode: state.restoreMode } : state,
+      editorWindow: state.mode === 'minimized' ? { ...state, mode: state.restoreMode } : state,
     });
   }
 

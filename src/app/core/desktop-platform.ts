@@ -31,7 +31,10 @@ export class DesktopPlatform {
   }
 
   /** Raw bytes for a channel's image, or `null` if the shader has nothing assigned to it. */
-  async readTexture(shaderId: string, channel: number): Promise<{ bytes: Uint8Array; ext: string } | null> {
+  async readTexture(
+    shaderId: string,
+    channel: number,
+  ): Promise<{ bytes: Uint8Array; ext: string } | null> {
     if (!this.available) return null;
     return window.electron.bridge.shader.readTexture(shaderId, channel);
   }
@@ -52,7 +55,9 @@ export class DesktopPlatform {
   }
 
   onCloseRequested(listener: () => void): () => void {
-    return this.available ? window.electron.bridge.window.onCloseRequested(listener) : () => undefined;
+    return this.available
+      ? window.electron.bridge.window.onCloseRequested(listener)
+      : () => undefined;
   }
 
   approveClose(approved: boolean): void {
@@ -82,9 +87,13 @@ export class DesktopPlatform {
   }
 
   onWindowStateChanged(listener: (state: WindowState) => void): () => void {
-    return this.available ? window.electron.bridge.window.onStateChanged(listener) : () => undefined;
+    return this.available
+      ? window.electron.bridge.window.onStateChanged(listener)
+      : () => undefined;
   }
 
   /** Keeps the import mode in the platform-neutral UI layer. */
-  mode(value: ImportMode): ImportMode { return value; }
+  mode(value: ImportMode): ImportMode {
+    return value;
+  }
 }

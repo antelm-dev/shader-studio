@@ -26,7 +26,10 @@ export class RendererHandle {
     if (!blob) return false;
 
     if (this.desktop.available) {
-      return this.desktop.savePng(`${filename}-${Date.now()}.png`, new Uint8Array(await blob.arrayBuffer()));
+      return this.desktop.savePng(
+        `${filename}-${Date.now()}.png`,
+        new Uint8Array(await blob.arrayBuffer()),
+      );
     }
 
     const url = URL.createObjectURL(blob);

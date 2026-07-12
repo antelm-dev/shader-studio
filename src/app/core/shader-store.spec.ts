@@ -246,7 +246,10 @@ describe('ShaderStore: loading', () => {
   });
 
   it('honours the remembered shader once the client takes over', async () => {
-    const { store, preferences } = setup(makeRecord(), makeRecord({ id: 'plasma', name: 'Plasma' }));
+    const { store, preferences } = setup(
+      makeRecord(),
+      makeRecord({ id: 'plasma', name: 'Plasma' }),
+    );
     preferences.patch({ lastShaderId: 'plasma' });
 
     await store.initializeClient();
@@ -315,7 +318,9 @@ describe('ShaderStore: config buffer', () => {
     const { store } = setup(makeRecord());
     await store.initialize();
 
-    store.setControlsText(JSON.stringify([{ key: 'speed', type: 'number', default: 5, min: 10, max: 0 }]));
+    store.setControlsText(
+      JSON.stringify([{ key: 'speed', type: 'number', default: 5, min: 10, max: 0 }]),
+    );
 
     expect(store.configValid()).toBe(false);
     expect(store.diagnostics().some((entry) => entry.source === 'config')).toBe(true);
@@ -345,7 +350,9 @@ describe('ShaderStore: config buffer', () => {
     await store.initialize();
     store.setParam('speed', 9);
 
-    store.setControlsText(controlsText([{ key: 'speed', type: 'number', default: 1, min: 0, max: 2 }]));
+    store.setControlsText(
+      controlsText([{ key: 'speed', type: 'number', default: 1, min: 0, max: 2 }]),
+    );
 
     expect(store.params()['speed']).toBe(2);
   });
@@ -434,7 +441,9 @@ describe('ShaderStore: saving', () => {
     const { store } = setup(makeRecord());
     await store.initialize();
 
-    store.setControlsText(controlsText([{ key: 'speed', type: 'number', default: 1, min: 0, max: 10 }]));
+    store.setControlsText(
+      controlsText([{ key: 'speed', type: 'number', default: 1, min: 0, max: 10 }]),
+    );
     store.setParam('speed', 6);
     await store.save();
 

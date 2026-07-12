@@ -109,7 +109,12 @@ export interface TextureChannel {
 }
 
 /** Always exactly four slots: iChannel0 through iChannel3. */
-export type TextureChannels = readonly [TextureChannel, TextureChannel, TextureChannel, TextureChannel];
+export type TextureChannels = readonly [
+  TextureChannel,
+  TextureChannel,
+  TextureChannel,
+  TextureChannel,
+];
 
 export const DEFAULT_TEXTURE_CHANNEL: TextureChannel = {
   ext: null,
@@ -128,7 +133,9 @@ export const DEFAULT_CHANNELS: TextureChannels = [
 ];
 
 /** Settings-only patch: never carries `ext`/`width`/`height`. */
-export type TextureChannelSettingsPatch = Partial<Pick<TextureChannel, 'wrap' | 'filter' | 'flipY'>>;
+export type TextureChannelSettingsPatch = Partial<
+  Pick<TextureChannel, 'wrap' | 'filter' | 'flipY'>
+>;
 
 /** A texture channel as it travels inside an import/export bundle: the image bytes, base64-encoded. */
 export interface TextureChannelPayload extends TextureChannel {
@@ -256,6 +263,9 @@ export function toPayload(record: ShaderRecord): ShaderPayload {
     fragment: record.fragment,
     vertex: record.vertex,
     presets: record.presets,
-    channels: record.channels.map((channel) => ({ ...channel, data: null })) as unknown as TextureChannelPayloads,
+    channels: record.channels.map((channel) => ({
+      ...channel,
+      data: null,
+    })) as unknown as TextureChannelPayloads,
   };
 }

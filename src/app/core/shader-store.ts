@@ -23,7 +23,13 @@ import {
   type TextureChannels,
   type TextureChannelSettingsPatch,
 } from '../../shared/model';
-import { defaultParams, extFromMime, LIMITS, sanitizeParams, validateControls } from '../../shared/validate';
+import {
+  defaultParams,
+  extFromMime,
+  LIMITS,
+  sanitizeParams,
+  validateControls,
+} from '../../shared/validate';
 import type { CompileDiagnostic } from './diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { ApiError, ShaderApi } from './shader-api';
@@ -88,7 +94,10 @@ export class ShaderStore {
 
   constructor() {
     this.recovery.onWarning = () =>
-      this.notice.set({ text: 'Local draft recovery is unavailable in this browser session', error: true });
+      this.notice.set({
+        text: 'Local draft recovery is unavailable in this browser session',
+        error: true,
+      });
 
     effect((onCleanup) => {
       const record = this.record();
@@ -193,9 +202,10 @@ export class ShaderStore {
     await this.refreshList();
 
     const shaders = this.shaders();
-    const requested = routeShaderId && shaders.some((shader) => shader.id === routeShaderId)
-      ? routeShaderId
-      : shaders[0]?.id;
+    const requested =
+      routeShaderId && shaders.some((shader) => shader.id === routeShaderId)
+        ? routeShaderId
+        : shaders[0]?.id;
     if (requested) await this.select(requested);
 
     if (this.isServer) {
@@ -621,7 +631,10 @@ export class ShaderStore {
     }
   }
 
-  async setChannelSettings(channel: 0 | 1 | 2 | 3, patch: TextureChannelSettingsPatch): Promise<void> {
+  async setChannelSettings(
+    channel: 0 | 1 | 2 | 3,
+    patch: TextureChannelSettingsPatch,
+  ): Promise<void> {
     const record = this.record();
     if (!record) return;
 

@@ -155,7 +155,9 @@ describe('validateControls', () => {
 
   it('rejects a key that is not a legal GLSL identifier', () => {
     expect(validateControls([{ key: '2fast', type: 'boolean', default: true }]).ok).toBe(false);
-    expect(validateControls([{ key: 'has-hyphen', type: 'boolean', default: true }]).ok).toBe(false);
+    expect(validateControls([{ key: 'has-hyphen', type: 'boolean', default: true }]).ok).toBe(
+      false,
+    );
   });
 
   it('rejects a key reserved by the engine', () => {

@@ -28,16 +28,20 @@ export class Workspace {
 
   guardedTransition(action: () => void | Promise<void>): Promise<boolean> {
     if (this.transitionInFlight) return this.transitionInFlight;
-    this.transitionInFlight = this.runGuarded(action).finally(() => (this.transitionInFlight = null));
+    this.transitionInFlight = this.runGuarded(action).finally(
+      () => (this.transitionInFlight = null),
+    );
     return this.transitionInFlight;
   }
 
   private async runGuarded(action: () => void | Promise<void>): Promise<boolean> {
     if (this.store.dirty()) {
       const choice = await firstValueFrom(
-        this.dialog.open<UnsavedChangesDialog, never, UnsavedChoice>(UnsavedChangesDialog, {
-          disableClose: true,
-        }).afterClosed(),
+        this.dialog
+          .open<UnsavedChangesDialog, never, UnsavedChoice>(UnsavedChangesDialog, {
+            disableClose: true,
+          })
+          .afterClosed(),
       );
       if (choice === 'cancel' || !choice) return false;
       if (choice === 'save' && !(await this.store.save())) return false;
@@ -55,7 +59,9 @@ export class Workspace {
   async resolveStaleRecovery(): Promise<void> {
     if (!this.store.staleRecovery()) return;
     const restore = await firstValueFrom(
-      this.dialog.open<RecoveryDialog, never, boolean>(RecoveryDialog, { disableClose: true }).afterClosed(),
+      this.dialog
+        .open<RecoveryDialog, never, boolean>(RecoveryDialog, { disableClose: true })
+        .afterClosed(),
     );
     this.store.resolveRecovery(restore === true);
   }
@@ -162,7 +168,10 @@ export class Workspace {
     try {
       const bundle = await this.store.exportAll();
       if (this.desktop.available) {
-        if (!(await this.desktop.saveBundle('shader-studio-collection.shader.json', bundle as never))) return;
+        if (
+          !(await this.desktop.saveBundle('shader-studio-collection.shader.json', bundle as never))
+        )
+          return;
       } else {
         this.download(bundle, 'shader-studio-collection.shader.json');
       }
@@ -212,7 +221,8 @@ export class Workspace {
       if (mode === 'overwrite') {
         const confirmed = await this.confirm({
           title: 'Import and replace',
-          message: 'Shaders with matching ids will be replaced, including their presets. This cannot be undone.',
+          message:
+            'Shaders with matching ids will be replaced, including their presets. This cannot be undone.',
           confirmText: 'Replace',
           destructive: true,
         });
@@ -228,7 +238,8 @@ export class Workspace {
     if (!this.desktop.available || !(await this.desktop.migrationPending())) return;
     const shouldImport = await this.confirm({
       title: 'Import an existing library?',
-      message: 'Choose an existing Shader Studio data folder, or continue with the example library.',
+      message:
+        'Choose an existing Shader Studio data folder, or continue with the example library.',
       confirmText: 'Choose folder',
     });
     if (!shouldImport) {

@@ -114,7 +114,8 @@ export class App {
     });
     afterNextRender(() => this.hintContextMenus());
 
-    this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+    this.router.events
+      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe(() => {
         if (this.routingReady) void this.applyRoute();
       });
@@ -187,7 +188,11 @@ export class App {
   private routeShaderId(): string | null {
     const match = /^\/shaders\/([^/?#]+)\/?(?:[?#].*)?$/.exec(this.router.url);
     if (!match) return null;
-    try { return decodeURIComponent(match[1]); } catch { return null; }
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return null;
+    }
   }
 
   protected toggle(key: 'editorOpen' | 'guiVisible'): void {
@@ -301,9 +306,13 @@ export class App {
     } catch {
       return;
     }
-    this.snackBar.open('Tip: right-click the preview, shaders, presets or editor bar for actions', 'Got it', {
-      duration: 6000,
-      politeness: 'polite',
-    });
+    this.snackBar.open(
+      'Tip: right-click the preview, shaders, presets or editor bar for actions',
+      'Got it',
+      {
+        duration: 6000,
+        politeness: 'polite',
+      },
+    );
   }
 }

@@ -219,9 +219,7 @@ export function sanitizeAppearance(value: unknown): EditorAppearance {
   const limits = EDITOR_LIMITS;
 
   return {
-    fontFamily: isValidFontFamily(input['fontFamily'])
-      ? input['fontFamily']
-      : defaults.fontFamily,
+    fontFamily: isValidFontFamily(input['fontFamily']) ? input['fontFamily'] : defaults.fontFamily,
     fontSize: Math.round(
       number(input['fontSize'], defaults.fontSize, limits.fontSize.min, limits.fontSize.max),
     ),
@@ -274,11 +272,7 @@ export function sanitizeWindowState(value: unknown): EditorWindowState {
       ['docked', 'floating', 'maximized', 'minimized'] as const,
       defaults.mode,
     ),
-    restoreMode: oneOf(
-      input['restoreMode'],
-      ['docked', 'floating'] as const,
-      defaults.restoreMode,
-    ),
+    restoreMode: oneOf(input['restoreMode'], ['docked', 'floating'] as const, defaults.restoreMode),
     dockedHeight: Math.round(
       number(
         input['dockedHeight'],
@@ -291,8 +285,22 @@ export function sanitizeWindowState(value: unknown): EditorWindowState {
       // Position is not clamped here: it is only meaningful against a viewport,
       // which storage knows nothing about. `clampToViewport` does that, every
       // time the workspace is measured.
-      x: Math.round(number(floating['x'], defaults.floating.x, -limits.floatingWidth.max, limits.floatingWidth.max)),
-      y: Math.round(number(floating['y'], defaults.floating.y, -limits.floatingHeight.max, limits.floatingHeight.max)),
+      x: Math.round(
+        number(
+          floating['x'],
+          defaults.floating.x,
+          -limits.floatingWidth.max,
+          limits.floatingWidth.max,
+        ),
+      ),
+      y: Math.round(
+        number(
+          floating['y'],
+          defaults.floating.y,
+          -limits.floatingHeight.max,
+          limits.floatingHeight.max,
+        ),
+      ),
       width: Math.round(
         number(
           floating['width'],

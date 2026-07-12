@@ -58,7 +58,11 @@ export class DraftRecovery {
 
   private get storage(): Storage | null {
     if (!this.browser) return null;
-    try { return this.document.defaultView?.localStorage ?? null; } catch { return null; }
+    try {
+      return this.document.defaultView?.localStorage ?? null;
+    } catch {
+      return null;
+    }
   }
 
   private empty(): DraftDocument {
@@ -76,34 +80,50 @@ export class DraftRecovery {
       }
       return { version: STORAGE_VERSION, drafts: { ...value.drafts } };
     } catch {
-      try { this.storage?.removeItem(STORAGE_KEY); } catch { /* unavailable storage */ }
+      try {
+        this.storage?.removeItem(STORAGE_KEY);
+      } catch {
+        /* unavailable storage */
+      }
       return this.empty();
     }
   }
 
   private write(value: DraftDocument): void {
     if (!this.browser) return;
-    try { this.storage?.setItem(STORAGE_KEY, JSON.stringify(value)); }
-    catch {
-      if (!this.warned) { this.warned = true; this.onWarning?.(); }
+    try {
+      this.storage?.setItem(STORAGE_KEY, JSON.stringify(value));
+    } catch {
+      if (!this.warned) {
+        this.warned = true;
+        this.onWarning?.();
+      }
     }
   }
 
   private valid(value: unknown, shaderId: string): value is RecoveredDraft {
     if (!value || typeof value !== 'object') return false;
     const draft = value as Partial<RecoveredDraft>;
-    return draft.shaderId === shaderId && typeof draft.baselineUpdatedAt === 'string' &&
-      typeof draft.draftUpdatedAt === 'string' && typeof draft.fragment === 'string' &&
-      typeof draft.vertex === 'string' && typeof draft.controlsText === 'string' &&
-      this.validRender(draft.render);
+    return (
+      draft.shaderId === shaderId &&
+      typeof draft.baselineUpdatedAt === 'string' &&
+      typeof draft.draftUpdatedAt === 'string' &&
+      typeof draft.fragment === 'string' &&
+      typeof draft.vertex === 'string' &&
+      typeof draft.controlsText === 'string' &&
+      this.validRender(draft.render)
+    );
   }
 
   private validRender(value: unknown): value is RenderSettings {
     if (!value || typeof value !== 'object') return false;
     const bloom = (value as Partial<RenderSettings>).bloom;
-    return !!bloom && typeof bloom.enabled === 'boolean' &&
+    return (
+      !!bloom &&
+      typeof bloom.enabled === 'boolean' &&
       [bloom.strength, bloom.radius, bloom.threshold].every(
         (entry) => typeof entry === 'number' && Number.isFinite(entry),
-      );
+      )
+    );
   }
 }

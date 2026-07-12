@@ -140,8 +140,18 @@ const FILTER_OPTIONS: readonly { value: TextureFilterMode; label: string }[] = [
       border: 1px dashed var(--mat-sys-outline-variant);
       border-radius: var(--mat-sys-corner-small);
       background:
-        linear-gradient(45deg, color-mix(in srgb, var(--mat-sys-surface) 92%, transparent) 25%, transparent 25%) 0 0 / 12px 12px,
-        linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--mat-sys-surface) 92%, transparent) 75%) 0 0 / 12px 12px,
+        linear-gradient(
+            45deg,
+            color-mix(in srgb, var(--mat-sys-surface) 92%, transparent) 25%,
+            transparent 25%
+          )
+          0 0 / 12px 12px,
+        linear-gradient(
+            45deg,
+            transparent 75%,
+            color-mix(in srgb, var(--mat-sys-surface) 92%, transparent) 75%
+          )
+          0 0 / 12px 12px,
         var(--mat-sys-surface-container-low);
       color: var(--mat-sys-on-surface-variant);
       cursor: pointer;
@@ -236,7 +246,9 @@ export class TexturePanel {
 
       void Promise.all(
         channels.map((channel, index) =>
-          this.textures.resolve(record.id, index, channel, record.updatedAt).then((resolved) => resolved?.url ?? null),
+          this.textures
+            .resolve(record.id, index, channel, record.updatedAt)
+            .then((resolved) => resolved?.url ?? null),
         ),
       ).then((urls) => {
         if (!cancelled) this.thumbnails.set(urls);
@@ -272,7 +284,9 @@ export class TexturePanel {
   }
 
   protected setWrap(index: ChannelIndex, event: Event): void {
-    void this.store.setChannelSettings(index, { wrap: (event.target as HTMLSelectElement).value as TextureWrapMode });
+    void this.store.setChannelSettings(index, {
+      wrap: (event.target as HTMLSelectElement).value as TextureWrapMode,
+    });
   }
 
   protected setFilter(index: ChannelIndex, event: Event): void {

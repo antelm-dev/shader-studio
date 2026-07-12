@@ -48,7 +48,12 @@ const RECOMPILE_DEBOUNCE_MS = 400;
         <span>{{ preferences.value().paused ? 'Resume' : 'Pause' }}</span>
         <span class="hint">Space</span>
       </button>
-      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="store.resetParams()">
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="!store.record()"
+        (click)="store.resetParams()"
+      >
         <mat-icon>restart_alt</mat-icon>
         <span>Reset parameters</span>
       </button>
@@ -143,7 +148,9 @@ export class ShaderCanvas {
           vertex: source.vertex,
           controls,
           params: this.store.params(),
-          render: draft?.render ?? { bloom: { enabled: false, strength: 0, radius: 0, threshold: 1 } },
+          render: draft?.render ?? {
+            bloom: { enabled: false, strength: 0, radius: 0, threshold: 1 },
+          },
           channels: this.channelSources(),
         });
         this.store.setCompileDiagnostics(diagnostics);
@@ -173,7 +180,9 @@ export class ShaderCanvas {
       });
 
       void Promise.all(
-        channels.map((channel, index) => this.textures.resolve(record.id, index, channel, record.updatedAt)),
+        channels.map((channel, index) =>
+          this.textures.resolve(record.id, index, channel, record.updatedAt),
+        ),
       ).then((resolved) => {
         if (!cancelled) this.channelSources.set(resolved);
       });
@@ -202,7 +211,9 @@ export class ShaderCanvas {
   }
 
   protected toggle(key: 'editorOpen' | 'guiVisible'): void {
-    this.preferences.patch({ [key]: !this.preferences.value()[key] } as Partial<WorkspacePreferences>);
+    this.preferences.patch({
+      [key]: !this.preferences.value()[key],
+    } as Partial<WorkspacePreferences>);
   }
 
   protected togglePause(): void {

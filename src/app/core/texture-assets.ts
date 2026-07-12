@@ -41,10 +41,17 @@ export class TextureAssets {
     return { url, wrap: meta.wrap, filter: meta.filter, flipY: meta.flipY };
   }
 
-  private urlFor(shaderId: string, channel: number, ext: string, updatedAt: string): Promise<string> {
+  private urlFor(
+    shaderId: string,
+    channel: number,
+    ext: string,
+    updatedAt: string,
+  ): Promise<string> {
     if (!this.desktop.available) {
       const bust = encodeURIComponent(updatedAt);
-      return Promise.resolve(`${this.baseUrl}/api/shaders/${shaderId}/textures/${channel}?v=${bust}`);
+      return Promise.resolve(
+        `${this.baseUrl}/api/shaders/${shaderId}/textures/${channel}?v=${bust}`,
+      );
     }
 
     const cacheKey = `${shaderId}:${channel}:${updatedAt}`;

@@ -3,9 +3,6 @@
   "version": 1,
   "cli": {
     "packageManager": "pnpm",
-    "schematicCollections": [
-      "angular-eslint"
-    ],
     "analytics": "56cc93d3-fa2e-4a94-8a1e-aebceab00ffd"
   },
   "newProjectRoot": "projects",
@@ -131,12 +128,6 @@
           "options": {
             "buildTarget": "shader-studio:build:development",
             "runner": "vitest"
-          }
-        },
-        "lint": {
-          "builder": "@angular-eslint/builder:lint",
-          "options": {
-            "lintFilePatterns": ["src/**/*.ts", "src/**/*.html"]
           }
         }
       }

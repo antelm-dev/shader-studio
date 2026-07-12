@@ -12,9 +12,9 @@ html {
   @include mat.theme(
     (
       color: (
-        primary: mat.$cyan-palette,
-        tertiary: mat.$magenta-palette,
-      ),
+          primary: mat.$cyan-palette,
+          tertiary: mat.$magenta-palette,
+        ),
       typography: Roboto,
       density: 0,
     ),

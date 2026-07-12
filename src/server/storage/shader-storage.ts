@@ -160,14 +160,21 @@ export class ShaderStorage {
     );
   }
 
-  private async copyTextures(fromDir: string, toDir: string, channels: TextureChannels): Promise<void> {
+  private async copyTextures(
+    fromDir: string,
+    toDir: string,
+    channels: TextureChannels,
+  ): Promise<void> {
     await fs.mkdir(this.texturesDir(toDir), { recursive: true });
     await Promise.all(
       CHANNEL_INDICES.map(async (channel) => {
         const ext = channels[channel].ext;
         if (ext === null) return;
         try {
-          await fs.copyFile(this.textureFile(fromDir, channel, ext), this.textureFile(toDir, channel, ext));
+          await fs.copyFile(
+            this.textureFile(fromDir, channel, ext),
+            this.textureFile(toDir, channel, ext),
+          );
         } catch (error) {
           console.warn(`[storage] failed to copy texture for channel ${channel}: ${String(error)}`);
         }
@@ -283,7 +290,7 @@ export class ShaderStorage {
 
     const raw = await this.readJson(file);
     const list = Array.isArray((raw as { presets?: unknown })?.presets)
-      ? ((raw as { presets: unknown[] }).presets)
+      ? (raw as { presets: unknown[] }).presets
       : [];
 
     const presets: Preset[] = [];
@@ -293,7 +300,9 @@ export class ShaderStorage {
       const base =
         typeof candidate?.['id'] === 'string' && validateId(candidate['id']).ok
           ? (candidate['id'] as string)
-          : slugify(typeof candidate?.['name'] === 'string' ? candidate['name'] : `preset-${index + 1}`);
+          : slugify(
+              typeof candidate?.['name'] === 'string' ? candidate['name'] : `preset-${index + 1}`,
+            );
       const id = uniqueId(base, used);
       const result = validatePreset(entry, controls, id);
       if (result.ok) {
@@ -378,7 +387,12 @@ export class ShaderStorage {
       ...textureWrites,
     ]);
 
-    return { ...meta, fragment: payload.fragment, vertex: payload.vertex, presets: payload.presets };
+    return {
+      ...meta,
+      fragment: payload.fragment,
+      vertex: payload.vertex,
+      presets: payload.presets,
+    };
   }
 
   async create(input: {
@@ -417,7 +431,10 @@ export class ShaderStorage {
         fragment,
         vertex,
         presets: [],
-        channels: DEFAULT_CHANNELS.map((channel) => ({ ...channel, data: null })) as unknown as TextureChannelPayloads,
+        channels: DEFAULT_CHANNELS.map((channel) => ({
+          ...channel,
+          data: null,
+        })) as unknown as TextureChannelPayloads,
       }),
     );
   }
@@ -439,7 +456,10 @@ export class ShaderStorage {
       const current = await this.read(id);
       const dir = this.shaderDir(id);
 
-      const name = patch.name === undefined ? current.name : expect(validateName(patch.name), 'Invalid shader name');
+      const name =
+        patch.name === undefined
+          ? current.name
+          : expect(validateName(patch.name), 'Invalid shader name');
       const description =
         patch.description === undefined
           ? current.description
@@ -461,7 +481,10 @@ export class ShaderStorage {
       const channels: TextureChannels =
         patch.channels === undefined
           ? current.channels
-          : this.mergeChannelSettings(current.channels, validateChannelSettingsPatch(patch.channels));
+          : this.mergeChannelSettings(
+              current.channels,
+              validateChannelSettingsPatch(patch.channels),
+            );
 
       const presets =
         patch.controls === undefined
@@ -584,12 +607,19 @@ export class ShaderStorage {
       await this.writeFileAtomic(this.textureFile(dir, channel, ext), input.bytes);
 
       const channels = CHANNEL_INDICES.map((index) =>
-        index === channel ? { ...current.channels[index], ext, width, height } : current.channels[index],
+        index === channel
+          ? { ...current.channels[index], ext, width, height }
+          : current.channels[index],
       ) as unknown as TextureChannels;
 
       const meta: ShaderMeta = { ...current, channels, updatedAt: new Date().toISOString() };
       await this.writeMeta(dir, meta);
-      return { ...meta, fragment: current.fragment, vertex: current.vertex, presets: current.presets };
+      return {
+        ...meta,
+        fragment: current.fragment,
+        vertex: current.vertex,
+        presets: current.presets,
+      };
     });
   }
 
@@ -610,7 +640,12 @@ export class ShaderStorage {
 
       const meta: ShaderMeta = { ...current, channels, updatedAt: new Date().toISOString() };
       await this.writeMeta(dir, meta);
-      return { ...meta, fragment: current.fragment, vertex: current.vertex, presets: current.presets };
+      return {
+        ...meta,
+        fragment: current.fragment,
+        vertex: current.vertex,
+        presets: current.presets,
+      };
     });
   }
 
@@ -637,7 +672,10 @@ export class ShaderStorage {
 
       const name = expect(validateName(input.name, 'preset.name'), 'Invalid preset name');
       if (shader.presets.length >= LIMITS.presetCount) {
-        throw new StorageError('conflict', `Shader "${id}" already has the maximum number of presets`);
+        throw new StorageError(
+          'conflict',
+          `Shader "${id}" already has the maximum number of presets`,
+        );
       }
 
       const existing = shader.presets.find((preset) => preset.name === name);

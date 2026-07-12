@@ -18,9 +18,17 @@ export default defineConfig([
     output: { file: './dist-main/preload.cjs', format: 'cjs', sourcemap: !production },
     external: ['electron'],
     plugins: [
-      ipcBridge({ ipcDir: './main/ipc', outFile: './main/generated/ipc-bridge.ts', tsconfig: './tsconfig.main.json' }),
-      json(), commonjs(),
-      typescript({ tsconfig: './tsconfig.preload.json', compilerOptions: { sourceMap: !production } }),
+      ipcBridge({
+        ipcDir: './main/ipc',
+        outFile: './main/generated/ipc-bridge.ts',
+        tsconfig: './tsconfig.main.json',
+      }),
+      json(),
+      commonjs(),
+      typescript({
+        tsconfig: './tsconfig.preload.json',
+        compilerOptions: { sourceMap: !production },
+      }),
       production && terser(),
     ],
   },
@@ -31,16 +39,19 @@ export default defineConfig([
     output: { file: './dist-main/main.cjs', format: 'cjs', sourcemap: !production },
     external: ['electron', /^node:/],
     plugins: [
-      json(), nodeResolve({ exportConditions: ['node'] }), commonjs(),
+      json(),
+      nodeResolve({ exportConditions: ['node'] }),
+      commonjs(),
       typescript({ tsconfig: './tsconfig.main.json', compilerOptions: { sourceMap: !production } }),
       replace({ preventAssignment: true, __ELECTRON_PRODUCTION__: JSON.stringify(production) }),
       production && terser(),
-      process.env.ROLLUP_WATCH && electronRun({
-        entry: 'main.cjs',
-        electronPath: createRequire(import.meta.url)('electron'),
-        additionalArgs: ['--inspect'],
-        stdinControls: false,
-      }),
+      process.env.ROLLUP_WATCH &&
+        electronRun({
+          entry: 'main.cjs',
+          electronPath: createRequire(import.meta.url)('electron'),
+          additionalArgs: ['--inspect'],
+          stdinControls: false,
+        }),
     ],
   },
 ]);

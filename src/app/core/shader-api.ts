@@ -179,12 +179,19 @@ export class HttpShaderApi extends ShaderApi {
 
   // --- Textures -------------------------------------------------------------
 
-  override async setTexture(id: string, channel: number, upload: TextureUpload): Promise<ShaderRecord> {
+  override async setTexture(
+    id: string,
+    channel: number,
+    upload: TextureUpload,
+  ): Promise<ShaderRecord> {
     const blob = new Blob([upload.bytes.slice()], { type: mimeFromExt(upload.ext) });
     const query = `?width=${upload.width}&height=${upload.height}`;
     const response = await this.request(
       firstValueFrom(
-        this.http.put<{ shader: ShaderRecord }>(this.url(`/shaders/${id}/textures/${channel}${query}`), blob),
+        this.http.put<{ shader: ShaderRecord }>(
+          this.url(`/shaders/${id}/textures/${channel}${query}`),
+          blob,
+        ),
       ),
     );
     return response.shader;

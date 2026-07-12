@@ -11,7 +11,12 @@
 import express, { type NextFunction, type Request, type Response, type Router } from 'express';
 
 import type { ApiErrorBody } from '../../shared/model';
-import { buildCollectionBundle, buildShaderBundle, parseBundle, validateImportMode } from '../../shared/validate';
+import {
+  buildCollectionBundle,
+  buildShaderBundle,
+  parseBundle,
+  validateImportMode,
+} from '../../shared/validate';
 import { ShaderStorage, StorageError } from '../storage';
 import {
   attachmentName,
@@ -177,7 +182,10 @@ export function createApiRouter(storage: ShaderStorage): Router {
     route(async (_req, res) => {
       const payloads = await storage.exportAll();
       res
-        .setHeader('Content-Disposition', 'attachment; filename="shader-studio-collection.shader.json"')
+        .setHeader(
+          'Content-Disposition',
+          'attachment; filename="shader-studio-collection.shader.json"',
+        )
         .json(buildCollectionBundle(payloads));
     }),
   );

@@ -30,7 +30,9 @@ import { Workspace } from './workspace';
         <nav class="menus" aria-label="Application menu">
           <button type="button" class="menu-trigger" [matMenuTriggerFor]="fileMenu">File</button>
           <button type="button" class="menu-trigger" [matMenuTriggerFor]="viewMenu">View</button>
-          <button type="button" class="menu-trigger" [matMenuTriggerFor]="windowMenu">Window</button>
+          <button type="button" class="menu-trigger" [matMenuTriggerFor]="windowMenu">
+            Window
+          </button>
         </nav>
       </div>
 
@@ -87,12 +89,7 @@ import { Workspace } from './workspace';
         <mat-icon>upload_file</mat-icon>
         <span>Import and replace…</span>
       </button>
-      <button
-        mat-menu-item
-        type="button"
-        [disabled]="!store.record()"
-        (click)="exportCurrent()"
-      >
+      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="exportCurrent()">
         <mat-icon>download</mat-icon>
         <span>Export this shader</span>
       </button>
@@ -319,7 +316,9 @@ export class AppTitlebar {
     });
   }
 
-  protected toggle(key: keyof Pick<WorkspacePreferences, 'browserOpen' | 'guiVisible' | 'editorOpen'>): void {
+  protected toggle(
+    key: keyof Pick<WorkspacePreferences, 'browserOpen' | 'guiVisible' | 'editorOpen'>,
+  ): void {
     this.preferences.patch({ [key]: !this.preferences.value()[key] });
   }
 

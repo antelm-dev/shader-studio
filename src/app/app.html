@@ -4,7 +4,7 @@
 
 <div class="shell">
   @if (desktop.available) {
-    <app-titlebar />
+  <app-titlebar />
   }
 
   <mat-toolbar class="toolbar">
@@ -25,39 +25,39 @@
     </span>
 
     @if (store.record(); as shader) {
-      <span
-        class="shader-name"
-        [title]="shader.description + ' — right-click for actions'"
-        [matContextMenuTriggerFor]="shaderMenu"
-      >
-        {{ shader.name }}
-      </span>
-      @if (store.dirty()) {
-        <span class="dot" matTooltip="Unsaved changes" aria-label="Unsaved changes">•</span>
-      }
+    <span
+      class="shader-name"
+      [title]="shader.description + ' — right-click for actions'"
+      [matContextMenuTriggerFor]="shaderMenu"
+    >
+      {{ shader.name }}
+    </span>
+    @if (store.dirty()) {
+    <span class="dot" matTooltip="Unsaved changes" aria-label="Unsaved changes">•</span>
+    }
 
-      <mat-menu #shaderMenu="matMenu">
-        <button mat-menu-item type="button" (click)="workspace.renameShader(shader.id, shader.name)">
-          <mat-icon>edit</mat-icon>
-          <span>Rename</span>
-        </button>
-        <button
-          mat-menu-item
-          type="button"
-          (click)="workspace.duplicateShader(shader.id, shader.name)"
-        >
-          <mat-icon>content_copy</mat-icon>
-          <span>Duplicate</span>
-        </button>
-        <button mat-menu-item type="button" (click)="exportCurrent()">
-          <mat-icon>download</mat-icon>
-          <span>Export</span>
-        </button>
-        <button mat-menu-item type="button" (click)="workspace.deleteShader(shader.id, shader.name)">
-          <mat-icon>delete</mat-icon>
-          <span>Delete</span>
-        </button>
-      </mat-menu>
+    <mat-menu #shaderMenu="matMenu">
+      <button mat-menu-item type="button" (click)="workspace.renameShader(shader.id, shader.name)">
+        <mat-icon>edit</mat-icon>
+        <span>Rename</span>
+      </button>
+      <button
+        mat-menu-item
+        type="button"
+        (click)="workspace.duplicateShader(shader.id, shader.name)"
+      >
+        <mat-icon>content_copy</mat-icon>
+        <span>Duplicate</span>
+      </button>
+      <button mat-menu-item type="button" (click)="exportCurrent()">
+        <mat-icon>download</mat-icon>
+        <span>Export</span>
+      </button>
+      <button mat-menu-item type="button" (click)="workspace.deleteShader(shader.id, shader.name)">
+        <mat-icon>delete</mat-icon>
+        <span>Delete</span>
+      </button>
+    </mat-menu>
     }
 
     <span class="spacer"></span>
@@ -118,7 +118,7 @@
     </mat-menu>
 
     <button
-      matButton="filled"
+      matButton="tonal"
       type="button"
       class="save"
       matTooltip="Save the source and config (Ctrl+S)"
@@ -130,7 +130,7 @@
     </button>
 
     @if (store.loading() || store.saving()) {
-      <mat-progress-bar class="loading" mode="indeterminate" aria-label="Working" />
+    <mat-progress-bar class="loading" mode="indeterminate" aria-label="Working" />
     }
   </mat-toolbar>
 
@@ -148,15 +148,13 @@
       <div class="stage"></div>
 
       @if (preferences.value().guiVisible) {
-        <aside class="controls" aria-label="Shader controls">
-          <app-preset-panel class="presets" />
-          <app-texture-panel class="textures" />
-          <app-gui-panel class="gui" />
-        </aside>
-      }
-
-      @if (preferences.value().editorOpen) {
-        <app-editor-shell class="editor" />
+      <aside class="controls" aria-label="Shader controls">
+        <app-preset-panel class="presets" />
+        <app-texture-panel class="textures" />
+        <app-gui-panel class="gui" />
+      </aside>
+      } @if (preferences.value().editorOpen) {
+      <app-editor-shell class="editor" />
       }
     </mat-sidenav-content>
   </mat-sidenav-container>

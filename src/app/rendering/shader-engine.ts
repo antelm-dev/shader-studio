@@ -199,7 +199,11 @@ export class ShaderEngine {
     const vertex = expandMacros(spec.vertex);
 
     const uniforms = this.buildUniforms(spec.controls, spec.params, spec.channels);
-    const candidate = new T.ShaderMaterial({ vertexShader: vertex, fragmentShader: fragment, uniforms });
+    const candidate = new T.ShaderMaterial({
+      vertexShader: vertex,
+      fragmentShader: fragment,
+      uniforms,
+    });
 
     const diagnostics = this.probe(candidate, fragment, vertex);
     if (diagnostics.length > 0) {
@@ -360,7 +364,8 @@ export class ShaderEngine {
     const wrap = this.wrapModeFor(spec.wrap);
     texture.wrapS = wrap;
     texture.wrapT = wrap;
-    texture.magFilter = spec.filter === 'nearest' ? this.three.NearestFilter : this.three.LinearFilter;
+    texture.magFilter =
+      spec.filter === 'nearest' ? this.three.NearestFilter : this.three.LinearFilter;
     texture.minFilter = texture.magFilter;
     texture.generateMipmaps = false;
     texture.flipY = spec.flipY;
@@ -371,7 +376,11 @@ export class ShaderEngine {
 
   /** Disposes any cached texture no longer referenced by the current channels. */
   private pruneTextureCache(channels: readonly (ChannelSource | null)[]): void {
-    const used = new Set(channels.filter((channel): channel is ChannelSource => channel !== null).map(ShaderEngine.cacheKey));
+    const used = new Set(
+      channels
+        .filter((channel): channel is ChannelSource => channel !== null)
+        .map(ShaderEngine.cacheKey),
+    );
     for (const [key, texture] of this.textureCache) {
       if (used.has(key)) continue;
       texture.dispose();

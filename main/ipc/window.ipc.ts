@@ -16,7 +16,8 @@ export function createWindowIpc(controller: CloseController) {
     minimize: listen((event) => BrowserWindow.fromWebContents(event.sender)?.minimize()),
     'toggle-maximize': listen((event) => {
       const win = BrowserWindow.fromWebContents(event.sender);
-      if (win?.isMaximized()) win.unmaximize(); else win?.maximize();
+      if (win?.isMaximized()) win.unmaximize();
+      else win?.maximize();
     }),
     'toggle-fullscreen': listen((event) => {
       const win = BrowserWindow.fromWebContents(event.sender);

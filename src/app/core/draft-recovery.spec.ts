@@ -8,12 +8,24 @@ import type { ShaderDraft } from './shader-store';
 
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
-  get length(): number { return this.values.size; }
-  clear(): void { this.values.clear(); }
-  getItem(key: string): string | null { return this.values.get(key) ?? null; }
-  key(index: number): string | null { return [...this.values.keys()][index] ?? null; }
-  removeItem(key: string): void { this.values.delete(key); }
-  setItem(key: string, value: string): void { this.values.set(key, value); }
+  get length(): number {
+    return this.values.size;
+  }
+  clear(): void {
+    this.values.clear();
+  }
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+  key(index: number): string | null {
+    return [...this.values.keys()][index] ?? null;
+  }
+  removeItem(key: string): void {
+    this.values.delete(key);
+  }
+  setItem(key: string, value: string): void {
+    this.values.set(key, value);
+  }
 }
 
 const draft: ShaderDraft = {
@@ -42,7 +54,9 @@ describe('DraftRecovery', () => {
   it('round-trips and removes a versioned per-shader draft', () => {
     recovery.put('waves', 'saved-at', draft);
     expect(recovery.get('waves')).toMatchObject({
-      shaderId: 'waves', baselineUpdatedAt: 'saved-at', fragment: draft.fragment,
+      shaderId: 'waves',
+      baselineUpdatedAt: 'saved-at',
+      fragment: draft.fragment,
     });
     recovery.remove('waves');
     expect(recovery.get('waves')).toBeNull();
@@ -57,7 +71,9 @@ describe('DraftRecovery', () => {
   it('warns only once when storage writes fail', () => {
     const warning = vi.fn();
     recovery.onWarning = warning;
-    vi.spyOn(storage, 'setItem').mockImplementation(() => { throw new Error('quota'); });
+    vi.spyOn(storage, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
     recovery.put('waves', 'one', draft);
     recovery.put('other', 'two', draft);
     expect(warning).toHaveBeenCalledTimes(1);

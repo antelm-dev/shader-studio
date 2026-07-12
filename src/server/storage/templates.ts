@@ -9,8 +9,24 @@ void main() {
 `;
 
 export const TEMPLATE_CONTROLS: ShaderControl[] = [
-  { key: 'timeScale', type: 'number', label: 'Time Scale', folder: 'Motion', default: 0.4, min: 0, max: 2 },
-  { key: 'scale', type: 'number', label: 'Scale', folder: 'Structure', default: 3, min: 0.5, max: 12 },
+  {
+    key: 'timeScale',
+    type: 'number',
+    label: 'Time Scale',
+    folder: 'Motion',
+    default: 0.4,
+    min: 0,
+    max: 2,
+  },
+  {
+    key: 'scale',
+    type: 'number',
+    label: 'Scale',
+    folder: 'Structure',
+    default: 3,
+    min: 0.5,
+    max: 12,
+  },
   { key: 'colorA', type: 'color', label: 'Color A', folder: 'Palette', default: '#1b2a4a' },
   { key: 'colorB', type: 'color', label: 'Color B', folder: 'Palette', default: '#5ad1c8' },
 ];

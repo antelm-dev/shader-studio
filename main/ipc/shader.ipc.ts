@@ -38,12 +38,11 @@ export function createShaderIpc(storage: ShaderStorage) {
       storage.duplicate(stringArg(id, 'id'), name),
     ),
     remove: handle(async (_event, id: string) => storage.remove(stringArg(id, 'id'))),
-    'save-preset': handle(
-      (_event, id: string, input: { name: string; values: ShaderParams }) =>
-        storage.savePreset(
-          stringArg(id, 'id'),
-          objectArg(input, 'preset') as { name: unknown; values: unknown },
-        ),
+    'save-preset': handle((_event, id: string, input: { name: string; values: ShaderParams }) =>
+      storage.savePreset(
+        stringArg(id, 'id'),
+        objectArg(input, 'preset') as { name: unknown; values: unknown },
+      ),
     ),
     'delete-preset': handle((_event, id: string, presetId: string) =>
       storage.deletePreset(stringArg(id, 'id'), stringArg(presetId, 'presetId')),
@@ -54,9 +53,11 @@ export function createShaderIpc(storage: ShaderStorage) {
     'export-all': handle(async () => buildCollectionBundle(await storage.exportAll())),
     'import-bundle': handle(async (_event, bundle: unknown, mode: ImportMode) => {
       const parsedMode = validateImportMode(mode);
-      if (!parsedMode.ok) throw new StorageError('invalid', 'Invalid import mode', parsedMode.errors);
+      if (!parsedMode.ok)
+        throw new StorageError('invalid', 'Invalid import mode', parsedMode.errors);
       const parsed = parseBundle(bundle);
-      if (!parsed.ok) throw new StorageError('invalid', 'The bundle could not be imported', parsed.errors);
+      if (!parsed.ok)
+        throw new StorageError('invalid', 'The bundle could not be imported', parsed.errors);
       return storage.importPayloads(parsed.value, parsedMode.value);
     }),
     'set-texture': handle(

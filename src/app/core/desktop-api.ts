@@ -12,7 +12,8 @@ import type {
 import { ApiError, ShaderApi, type TextureUpload, type UpdateShaderPatch } from './shader-api';
 
 function messageOf(error: unknown): string {
-  if (error instanceof Error) return error.message.replace(/^Error invoking remote method '[^']+':\s*/, '');
+  if (error instanceof Error)
+    return error.message.replace(/^Error invoking remote method '[^']+':\s*/, '');
   return String(error);
 }
 

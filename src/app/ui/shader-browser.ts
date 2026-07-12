@@ -38,7 +38,7 @@ import { Workspace } from './workspace';
       </button>
     </header>
 
-    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
+    <mat-form-field appearance="fill" subscriptSizing="dynamic" class="search">
       <mat-icon matPrefix>search</mat-icon>
       <mat-label>Filter</mat-label>
       <input
@@ -83,7 +83,11 @@ import { Workspace } from './workspace';
 
     <mat-menu #rowMenu="matMenu">
       <ng-template matMenuContent let-shader="shader">
-        <button mat-menu-item type="button" (click)="workspace.renameShader(shader.id, shader.name)">
+        <button
+          mat-menu-item
+          type="button"
+          (click)="workspace.renameShader(shader.id, shader.name)"
+        >
           <mat-icon>edit</mat-icon>
           <span>Rename</span>
         </button>
@@ -95,11 +99,19 @@ import { Workspace } from './workspace';
           <mat-icon>content_copy</mat-icon>
           <span>Duplicate</span>
         </button>
-        <button mat-menu-item type="button" (click)="workspace.exportShader(shader.id, shader.name)">
+        <button
+          mat-menu-item
+          type="button"
+          (click)="workspace.exportShader(shader.id, shader.name)"
+        >
           <mat-icon>download</mat-icon>
           <span>Export</span>
         </button>
-        <button mat-menu-item type="button" (click)="workspace.deleteShader(shader.id, shader.name)">
+        <button
+          mat-menu-item
+          type="button"
+          (click)="workspace.deleteShader(shader.id, shader.name)"
+        >
           <mat-icon>delete</mat-icon>
           <span>Delete</span>
         </button>

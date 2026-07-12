@@ -162,7 +162,7 @@ function isFiniteNumber(value: unknown): value is number {
 
 /** Rejects control characters, which have no business in a name or a path. */
 function isCleanString(value: unknown): value is string {
-  // eslint-disable-next-line no-control-regex
+  // oxlint-disable-next-line no-control-regex
   return typeof value === 'string' && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
@@ -185,9 +185,7 @@ export function validateId(value: unknown): Result<string> {
     return fail(`id must be at most ${LIMITS.idLength} characters`);
   }
   if (!ID_PATTERN.test(value)) {
-    return fail(
-      `id "${value}" is invalid: use lowercase letters, digits and inner hyphens only`,
-    );
+    return fail(`id "${value}" is invalid: use lowercase letters, digits and inner hyphens only`);
   }
   if (RESERVED_IDS.has(value)) {
     return fail(`id "${value}" is a reserved device name`);
@@ -209,11 +207,7 @@ export function validateName(value: unknown, field = 'name'): Result<string> {
   return ok(trimmed);
 }
 
-function validateOptionalText(
-  value: unknown,
-  field: string,
-  maxLength: number,
-): Result<string> {
+function validateOptionalText(value: unknown, field: string, maxLength: number): Result<string> {
   if (value === undefined || value === null) return ok('');
   if (!isCleanString(value)) {
     return fail(`${field} must be a string without control characters`);
@@ -439,9 +433,7 @@ function coerce(control: ShaderControl, value: unknown): ParamOrNull {
         ? value.toLowerCase()
         : null;
     case 'select':
-      return isFiniteNumber(value) && Object.values(control.options).includes(value)
-        ? value
-        : null;
+      return isFiniteNumber(value) && Object.values(control.options).includes(value) ? value : null;
     default:
       return null;
   }
@@ -454,10 +446,7 @@ type ParamOrNull = number | boolean | string | null;
  * or unusable, unknown keys dropped. This is what keeps a preset meaningful
  * after its shader's schema has been edited underneath it.
  */
-export function sanitizeParams(
-  controls: readonly ShaderControl[],
-  input: unknown,
-): ShaderParams {
+export function sanitizeParams(controls: readonly ShaderControl[], input: unknown): ShaderParams {
   const params = defaultParams(controls);
   if (!isRecord(input)) return params;
 
@@ -509,9 +498,7 @@ export function validateRender(input: unknown): RenderSettings {
   return {
     bloom: {
       enabled:
-        typeof bloomInput['enabled'] === 'boolean'
-          ? bloomInput['enabled']
-          : DEFAULT_BLOOM.enabled,
+        typeof bloomInput['enabled'] === 'boolean' ? bloomInput['enabled'] : DEFAULT_BLOOM.enabled,
       strength: clamp(bloomInput['strength'], 0, 3, DEFAULT_BLOOM.strength),
       radius: clamp(bloomInput['radius'], 0, 1, DEFAULT_BLOOM.radius),
       threshold: clamp(bloomInput['threshold'], 0, 1, DEFAULT_BLOOM.threshold),
@@ -524,11 +511,15 @@ export function validateRender(input: unknown): RenderSettings {
 // ---------------------------------------------------------------------------
 
 function wrapMode(value: unknown, fallback: TextureWrapMode): TextureWrapMode {
-  return typeof value === 'string' && TEXTURE_WRAP_MODES.has(value) ? (value as TextureWrapMode) : fallback;
+  return typeof value === 'string' && TEXTURE_WRAP_MODES.has(value)
+    ? (value as TextureWrapMode)
+    : fallback;
 }
 
 function filterMode(value: unknown, fallback: TextureFilterMode): TextureFilterMode {
-  return typeof value === 'string' && TEXTURE_FILTER_MODES.has(value) ? (value as TextureFilterMode) : fallback;
+  return typeof value === 'string' && TEXTURE_FILTER_MODES.has(value)
+    ? (value as TextureFilterMode)
+    : fallback;
 }
 
 function positiveInt(value: unknown, max: number, fallback: number): number {
@@ -547,7 +538,8 @@ function positiveInt(value: unknown, max: number, fallback: number): number {
 function validateChannel(input: unknown): TextureChannel {
   if (!isRecord(input)) return { ...DEFAULT_TEXTURE_CHANNEL };
 
-  const ext = typeof input['ext'] === 'string' && TEXTURE_EXTENSIONS.has(input['ext']) ? input['ext'] : null;
+  const ext =
+    typeof input['ext'] === 'string' && TEXTURE_EXTENSIONS.has(input['ext']) ? input['ext'] : null;
   if (ext === null) {
     return {
       ...DEFAULT_TEXTURE_CHANNEL,
@@ -624,7 +616,9 @@ function validateChannelPayload(input: unknown): TextureChannelPayload {
 
 export function validateChannelPayloads(input: unknown): TextureChannelPayloads {
   const list = Array.isArray(input) ? input : [];
-  return [0, 1, 2, 3].map((index) => validateChannelPayload(list[index])) as unknown as TextureChannelPayloads;
+  return [0, 1, 2, 3].map((index) =>
+    validateChannelPayload(list[index]),
+  ) as unknown as TextureChannelPayloads;
 }
 
 // ---------------------------------------------------------------------------
@@ -649,7 +643,11 @@ export function validateShaderPayload(input: unknown, label = 'shader'): Result<
   const idResult = validateId(input['id']);
   const nameResult = validateName(input['name'], `${label}.name`);
   const descriptionResult = validateDescription(input['description']);
-  const authorResult = validateOptionalText(input['author'], `${label}.author`, LIMITS.authorLength);
+  const authorResult = validateOptionalText(
+    input['author'],
+    `${label}.author`,
+    LIMITS.authorLength,
+  );
   const fragmentResult = validateSource(input['fragment'], `${label}.fragment`);
   const vertexResult = validateSource(input['vertex'], `${label}.vertex`);
   const controlsResult = validateControls(input['controls'] ?? []);
@@ -696,11 +694,17 @@ export function validateShaderPayload(input: unknown, label = 'shader'): Result<
 
   rawPresets.forEach((entry, index) => {
     const raw = isRecord(entry) && isValidId(entry['id']) ? (entry['id'] as string) : undefined;
-    const base = raw ?? (isRecord(entry) && typeof entry['name'] === 'string' ? slugify(entry['name']) : `preset-${index + 1}`);
+    const base =
+      raw ??
+      (isRecord(entry) && typeof entry['name'] === 'string'
+        ? slugify(entry['name'])
+        : `preset-${index + 1}`);
     const presetId = uniqueId(base, usedPresetIds);
     const result = validatePreset(entry, controls, presetId);
     if (!result.ok) {
-      presetErrors.push(...result.errors.map((message) => `${label}.presets[${index}]: ${message}`));
+      presetErrors.push(
+        ...result.errors.map((message) => `${label}.presets[${index}]: ${message}`),
+      );
       return;
     }
     usedPresetIds.add(presetId);

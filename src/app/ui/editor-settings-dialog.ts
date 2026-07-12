@@ -366,7 +366,7 @@ void main() {
     </mat-dialog-content>
 
     <mat-dialog-actions class="actions">
-      <button matButton type="button" (click)="restoreDefaults()">
+      <button matButton="outlined" type="button" (click)="restoreDefaults()">
         <mat-icon>restart_alt</mat-icon>
         Restore defaults
       </button>

@@ -19,7 +19,10 @@ export function prepare(options: PrepareOptions): void {
       for (const entry of protocols) entry.scheme.registerHandler(entry.handler);
       await options.onReady();
     } catch (error) {
-      dialog.showErrorBox('Shader Studio could not start', error instanceof Error ? error.message : String(error));
+      dialog.showErrorBox(
+        'Shader Studio could not start',
+        error instanceof Error ? error.message : String(error),
+      );
       app.exit(1);
     }
   });

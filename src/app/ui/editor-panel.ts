@@ -46,7 +46,7 @@ type Tab = DiagnosticSource;
       <nav class="tabs" role="tablist" aria-label="Shader source">
         @for (option of tabs; track option.id) {
           <button
-            matButton
+            [matButton]="tab() === option.id ? 'tonal' : 'text'"
             type="button"
             role="tab"
             class="tab"
@@ -143,7 +143,10 @@ type Tab = DiagnosticSource;
               {{ diagnostic.severity === 'warning' ? 'warning' : 'error' }}
             </mat-icon>
             <span class="diagnostic-where">
-              {{ diagnostic.source }}@if (diagnostic.line) {<span>:{{ diagnostic.line }}</span>}
+              {{ diagnostic.source }}
+              @if (diagnostic.line) {
+                <span>:{{ diagnostic.line }}</span>
+              }
             </span>
             <span class="diagnostic-message">{{ diagnostic.message }}</span>
           </li>

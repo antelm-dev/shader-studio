@@ -45,35 +45,36 @@ Express server. The web and SSR targets continue to use the REST API.
 The dev server runs the same Express app as production — the API is real in both,
 not mocked.
 
-| Script           | What it does                                       |
-| ---------------- | -------------------------------------------------- |
-| `pnpm dev`       | Dev server with HMR, SSR and the API                |
-| `pnpm build`     | Production build into `dist/`                       |
-| `pnpm serve:ssr` | Run the built SSR server                            |
-| `pnpm test`      | Unit tests (Vitest)                                 |
-| `pnpm lint`      | ESLint                                              |
-| `pnpm typecheck` | `tsc -b`, strict                                    |
+| Script           | What it does                         |
+| ---------------- | ------------------------------------ |
+| `pnpm dev`       | Dev server with HMR, SSR and the API |
+| `pnpm build`     | Production build into `dist/`        |
+| `pnpm serve:ssr` | Run the built SSR server             |
+| `pnpm test`      | Unit tests (Vitest)                  |
+| `pnpm lint`      | Oxlint                               |
+| `pnpm format`    | Oxfmt                                |
+| `pnpm typecheck` | `tsc -b`, strict                     |
 
 ### Environment
 
-| Variable             | Default                    | Purpose                                            |
-| -------------------- | -------------------------- | -------------------------------------------------- |
-| `PORT`               | `4000`                     | Port for the SSR server                            |
-| `SHADER_DATA_DIR`    | `./data`                   | Where shaders are stored                           |
-| `SHADER_EXAMPLES_DIR`| `./examples`               | Where the seed examples are read from              |
-| `SHADER_SEED`        | —                          | `0` disables seeding an empty store                |
-| `NG_ALLOWED_HOSTS`   | `localhost,127.0.0.1,[::1]`| Hosts SSR will render for (SSRF guard). Set this when deploying. |
+| Variable              | Default                     | Purpose                                                          |
+| --------------------- | --------------------------- | ---------------------------------------------------------------- |
+| `PORT`                | `4000`                      | Port for the SSR server                                          |
+| `SHADER_DATA_DIR`     | `./data`                    | Where shaders are stored                                         |
+| `SHADER_EXAMPLES_DIR` | `./examples`                | Where the seed examples are read from                            |
+| `SHADER_SEED`         | —                           | `0` disables seeding an empty store                              |
+| `NG_ALLOWED_HOSTS`    | `localhost,127.0.0.1,[::1]` | Hosts SSR will render for (SSRF guard). Set this when deploying. |
 
 ---
 
 ## Keyboard
 
-| Key         | Action                    |
-| ----------- | ------------------------- |
-| `Space`     | Pause / resume time       |
-| `H`         | Show / hide the controls  |
-| `S`         | Save the frame as a PNG   |
-| `Ctrl`+`S`  | Save the shader           |
+| Key        | Action                   |
+| ---------- | ------------------------ |
+| `Space`    | Pause / resume time      |
+| `H`        | Show / hide the controls |
+| `S`        | Save the frame as a PNG  |
+| `Ctrl`+`S` | Save the shader          |
 
 Move the pointer over the background to push the shader around; click to drop a
 ripple. Both are fed to the shader as uniforms (see below) — what a shader does
@@ -117,7 +118,7 @@ The store keeps three layers of state deliberately distinct:
 - **record** — the shader as the server last gave it to us.
 - **draft** — the editor buffers. The difference from `record` is what "unsaved
   changes" means, and what `Save` sends.
-- **params** — the live uniform values. Turning a knob is *not* an unsaved edit to
+- **params** — the live uniform values. Turning a knob is _not_ an unsaved edit to
   the source; it is a value you can capture as a preset.
 
 ### SSR
@@ -128,7 +129,7 @@ from the incoming request; see `app.config.server.ts`).
 
 The rendered state is handed to the browser through Angular's `TransferState`, so
 the first client render is identical to the server's markup and hydration does
-not throw the page away. The server deliberately opens the *first* shader rather
+not throw the page away. The server deliberately opens the _first_ shader rather
 than the last one you had open — it cannot read your `localStorage`, and
 rendering a different shader than the client would then hydrate is exactly the
 mismatch the snapshot exists to prevent. The client switches to your remembered
@@ -145,7 +146,7 @@ is allowed anywhere near the screen. Only if the driver accepts it does the live
 material get swapped. If it does not, the previous shader keeps rendering and the
 driver's log comes back as diagnostics.
 
-Line numbers in a driver's log count from the top of the source *three.js*
+Line numbers in a driver's log count from the top of the source _three.js_
 assembled, which is not the source you typed — three prepends a prelude. The
 engine finds your source inside the full source and subtracts the offset, so a
 diagnostic lands on the line you are actually looking at.
@@ -187,7 +188,7 @@ shader changes its display name only; the id, and therefore the path, is stable.
   "author": "Shader Studio",
   "createdAt": "2026-07-12T00:00:00.000Z",
   "updatedAt": "2026-07-12T00:00:00.000Z",
-  "controls": [ /* see below */ ],
+  "controls": [/* see below */],
   "render": {
     "bloom": { "enabled": true, "strength": 0.55, "radius": 0.55, "threshold": 0.65 }
   }
@@ -205,25 +206,42 @@ appears immediately, bound to a uniform, without a reload.
 **The rule: a control keyed `warpIntensity` feeds `uniform float u_warpIntensity`.**
 The uniform is always the key prefixed with `u_`.
 
-| `type`    | GLSL uniform      | Widget        | Required fields                        |
-| --------- | ----------------- | ------------- | -------------------------------------- |
-| `number`  | `float u_<key>`   | slider        | `default`, `min`, `max`, (`step`)      |
-| `boolean` | `bool u_<key>`    | checkbox      | `default`                              |
-| `color`   | `vec3 u_<key>`    | color picker  | `default` as `#rrggbb`                 |
-| `select`  | `float u_<key>`   | dropdown      | `default`, `options` (label → number)  |
+| `type`    | GLSL uniform    | Widget       | Required fields                       |
+| --------- | --------------- | ------------ | ------------------------------------- |
+| `number`  | `float u_<key>` | slider       | `default`, `min`, `max`, (`step`)     |
+| `boolean` | `bool u_<key>`  | checkbox     | `default`                             |
+| `color`   | `vec3 u_<key>`  | color picker | `default` as `#rrggbb`                |
+| `select`  | `float u_<key>` | dropdown     | `default`, `options` (label → number) |
 
 `label` (GUI text) and `folder` (grouping) are optional on all of them.
 
 ```json
 [
-  { "key": "timeScale", "type": "number",  "label": "Time Scale", "folder": "Motion",
-    "default": 0.5, "min": 0, "max": 2 },
-  { "key": "mirror",    "type": "boolean", "label": "Mirror",     "folder": "Flight",
-    "default": false },
-  { "key": "colorLine", "type": "color",   "label": "Lattice",    "folder": "Palette",
-    "default": "#54e0ff" },
-  { "key": "paletteMode", "type": "select", "label": "Palette Mode", "folder": "Palette",
-    "default": 1, "options": { "Classic": 0, "Neon": 1, "Ember": 2 } }
+  {
+    "key": "timeScale",
+    "type": "number",
+    "label": "Time Scale",
+    "folder": "Motion",
+    "default": 0.5,
+    "min": 0,
+    "max": 2
+  },
+  { "key": "mirror", "type": "boolean", "label": "Mirror", "folder": "Flight", "default": false },
+  {
+    "key": "colorLine",
+    "type": "color",
+    "label": "Lattice",
+    "folder": "Palette",
+    "default": "#54e0ff"
+  },
+  {
+    "key": "paletteMode",
+    "type": "select",
+    "label": "Palette Mode",
+    "folder": "Palette",
+    "default": 1,
+    "options": { "Classic": 0, "Neon": 1, "Ember": 2 }
+  }
 ]
 ```
 
@@ -281,13 +299,17 @@ settings and presets.
     "name": "Hex Pulse",
     "description": "...",
     "author": "Shader Studio",
-    "controls": [ /* the schema */ ],
-    "render": { "bloom": { /* ... */ } },
+    "controls": [/* the schema */],
+    "render": { "bloom": {/* ... */} },
     "fragment": "precision highp float; ...",
     "vertex": "varying vec2 vUv; ...",
     "presets": [
-      { "id": "circuit", "name": "Circuit", "createdAt": "...",
-        "values": { "timeScale": 0.5, "colorPulse": "#5ef2ff" } }
+      {
+        "id": "circuit",
+        "name": "Circuit",
+        "createdAt": "...",
+        "values": { "timeScale": 0.5, "colorPulse": "#5ef2ff" }
+      }
     ]
   }
 }
@@ -311,20 +333,20 @@ name is recovered rather than rejected — hand-edited files are expected.
 All errors are `{ "error": { "code", "message", "details"? } }`.
 `400` invalid · `404` not found · `409` conflict.
 
-| Method   | Route                                | Purpose                          |
-| -------- | ------------------------------------ | -------------------------------- |
-| `GET`    | `/api/shaders`                       | List (summaries)                 |
-| `POST`   | `/api/shaders`                       | Create from the template         |
-| `GET`    | `/api/shaders/:id`                   | Read one, in full                |
+| Method   | Route                                | Purpose                                         |
+| -------- | ------------------------------------ | ----------------------------------------------- |
+| `GET`    | `/api/shaders`                       | List (summaries)                                |
+| `POST`   | `/api/shaders`                       | Create from the template                        |
+| `GET`    | `/api/shaders/:id`                   | Read one, in full                               |
 | `PUT`    | `/api/shaders/:id`                   | Partial update (name, source, controls, render) |
-| `DELETE` | `/api/shaders/:id`                   | Delete                           |
-| `POST`   | `/api/shaders/:id/duplicate`         | Copy, presets included           |
-| `GET`    | `/api/shaders/:id/presets`           | List presets                     |
-| `POST`   | `/api/shaders/:id/presets`           | Save; reusing a name overwrites  |
-| `DELETE` | `/api/shaders/:id/presets/:presetId` | Delete a preset                  |
-| `GET`    | `/api/shaders/:id/export`            | Export one                       |
-| `GET`    | `/api/export`                        | Export everything                |
-| `POST`   | `/api/import`                        | Import a bundle                  |
+| `DELETE` | `/api/shaders/:id`                   | Delete                                          |
+| `POST`   | `/api/shaders/:id/duplicate`         | Copy, presets included                          |
+| `GET`    | `/api/shaders/:id/presets`           | List presets                                    |
+| `POST`   | `/api/shaders/:id/presets`           | Save; reusing a name overwrites                 |
+| `DELETE` | `/api/shaders/:id/presets/:presetId` | Delete a preset                                 |
+| `GET`    | `/api/shaders/:id/export`            | Export one                                      |
+| `GET`    | `/api/export`                        | Export everything                               |
+| `POST`   | `/api/import`                        | Import a bundle                                 |
 
 Preset values are sanitized against the shader's schema on save, so a preset can
 never carry a value for a control that does not exist.
@@ -333,12 +355,12 @@ never carry a value for a control that does not exist.
 
 ## The example shaders
 
-| Shader           | Shows                                                                  |
-| ---------------- | ---------------------------------------------------------------------- |
+| Shader           | Shows                                                                                                                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Poured Paint** | 43 controls. Domain-warped fbm, layers quantized into pooled bands with hard contour lips, wet specular relief, OKLab palette ramp, click ripples with chromatic dispersion, and momentum-tunable pointer smearing. Bloom on. |
-| **Aurora Veil**  | Curtains draped by warping the x axis with slow noise, over a twinkling star field. |
-| **Hex Pulse**    | `u_clickData`: click and a wavefront crosses the lattice. Hover lights the cells under the cursor. |
-| **Warp Tunnel**  | A tunnel from `1/r` — no raymarching. Demonstrates `select` and `boolean` controls. |
+| **Aurora Veil**  | Curtains draped by warping the x axis with slow noise, over a twinkling star field.                                                                                                                                           |
+| **Hex Pulse**    | `u_clickData`: click and a wavefront crosses the lattice. Hover lights the cells under the cursor.                                                                                                                            |
+| **Warp Tunnel**  | A tunnel from `1/r` — no raymarching. Demonstrates `select` and `boolean` controls.                                                                                                                                           |
 
 Poured Paint and its five presets are carried over from the project this app grew
 out of, and are the reference for what the format can express.
@@ -374,7 +396,7 @@ pnpm test
   something a preset can capture.
 - **Monaco's stylesheet is global** (~88 kB gzipped), not lazy: the CSS its ESM
   modules import lands in a chunk nothing links, so the editor comes out
-  structurally unstyled if you rely on it. The editor's *code* is still lazy.
+  structurally unstyled if you rely on it. The editor's _code_ is still lazy.
 - **`renderer.compile` uses a real draw call** to a 1×1 target to force a compile.
   It is the only reliable way to make three.js compile eagerly, but it does mean a
   recompile costs one hidden frame.

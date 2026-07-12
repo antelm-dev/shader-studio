@@ -48,7 +48,12 @@ ERROR: 0:9: 'y' : undeclared identifier`;
     const log = 'Program link error: too many uniforms';
 
     expect(parseInfoLog(log, 'fragment')).toEqual([
-      { severity: 'error', line: 0, message: 'Program link error: too many uniforms', source: 'fragment' },
+      {
+        severity: 'error',
+        line: 0,
+        message: 'Program link error: too many uniforms',
+        source: 'fragment',
+      },
     ]);
   });
 
