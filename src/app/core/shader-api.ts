@@ -40,8 +40,22 @@ export interface UpdateShaderPatch {
   vertex?: string;
 }
 
-@Injectable({ providedIn: 'root' })
-export class ShaderApi {
+export abstract class ShaderApi {
+  abstract list(): Promise<ShaderSummary[]>;
+  abstract read(id: string): Promise<ShaderRecord>;
+  abstract create(name: string, description?: string): Promise<ShaderRecord>;
+  abstract update(id: string, patch: UpdateShaderPatch): Promise<ShaderRecord>;
+  abstract duplicate(id: string, name?: string): Promise<ShaderRecord>;
+  abstract remove(id: string): Promise<void>;
+  abstract savePreset(id: string, name: string, values: ShaderParams): Promise<Preset>;
+  abstract deletePreset(id: string, presetId: string): Promise<void>;
+  abstract exportShader(id: string): Promise<Bundle>;
+  abstract exportAll(): Promise<Bundle>;
+  abstract importBundle(bundle: unknown, mode: ImportMode): Promise<ImportResult>;
+}
+
+@Injectable()
+export class HttpShaderApi extends ShaderApi {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = inject(API_BASE_URL);
 
@@ -89,27 +103,27 @@ export class ShaderApi {
 
   // --- Shaders ------------------------------------------------------------
 
-  async list(): Promise<ShaderSummary[]> {
+  override async list(): Promise<ShaderSummary[]> {
     const response = await this.get<{ shaders: ShaderSummary[] }>('/shaders');
     return response.shaders;
   }
 
-  async read(id: string): Promise<ShaderRecord> {
+  override async read(id: string): Promise<ShaderRecord> {
     const response = await this.get<{ shader: ShaderRecord }>(`/shaders/${id}`);
     return response.shader;
   }
 
-  async create(name: string, description = ''): Promise<ShaderRecord> {
+  override async create(name: string, description = ''): Promise<ShaderRecord> {
     const response = await this.post<{ shader: ShaderRecord }>('/shaders', { name, description });
     return response.shader;
   }
 
-  async update(id: string, patch: UpdateShaderPatch): Promise<ShaderRecord> {
+  override async update(id: string, patch: UpdateShaderPatch): Promise<ShaderRecord> {
     const response = await this.put<{ shader: ShaderRecord }>(`/shaders/${id}`, patch);
     return response.shader;
   }
 
-  async duplicate(id: string, name?: string): Promise<ShaderRecord> {
+  override async duplicate(id: string, name?: string): Promise<ShaderRecord> {
     const response = await this.post<{ shader: ShaderRecord }>(
       `/shaders/${id}/duplicate`,
       name ? { name } : {},
@@ -117,13 +131,13 @@ export class ShaderApi {
     return response.shader;
   }
 
-  remove(id: string): Promise<void> {
+  override remove(id: string): Promise<void> {
     return this.delete(`/shaders/${id}`);
   }
 
   // --- Presets ------------------------------------------------------------
 
-  async savePreset(id: string, name: string, values: ShaderParams): Promise<Preset> {
+  override async savePreset(id: string, name: string, values: ShaderParams): Promise<Preset> {
     const response = await this.post<{ preset: Preset }>(`/shaders/${id}/presets`, {
       name,
       values,
@@ -131,21 +145,21 @@ export class ShaderApi {
     return response.preset;
   }
 
-  deletePreset(id: string, presetId: string): Promise<void> {
+  override deletePreset(id: string, presetId: string): Promise<void> {
     return this.delete(`/shaders/${id}/presets/${presetId}`);
   }
 
   // --- Import / export ----------------------------------------------------
 
-  exportShader(id: string): Promise<Bundle> {
+  override exportShader(id: string): Promise<Bundle> {
     return this.get<Bundle>(`/shaders/${id}/export`);
   }
 
-  exportAll(): Promise<Bundle> {
+  override exportAll(): Promise<Bundle> {
     return this.get<Bundle>('/export');
   }
 
-  importBundle(bundle: unknown, mode: ImportMode): Promise<ImportResult> {
+  override importBundle(bundle: unknown, mode: ImportMode): Promise<ImportResult> {
     return this.post<ImportResult>('/import', { bundle, mode });
   }
 }

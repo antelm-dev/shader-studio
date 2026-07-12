@@ -1,9 +1,19 @@
 import { DOCUMENT, Injectable, PLATFORM_ID, effect, inject, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
+import {
+  DEFAULT_EDITOR_APPEARANCE,
+  DEFAULT_EDITOR_WINDOW,
+  sanitizeAppearance,
+  sanitizeWindowState,
+  type EditorAppearance,
+  type EditorWindowState,
+} from './editor-prefs';
+
 /**
  * UI state that should survive a reload: which shader was open, which panels
- * were showing, how hard the GPU was being pushed.
+ * were showing, how hard the GPU was being pushed, and how the source editor is
+ * dressed and arranged.
  *
  * Kept deliberately separate from the shader documents themselves — this is
  * about the workspace, not the content, and it never leaves the browser.
@@ -25,6 +35,10 @@ export interface WorkspacePreferences {
   paused: boolean;
   autoRipples: boolean;
   colorScheme: ColorScheme;
+  /** How the editor is dressed: font, size, theme, and the rest. */
+  editorAppearance: EditorAppearance;
+  /** Where the editor sits: docked, floating, maximized or collapsed. */
+  editorWindow: EditorWindowState;
 }
 
 const DEFAULTS: WorkspacePreferences = {
@@ -36,6 +50,8 @@ const DEFAULTS: WorkspacePreferences = {
   paused: false,
   autoRipples: false,
   colorScheme: 'dark',
+  editorAppearance: DEFAULT_EDITOR_APPEARANCE,
+  editorWindow: DEFAULT_EDITOR_WINDOW,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -97,6 +113,12 @@ export class Preferences {
           parsed.colorScheme === 'light' || parsed.colorScheme === 'dark'
             ? parsed.colorScheme
             : DEFAULTS.colorScheme,
+        // These two are structures rather than scalars, and everything inside
+        // them ends up in a Monaco option or a CSS length. They get sanitized
+        // field by field, and a value that cannot be salvaged falls back to its
+        // default rather than to whatever was in storage.
+        editorAppearance: sanitizeAppearance(parsed.editorAppearance),
+        editorWindow: sanitizeWindowState(parsed.editorWindow),
       };
     } catch {
       return DEFAULTS;

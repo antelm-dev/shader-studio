@@ -219,6 +219,6 @@ export class ShaderBrowser {
   });
 
   protected select(id: string): void {
-    void this.store.select(id);
+    void this.workspace.selectShader(id);
   }
 }

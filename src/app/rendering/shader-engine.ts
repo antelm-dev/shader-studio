@@ -515,7 +515,13 @@ export class ShaderEngine {
       }
       const velocity = this.uniforms['iMouseVel']?.value as THREE.Vector2 | undefined;
       velocity?.copy(this.pointerVelocity);
-      this.pointerVelocity.multiplyScalar(0.9); // decay once the pointer stops
+      // Shaders can opt into a tunable amount of pointer inertia. Treat the
+      // value as retention per 60 Hz frame so the feel stays stable at other
+      // refresh rates; shaders without the control retain the original decay.
+      const momentum = this.uniforms['u_smearMomentum']?.value;
+      const velocityRetention =
+        typeof momentum === 'number' ? Math.min(Math.max(momentum, 0), 0.99) : 0.9;
+      this.pointerVelocity.multiplyScalar(Math.pow(velocityRetention, delta * 60));
 
       if (this.autoRipples && this.time >= this.nextAutoRipple) {
         const resolution = this.uniforms['iResolution']?.value as THREE.Vector2 | undefined;

@@ -15,6 +15,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -23,7 +24,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { map } from 'rxjs';
+import { filter, map } from 'rxjs';
 
 import type { ImportMode } from '../shared/model';
 import { Preferences, type WorkspacePreferences } from './core/preferences';
@@ -31,7 +32,7 @@ import { ShaderStore } from './core/shader-store';
 import { GuiPanel } from './gui/gui-panel';
 import { RendererHandle } from './rendering/renderer-handle';
 import { ShaderCanvas } from './rendering/shader-canvas';
-import { EditorPanel } from './ui/editor-panel';
+import { EditorShell } from './ui/editor-shell';
 import { PresetPanel } from './ui/preset-panel';
 import { ShaderBrowser } from './ui/shader-browser';
 import { Workspace } from './ui/workspace';
@@ -47,7 +48,7 @@ import { Workspace } from './ui/workspace';
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    EditorPanel,
+    EditorShell,
     GuiPanel,
     MatButtonModule,
     MatIconModule,
@@ -57,6 +58,7 @@ import { Workspace } from './ui/workspace';
     MatToolbarModule,
     MatTooltipModule,
     PresetPanel,
+    RouterOutlet,
     ShaderBrowser,
     ShaderCanvas,
   ],
@@ -71,6 +73,8 @@ export class App {
   private readonly renderer = inject(RendererHandle);
   private readonly snackBar = inject(MatSnackBar);
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
+  private readonly router = inject(Router);
+  private routingReady = false;
 
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
   private readonly importMode = signal<ImportMode>('rename');
@@ -100,10 +104,22 @@ export class App {
     // same work is deferred until after hydration, so the first client render
     // matches the markup the server produced (see ShaderStore's snapshot).
     if (this.isServer) {
-      void this.store.initialize();
+      void this.store.initialize(this.routeShaderId());
     }
 
-    afterNextRender(() => void this.store.initializeClient());
+    afterNextRender(() => void this.initializeRouting());
+
+    this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+      .subscribe(() => {
+        if (this.routingReady) void this.applyRoute();
+      });
+
+    effect(() => {
+      const id = this.store.selectedId();
+      if (!this.routingReady) return;
+      const canonical = id ? `/shaders/${encodeURIComponent(id)}` : '/';
+      if (this.router.url !== canonical) void this.router.navigateByUrl(canonical);
+    });
 
     // Picking a shader on a handset should get the drawer out of the way — it
     // is covering the very thing you just chose to look at.
@@ -124,6 +140,48 @@ export class App {
       });
       this.store.notice.set(null);
     });
+  }
+
+  private async initializeRouting(): Promise<void> {
+    const requested = this.routeShaderId();
+    await this.store.initializeClient(requested);
+    this.routingReady = true;
+    await this.normalizeRoute(requested);
+    await this.workspace.resolveStaleRecovery();
+  }
+
+  private async applyRoute(): Promise<void> {
+    const requested = this.routeShaderId();
+    if (!requested) {
+      await this.normalizeRoute(null);
+      return;
+    }
+    if (!this.store.shaders().some((shader) => shader.id === requested)) {
+      this.store.notice.set({ text: `Shader “${requested}” was not found`, error: true });
+      await this.normalizeRoute(requested);
+      return;
+    }
+    const changed = await this.workspace.selectShader(requested);
+    if (!changed) await this.router.navigateByUrl(this.canonicalUrl(), { replaceUrl: true });
+    else await this.workspace.resolveStaleRecovery();
+  }
+
+  private async normalizeRoute(requested: string | null): Promise<void> {
+    const canonical = this.canonicalUrl();
+    if (this.router.url !== canonical || requested !== this.store.selectedId()) {
+      await this.router.navigateByUrl(canonical, { replaceUrl: true });
+    }
+  }
+
+  private canonicalUrl(): string {
+    const id = this.store.selectedId();
+    return id ? `/shaders/${encodeURIComponent(id)}` : '/';
+  }
+
+  private routeShaderId(): string | null {
+    const match = /^\/shaders\/([^/?#]+)\/?(?:[?#].*)?$/.exec(this.router.url);
+    if (!match) return null;
+    try { return decodeURIComponent(match[1]); } catch { return null; }
   }
 
   protected toggle(key: 'editorOpen' | 'guiVisible'): void {
@@ -200,6 +258,14 @@ export class App {
       default:
         break;
     }
+  }
+
+  @HostListener('window:beforeunload', ['$event'])
+  protected onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (!this.store.dirty()) return;
+    this.store.flushRecovery();
+    event.preventDefault();
+    event.returnValue = '';
   }
 
   private isTyping(target: EventTarget | null): boolean {

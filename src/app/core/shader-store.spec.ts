@@ -13,6 +13,7 @@ import {
   type ShaderSummary,
 } from '../../shared/model';
 import { Preferences, type WorkspacePreferences } from './preferences';
+import { DEFAULT_EDITOR_APPEARANCE, DEFAULT_EDITOR_WINDOW } from './editor-prefs';
 import { ApiError, type UpdateShaderPatch } from './shader-api';
 import { ShaderApi } from './shader-api';
 import { ShaderStore } from './shader-store';
@@ -161,6 +162,8 @@ class FakePreferences implements Partial<Preferences> {
     paused: false,
     autoRipples: false,
     colorScheme: 'dark',
+    editorAppearance: DEFAULT_EDITOR_APPEARANCE,
+    editorWindow: DEFAULT_EDITOR_WINDOW,
   });
 
   readonly value = this.state.asReadonly();

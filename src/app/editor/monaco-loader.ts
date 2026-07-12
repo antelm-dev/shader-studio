@@ -1,6 +1,6 @@
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api.js';
 
-import type { ColorScheme } from '../core/preferences';
+import { EDITOR_THEMES, monacoThemeId, type EditorThemePalette } from './editor-themes';
 
 /**
  * Loads Monaco once, on demand, in the browser only.
@@ -29,11 +29,6 @@ export type MonacoApi = typeof Monaco;
 
 export const GLSL_LANGUAGE_ID = 'glsl';
 export const JSON_LANGUAGE_ID = 'json-lite';
-
-export const THEME_IDS: Record<ColorScheme, string> = {
-  dark: 'shader-studio-dark',
-  light: 'shader-studio-light',
-};
 
 let loader: Promise<MonacoApi> | null = null;
 
@@ -278,55 +273,48 @@ function registerJson(monaco: MonacoApi): void {
 // ---------------------------------------------------------------------------
 
 /**
- * One theme per colour mode, each tuned to sit on the app's own surfaces without
- * fighting the shader behind it. Monaco's theme is a global setting rather than
- * a per-editor one, so the panel switches all three editors with a single call.
+ * Every theme in the catalogue, registered up front — they are a few hundred
+ * bytes of data each, and defining them lazily would mean a visible flash of the
+ * wrong colours the first time someone picks one in the settings dialog.
+ *
+ * Monaco's theme is a *global* setting rather than a per-editor one, so a single
+ * `setTheme` switches all three tabs at once. That is also why the editor cannot
+ * offer a different theme per tab, and why nothing here tries to.
  */
 function registerThemes(monaco: MonacoApi): void {
-  monaco.editor.defineTheme(THEME_IDS.dark, {
-    base: 'vs-dark',
-    inherit: true,
-    rules: [
-      { token: 'comment', foreground: '6b7a8d', fontStyle: 'italic' },
-      { token: 'keyword', foreground: 'c792ea' },
-      { token: 'keyword.directive', foreground: 'f78c6c' },
-      { token: 'type', foreground: '82aaff' },
-      { token: 'predefined', foreground: '89ddff' },
-      { token: 'variable.predefined', foreground: 'ffcb6b' },
-      { token: 'number', foreground: 'f5c078' },
-      { token: 'number.float', foreground: 'f5c078' },
-      { token: 'string', foreground: 'c3e88d' },
-      { token: 'operator', foreground: '89ddff' },
-    ],
-    colors: {
-      'editor.background': '#10141c',
-      'editor.lineHighlightBackground': '#1a2130',
-      'editorLineNumber.foreground': '#3c4759',
-      'editorGutter.background': '#10141c',
-    },
-  });
+  for (const theme of EDITOR_THEMES) {
+    monaco.editor.defineTheme(monacoThemeId(theme.id), toMonacoTheme(theme.palette));
+  }
+}
 
-  // The same hues, darkened until they carry their weight against white.
-  monaco.editor.defineTheme(THEME_IDS.light, {
-    base: 'vs',
+/** Monaco wants its colours without the `#`, in the rules but not in the colors. */
+function toMonacoTheme(palette: EditorThemePalette): Monaco.editor.IStandaloneThemeData {
+  const { tokens } = palette;
+  const hex = (color: string) => color.replace('#', '');
+
+  return {
+    base: palette.base,
     inherit: true,
     rules: [
-      { token: 'comment', foreground: '7c8798', fontStyle: 'italic' },
-      { token: 'keyword', foreground: '8a3fb8' },
-      { token: 'keyword.directive', foreground: 'bf4e18' },
-      { token: 'type', foreground: '2758c8' },
-      { token: 'predefined', foreground: '0b7285' },
-      { token: 'variable.predefined', foreground: '96631a' },
-      { token: 'number', foreground: 'a15c12' },
-      { token: 'number.float', foreground: 'a15c12' },
-      { token: 'string', foreground: '3a7d34' },
-      { token: 'operator', foreground: '0b7285' },
+      { token: 'comment', foreground: hex(tokens.comment), fontStyle: 'italic' },
+      { token: 'keyword', foreground: hex(tokens.keyword) },
+      { token: 'keyword.directive', foreground: hex(tokens.directive) },
+      { token: 'type', foreground: hex(tokens.type) },
+      { token: 'predefined', foreground: hex(tokens.predefined) },
+      { token: 'variable.predefined', foreground: hex(tokens.variable) },
+      { token: 'number', foreground: hex(tokens.number) },
+      { token: 'number.float', foreground: hex(tokens.number) },
+      { token: 'string', foreground: hex(tokens.string) },
+      { token: 'operator', foreground: hex(tokens.operator) },
     ],
     colors: {
-      'editor.background': '#fbfcfe',
-      'editor.lineHighlightBackground': '#eef2f8',
-      'editorLineNumber.foreground': '#a5b0c0',
-      'editorGutter.background': '#fbfcfe',
+      'editor.background': palette.background,
+      'editor.foreground': palette.foreground,
+      'editor.lineHighlightBackground': palette.lineHighlight,
+      'editorLineNumber.foreground': palette.lineNumber,
+      'editorGutter.background': palette.background,
+      'editorWidget.background': palette.background,
+      'editorStickyScroll.background': palette.background,
     },
-  });
+  };
 }

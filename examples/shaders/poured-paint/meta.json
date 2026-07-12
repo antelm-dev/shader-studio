@@ -278,6 +278,15 @@
       "max": 0.2
     },
     {
+      "key": "smearMomentum",
+      "type": "number",
+      "label": "Smear Momentum",
+      "folder": "Pointer",
+      "default": 0.96,
+      "min": 0,
+      "max": 0.99
+    },
+    {
       "key": "accentAmount",
       "type": "number",
       "label": "Accent Amount",

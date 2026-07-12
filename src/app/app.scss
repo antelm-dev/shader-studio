@@ -29,6 +29,7 @@
 }
 
 .toolbar {
+  position: relative;
   gap: 4px;
   flex: 0 0 auto;
   background: color-mix(in srgb, var(--mat-sys-surface-container) 82%, transparent);
@@ -37,9 +38,20 @@
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-left: 4px;
   font: var(--mat-sys-title-medium);
   white-space: nowrap;
+}
+
+.brand-logo {
+  width: 32px;
+  height: 32px;
+  display: block;
+  flex: 0 0 auto;
+  border-radius: 7px;
 }
 
 .shader-name {
@@ -75,7 +87,10 @@
 }
 
 .loading {
-  flex: 0 0 auto;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 1;
 }
 
 .body {
@@ -119,7 +134,7 @@
   margin: 12px;
   padding: 12px;
   overflow-y: auto;
-  border-radius: 14px;
+  border-radius: var(--mat-sys-corner-small);
   border: 1px solid var(--mat-sys-outline-variant);
   background: color-mix(in srgb, var(--mat-sys-surface-container) 80%, transparent);
   backdrop-filter: blur(18px);
@@ -130,16 +145,11 @@
   margin-bottom: 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--mat-sys-outline-variant);
+  --mat-chip-container-shape-radius: var(--mat-sys-corner-small);
 }
 
 .editor {
-  grid-area: editor;
-  height: 45dvh;
-  min-height: 260px;
-  border-top: 1px solid var(--mat-sys-outline-variant);
-  background: color-mix(in srgb, var(--mat-sys-surface-container-lowest) 94%, transparent);
-  backdrop-filter: blur(18px);
-  overflow: hidden;
+  pointer-events: auto;
 }
 
 // --- Narrow screens --------------------------------------------------------
@@ -161,10 +171,6 @@
     margin: 8px;
   }
 
-  .editor {
-    height: 60dvh;
-  }
-
   .shader-name {
     display: none;
   }
@@ -180,7 +186,7 @@
 }
 
 @media (max-width: 600px) {
-  .brand {
+  .brand-title {
     display: none;
   }
 }

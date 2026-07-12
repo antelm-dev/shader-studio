@@ -4,6 +4,7 @@ import {
   PLATFORM_ID,
   TransferState,
   computed,
+  effect,
   inject,
   makeStateKey,
   signal,
@@ -21,6 +22,7 @@ import {
 } from '../../shared/model';
 import { defaultParams, sanitizeParams, validateControls } from '../../shared/validate';
 import type { CompileDiagnostic } from './diagnostic';
+import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { ApiError, ShaderApi } from './shader-api';
 import { Preferences } from './preferences';
 
@@ -74,11 +76,27 @@ export class ShaderStore {
   private readonly preferences = inject(Preferences);
   private readonly transferState = inject(TransferState);
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
+  private readonly recovery = inject(DraftRecovery);
 
   /** True once the client has taken over the server's snapshot. */
   private hydrated = false;
 
   constructor() {
+    this.recovery.onWarning = () =>
+      this.notice.set({ text: 'Local draft recovery is unavailable in this browser session', error: true });
+
+    effect((onCleanup) => {
+      const record = this.record();
+      const draft = this.draft();
+      const dirty = this.dirty();
+      if (!record || !draft) return;
+      const timer = setTimeout(() => {
+        if (dirty) this.recovery.put(record.id, record.updatedAt, draft);
+        else this.recovery.remove(record.id);
+      }, 350);
+      onCleanup(() => clearTimeout(timer));
+    });
+
     if (this.isServer || !this.transferState.hasKey(SNAPSHOT_KEY)) return;
 
     const snapshot = this.transferState.get(SNAPSHOT_KEY, null);
@@ -106,6 +124,7 @@ export class ShaderStore {
 
   /** Last message worth showing the user (error or confirmation). */
   readonly notice = signal<{ text: string; error: boolean } | null>(null);
+  readonly staleRecovery = signal<RecoveredDraft | null>(null);
 
   // --- Derived ------------------------------------------------------------
 
@@ -158,11 +177,14 @@ export class ShaderStore {
    * would then hydrate is exactly the mismatch this snapshot exists to avoid.
    * The client switches to the remembered shader once it takes over.
    */
-  async initialize(): Promise<void> {
+  async initialize(routeShaderId?: string | null): Promise<void> {
     await this.refreshList();
 
     const shaders = this.shaders();
-    if (shaders.length > 0) await this.select(shaders[0].id);
+    const requested = routeShaderId && shaders.some((shader) => shader.id === routeShaderId)
+      ? routeShaderId
+      : shaders[0]?.id;
+    if (requested) await this.select(requested);
 
     if (this.isServer) {
       this.transferState.set(SNAPSHOT_KEY, {
@@ -177,13 +199,13 @@ export class ShaderStore {
    * snapshot there is nothing to fetch — we only need to honour the shader the
    * user last had open.
    */
-  async initializeClient(): Promise<void> {
+  async initializeClient(routeShaderId?: string | null): Promise<void> {
     // Read before `initialize`, not after: opening the first shader writes it
     // to `lastShaderId`, which would leave nothing left to honour.
-    const preferred = this.preferences.value().lastShaderId;
+    const preferred = routeShaderId ?? this.preferences.value().lastShaderId;
 
     if (!this.hydrated) {
-      await this.initialize();
+      await this.initialize(routeShaderId);
     }
 
     if (preferred && preferred !== this.selectedId()) {
@@ -227,6 +249,41 @@ export class ShaderStore {
     this.params.set(defaultParams(record.controls));
     this.activePresetId.set(null);
     this.diagnostics.set([]);
+
+    const recovered = this.isServer ? null : this.recovery.get(record.id);
+    if (recovered?.baselineUpdatedAt === record.updatedAt) this.applyRecoveredDraft(recovered);
+    else this.staleRecovery.set(recovered);
+  }
+
+  resolveRecovery(restore: boolean): void {
+    const recovered = this.staleRecovery();
+    if (!recovered) return;
+    if (restore && recovered.shaderId === this.selectedId()) this.applyRecoveredDraft(recovered);
+    else this.recovery.remove(recovered.shaderId);
+    this.staleRecovery.set(null);
+  }
+
+  discardCurrentDraft(): void {
+    const record = this.record();
+    if (!record) return;
+    this.recovery.remove(record.id);
+    this.adopt(record);
+  }
+
+  flushRecovery(): void {
+    const record = this.record();
+    const draft = this.draft();
+    if (record && draft && this.dirty()) this.recovery.put(record.id, record.updatedAt, draft);
+  }
+
+  private applyRecoveredDraft(recovered: RecoveredDraft): void {
+    this.draft.set({
+      fragment: recovered.fragment,
+      vertex: recovered.vertex,
+      controlsText: recovered.controlsText,
+      render: structuredClone(recovered.render),
+    });
+    this.setControlsText(recovered.controlsText);
   }
 
   // --- Editing ------------------------------------------------------------
@@ -325,15 +382,15 @@ export class ShaderStore {
 
   // --- Persistence --------------------------------------------------------
 
-  async save(): Promise<void> {
+  async save(): Promise<boolean> {
     const record = this.record();
     const draft = this.draft();
-    if (!record || !draft || this.saving()) return;
+    if (!record || !draft || this.saving()) return false;
 
     const controls = this.parseControls(draft.controlsText);
     if (!controls) {
       this.notice.set({ text: 'Fix the configuration schema before saving', error: true });
-      return;
+      return false;
     }
 
     this.saving.set(true);
@@ -361,16 +418,18 @@ export class ShaderStore {
 
       await this.refreshList();
       this.notice.set({ text: `Saved “${saved.name}”`, error: false });
+      this.recovery.remove(saved.id);
+      return true;
     } catch (error) {
       this.report(error);
+      return false;
     } finally {
       this.saving.set(false);
     }
   }
 
   revert(): void {
-    const record = this.record();
-    if (record) this.adopt(record);
+    this.discardCurrentDraft();
   }
 
   // --- Collection actions -------------------------------------------------
@@ -415,6 +474,7 @@ export class ShaderStore {
   async remove(id: string): Promise<void> {
     try {
       await this.api.remove(id);
+      this.recovery.remove(id);
       await this.refreshList();
 
       if (this.selectedId() === id) {

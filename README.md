@@ -322,7 +322,7 @@ never carry a value for a control that does not exist.
 
 | Shader           | Shows                                                                  |
 | ---------------- | ---------------------------------------------------------------------- |
-| **Poured Paint** | 42 controls. Domain-warped fbm, layers quantized into pooled bands with hard contour lips, wet specular relief, OKLab palette ramp, click ripples with chromatic dispersion. Bloom on. |
+| **Poured Paint** | 43 controls. Domain-warped fbm, layers quantized into pooled bands with hard contour lips, wet specular relief, OKLab palette ramp, click ripples with chromatic dispersion, and momentum-tunable pointer smearing. Bloom on. |
 | **Aurora Veil**  | Curtains draped by warping the x axis with slow noise, over a twinkling star field. |
 | **Hex Pulse**    | `u_clickData`: click and a wavefront crosses the lattice. Hover lights the cells under the cursor. |
 | **Warp Tunnel**  | A tunnel from `1/r` — no raymarching. Demonstrates `select` and `boolean` controls. |

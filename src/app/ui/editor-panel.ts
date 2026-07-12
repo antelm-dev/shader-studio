@@ -1,12 +1,23 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+  viewChildren,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { CodeEditor } from '../editor/code-editor';
+import { EditorSettings } from '../editor/editor-settings';
 import { Preferences } from '../core/preferences';
 import type { CompileDiagnostic, DiagnosticSource } from '../core/diagnostic';
 import { ShaderStore } from '../core/shader-store';
+import { EditorWindowControls } from './editor-window-controls';
 
 /** One tab per buffer, which is also the set of things a diagnostic can point at. */
 type Tab = DiagnosticSource;
@@ -18,13 +29,32 @@ type Tab = DiagnosticSource;
  * debounce — there is no "run" button, because the whole point is that the
  * background *is* the shader you are editing. A shader that fails to compile
  * leaves the last good one on screen and reports why in the diagnostics strip.
+ *
+ * The panel knows nothing about where it is. It is docked, floating, maximized
+ * or collapsed entirely at `EditorShell`'s discretion; all it is told is whether
+ * to collapse its body and whether its toolbar should behave as a drag handle.
+ * That ignorance is what lets the shell move it between modes without ever
+ * recreating it — and an editor that is never recreated is an editor that never
+ * loses your undo history.
  */
 @Component({
   selector: 'app-editor-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CodeEditor, MatButtonModule, MatIconModule, MatTooltipModule],
+  imports: [
+    CodeEditor,
+    EditorWindowControls,
+    MatButtonModule,
+    MatIconModule,
+    MatTooltipModule,
+  ],
   template: `
-    <div class="editor-toolbar">
+    <!-- The toolbar doubles as the floating window's title bar. dragStart only
+         fires for presses on the bar itself, never on a control inside it. -->
+    <div
+      class="editor-toolbar"
+      [class.draggable]="dragEnabled()"
+      (pointerdown)="onToolbarPointerDown($event)"
+    >
       <nav class="tabs" role="tablist" aria-label="Shader source">
         @for (option of tabs; track option.id) {
           <button
@@ -34,7 +64,7 @@ type Tab = DiagnosticSource;
             class="tab"
             [class.active]="tab() === option.id"
             [attr.aria-selected]="tab() === option.id"
-            (click)="tab.set(option.id)"
+            (click)="selectTab(option.id)"
           >
             {{ option.label }}
             @if (errorCount(option.id); as count) {
@@ -53,6 +83,7 @@ type Tab = DiagnosticSource;
       <button
         matButton
         type="button"
+        class="action"
         matTooltip="Discard your edits and reload the saved shader"
         [disabled]="!store.dirty() || store.saving()"
         (click)="store.revert()"
@@ -64,15 +95,21 @@ type Tab = DiagnosticSource;
       <button
         matButton="filled"
         type="button"
+        class="action"
+        matTooltip="Save the source and config (Ctrl+S)"
         [disabled]="!store.dirty() || store.saving() || !store.configValid()"
         (click)="store.save()"
       >
         <mat-icon>save</mat-icon>
         {{ store.saving() ? 'Saving…' : 'Save' }}
       </button>
+
+      <app-editor-window-controls />
     </div>
 
-    <div class="editor-body">
+    <!-- Hidden, never removed. Collapsing the editor must not cost you the
+         undo stack you spent the last twenty minutes building. -->
+    <div class="editor-body" [class.collapsed]="collapsed()" [attr.inert]="collapsed() || null">
       @if (store.draft(); as draft) {
         <!-- Each tab keeps its own editor so switching does not reset the cursor. -->
         <app-code-editor
@@ -81,6 +118,7 @@ type Tab = DiagnosticSource;
           language="glsl"
           [value]="draft.fragment"
           [colorScheme]="preferences.value().colorScheme"
+          [appearance]="settings.effective()"
           [diagnostics]="diagnosticsFor('fragment')"
           (valueChange)="store.setFragment($event)"
         />
@@ -90,6 +128,7 @@ type Tab = DiagnosticSource;
           language="glsl"
           [value]="draft.vertex"
           [colorScheme]="preferences.value().colorScheme"
+          [appearance]="settings.effective()"
           [diagnostics]="diagnosticsFor('vertex')"
           (valueChange)="store.setVertex($event)"
         />
@@ -99,6 +138,7 @@ type Tab = DiagnosticSource;
           language="json"
           [value]="draft.controlsText"
           [colorScheme]="preferences.value().colorScheme"
+          [appearance]="settings.effective()"
           [diagnostics]="diagnosticsFor('config')"
           (valueChange)="store.setControlsText($event)"
         />
@@ -107,7 +147,7 @@ type Tab = DiagnosticSource;
       }
     </div>
 
-    @if (visibleDiagnostics().length > 0) {
+    @if (visibleDiagnostics().length > 0 && !collapsed()) {
       <ul class="diagnostics" aria-label="Diagnostics" aria-live="polite">
         @for (diagnostic of visibleDiagnostics(); track $index) {
           <li class="diagnostic" [class.warning]="diagnostic.severity === 'warning'">
@@ -138,6 +178,13 @@ type Tab = DiagnosticSource;
       gap: 8px;
       padding: 6px 8px;
       border-bottom: 1px solid var(--mat-sys-outline-variant);
+      /* The bar is a drag surface when floating; its own text should not select
+         out from under the gesture. The code below it is untouched. */
+      user-select: none;
+    }
+
+    .editor-toolbar.draggable {
+      cursor: move;
     }
 
     .tabs {
@@ -170,12 +217,21 @@ type Tab = DiagnosticSource;
     .dirty {
       color: var(--mat-sys-tertiary);
       font: var(--mat-sys-label-medium);
+      white-space: nowrap;
     }
 
     .editor-body {
       position: relative;
       flex: 1;
       min-height: 0;
+    }
+
+    /* Collapsed, not destroyed: zero height, no hit area, still alive. */
+    .editor-body.collapsed {
+      flex: 0 0 0;
+      height: 0;
+      overflow: hidden;
+      visibility: hidden;
     }
 
     .editor {
@@ -238,11 +294,34 @@ type Tab = DiagnosticSource;
       color: var(--mat-sys-on-surface);
       overflow-wrap: anywhere;
     }
+
+    /* Narrow panels lose the wordy buttons before they lose the window controls:
+       Save is also on the app toolbar and bound to Ctrl+S, but there is nowhere
+       else to un-maximize from. */
+    @container (max-width: 560px) {
+      .action {
+        display: none;
+      }
+    }
   `,
+  host: {
+    style: 'container-type: inline-size',
+  },
 })
 export class EditorPanel {
   protected readonly store = inject(ShaderStore);
   protected readonly preferences = inject(Preferences);
+  protected readonly settings = inject(EditorSettings);
+
+  /** Collapse to just the toolbar, keeping every editor alive underneath. */
+  readonly collapsed = input(false);
+
+  /** Whether a press on the toolbar should begin a window drag. */
+  readonly dragEnabled = input(false);
+
+  readonly dragStart = output<PointerEvent>();
+
+  private readonly editors = viewChildren(CodeEditor);
 
   protected readonly tabs: readonly { id: Tab; label: string }[] = [
     { id: 'fragment', label: 'Fragment' },
@@ -255,6 +334,47 @@ export class EditorPanel {
   protected readonly visibleDiagnostics = computed(() =>
     this.store.diagnostics().filter((diagnostic) => diagnostic.source === this.tab()),
   );
+
+  /**
+   * Re-measure every tab, including the hidden ones.
+   *
+   * Monaco lays itself out from the size of its container, and a container that
+   * was `visibility: hidden` or zero-height while the window was resized has been
+   * measuring nothing. Without this, restoring a collapsed editor or switching to
+   * a tab that was hidden during a drag shows a correctly-sized box with the text
+   * still laid out for the *old* one.
+   */
+  relayout(): void {
+    for (const editor of this.editors()) editor.layout();
+  }
+
+  /** Focus the tab the user is actually looking at. */
+  focusEditor(): void {
+    const index = this.tabs.findIndex((option) => option.id === this.tab());
+    this.editors()[index]?.focus();
+  }
+
+  protected selectTab(tab: Tab): void {
+    this.tab.set(tab);
+    // The editor we are about to reveal has been sitting at `visibility: hidden`
+    // and may have missed a resize while it was there.
+    queueMicrotask(() => this.relayout());
+  }
+
+  /**
+   * Begin a drag — but only from the bar itself.
+   *
+   * A press that started on a button, a tab or the dirty badge is that control's
+   * business, and hijacking it would make every click a one-pixel window move.
+   */
+  protected onToolbarPointerDown(event: PointerEvent): void {
+    if (!this.dragEnabled() || event.button !== 0) return;
+
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, a, input, [role="tab"]')) return;
+
+    this.dragStart.emit(event);
+  }
 
   protected diagnosticsFor(source: Tab): CompileDiagnostic[] {
     return this.store.diagnostics().filter((diagnostic) => diagnostic.source === source);

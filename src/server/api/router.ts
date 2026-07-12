@@ -10,45 +10,15 @@
 
 import express, { type NextFunction, type Request, type Response, type Router } from 'express';
 
-import type { ApiErrorBody } from '../shared/model';
-import { buildCollectionBundle, buildShaderBundle, parseBundle, validateImportMode } from '../shared/validate';
-import { ShaderStorage, StorageError } from './storage';
-
-/** Bundles carry GLSL for every shader they hold, so the cap is generous. */
-const BODY_LIMIT = '8mb';
-
-/** Turn a name into something safe to put in a Content-Disposition header. */
-function attachmentName(name: string): string {
-  const ascii = name.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'shaders';
-  return `${ascii}.shader.json`;
-}
-
-/** Async route handlers, with rejections funnelled to the error middleware. */
-function route(handler: (req: Request, res: Response) => Promise<void>) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    handler(req, res).catch(next);
-  };
-}
-
-/**
- * Read a route parameter as a string.
- *
- * Express types params as `string | string[]` behind an index signature, since
- * a wildcard segment can repeat. Ours never do, and an empty string falls
- * straight through to `validateId`, which rejects it.
- */
-function param(req: Request, name: string): string {
-  const value = (req.params as Record<string, string | string[] | undefined>)[name];
-  if (Array.isArray(value)) return value[0] ?? '';
-  return value ?? '';
-}
+import type { ApiErrorBody } from '../../shared/model';
+import { buildCollectionBundle, buildShaderBundle, parseBundle, validateImportMode } from '../../shared/validate';
+import { ShaderStorage, StorageError } from '../storage';
+import { attachmentName, BODY_LIMIT, param, route } from './helpers';
 
 export function createApiRouter(storage: ShaderStorage): Router {
   const api = express.Router();
 
   api.use(express.json({ limit: BODY_LIMIT }));
-
-  // --- Collection ---------------------------------------------------------
 
   api.get(
     '/shaders',
@@ -73,8 +43,6 @@ export function createApiRouter(storage: ShaderStorage): Router {
     }),
   );
 
-  // --- One shader ---------------------------------------------------------
-
   api.get(
     '/shaders/:id',
     route(async (req, res) => {
@@ -87,7 +55,6 @@ export function createApiRouter(storage: ShaderStorage): Router {
     route(async (req, res) => {
       const body = (req.body ?? {}) as Record<string, unknown>;
       const updated = await storage.update(param(req, 'id'), {
-        // `undefined` means "leave alone", so only forward keys that are present.
         ...('name' in body ? { name: body['name'] } : {}),
         ...('description' in body ? { description: body['description'] } : {}),
         ...('controls' in body ? { controls: body['controls'] } : {}),
@@ -115,8 +82,6 @@ export function createApiRouter(storage: ShaderStorage): Router {
       res.status(201).json({ shader: copy });
     }),
   );
-
-  // --- Presets ------------------------------------------------------------
 
   api.get(
     '/shaders/:id/presets',
@@ -146,8 +111,6 @@ export function createApiRouter(storage: ShaderStorage): Router {
     }),
   );
 
-  // --- Import / export ----------------------------------------------------
-
   api.get(
     '/shaders/:id/export',
     route(async (req, res) => {
@@ -173,8 +136,6 @@ export function createApiRouter(storage: ShaderStorage): Router {
     route(async (req, res) => {
       const body = (req.body ?? {}) as Record<string, unknown>;
 
-      // Accept the bundle either wrapped (`{ bundle, mode }`) or bare, so a
-      // file exported from the app can be POSTed back untouched.
       const raw = 'bundle' in body ? body['bundle'] : body;
 
       const mode = validateImportMode(body['mode']);
@@ -191,8 +152,6 @@ export function createApiRouter(storage: ShaderStorage): Router {
       res.status(201).json(result);
     }),
   );
-
-  // --- Errors -------------------------------------------------------------
 
   api.use((_req, res) => {
     const body: ApiErrorBody = {
@@ -219,7 +178,6 @@ export function createApiRouter(storage: ShaderStorage): Router {
       return;
     }
 
-    // A malformed JSON body surfaces here as a SyntaxError from body-parser.
     if (error instanceof SyntaxError && 'body' in error) {
       const body: ApiErrorBody = {
         error: { code: 'invalid', message: 'Request body is not valid JSON' },

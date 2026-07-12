@@ -41,7 +41,7 @@ import {
   type ShaderPayload,
   type ShaderRecord,
   type ShaderSummary,
-} from '../shared/model';
+} from '../../shared/model';
 import {
   LIMITS,
   sanitizeParams,
@@ -54,60 +54,10 @@ import {
   validatePreset,
   validateRender,
   validateSource,
-  type Result,
-} from '../shared/validate';
-
-// ---------------------------------------------------------------------------
-// Errors
-// ---------------------------------------------------------------------------
-
-/** Everything the routes need in order to answer with a useful status code. */
-export class StorageError extends Error {
-  constructor(
-    readonly code: 'not_found' | 'conflict' | 'invalid' | 'io',
-    message: string,
-    readonly details: string[] = [],
-  ) {
-    super(message);
-    this.name = 'StorageError';
-  }
-
-  get status(): number {
-    switch (this.code) {
-      case 'not_found':
-        return 404;
-      case 'conflict':
-        return 409;
-      case 'invalid':
-        return 400;
-      case 'io':
-        return 500;
-      default:
-        return 500;
-    }
-  }
-}
-
-function invalid(result: { errors: string[] }, message: string): never {
-  throw new StorageError('invalid', message, result.errors);
-}
-
-/** Unwrap a validation Result or turn it into a 400. */
-function expect<T>(result: Result<T>, message: string): T {
-  if (!result.ok) invalid(result, message);
-  return result.value;
-}
-
-// ---------------------------------------------------------------------------
-// Paths
-// ---------------------------------------------------------------------------
-
-export interface StorageOptions {
-  /** Where shaders live. Defaults to `<cwd>/data`. */
-  dataDir?: string;
-  /** Seeded into an empty store on first run. Defaults to `<cwd>/examples`. */
-  examplesDir?: string;
-}
+} from '../../shared/validate';
+import { expect, StorageError } from './storage-error';
+import { DEFAULT_VERTEX, TEMPLATE_CONTROLS, TEMPLATE_FRAGMENT } from './templates';
+import type { StorageOptions } from './types';
 
 const META_FILE = 'meta.json';
 const FRAGMENT_FILE = 'fragment.glsl';
@@ -129,11 +79,6 @@ export class ShaderStorage {
     );
   }
 
-  /**
-   * Resolve a shader directory. The id is validated first, then the resolved
-   * path is checked to still sit under the shaders root — belt and braces
-   * against a traversal slipping through a future change to the pattern.
-   */
   private shaderDir(id: string): string {
     const validated = expect(validateId(id), `Invalid shader id "${id}"`);
     const dir = path.resolve(this.shadersDir, validated);
@@ -144,14 +89,9 @@ export class ShaderStorage {
     return dir;
   }
 
-  /**
-   * Serialize mutations per shader id. Reads are not locked: the worst a reader
-   * can see is the previous complete version, because writes are atomic.
-   */
   private async withLock<T>(id: string, work: () => Promise<T>): Promise<T> {
     const previous = this.locks.get(id) ?? Promise.resolve();
     const current = previous.then(work, work);
-    // Keep the chain alive on failure, but do not leave an unhandled rejection.
     this.locks.set(
       id,
       current.catch(() => undefined),
@@ -163,15 +103,6 @@ export class ShaderStorage {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Low-level IO
-  // -------------------------------------------------------------------------
-
-  /**
-   * Write via a temp file in the same directory, then rename. Rename is atomic
-   * within a filesystem, so a reader sees either the old file or the new one —
-   * never a truncated one — even if the process dies mid-write.
-   */
   private async writeFileAtomic(file: string, contents: string): Promise<void> {
     const temp = `${file}.${randomBytes(6).toString('hex')}.tmp`;
     try {
@@ -206,10 +137,6 @@ export class ShaderStorage {
     await this.seedIfEmpty();
   }
 
-  // -------------------------------------------------------------------------
-  // Reads
-  // -------------------------------------------------------------------------
-
   async listIds(): Promise<string[]> {
     let entries;
     try {
@@ -223,10 +150,6 @@ export class ShaderStorage {
       .sort();
   }
 
-  /**
-   * A directory whose meta.json is unreadable is skipped rather than fatal:
-   * one corrupt shader must not take the whole browser down with it.
-   */
   async list(): Promise<ShaderSummary[]> {
     const ids = await this.listIds();
     const records = await Promise.all(
@@ -267,7 +190,6 @@ export class ShaderStorage {
     return { ...meta, fragment, vertex, presets };
   }
 
-  /** Files on disk are still untrusted input — they may have been hand-edited. */
   private parseMeta(id: string, raw: unknown): ShaderMeta {
     const record = (raw ?? {}) as Record<string, unknown>;
     const name = expect(validateName(record['name'] ?? id), `Shader "${id}" has an invalid name`);
@@ -320,14 +242,6 @@ export class ShaderStorage {
     return presets;
   }
 
-  // -------------------------------------------------------------------------
-  // Writes
-  // -------------------------------------------------------------------------
-
-  /**
-   * The id is not written into meta.json: the directory name already *is* the
-   * id, and storing it twice invites the two to disagree after a manual copy.
-   */
   private async writeMeta(dir: string, meta: ShaderMeta): Promise<void> {
     const persisted = {
       name: meta.name,
@@ -418,13 +332,6 @@ export class ShaderStorage {
     );
   }
 
-  /**
-   * Partial update. Only the fields present in `patch` are touched; the rest of
-   * the shader is read back and rewritten unchanged.
-   *
-   * Editing `controls` re-projects every preset onto the new schema, so a
-   * preset never carries a value for a control that no longer exists.
-   */
   async update(
     id: string,
     patch: {
@@ -515,15 +422,10 @@ export class ShaderStorage {
         ...toPayload(source),
         id: copyId,
         name: copyName,
-        // Presets come along, but get ids of their own scoped to the copy.
         presets: source.presets.map((preset) => ({ ...preset })),
       }),
     );
   }
-
-  // -------------------------------------------------------------------------
-  // Presets
-  // -------------------------------------------------------------------------
 
   async savePreset(id: string, input: { name: unknown; values: unknown }): Promise<Preset> {
     return this.withLock(id, async () => {
@@ -535,8 +437,6 @@ export class ShaderStorage {
         throw new StorageError('conflict', `Shader "${id}" already has the maximum number of presets`);
       }
 
-      // Saving over a preset of the same name replaces it: re-saving from the
-      // GUI is the common case, and it should not pile up duplicates.
       const existing = shader.presets.find((preset) => preset.name === name);
       const presetId =
         existing?.id ??
@@ -583,10 +483,6 @@ export class ShaderStorage {
     await this.writeMeta(dir, { ...meta, updatedAt: new Date().toISOString() });
   }
 
-  // -------------------------------------------------------------------------
-  // Import / export
-  // -------------------------------------------------------------------------
-
   async exportOne(id: string): Promise<ShaderPayload> {
     return toPayload(await this.read(id));
   }
@@ -604,17 +500,8 @@ export class ShaderStorage {
     return payloads;
   }
 
-  /**
-   * Import validated payloads.
-   *
-   * `rename` (the default) never destroys anything: a colliding id is given a
-   * fresh suffixed one. `overwrite` replaces the shader that already holds the
-   * id, which is what makes an export/import round trip idempotent.
-   */
   async importPayloads(payloads: ShaderPayload[], mode: ImportMode): Promise<ImportResult> {
     const imported: ImportResult['imported'] = [];
-    // Accumulates across the loop so two shaders in one bundle cannot both
-    // claim the same freshly-generated id.
     const taken = new Set(await this.listIds());
 
     for (const payload of payloads) {
@@ -636,14 +523,6 @@ export class ShaderStorage {
     return { imported };
   }
 
-  // -------------------------------------------------------------------------
-  // Seeding
-  // -------------------------------------------------------------------------
-
-  /**
-   * Copy the bundled examples into an empty store. The `.seeded` marker means a
-   * user who deletes every example does not find them back after a restart.
-   */
   private async seedIfEmpty(): Promise<void> {
     if (process.env['SHADER_SEED'] === '0') return;
     if (await this.exists(path.join(this.dataDir, SEED_MARKER))) return;
@@ -677,49 +556,3 @@ export class ShaderStorage {
     console.log(`[storage] seeded ${examples.length} example shader(s) into ${this.shadersDir}`);
   }
 }
-
-// ---------------------------------------------------------------------------
-// The starting point for a brand new shader
-// ---------------------------------------------------------------------------
-
-export const DEFAULT_VERTEX = `varying vec2 vUv;
-
-void main() {
-  vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`;
-
-export const TEMPLATE_CONTROLS: ShaderControl[] = [
-  { key: 'timeScale', type: 'number', label: 'Time Scale', folder: 'Motion', default: 0.4, min: 0, max: 2 },
-  { key: 'scale', type: 'number', label: 'Scale', folder: 'Structure', default: 3, min: 0.5, max: 12 },
-  { key: 'colorA', type: 'color', label: 'Color A', folder: 'Palette', default: '#1b2a4a' },
-  { key: 'colorB', type: 'color', label: 'Color B', folder: 'Palette', default: '#5ad1c8' },
-];
-
-export const TEMPLATE_FRAGMENT = `precision highp float;
-
-// Built-in uniforms, always provided by the engine.
-uniform vec2 iResolution;
-uniform float iTime;
-
-// One uniform per control in the schema, named u_<key>.
-uniform float u_timeScale;
-uniform float u_scale;
-uniform vec3 u_colorA;
-uniform vec3 u_colorB;
-
-varying vec2 vUv;
-
-void main() {
-  vec2 uv = vUv;
-  uv.x *= iResolution.x / iResolution.y;
-
-  float t = iTime * u_timeScale;
-  float wave = sin(uv.x * u_scale + t) * 0.5 + 0.5;
-  wave *= sin(uv.y * u_scale - t * 0.7) * 0.5 + 0.5;
-
-  vec3 color = mix(u_colorA, u_colorB, wave);
-  gl_FragColor = vec4(color, 1.0);
-}
-`;

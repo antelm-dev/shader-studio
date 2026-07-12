@@ -46,7 +46,7 @@
               "allowedHosts": []
             },
             "ssr": {
-              "entry": "src/server.ts"
+              "entry": "src/server/index.ts"
             }
           },
           "configurations": {

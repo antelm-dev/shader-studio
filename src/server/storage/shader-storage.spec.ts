@@ -3,15 +3,9 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { ShaderPayload } from '../shared/model';
-import { buildCollectionBundle, parseBundle } from '../shared/validate';
-import { ShaderStorage, StorageError, DEFAULT_VERTEX, TEMPLATE_FRAGMENT } from './storage';
-
-/**
- * These run against a real temp directory rather than a mocked fs: the whole
- * point of this layer is what it does to the filesystem, and a mock would let a
- * path-traversal bug through without complaint.
- */
+import type { ShaderPayload } from '../../shared/model';
+import { buildCollectionBundle, parseBundle } from '../../shared/validate';
+import { ShaderStorage, StorageError, DEFAULT_VERTEX, TEMPLATE_FRAGMENT } from './index';
 
 let root: string;
 let storage: ShaderStorage;
@@ -78,8 +72,6 @@ describe('create', () => {
 });
 
 describe('path traversal', () => {
-  // The id is a directory name. Each of these would escape the shaders root if
-  // it reached `path.join` unchecked.
   it.each(['..', '../..', '../../etc', 'a/b', 'a\\b', '.', 'foo/../../bar', '%2e%2e'])(
     'refuses to read "%s"',
     async (id) => {
@@ -157,13 +149,10 @@ describe('update', () => {
 
     await storage.savePreset(id, { name: 'Fast', values: { speed: 2, gone: 9 } });
 
-    // Drop `gone` and narrow `speed`.
     const updated = await storage.update(id, {
       controls: [{ key: 'speed', type: 'number', default: 0.5, min: 0, max: 1 }],
     });
 
-    // The preset survives, minus the control that no longer exists, and its
-    // out-of-range value clamped back in.
     expect(updated.presets[0].values).toEqual({ speed: 1 });
   });
 
@@ -190,7 +179,6 @@ describe('duplicate', () => {
     expect(copy.fragment).toBe(FRAGMENT);
     expect(copy.presets.map((preset) => preset.name)).toEqual(['Warm']);
 
-    // And the original is untouched.
     expect((await storage.read(id)).name).toBe('Original');
   });
 
@@ -288,7 +276,6 @@ describe('import / export', () => {
 
     const payloads = await exportedPayloads();
 
-    // Import into a completely fresh store.
     const fresh = new ShaderStorage({
       dataDir: path.join(root, 'data2'),
       examplesDir: path.join(root, 'examples'),
@@ -313,7 +300,6 @@ describe('import / export', () => {
     expect(result.imported[0].id).toBe('keep-me-2');
     expect(result.imported[0].replaced).toBe(false);
 
-    // The original is still exactly as it was.
     expect((await storage.read('keep-me')).fragment).toBe(FRAGMENT);
     expect(await storage.listIds()).toEqual(['keep-me', 'keep-me-2']);
   });
@@ -327,14 +313,13 @@ describe('import / export', () => {
     const result = await storage.importPayloads(payloads, 'overwrite');
 
     expect(result.imported[0]).toMatchObject({ id: 'target', replaced: true });
-    // The imported version won, so the edit above is gone.
     expect((await storage.read('target')).fragment).toBe(TEMPLATE_FRAGMENT);
     expect(await storage.listIds()).toEqual(['target']);
   });
 
   it('overwrite mode drops presets that the incoming shader does not have', async () => {
     const id = await seed('Target');
-    const payloads = await exportedPayloads(); // exported with no presets
+    const payloads = await exportedPayloads();
 
     await storage.savePreset(id, { name: 'Added Later', values: {} });
     await storage.importPayloads(payloads, 'overwrite');
@@ -389,7 +374,6 @@ describe('seeding', () => {
     await first.init();
     await first.remove('demo');
 
-    // A restart must respect the deletion — that is what the .seeded marker is for.
     const second = new ShaderStorage(options);
     await second.init();
 

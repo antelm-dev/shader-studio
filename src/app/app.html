@@ -1,5 +1,6 @@
 <!-- The shader is the page: everything below is painted on top of it. -->
 <app-shader-canvas />
+<router-outlet />
 
 <div class="shell">
   <mat-toolbar class="toolbar">
@@ -14,7 +15,10 @@
       <mat-icon>menu</mat-icon>
     </button>
 
-    <span class="brand">Shader Studio</span>
+    <span class="brand" aria-label="Shader Studio">
+      <img class="brand-logo" src="shader-studio-logo.png" alt="" width="32" height="32" />
+      <span class="brand-title">Shader Studio</span>
+    </span>
 
     @if (store.record(); as shader) {
       <span class="shader-name" [title]="shader.description">{{ shader.name }}</span>
@@ -109,11 +113,11 @@
       <mat-icon>save</mat-icon>
       Save
     </button>
-  </mat-toolbar>
 
-  @if (store.loading() || store.saving()) {
-    <mat-progress-bar class="loading" mode="indeterminate" aria-label="Working" />
-  }
+    @if (store.loading() || store.saving()) {
+      <mat-progress-bar class="loading" mode="indeterminate" aria-label="Working" />
+    }
+  </mat-toolbar>
 
   <mat-sidenav-container class="body" [hasBackdrop]="isHandset()">
     <mat-sidenav
@@ -137,9 +141,7 @@
       }
 
       @if (preferences.value().editorOpen) {
-        <section class="editor" aria-label="Source editor">
-          <app-editor-panel />
-        </section>
+        <app-editor-shell class="editor" />
       }
     </mat-sidenav-content>
   </mat-sidenav-container>

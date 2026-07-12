@@ -1,0 +1,70 @@
+import { Injectable } from '@angular/core';
+
+import type {
+  Bundle,
+  ImportMode,
+  ImportResult,
+  Preset,
+  ShaderParams,
+  ShaderRecord,
+  ShaderSummary,
+} from '../../shared/model';
+import { ApiError, ShaderApi, type UpdateShaderPatch } from './shader-api';
+
+function messageOf(error: unknown): string {
+  if (error instanceof Error) return error.message.replace(/^Error invoking remote method '[^']+':\s*/, '');
+  return String(error);
+}
+
+@Injectable()
+export class DesktopShaderApi extends ShaderApi {
+  private request<T>(work: () => Promise<T>): Promise<T> {
+    return work().catch((error: unknown) => {
+      throw new ApiError(messageOf(error));
+    });
+  }
+
+  override list(): Promise<ShaderSummary[]> {
+    return this.request(() => window.electron.bridge.shader.list());
+  }
+
+  override read(id: string): Promise<ShaderRecord> {
+    return this.request(() => window.electron.bridge.shader.read(id));
+  }
+
+  override create(name: string, description = ''): Promise<ShaderRecord> {
+    return this.request(() => window.electron.bridge.shader.create({ name, description }));
+  }
+
+  override update(id: string, patch: UpdateShaderPatch): Promise<ShaderRecord> {
+    return this.request(() => window.electron.bridge.shader.update(id, patch));
+  }
+
+  override duplicate(id: string, name?: string): Promise<ShaderRecord> {
+    return this.request(() => window.electron.bridge.shader.duplicate(id, name));
+  }
+
+  override remove(id: string): Promise<void> {
+    return this.request(() => window.electron.bridge.shader.remove(id));
+  }
+
+  override savePreset(id: string, name: string, values: ShaderParams): Promise<Preset> {
+    return this.request(() => window.electron.bridge.shader.savePreset(id, { name, values }));
+  }
+
+  override deletePreset(id: string, presetId: string): Promise<void> {
+    return this.request(() => window.electron.bridge.shader.deletePreset(id, presetId));
+  }
+
+  override exportShader(id: string): Promise<Bundle> {
+    return this.request(() => window.electron.bridge.shader.exportShader(id));
+  }
+
+  override exportAll(): Promise<Bundle> {
+    return this.request(() => window.electron.bridge.shader.exportAll());
+  }
+
+  override importBundle(bundle: unknown, mode: ImportMode): Promise<ImportResult> {
+    return this.request(() => window.electron.bridge.shader.importBundle(bundle, mode));
+  }
+}

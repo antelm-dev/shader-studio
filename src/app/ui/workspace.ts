@@ -5,7 +5,10 @@ import { firstValueFrom } from 'rxjs';
 import type { ImportMode } from '../../shared/model';
 import { ShaderStore } from '../core/shader-store';
 import { ConfirmDialog, type ConfirmDialogData } from './confirm-dialog';
+import { EditorSettingsDialog } from './editor-settings-dialog';
 import { PromptDialog, type PromptDialogData } from './prompt-dialog';
+import { RecoveryDialog } from './recovery-dialog';
+import { UnsavedChangesDialog, type UnsavedChoice } from './unsaved-changes-dialog';
 
 /**
  * The user-facing verbs of the app: the flows that need a dialog or a file
@@ -19,6 +22,45 @@ import { PromptDialog, type PromptDialogData } from './prompt-dialog';
 export class Workspace {
   private readonly dialog = inject(MatDialog);
   private readonly store = inject(ShaderStore);
+  private transitionInFlight: Promise<boolean> | null = null;
+
+  guardedTransition(action: () => void | Promise<void>): Promise<boolean> {
+    if (this.transitionInFlight) return this.transitionInFlight;
+    this.transitionInFlight = this.runGuarded(action).finally(() => (this.transitionInFlight = null));
+    return this.transitionInFlight;
+  }
+
+  private async runGuarded(action: () => void | Promise<void>): Promise<boolean> {
+    if (this.store.dirty()) {
+      const choice = await firstValueFrom(
+        this.dialog.open<UnsavedChangesDialog, never, UnsavedChoice>(UnsavedChangesDialog, {
+          disableClose: true,
+        }).afterClosed(),
+      );
+      if (choice === 'cancel' || !choice) return false;
+      if (choice === 'save' && !(await this.store.save())) return false;
+      if (choice === 'discard') this.store.discardCurrentDraft();
+    }
+    await action();
+    return true;
+  }
+
+  async selectShader(id: string): Promise<boolean> {
+    if (id === this.store.selectedId()) return true;
+    return this.guardedTransition(() => this.store.select(id));
+  }
+
+  async resolveStaleRecovery(): Promise<void> {
+    if (!this.store.staleRecovery()) return;
+    const restore = await firstValueFrom(
+      this.dialog.open<RecoveryDialog, never, boolean>(RecoveryDialog, { disableClose: true }).afterClosed(),
+    );
+    this.store.resolveRecovery(restore === true);
+  }
+
+  openEditorSettings(): void {
+    this.dialog.open(EditorSettingsDialog);
+  }
 
   private prompt(data: PromptDialogData): Promise<string | undefined> {
     return firstValueFrom(this.dialog.open(PromptDialog, { data }).afterClosed());
@@ -39,7 +81,7 @@ export class Workspace {
       confirmText: 'Create',
       hint: 'Starts from a small template you can edit straight away',
     });
-    if (name) await this.store.create(name);
+    if (name) await this.guardedTransition(() => this.store.create(name));
   }
 
   async renameShader(id: string, currentName: string): Promise<void> {
@@ -60,7 +102,7 @@ export class Workspace {
       value: `${currentName} copy`,
       confirmText: 'Duplicate',
     });
-    if (name) await this.store.duplicate(id, name);
+    if (name) await this.guardedTransition(() => this.store.duplicate(id, name));
   }
 
   async deleteShader(id: string, name: string): Promise<void> {
@@ -70,7 +112,10 @@ export class Workspace {
       confirmText: 'Delete',
       destructive: true,
     });
-    if (confirmed) await this.store.remove(id);
+    if (confirmed) {
+      if (id === this.store.selectedId()) await this.guardedTransition(() => this.store.remove(id));
+      else await this.store.remove(id);
+    }
   }
 
   // --- Presets ------------------------------------------------------------
@@ -147,7 +192,7 @@ export class Workspace {
       if (!confirmed) return;
     }
 
-    await this.store.importBundle(bundle, mode);
+    await this.guardedTransition(() => this.store.importBundle(bundle, mode));
   }
 
   private download(bundle: unknown, filename: string): void {

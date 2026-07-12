@@ -4,6 +4,7 @@ import {
   DestroyRef,
   ElementRef,
   afterNextRender,
+  computed,
   effect,
   inject,
   input,
@@ -15,23 +16,31 @@ import {
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api.js';
 
 import type { ColorScheme } from '../core/preferences';
-import type { CompileDiagnostic } from '../core/diagnostic';
 import {
-  GLSL_LANGUAGE_ID,
-  JSON_LANGUAGE_ID,
-  THEME_IDS,
-  loadMonaco,
-  type MonacoApi,
-} from './monaco-loader';
+  DEFAULT_EDITOR_APPEARANCE,
+  fontFamilyStack,
+  type EditorAppearance,
+} from '../core/editor-prefs';
+import type { CompileDiagnostic } from '../core/diagnostic';
+import { ReducedMotion } from '../core/reduced-motion';
+import { FontLoader, findFont, nearestWeight } from './google-fonts';
+import { monacoThemeId, resolveThemeId } from './editor-themes';
+import { GLSL_LANGUAGE_ID, JSON_LANGUAGE_ID, loadMonaco, type MonacoApi } from './monaco-loader';
 
 export type EditorLanguage = 'glsl' | 'json';
 
 /**
  * A Monaco instance bound to a signal.
  *
- * Deliberately dumb: it renders whatever `value` it is given and reports edits
- * through `valueChange`. It holds no opinion about shaders, which is what lets
- * the same component back the fragment, vertex and config tabs.
+ * Deliberately dumb: it renders whatever `value` it is given, dresses itself in
+ * whatever `appearance` it is given, and reports edits through `valueChange`. It
+ * holds no opinion about shaders, which is what lets the same component back the
+ * fragment, vertex and config tabs.
+ *
+ * It also never rebuilds itself. Every input is applied to the *live* editor
+ * through `updateOptions`, because tearing down a Monaco instance takes the undo
+ * stack, the cursor and the scroll position with it — and this component is
+ * moved between a docked panel and a floating window at the user's whim.
  */
 @Component({
   selector: 'app-code-editor',
@@ -70,11 +79,14 @@ export class CodeEditor {
   readonly diagnostics = input<readonly CompileDiagnostic[]>([]);
   readonly readOnly = input(false);
   readonly colorScheme = input<ColorScheme>('dark');
+  readonly appearance = input<EditorAppearance>(DEFAULT_EDITOR_APPEARANCE);
 
   readonly valueChange = output<string>();
 
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
   private readonly destroyRef = inject(DestroyRef);
+  private readonly fonts = inject(FontLoader);
+  private readonly reducedMotion = inject(ReducedMotion);
 
   private readonly monaco = signal<MonacoApi | null>(null);
   private editor: Monaco.editor.IStandaloneCodeEditor | null = null;
@@ -86,6 +98,41 @@ export class CodeEditor {
    * event is not echoed back out as if the user had typed it.
    */
   private applying = false;
+
+  /**
+   * The Monaco options implied by the current appearance.
+   *
+   * Motion is the one thing the user does not get the last word on: someone who
+   * has asked their OS for less of it means it here too, and a cursor that
+   * pulses or a viewport that glides is exactly what they asked to be spared.
+   */
+  private readonly options = computed<Monaco.editor.IEditorOptions>(() => {
+    const appearance = this.appearance();
+    const still = this.reducedMotion.enabled();
+    const font = findFont(appearance.fontFamily);
+
+    return {
+      fontFamily: fontFamilyStack(appearance.fontFamily),
+      fontSize: appearance.fontSize,
+      lineHeight: appearance.lineHeight,
+      fontWeight: String(nearestWeight(appearance.fontFamily, appearance.fontWeight)),
+      // Asking a face without ligatures for its ligatures is harmless, but it
+      // also turns on kerning and contextual alternates that some of these fonts
+      // do surprising things with. Only opt in where there is something to gain.
+      fontLigatures: appearance.ligatures && (font?.ligatures ?? false),
+      tabSize: appearance.tabSize,
+      wordWrap: appearance.wordWrap,
+      minimap: { enabled: appearance.minimap },
+      lineNumbers: appearance.lineNumbers ? 'on' : 'off',
+      bracketPairColorization: { enabled: appearance.bracketPairs },
+      guides: { bracketPairs: appearance.bracketPairs },
+      renderWhitespace: appearance.renderWhitespace ? 'all' : 'none',
+      stickyScroll: { enabled: appearance.stickyScroll },
+      cursorBlinking: still ? 'solid' : appearance.cursorBlinking,
+      smoothScrolling: !still,
+      cursorSmoothCaretAnimation: still ? 'off' : 'on',
+    };
+  });
 
   constructor() {
     afterNextRender(() => void this.boot());
@@ -125,13 +172,49 @@ export class CodeEditor {
       untracked(() => this.editor?.updateOptions({ readOnly }));
     });
 
+    // Appearance, applied live. Nothing here recreates the editor.
+    effect(() => {
+      const options = this.options();
+      untracked(() => this.editor?.updateOptions(options));
+    });
+
     // `setTheme` is global to Monaco, not scoped to one editor; every instance
     // asking for the same theme is harmless and keeps them all in step.
     effect(() => {
       const monaco = this.monaco();
-      const theme = THEME_IDS[this.colorScheme()];
+      const theme = monacoThemeId(resolveThemeId(this.appearance().theme, this.colorScheme()));
       untracked(() => monaco?.editor.setTheme(theme));
     });
+
+    // Fetch the chosen family, then tell Monaco to measure again. Monaco caches
+    // character widths on first paint; without the remeasure a font that lands a
+    // moment later renders at the *fallback's* metrics — every glyph correct and
+    // every cursor position wrong.
+    effect(() => {
+      const family = this.appearance().fontFamily;
+      const monaco = this.monaco();
+      if (!monaco) return;
+
+      untracked(() => {
+        void this.fonts.load(family).then((status) => {
+          if (status === 'loaded') monaco.editor.remeasureFonts();
+        });
+      });
+    });
+  }
+
+  /**
+   * Re-measure and re-lay-out. Monaco's `automaticLayout` watches the host with a
+   * ResizeObserver, which covers dragging and resizing; this exists for the cases
+   * it cannot see — a tab that was hidden while its container changed size, and a
+   * panel restored from a mode where it had no size at all.
+   */
+  layout(): void {
+    this.editor?.layout();
+  }
+
+  focus(): void {
+    this.editor?.focus();
   }
 
   private async boot(): Promise<void> {
@@ -140,19 +223,16 @@ export class CodeEditor {
     const editor = monaco.editor.create(this.host().nativeElement, {
       value: untracked(this.value),
       language: this.monacoLanguage(untracked(this.language)),
-      theme: THEME_IDS[untracked(this.colorScheme)],
+      theme: monacoThemeId(
+        resolveThemeId(untracked(this.appearance).theme, untracked(this.colorScheme)),
+      ),
       readOnly: untracked(this.readOnly),
       automaticLayout: true,
-      minimap: { enabled: false },
-      fontSize: 13,
-      lineHeight: 20,
-      fontFamily: `'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace`,
       scrollBeyondLastLine: false,
-      smoothScrolling: true,
       renderLineHighlight: 'line',
-      tabSize: 2,
       padding: { top: 12, bottom: 12 },
       scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
+      ...untracked(this.options),
     });
 
     editor.onDidChangeModelContent(() => {

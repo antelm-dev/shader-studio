@@ -8,6 +8,7 @@ import { provideClientHydration, withEventReplay } from '@angular/platform-brows
 import { provideRouter } from '@angular/router';
 
 import { routes } from './app.routes';
+import { HttpShaderApi, ShaderApi } from './core/shader-api';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -17,6 +18,8 @@ export const appConfig: ApplicationConfig = {
     // HttpClient defaults to the fetch backend in v22, which is what lets it
     // run during SSR, where there is no XHR.
     provideHttpClient(),
+    HttpShaderApi,
+    { provide: ShaderApi, useExisting: HttpShaderApi },
     // Replays clicks that landed before the app finished booting.
     provideClientHydration(withEventReplay()),
     // No `provideAnimationsAsync()`: @angular/animations is deprecated as of
