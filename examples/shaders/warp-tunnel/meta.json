@@ -1,0 +1,164 @@
+{
+  "name": "Warp Tunnel",
+  "description": "A hyperspace tube built from a reciprocal depth map: no raymarching, just 1/r. Shows the select and boolean control types alongside numbers and colors.",
+  "author": "Shader Studio",
+  "createdAt": "2026-07-12T00:00:00.000Z",
+  "updatedAt": "2026-07-12T00:00:00.000Z",
+  "controls": [
+    {
+      "key": "speed",
+      "type": "number",
+      "label": "Speed",
+      "folder": "Flight",
+      "default": 0.55,
+      "min": -2,
+      "max": 3
+    },
+    {
+      "key": "depth",
+      "type": "number",
+      "label": "Depth Scale",
+      "folder": "Flight",
+      "default": 0.28,
+      "min": 0.05,
+      "max": 1.2
+    },
+    {
+      "key": "twist",
+      "type": "number",
+      "label": "Twist",
+      "folder": "Flight",
+      "default": 0.09,
+      "min": -0.6,
+      "max": 0.6
+    },
+    {
+      "key": "steering",
+      "type": "boolean",
+      "label": "Pointer Steering",
+      "folder": "Flight",
+      "default": true
+    },
+    {
+      "key": "mirror",
+      "type": "boolean",
+      "label": "Mirror",
+      "folder": "Flight",
+      "default": false
+    },
+    {
+      "key": "rings",
+      "type": "number",
+      "label": "Rings",
+      "folder": "Lattice",
+      "default": 6,
+      "min": 1,
+      "max": 30
+    },
+    {
+      "key": "spokes",
+      "type": "number",
+      "label": "Spokes",
+      "folder": "Lattice",
+      "default": 12,
+      "min": 2,
+      "max": 48,
+      "step": 1
+    },
+    {
+      "key": "lineWidth",
+      "type": "number",
+      "label": "Line Width",
+      "folder": "Lattice",
+      "default": 0.06,
+      "min": 0.005,
+      "max": 0.4
+    },
+    {
+      "key": "fog",
+      "type": "number",
+      "label": "Distance Fog",
+      "folder": "Lattice",
+      "default": 1.4,
+      "min": 0,
+      "max": 8
+    },
+    {
+      "key": "paletteMode",
+      "type": "select",
+      "label": "Palette Mode",
+      "folder": "Palette",
+      "default": 1,
+      "options": {
+        "Classic": 0,
+        "Neon": 1,
+        "Ember": 2
+      }
+    },
+    {
+      "key": "colorNear",
+      "type": "color",
+      "label": "Near Wall",
+      "folder": "Palette",
+      "default": "#1b1150"
+    },
+    {
+      "key": "colorFar",
+      "type": "color",
+      "label": "Far Wall",
+      "folder": "Palette",
+      "default": "#04030c"
+    },
+    {
+      "key": "colorLine",
+      "type": "color",
+      "label": "Lattice",
+      "folder": "Palette",
+      "default": "#54e0ff"
+    },
+    {
+      "key": "chroma",
+      "type": "number",
+      "label": "Dispersion",
+      "folder": "Optics",
+      "default": 0.5,
+      "min": 0,
+      "max": 3
+    },
+    {
+      "key": "coreGlow",
+      "type": "number",
+      "label": "Core Glow",
+      "folder": "Optics",
+      "default": 0.35,
+      "min": 0,
+      "max": 3
+    },
+    {
+      "key": "exposure",
+      "type": "number",
+      "label": "Exposure",
+      "folder": "Grade",
+      "default": 1.15,
+      "min": 0.2,
+      "max": 3
+    },
+    {
+      "key": "vignette",
+      "type": "number",
+      "label": "Vignette",
+      "folder": "Grade",
+      "default": 0.5,
+      "min": 0,
+      "max": 1
+    }
+  ],
+  "render": {
+    "bloom": {
+      "enabled": true,
+      "strength": 0.5,
+      "radius": 0.5,
+      "threshold": 0.6
+    }
+  }
+}

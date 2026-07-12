@@ -1,0 +1,369 @@
+# Shader Studio
+
+A shader collection viewer and editor. Browse your shaders, edit their GLSL, tune
+their parameters with an auto-generated GUI, save presets, and take the whole
+thing somewhere else as a portable JSON bundle.
+
+The selected shader **is** the application background: you edit the thing you are
+looking at. A shader that fails to compile does not black out the screen — the
+last one that worked keeps rendering while the compiler's diagnostics appear
+under the editor.
+
+Angular 22 (zoneless, SSR) · Angular Material · Express · three.js · lil-gui · Monaco.
+
+---
+
+## Install and run
+
+Requires Node `^22.22.3 || ^24.15.0 || >=26` (Angular 22's minimum) and pnpm.
+
+```bash
+pnpm install
+pnpm dev              # http://localhost:4200 — API and SSR both live
+```
+
+Production:
+
+```bash
+pnpm build
+pnpm serve:ssr        # http://localhost:4000
+```
+
+The dev server runs the same Express app as production — the API is real in both,
+not mocked.
+
+| Script           | What it does                                       |
+| ---------------- | -------------------------------------------------- |
+| `pnpm dev`       | Dev server with HMR, SSR and the API                |
+| `pnpm build`     | Production build into `dist/`                       |
+| `pnpm serve:ssr` | Run the built SSR server                            |
+| `pnpm test`      | Unit tests (Vitest)                                 |
+| `pnpm lint`      | ESLint                                              |
+| `pnpm typecheck` | `tsc -b`, strict                                    |
+
+### Environment
+
+| Variable             | Default                    | Purpose                                            |
+| -------------------- | -------------------------- | -------------------------------------------------- |
+| `PORT`               | `4000`                     | Port for the SSR server                            |
+| `SHADER_DATA_DIR`    | `./data`                   | Where shaders are stored                           |
+| `SHADER_EXAMPLES_DIR`| `./examples`               | Where the seed examples are read from              |
+| `SHADER_SEED`        | —                          | `0` disables seeding an empty store                |
+| `NG_ALLOWED_HOSTS`   | `localhost,127.0.0.1,[::1]`| Hosts SSR will render for (SSRF guard). Set this when deploying. |
+
+---
+
+## Keyboard
+
+| Key         | Action                    |
+| ----------- | ------------------------- |
+| `Space`     | Pause / resume time       |
+| `H`         | Show / hide the controls  |
+| `S`         | Save the frame as a PNG   |
+| `Ctrl`+`S`  | Save the shader           |
+
+Move the pointer over the background to push the shader around; click to drop a
+ripple. Both are fed to the shader as uniforms (see below) — what a shader does
+with them is up to it.
+
+---
+
+## Architecture
+
+Four concerns, kept apart on purpose. Nothing below the line knows about Angular.
+
+```
+src/
+  shared/          model + validation — imported by BOTH the server and the client
+    model.ts         the shader document: controls, presets, bundles
+    validate.ts      every rule, in one place. The API is the authority; the
+                     client reuses it to pre-validate the config editor.
+
+  server/          Node only
+    storage.ts       file-backed persistence: atomic writes, per-shader locks,
+                     path-traversal defence, example seeding
+    api.ts           the REST routes — thin; they parse, delegate, map errors
+  server.ts        Express: mounts /api, then server-renders everything else
+
+  app/
+    core/          state and transport
+      shader-store.ts  the single source of truth (signals)
+      shader-api.ts    HTTP client
+      preferences.ts   localStorage-backed workspace prefs
+    rendering/     three.js. Knows nothing about HTTP or the DOM beyond a canvas
+      shader-engine.ts     compile, uniforms, ripples, bloom, screenshots
+      glsl-diagnostics.ts  driver info-logs -> editor markers
+      shader-canvas.ts     the only place the store is wired to the engine
+    gui/           lil-gui, generated from the control schema
+    editor/        Monaco
+    ui/            Material components: browser, presets, editor panel, dialogs
+```
+
+The store keeps three layers of state deliberately distinct:
+
+- **record** — the shader as the server last gave it to us.
+- **draft** — the editor buffers. The difference from `record` is what "unsaved
+  changes" means, and what `Save` sends.
+- **params** — the live uniform values. Turning a knob is *not* an unsaved edit to
+  the source; it is a value you can capture as a preset.
+
+### SSR
+
+Express serves the API and renders the app in the same process. During SSR the
+app calls its own `/api` over a same-origin request (the absolute origin comes
+from the incoming request; see `app.config.server.ts`).
+
+The rendered state is handed to the browser through Angular's `TransferState`, so
+the first client render is identical to the server's markup and hydration does
+not throw the page away. The server deliberately opens the *first* shader rather
+than the last one you had open — it cannot read your `localStorage`, and
+rendering a different shader than the client would then hydrate is exactly the
+mismatch the snapshot exists to prevent. The client switches to your remembered
+shader once it takes over.
+
+three.js, lil-gui and Monaco are all **dynamically imported**: none of them exist
+on the server (lil-gui injects a stylesheet at import time and would throw), and
+keeping them out of the initial bundle lets the shell paint first.
+
+### Compiling without breaking the preview
+
+A candidate shader is compiled against an offscreen 1×1 render target before it
+is allowed anywhere near the screen. Only if the driver accepts it does the live
+material get swapped. If it does not, the previous shader keeps rendering and the
+driver's log comes back as diagnostics.
+
+Line numbers in a driver's log count from the top of the source *three.js*
+assembled, which is not the source you typed — three prepends a prelude. The
+engine finds your source inside the full source and subtracts the offset, so a
+diagnostic lands on the line you are actually looking at.
+
+---
+
+## Storage format
+
+One directory per shader. The directory name is the id — it is the primary key,
+which is why it is validated before it is ever joined onto a path.
+
+```
+data/
+  .seeded                    marker; stops examples coming back after you delete them
+  shaders/
+    poured-paint/
+      meta.json              name, description, control schema, render settings
+      fragment.glsl          the fragment shader
+      vertex.glsl            the vertex shader
+      presets.json           { "presets": [ ... ] }
+```
+
+`examples/shaders/` uses exactly this layout, and is copied into `data/` the first
+time you run an empty store. `data/` is gitignored; `examples/` is not.
+
+Writes are atomic (temp file + rename), and mutations of a given shader are
+serialized, so a half-written `meta.json` is never observable.
+
+**Ids** are lowercase letters, digits and inner hyphens — no dots, no separators.
+That rules out `..`, hidden files, and Windows' reserved device names. Renaming a
+shader changes its display name only; the id, and therefore the path, is stable.
+
+### `meta.json`
+
+```json
+{
+  "name": "Hex Pulse",
+  "description": "A hexagonal lattice that answers back.",
+  "author": "Shader Studio",
+  "createdAt": "2026-07-12T00:00:00.000Z",
+  "updatedAt": "2026-07-12T00:00:00.000Z",
+  "controls": [ /* see below */ ],
+  "render": {
+    "bloom": { "enabled": true, "strength": 0.55, "radius": 0.55, "threshold": 0.65 }
+  }
+}
+```
+
+---
+
+## The shader configuration schema
+
+A shader declares its parameters; the GUI is generated from that declaration. No
+shader ever writes GUI code. Add a control in the **Config** tab and its knob
+appears immediately, bound to a uniform, without a reload.
+
+**The rule: a control keyed `warpIntensity` feeds `uniform float u_warpIntensity`.**
+The uniform is always the key prefixed with `u_`.
+
+| `type`    | GLSL uniform      | Widget        | Required fields                        |
+| --------- | ----------------- | ------------- | -------------------------------------- |
+| `number`  | `float u_<key>`   | slider        | `default`, `min`, `max`, (`step`)      |
+| `boolean` | `bool u_<key>`    | checkbox      | `default`                              |
+| `color`   | `vec3 u_<key>`    | color picker  | `default` as `#rrggbb`                 |
+| `select`  | `float u_<key>`   | dropdown      | `default`, `options` (label → number)  |
+
+`label` (GUI text) and `folder` (grouping) are optional on all of them.
+
+```json
+[
+  { "key": "timeScale", "type": "number",  "label": "Time Scale", "folder": "Motion",
+    "default": 0.5, "min": 0, "max": 2 },
+  { "key": "mirror",    "type": "boolean", "label": "Mirror",     "folder": "Flight",
+    "default": false },
+  { "key": "colorLine", "type": "color",   "label": "Lattice",    "folder": "Palette",
+    "default": "#54e0ff" },
+  { "key": "paletteMode", "type": "select", "label": "Palette Mode", "folder": "Palette",
+    "default": 1, "options": { "Classic": 0, "Neon": 1, "Ember": 2 } }
+]
+```
+
+Colors are passed to the shader as **display-space sRGB** `vec3` (three.js's
+colour management is off), which is what you almost certainly want when you pick
+`#54e0ff` and expect to see `#54e0ff`.
+
+### Built-in uniforms
+
+Provided to every shader whether it declares them or not. Declare the ones you use.
+
+```glsl
+uniform vec2  iResolution;             // drawing-buffer size, pixels
+uniform float iTime;                   // seconds; pausable, and it does not
+                                       // fast-forward when you resume
+uniform vec4  iMouse;                  // xy: pointer in pixels, z: 1 while pressed
+uniform vec2  iMouseVel;               // pointer velocity, pixels/second
+uniform vec3  u_clickData[__MAX_WAVES__]; // per click: xy pixels, z = birth time
+                                          // (z <= 0 means the slot is unused)
+```
+
+`__MAX_WAVES__` is substituted with the ripple-slot count (24) before compiling,
+so use it for the array size and any loop bound. `examples/shaders/hex-pulse` is
+the worked example.
+
+The vertex shader is an ordinary three.js `ShaderMaterial` vertex shader, and gets
+`position`, `uv`, `projectionMatrix` and `modelViewMatrix`. The default passes
+`vUv` through, which is all a full-screen shader needs.
+
+### Editing the schema
+
+Changing the controls re-projects every preset onto the new schema: a value for a
+control you deleted is dropped, and a value now out of range is **clamped** rather
+than discarded — a preset saved before you narrowed a slider is still worth
+keeping. A schema that does not parse is reported in the diagnostics strip, blocks
+saving, and leaves the working GUI alone.
+
+---
+
+## Import / export
+
+One documented format, used for both a single shader and a whole collection.
+Everything needed to reproduce a shader elsewhere is in it: source, schema, render
+settings and presets.
+
+`GET /api/shaders/:id/export` →
+
+```json
+{
+  "format": "shader-studio/v1",
+  "kind": "shader",
+  "exportedAt": "2026-07-12T12:00:00.000Z",
+  "shader": {
+    "id": "hex-pulse",
+    "name": "Hex Pulse",
+    "description": "...",
+    "author": "Shader Studio",
+    "controls": [ /* the schema */ ],
+    "render": { "bloom": { /* ... */ } },
+    "fragment": "precision highp float; ...",
+    "vertex": "varying vec2 vUv; ...",
+    "presets": [
+      { "id": "circuit", "name": "Circuit", "createdAt": "...",
+        "values": { "timeScale": 0.5, "colorPulse": "#5ef2ff" } }
+    ]
+  }
+}
+```
+
+`GET /api/export` returns the same thing with `"kind": "collection"` and a
+`"shaders": [ ... ]` array of those payloads. Import accepts either kind.
+
+**Import modes.** `rename` (the default) never destroys anything: a shader whose id
+already exists is given a fresh, suffixed one. `overwrite` replaces the shader
+holding that id, which is what makes an export → import round trip idempotent. The
+UI asks before it overwrites.
+
+Bundles are validated on the way in, and a bundle with a broken id but a usable
+name is recovered rather than rejected — hand-edited files are expected.
+
+---
+
+## API
+
+All errors are `{ "error": { "code", "message", "details"? } }`.
+`400` invalid · `404` not found · `409` conflict.
+
+| Method   | Route                                | Purpose                          |
+| -------- | ------------------------------------ | -------------------------------- |
+| `GET`    | `/api/shaders`                       | List (summaries)                 |
+| `POST`   | `/api/shaders`                       | Create from the template         |
+| `GET`    | `/api/shaders/:id`                   | Read one, in full                |
+| `PUT`    | `/api/shaders/:id`                   | Partial update (name, source, controls, render) |
+| `DELETE` | `/api/shaders/:id`                   | Delete                           |
+| `POST`   | `/api/shaders/:id/duplicate`         | Copy, presets included           |
+| `GET`    | `/api/shaders/:id/presets`           | List presets                     |
+| `POST`   | `/api/shaders/:id/presets`           | Save; reusing a name overwrites  |
+| `DELETE` | `/api/shaders/:id/presets/:presetId` | Delete a preset                  |
+| `GET`    | `/api/shaders/:id/export`            | Export one                       |
+| `GET`    | `/api/export`                        | Export everything                |
+| `POST`   | `/api/import`                        | Import a bundle                  |
+
+Preset values are sanitized against the shader's schema on save, so a preset can
+never carry a value for a control that does not exist.
+
+---
+
+## The example shaders
+
+| Shader           | Shows                                                                  |
+| ---------------- | ---------------------------------------------------------------------- |
+| **Poured Paint** | 42 controls. Domain-warped fbm, layers quantized into pooled bands with hard contour lips, wet specular relief, OKLab palette ramp, click ripples with chromatic dispersion. Bloom on. |
+| **Aurora Veil**  | Curtains draped by warping the x axis with slow noise, over a twinkling star field. |
+| **Hex Pulse**    | `u_clickData`: click and a wavefront crosses the lattice. Hover lights the cells under the cursor. |
+| **Warp Tunnel**  | A tunnel from `1/r` — no raymarching. Demonstrates `select` and `boolean` controls. |
+
+Poured Paint and its five presets are carried over from the project this app grew
+out of, and are the reference for what the format can express.
+
+---
+
+## Tests
+
+```bash
+pnpm test
+```
+
+102 tests, focused where a bug would actually cost you something:
+
+- **`shared/validate.spec.ts`** — ids (every traversal and reserved-name case),
+  the control schema, preset sanitization and clamping, and bundle round-trips.
+- **`server/storage.spec.ts`** — runs against a real temp directory, not a mocked
+  fs, because the whole point of that layer is what it does to the filesystem and
+  a mock would let a traversal bug through. Covers CRUD, path traversal, atomic
+  update, preset lifecycle, import modes, and seeding.
+- **`rendering/glsl-diagnostics.spec.ts`** — both driver log dialects, and the
+  prelude offset that makes a line number point at the right line.
+
+---
+
+## Known limitations
+
+- **One WebGL context.** Only the selected shader renders; there are no thumbnails
+  in the browser list.
+- **No auth, no multi-user.** The API writes to the local filesystem and assumes a
+  single trusted user. It is a studio, not a service.
+- **Bloom is the only post effect**, and it is a shader-level setting rather than
+  something a preset can capture.
+- **Monaco's stylesheet is global** (~88 kB gzipped), not lazy: the CSS its ESM
+  modules import lands in a chunk nothing links, so the editor comes out
+  structurally unstyled if you rely on it. The editor's *code* is still lazy.
+- **`renderer.compile` uses a real draw call** to a 1×1 target to force a compile.
+  It is the only reliable way to make three.js compile eagerly, but it does mean a
+  recompile costs one hidden frame.
+- GLSL diagnostics come from the driver, so their exact wording varies by
+  browser and GPU.

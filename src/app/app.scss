@@ -1,0 +1,186 @@
+// The shell floats above the canvas. Every surface that is not actively being
+// read is translucent, so the shader stays visible through the chrome — that is
+// the whole premise of the app, and it is why nothing here uses an opaque
+// background by default.
+
+:host {
+  position: relative;
+  display: block;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  pointer-events: none; // clicks fall through to the shader...
+}
+
+// ...except on the chrome itself.
+.toolbar,
+.drawer,
+.controls,
+.editor,
+.loading {
+  pointer-events: auto;
+}
+
+.toolbar {
+  gap: 4px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--mat-sys-surface-container) 82%, transparent);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.brand {
+  margin-left: 4px;
+  font: var(--mat-sys-title-medium);
+  white-space: nowrap;
+}
+
+.shader-name {
+  margin-left: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  font: var(--mat-sys-label-large);
+  max-width: 30vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dot {
+  margin-left: 6px;
+  color: var(--mat-sys-tertiary);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading {
+  flex: 0 0 auto;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+
+  // Both the container and its content default to an opaque surface, which
+  // would hide the shader completely.
+  --mat-sidenav-content-background-color: transparent;
+  --mat-sidenav-container-background-color: transparent;
+  --mat-sidenav-container-divider-color: transparent;
+}
+
+.drawer {
+  width: 300px;
+  border-right: 1px solid var(--mat-sys-outline-variant);
+  background: color-mix(in srgb, var(--mat-sys-surface-container-low) 88%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.content {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: 1fr auto;
+  grid-template-areas:
+    'stage controls'
+    'editor editor';
+  min-height: 0;
+  overflow: hidden;
+}
+
+.stage {
+  grid-area: stage;
+}
+
+.controls {
+  grid-area: controls;
+  width: 300px;
+  margin: 12px;
+  padding: 12px;
+  overflow-y: auto;
+  border-radius: 14px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  background: color-mix(in srgb, var(--mat-sys-surface-container) 80%, transparent);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--mat-sys-level2);
+}
+
+.presets {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.editor {
+  grid-area: editor;
+  height: 45dvh;
+  min-height: 260px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  background: color-mix(in srgb, var(--mat-sys-surface-container-lowest) 94%, transparent);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+}
+
+// --- Narrow screens --------------------------------------------------------
+// The controls stop being a rail and become a sheet above the stage, and the
+// editor takes the full height: on a phone there is no room for both at once.
+
+@media (max-width: 900px) {
+  .content {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'stage'
+      'controls'
+      'editor';
+  }
+
+  .controls {
+    width: auto;
+    max-height: 42dvh;
+    margin: 8px;
+  }
+
+  .editor {
+    height: 60dvh;
+  }
+
+  .shader-name {
+    display: none;
+  }
+
+  .save {
+    // The icon alone carries it; the label does not fit next to everything else.
+    --mat-button-filled-horizontal-padding: 12px;
+
+    ::ng-deep .mat-mdc-button-touch-target + * {
+      display: none;
+    }
+  }
+}
+
+@media (max-width: 600px) {
+  .brand {
+    display: none;
+  }
+}

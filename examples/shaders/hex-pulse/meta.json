@@ -1,0 +1,164 @@
+{
+  "name": "Hex Pulse",
+  "description": "A hexagonal lattice that answers back: click to send a wavefront across the grid, or hover to light the cells under the cursor. Demonstrates the engine's u_clickData ripple slots.",
+  "author": "Shader Studio",
+  "createdAt": "2026-07-12T00:00:00.000Z",
+  "updatedAt": "2026-07-12T00:00:00.000Z",
+  "controls": [
+    {
+      "key": "timeScale",
+      "type": "number",
+      "label": "Time Scale",
+      "folder": "Motion",
+      "default": 0.5,
+      "min": 0,
+      "max": 2
+    },
+    {
+      "key": "cellSize",
+      "type": "number",
+      "label": "Cell Density",
+      "folder": "Grid",
+      "default": 14,
+      "min": 3,
+      "max": 46
+    },
+    {
+      "key": "rotation",
+      "type": "number",
+      "label": "Rotation",
+      "folder": "Grid",
+      "default": 0.2,
+      "min": 0,
+      "max": 3.141593
+    },
+    {
+      "key": "edgeWidth",
+      "type": "number",
+      "label": "Edge Width",
+      "folder": "Grid",
+      "default": 0.06,
+      "min": 0.005,
+      "max": 0.25
+    },
+    {
+      "key": "edgeGlow",
+      "type": "number",
+      "label": "Edge Glow",
+      "folder": "Grid",
+      "default": 0.9,
+      "min": 0,
+      "max": 3
+    },
+    {
+      "key": "pulseSpeed",
+      "type": "number",
+      "label": "Pulse Speed",
+      "folder": "Pulses",
+      "default": 0.45,
+      "min": 0.05,
+      "max": 2
+    },
+    {
+      "key": "pulseWidth",
+      "type": "number",
+      "label": "Pulse Width",
+      "folder": "Pulses",
+      "default": 0.12,
+      "min": 0.01,
+      "max": 0.6
+    },
+    {
+      "key": "pulseDuration",
+      "type": "number",
+      "label": "Pulse Duration",
+      "folder": "Pulses",
+      "default": 2.6,
+      "min": 0.5,
+      "max": 8
+    },
+    {
+      "key": "pulseLift",
+      "type": "number",
+      "label": "Pulse Energy",
+      "folder": "Pulses",
+      "default": 1.1,
+      "min": 0,
+      "max": 3
+    },
+    {
+      "key": "breathAmount",
+      "type": "number",
+      "label": "Idle Breathing",
+      "folder": "Pulses",
+      "default": 0.18,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "key": "breathSpeed",
+      "type": "number",
+      "label": "Breathing Speed",
+      "folder": "Pulses",
+      "default": 1.4,
+      "min": 0.1,
+      "max": 6
+    },
+    {
+      "key": "pointerRadius",
+      "type": "number",
+      "label": "Pointer Radius",
+      "folder": "Pointer",
+      "default": 0.16,
+      "min": 0,
+      "max": 0.8
+    },
+    {
+      "key": "colorBackground",
+      "type": "color",
+      "label": "Background",
+      "folder": "Palette",
+      "default": "#070a12"
+    },
+    {
+      "key": "colorCell",
+      "type": "color",
+      "label": "Cell",
+      "folder": "Palette",
+      "default": "#123a52"
+    },
+    {
+      "key": "colorPulse",
+      "type": "color",
+      "label": "Pulse",
+      "folder": "Palette",
+      "default": "#5ef2ff"
+    },
+    {
+      "key": "exposure",
+      "type": "number",
+      "label": "Exposure",
+      "folder": "Grade",
+      "default": 1.1,
+      "min": 0.2,
+      "max": 3
+    },
+    {
+      "key": "vignette",
+      "type": "number",
+      "label": "Vignette",
+      "folder": "Grade",
+      "default": 0.45,
+      "min": 0,
+      "max": 1
+    }
+  ],
+  "render": {
+    "bloom": {
+      "enabled": true,
+      "strength": 0.55,
+      "radius": 0.55,
+      "threshold": 0.65
+    }
+  }
+}

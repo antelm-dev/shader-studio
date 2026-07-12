@@ -1,0 +1,76 @@
+{
+  "presets": [
+    {
+      "id": "northern-lights",
+      "name": "Northern Lights",
+      "createdAt": "2026-07-12T00:00:00.000Z",
+      "values": {
+        "timeScale": 0.35,
+        "flowSpeed": 0.6,
+        "curtainScale": 2.6,
+        "waviness": 0.55,
+        "bandSharpness": 2.2,
+        "intensity": 1.5,
+        "horizon": 0.18,
+        "veilHeight": 0.72,
+        "rayStrength": 0.35,
+        "colorLow": "#2ff5a8",
+        "colorHigh": "#8b5cf6",
+        "colorSky": "#070b1c",
+        "starDensity": 90,
+        "starBrightness": 0.5,
+        "pointerGlow": 0.5,
+        "exposure": 1.05,
+        "vignette": 0.35
+      }
+    },
+    {
+      "id": "solar-storm",
+      "name": "Solar Storm",
+      "createdAt": "2026-07-12T00:00:00.000Z",
+      "values": {
+        "timeScale": 0.75,
+        "flowSpeed": 1.6,
+        "curtainScale": 3.8,
+        "waviness": 1.1,
+        "bandSharpness": 3.4,
+        "intensity": 2.6,
+        "horizon": 0.05,
+        "veilHeight": 1.1,
+        "rayStrength": 0.7,
+        "colorLow": "#ff5f3c",
+        "colorHigh": "#ffd166",
+        "colorSky": "#150610",
+        "starDensity": 60,
+        "starBrightness": 0.25,
+        "pointerGlow": 1.2,
+        "exposure": 1.2,
+        "vignette": 0.5
+      }
+    },
+    {
+      "id": "still-night",
+      "name": "Still Night",
+      "createdAt": "2026-07-12T00:00:00.000Z",
+      "values": {
+        "timeScale": 0.12,
+        "flowSpeed": 0.22,
+        "curtainScale": 1.6,
+        "waviness": 0.25,
+        "bandSharpness": 1.4,
+        "intensity": 0.85,
+        "horizon": 0.3,
+        "veilHeight": 0.6,
+        "rayStrength": 0.15,
+        "colorLow": "#3ad6c8",
+        "colorHigh": "#2a5ec9",
+        "colorSky": "#04060f",
+        "starDensity": 190,
+        "starBrightness": 1.1,
+        "pointerGlow": 0.25,
+        "exposure": 0.95,
+        "vignette": 0.45
+      }
+    }
+  ]
+}

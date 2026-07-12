@@ -1,0 +1,146 @@
+<!-- The shader is the page: everything below is painted on top of it. -->
+<app-shader-canvas />
+
+<div class="shell">
+  <mat-toolbar class="toolbar">
+    <button
+      matIconButton
+      type="button"
+      matTooltip="Toggle the shader browser"
+      aria-label="Toggle the shader browser"
+      [attr.aria-expanded]="drawerOpen()"
+      (click)="toggleBrowser()"
+    >
+      <mat-icon>menu</mat-icon>
+    </button>
+
+    <span class="brand">Shader Studio</span>
+
+    @if (store.record(); as shader) {
+      <span class="shader-name" [title]="shader.description">{{ shader.name }}</span>
+      @if (store.dirty()) {
+        <span class="dot" matTooltip="Unsaved changes" aria-label="Unsaved changes">•</span>
+      }
+    }
+
+    <span class="spacer"></span>
+
+    <!-- Kept out of the layout; the Import menu items click it. -->
+    <input
+      #fileInput
+      type="file"
+      class="file-input"
+      accept="application/json,.json"
+      tabindex="-1"
+      aria-hidden="true"
+      (change)="onFilePicked($event)"
+    />
+
+    <button
+      matIconButton
+      type="button"
+      matTooltip="Import / export"
+      aria-label="Import and export"
+      [matMenuTriggerFor]="ioMenu"
+    >
+      <mat-icon>swap_vert</mat-icon>
+    </button>
+
+    <mat-menu #ioMenu="matMenu">
+      <button mat-menu-item type="button" (click)="pickFile('rename')">
+        <mat-icon>upload</mat-icon>
+        <span>Import…</span>
+      </button>
+      <button mat-menu-item type="button" (click)="pickFile('overwrite')">
+        <mat-icon>upload_file</mat-icon>
+        <span>Import and replace…</span>
+      </button>
+      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="exportCurrent()">
+        <mat-icon>download</mat-icon>
+        <span>Export this shader</span>
+      </button>
+      <button mat-menu-item type="button" (click)="workspace.exportAll()">
+        <mat-icon>library_books</mat-icon>
+        <span>Export all shaders</span>
+      </button>
+    </mat-menu>
+
+    <button
+      matIconButton
+      type="button"
+      [matTooltip]="darkMode() ? 'Switch to the light theme' : 'Switch to the dark theme'"
+      aria-label="Toggle the light and dark theme"
+      [attr.aria-pressed]="!darkMode()"
+      (click)="toggleColorScheme()"
+    >
+      <mat-icon>{{ darkMode() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+    </button>
+
+    <button
+      matIconButton
+      type="button"
+      matTooltip="Toggle the controls (H)"
+      aria-label="Toggle the controls"
+      [attr.aria-pressed]="preferences.value().guiVisible"
+      (click)="toggle('guiVisible')"
+    >
+      <mat-icon>tune</mat-icon>
+    </button>
+
+    <button
+      matIconButton
+      type="button"
+      matTooltip="Toggle the source editor"
+      aria-label="Toggle the source editor"
+      [attr.aria-pressed]="preferences.value().editorOpen"
+      (click)="toggle('editorOpen')"
+    >
+      <mat-icon>code</mat-icon>
+    </button>
+
+    <button
+      matButton="filled"
+      type="button"
+      class="save"
+      matTooltip="Save the source and config (Ctrl+S)"
+      [disabled]="!store.dirty() || store.saving() || !store.configValid()"
+      (click)="store.save()"
+    >
+      <mat-icon>save</mat-icon>
+      Save
+    </button>
+  </mat-toolbar>
+
+  @if (store.loading() || store.saving()) {
+    <mat-progress-bar class="loading" mode="indeterminate" aria-label="Working" />
+  }
+
+  <mat-sidenav-container class="body" [hasBackdrop]="isHandset()">
+    <mat-sidenav
+      class="drawer"
+      [mode]="isHandset() ? 'over' : 'side'"
+      [opened]="drawerOpen()"
+      (closedStart)="closeBrowser()"
+    >
+      <app-shader-browser />
+    </mat-sidenav>
+
+    <mat-sidenav-content class="content">
+      <!-- Empty on purpose: the stage is a window onto the canvas underneath. -->
+      <div class="stage"></div>
+
+      @if (preferences.value().guiVisible) {
+        <aside class="controls" aria-label="Shader controls">
+          <app-preset-panel class="presets" />
+          <app-gui-panel class="gui" />
+        </aside>
+      }
+
+      @if (preferences.value().editorOpen) {
+        <section class="editor" aria-label="Source editor">
+          <app-editor-panel />
+        </section>
+      }
+    </mat-sidenav-content>
+  </mat-sidenav-container>
+</div>

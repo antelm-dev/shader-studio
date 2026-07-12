@@ -1,0 +1,76 @@
+{
+  "presets": [
+    {
+      "id": "circuit",
+      "name": "Circuit",
+      "createdAt": "2026-07-12T00:00:00.000Z",
+      "values": {
+        "timeScale": 0.5,
+        "cellSize": 14,
+        "rotation": 0.2,
+        "edgeWidth": 0.06,
+        "edgeGlow": 0.9,
+        "pulseSpeed": 0.45,
+        "pulseWidth": 0.12,
+        "pulseDuration": 2.6,
+        "pulseLift": 1.1,
+        "breathAmount": 0.18,
+        "breathSpeed": 1.4,
+        "pointerRadius": 0.16,
+        "colorBackground": "#070a12",
+        "colorCell": "#123a52",
+        "colorPulse": "#5ef2ff",
+        "exposure": 1.1,
+        "vignette": 0.45
+      }
+    },
+    {
+      "id": "honeycomb",
+      "name": "Honeycomb",
+      "createdAt": "2026-07-12T00:00:00.000Z",
+      "values": {
+        "timeScale": 0.25,
+        "cellSize": 8,
+        "rotation": 0,
+        "edgeWidth": 0.11,
+        "edgeGlow": 0.35,
+        "pulseSpeed": 0.3,
+        "pulseWidth": 0.2,
+        "pulseDuration": 3.4,
+        "pulseLift": 0.8,
+        "breathAmount": 0.4,
+        "breathSpeed": 0.7,
+        "pointerRadius": 0.24,
+        "colorBackground": "#140c02",
+        "colorCell": "#6b3f07",
+        "colorPulse": "#ffc247",
+        "exposure": 1.25,
+        "vignette": 0.35
+      }
+    },
+    {
+      "id": "shockwave",
+      "name": "Shockwave",
+      "createdAt": "2026-07-12T00:00:00.000Z",
+      "values": {
+        "timeScale": 1.1,
+        "cellSize": 30,
+        "rotation": 0.5,
+        "edgeWidth": 0.02,
+        "edgeGlow": 2.1,
+        "pulseSpeed": 1.2,
+        "pulseWidth": 0.05,
+        "pulseDuration": 1.6,
+        "pulseLift": 2.4,
+        "breathAmount": 0.02,
+        "breathSpeed": 3,
+        "pointerRadius": 0.08,
+        "colorBackground": "#0a0410",
+        "colorCell": "#2a1155",
+        "colorPulse": "#ff4fd8",
+        "exposure": 1.35,
+        "vignette": 0.6
+      }
+    }
+  ]
+}

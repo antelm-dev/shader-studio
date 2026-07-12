@@ -1,0 +1,76 @@
+{
+  "presets": [
+    {
+      "id": "hyperspace",
+      "name": "Hyperspace",
+      "createdAt": "2026-07-12T00:00:00.000Z",
+      "values": {
+        "speed": 0.55,
+        "depth": 0.28,
+        "twist": 0.09,
+        "steering": true,
+        "mirror": false,
+        "rings": 6,
+        "spokes": 12,
+        "lineWidth": 0.06,
+        "fog": 1.4,
+        "paletteMode": 1,
+        "colorNear": "#1b1150",
+        "colorFar": "#04030c",
+        "colorLine": "#54e0ff",
+        "chroma": 0.5,
+        "coreGlow": 0.35,
+        "exposure": 1.15,
+        "vignette": 0.5
+      }
+    },
+    {
+      "id": "ember-drift",
+      "name": "Ember Drift",
+      "createdAt": "2026-07-12T00:00:00.000Z",
+      "values": {
+        "speed": 0.18,
+        "depth": 0.5,
+        "twist": 0.28,
+        "steering": true,
+        "mirror": false,
+        "rings": 3,
+        "spokes": 7,
+        "lineWidth": 0.14,
+        "fog": 2.6,
+        "paletteMode": 2,
+        "colorNear": "#3a1004",
+        "colorFar": "#0a0402",
+        "colorLine": "#ff8c3a",
+        "chroma": 0.15,
+        "coreGlow": 1.1,
+        "exposure": 1.3,
+        "vignette": 0.55
+      }
+    },
+    {
+      "id": "wireframe",
+      "name": "Wireframe",
+      "createdAt": "2026-07-12T00:00:00.000Z",
+      "values": {
+        "speed": 0.9,
+        "depth": 0.2,
+        "twist": 0,
+        "steering": false,
+        "mirror": true,
+        "rings": 14,
+        "spokes": 24,
+        "lineWidth": 0.02,
+        "fog": 0.8,
+        "paletteMode": 0,
+        "colorNear": "#0c1418",
+        "colorFar": "#000000",
+        "colorLine": "#9dffcf",
+        "chroma": 1.4,
+        "coreGlow": 0.1,
+        "exposure": 1,
+        "vignette": 0.7
+      }
+    }
+  ]
+}

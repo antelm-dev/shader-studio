@@ -1,0 +1,69 @@
+@use '@angular/material' as mat;
+
+html {
+  height: 100%;
+
+  // The studio opens as a dark room with a lit canvas in it — most shaders are
+  // dark, and bright chrome fights the preview it is meant to frame. The light
+  // theme is there for the times you are reading code rather than watching it.
+  // `Preferences` overrides this inline once it knows what you last chose.
+  color-scheme: dark;
+
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$cyan-palette,
+        tertiary: mat.$magenta-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden; // the shader owns the viewport; the page itself never scrolls
+  // Only ever seen for the instant before the canvas paints, so it is the one
+  // colour here that does not come from a token: it has to match the void.
+  background-color: light-dark(#eef1f6, #0a0c10);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+}
+
+// --- lil-gui ---------------------------------------------------------------
+// lil-gui ships its own look. Re-skinning it with the Material system variables
+// keeps the generated parameter panel from reading as a foreign object bolted
+// onto the side of the app.
+
+.lil-gui {
+  --background-color: transparent;
+  --title-background-color: transparent;
+  --widget-color: var(--mat-sys-surface-container-highest);
+  --hover-color: var(--mat-sys-surface-container-high);
+  --focus-color: var(--mat-sys-primary);
+  --number-color: var(--mat-sys-primary);
+  --string-color: var(--mat-sys-tertiary);
+  --text-color: var(--mat-sys-on-surface);
+  --font-family: Roboto, sans-serif;
+  --font-size: 12px;
+  --input-font-size: 12px;
+  --padding: 6px;
+  --spacing: 6px;
+  --widget-height: 22px;
+}
+
+// lil-gui 0.21 prefixes every one of its class names with `lil-`.
+.lil-gui .lil-title {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.lil-gui .lil-children {
+  border-left: 1px solid var(--mat-sys-outline-variant);
+}
+
+.lil-gui .lil-controller .lil-name {
+  color: var(--mat-sys-on-surface-variant);
+}
