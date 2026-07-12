@@ -6,9 +6,6 @@
   "keywords": [],
   "license": "ISC",
   "author": "Adel Terki",
-  "directories": {
-    "example": "examples"
-  },
   "type": "module",
   "main": "dist-main/main.cjs",
   "scripts": {
@@ -20,13 +17,13 @@
     "gen:ipc": "node scripts/gen-ipc.mjs",
     "build:renderer": "ng run shader-studio:desktop:production",
     "build:main": "rollup -c --environment NODE_ENV:production",
-    "build:desktop": "pnpm clean:desktop && pnpm gen:ipc && pnpm typecheck && pnpm typecheck:main && pnpm typecheck:preload && pnpm build:renderer && pnpm build:main",
+    "build:desktop": "node scripts/build.mjs",
     "dev:desktop": "concurrently -k -n angular,rollup -c blue,magenta \"ng run shader-studio:desktop-serve:development\" \"rollup -c --environment NODE_ENV:development --watch\"",
     "typecheck:main": "tsc --noEmit -p tsconfig.main.json",
     "typecheck:preload": "tsc --noEmit -p tsconfig.preload.json",
-    "pack:dir": "pnpm build:desktop && electron-builder --dir",
-    "pack:win": "pnpm build:desktop && electron-builder --win --dir",
-    "dist:win": "pnpm build:desktop && electron-builder --win",
+    "pack:dir": "node scripts/build.mjs pack",
+    "pack:win": "node scripts/build.mjs pack --win",
+    "dist:win": "node scripts/build.mjs dist --win",
     "serve:ssr": "node dist/shader-studio/server/server.mjs",
     "test": "ng test",
     "test:watch": "ng test --watch",

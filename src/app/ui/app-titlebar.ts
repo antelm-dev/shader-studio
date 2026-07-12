@@ -162,7 +162,7 @@ import { Workspace } from './workspace';
           <mat-icon>{{ option.icon }}</mat-icon>
           <span>{{ option.label }}</span>
           @if (preferences.value().colorScheme === option.value) {
-            <mat-icon class="menu-hint" aria-hidden="true">check</mat-icon>
+            <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
           }
         </button>
       }

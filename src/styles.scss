@@ -93,5 +93,40 @@ body {
   margin-left: auto;
   padding-left: 24px;
   color: var(--mat-sys-on-surface-variant);
+}
+
+// Do not apply a text-font shorthand to Material icons: it replaces the
+// Material Symbols font and exposes the icon ligature (for example, "check").
+.mat-mdc-menu-item span.menu-hint,
+.mat-mdc-menu-item span.hint {
   font: var(--mat-sys-label-small);
+}
+
+.mat-mdc-menu-item mat-icon.menu-hint,
+.mat-mdc-menu-item mat-icon.hint {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  font-size: 20px;
+  line-height: 24px;
+}
+
+// Selection is secondary information: pin it to the trailing edge instead of
+// letting it interrupt the leading icon-and-label pair.
+.mat-mdc-menu-item:has(.theme-check) {
+  padding-right: 48px;
+}
+
+.mat-mdc-menu-item:has(.theme-check) .mat-mdc-menu-item-text {
+  padding-right: 64px;
+}
+
+.mat-mdc-menu-item .theme-check {
+  position: absolute;
+  right: 16px;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  font-size: 20px;
+  line-height: 20px;
 }
