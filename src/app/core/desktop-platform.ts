@@ -1,12 +1,25 @@
-import { Injectable } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
 
 import type { Bundle, ImportMode } from '../../shared/model';
 
 type WindowState = { maximized: boolean; fullscreen: boolean };
 
+const IDLE_STATE: WindowState = { maximized: false, fullscreen: false };
+
 @Injectable({ providedIn: 'root' })
 export class DesktopPlatform {
   readonly available = typeof window !== 'undefined' && 'electron' in window;
+
+  private readonly windowStateSignal = signal(IDLE_STATE);
+
+  readonly maximized = computed(() => this.windowStateSignal().maximized);
+  readonly fullscreen = computed(() => this.windowStateSignal().fullscreen);
+
+  constructor() {
+    if (!this.available) return;
+    void window.electron.bridge.window.state().then((state) => this.windowStateSignal.set(state));
+    window.electron.bridge.window.onStateChanged((state) => this.windowStateSignal.set(state));
+  }
 
   async openBundle(): Promise<{ name: string; bundle: unknown } | null> {
     if (!this.available) return null;
@@ -78,18 +91,6 @@ export class DesktopPlatform {
 
   close(): void {
     if (this.available) window.electron.bridge.window.close();
-  }
-
-  windowState(): Promise<WindowState> {
-    return this.available
-      ? window.electron.bridge.window.state()
-      : Promise.resolve({ maximized: false, fullscreen: false });
-  }
-
-  onWindowStateChanged(listener: (state: WindowState) => void): () => void {
-    return this.available
-      ? window.electron.bridge.window.onStateChanged(listener)
-      : () => undefined;
   }
 
   /** Keeps the import mode in the platform-neutral UI layer. */

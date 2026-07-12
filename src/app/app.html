@@ -2,11 +2,20 @@
 <app-shader-canvas />
 <router-outlet />
 
-<div class="shell">
-  @if (desktop.available) {
-  <app-titlebar />
-  }
+<input
+  #fileInput
+  type="file"
+  class="file-input"
+  accept="application/json,.json"
+  tabindex="-1"
+  aria-hidden="true"
+  (change)="onFilePicked($event)"
+/>
 
+<div class="shell" [class.fullscreen]="desktop.fullscreen()">
+  @if (desktop.available && !desktop.fullscreen()) {
+  <app-titlebar />
+  } @if (!desktop.fullscreen()) {
   <mat-toolbar class="toolbar">
     <button
       matIconButton
@@ -62,16 +71,6 @@
 
     <span class="spacer"></span>
 
-    <input
-      #fileInput
-      type="file"
-      class="file-input"
-      accept="application/json,.json"
-      tabindex="-1"
-      aria-hidden="true"
-      (change)="onFilePicked($event)"
-    />
-
     <button
       matIconButton
       type="button"
@@ -107,6 +106,10 @@
         <mat-icon>upload_file</mat-icon>
         <span>Import and replace…</span>
       </button>
+      <button mat-menu-item type="button" (click)="workspace.importShadertoy()">
+        <mat-icon>code</mat-icon>
+        <span>Import from Shadertoy…</span>
+      </button>
       <button mat-menu-item type="button" [disabled]="!store.record()" (click)="exportCurrent()">
         <mat-icon>download</mat-icon>
         <span>Export this shader</span>
@@ -133,6 +136,7 @@
     <mat-progress-bar class="loading" mode="indeterminate" aria-label="Working" />
     }
   </mat-toolbar>
+  }
 
   <mat-sidenav-container class="body" [hasBackdrop]="isHandset()">
     <mat-sidenav
@@ -147,13 +151,13 @@
     <mat-sidenav-content class="content">
       <div class="stage"></div>
 
-      @if (preferences.value().guiVisible) {
+      @if (preferences.value().guiVisible && !desktop.fullscreen()) {
       <aside class="controls" aria-label="Shader controls">
         <app-preset-panel class="presets" />
         <app-texture-panel class="textures" />
         <app-gui-panel class="gui" />
       </aside>
-      } @if (preferences.value().editorOpen) {
+      } @if (preferences.value().editorOpen && !desktop.fullscreen()) {
       <app-editor-shell class="editor" />
       }
     </mat-sidenav-content>

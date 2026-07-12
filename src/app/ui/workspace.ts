@@ -5,10 +5,13 @@ import { firstValueFrom } from 'rxjs';
 import type { ImportMode } from '../../shared/model';
 import { DesktopPlatform } from '../core/desktop-platform';
 import { ShaderStore } from '../core/shader-store';
+import { convertShadertoy } from '../rendering/shadertoy-import';
 import { ConfirmDialog, type ConfirmDialogData } from './confirm-dialog';
 import { EditorSettingsDialog } from './editor-settings-dialog';
+import { NewShaderDialog, type NewShaderDialogResult } from './new-shader-dialog';
 import { PromptDialog, type PromptDialogData } from './prompt-dialog';
 import { RecoveryDialog } from './recovery-dialog';
+import { ShadertoyImportDialog, type ShadertoyImportDialogResult } from './shadertoy-import-dialog';
 import { UnsavedChangesDialog, type UnsavedChoice } from './unsaved-changes-dialog';
 
 /**
@@ -83,13 +86,17 @@ export class Workspace {
   // --- Shaders ------------------------------------------------------------
 
   async createShader(): Promise<void> {
-    const name = await this.prompt({
-      title: 'New shader',
-      label: 'Name',
-      confirmText: 'Create',
-      hint: 'Starts from a small template you can edit straight away',
-    });
-    if (name) await this.guardedTransition(() => this.store.create(name));
+    const result = await firstValueFrom(
+      this.dialog
+        .open<NewShaderDialog, never, NewShaderDialogResult>(NewShaderDialog)
+        .afterClosed(),
+    );
+    if (!result) return;
+    if (result.action === 'shadertoy') {
+      await this.importShadertoy();
+      return;
+    }
+    await this.guardedTransition(() => this.store.create(result.name));
   }
 
   async renameShader(id: string, currentName: string): Promise<void> {
@@ -149,6 +156,42 @@ export class Workspace {
   }
 
   // --- Import / export ----------------------------------------------------
+
+  async importShadertoy(): Promise<void> {
+    const input = await firstValueFrom(
+      this.dialog
+        .open<ShadertoyImportDialog, never, ShadertoyImportDialogResult>(ShadertoyImportDialog, {
+          width: '800px',
+          maxWidth: '94vw',
+        })
+        .afterClosed(),
+    );
+    if (!input) return;
+
+    let converted;
+    try {
+      converted = convertShadertoy(input.source);
+    } catch (error) {
+      this.store.notice.set({
+        text: `Shadertoy import failed: ${(error as Error).message}`,
+        error: true,
+      });
+      return;
+    }
+
+    await this.guardedTransition(async () => {
+      const previousId = this.store.selectedId();
+      await this.store.create(input.name);
+      if (!this.store.selectedId() || this.store.selectedId() === previousId) return;
+      this.store.setFragment(converted.fragment);
+      if (!(await this.store.save())) return;
+      const suffix = converted.warnings.length ? ` ${converted.warnings.join(' ')}` : '';
+      this.store.notice.set({
+        text: `Imported “${input.name}” from Shadertoy.${suffix}`,
+        error: false,
+      });
+    });
+  }
 
   async exportShader(id: string, name: string): Promise<void> {
     try {

@@ -94,9 +94,10 @@ export class App {
    */
   private readonly handsetDrawerOpen = signal(false);
 
-  protected readonly drawerOpen = computed(() =>
-    this.isHandset() ? this.handsetDrawerOpen() : this.preferences.value().browserOpen,
-  );
+  protected readonly drawerOpen = computed(() => {
+    if (this.desktop.fullscreen()) return false;
+    return this.isHandset() ? this.handsetDrawerOpen() : this.preferences.value().browserOpen;
+  });
 
   protected readonly darkMode = computed(() => this.preferences.value().colorScheme === 'dark');
 
@@ -250,6 +251,12 @@ export class App {
   @HostListener('window:keydown', ['$event'])
   protected onKeydown(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
+
+    if (event.key === 'F11' && this.desktop.available) {
+      event.preventDefault();
+      this.desktop.toggleFullscreen();
+      return;
+    }
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();

@@ -1,12 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  afterNextRender,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -57,11 +49,11 @@ import { Workspace } from './workspace';
         <button
           class="win-btn"
           type="button"
-          [matTooltip]="maximized() ? 'Restore' : 'Maximize'"
-          [attr.aria-label]="maximized() ? 'Restore' : 'Maximize'"
+          [matTooltip]="desktop.maximized() ? 'Restore' : 'Maximize'"
+          [attr.aria-label]="desktop.maximized() ? 'Restore' : 'Maximize'"
           (click)="desktop.toggleMaximize()"
         >
-          <mat-icon>{{ maximized() ? 'filter_none' : 'crop_square' }}</mat-icon>
+          <mat-icon>{{ desktop.maximized() ? 'filter_none' : 'crop_square' }}</mat-icon>
         </button>
         <button
           class="win-btn close"
@@ -145,8 +137,9 @@ import { Workspace } from './workspace';
         <span class="menu-hint">S</span>
       </button>
       <button mat-menu-item type="button" (click)="desktop.toggleFullscreen()">
-        <mat-icon>{{ fullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
-        <span>{{ fullscreen() ? 'Exit fullscreen' : 'Enter fullscreen' }}</span>
+        <mat-icon>{{ desktop.fullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+        <span>{{ desktop.fullscreen() ? 'Exit fullscreen' : 'Enter fullscreen' }}</span>
+        <span class="menu-hint">F11</span>
       </button>
     </mat-menu>
 
@@ -156,8 +149,8 @@ import { Workspace } from './workspace';
         <span>Minimize</span>
       </button>
       <button mat-menu-item type="button" (click)="desktop.toggleMaximize()">
-        <mat-icon>{{ maximized() ? 'filter_none' : 'crop_square' }}</mat-icon>
-        <span>{{ maximized() ? 'Restore' : 'Maximize' }}</span>
+        <mat-icon>{{ desktop.maximized() ? 'filter_none' : 'crop_square' }}</mat-icon>
+        <span>{{ desktop.maximized() ? 'Restore' : 'Maximize' }}</span>
       </button>
       <mat-divider />
       <button mat-menu-item type="button" (click)="desktop.close()">
@@ -300,21 +293,8 @@ export class AppTitlebar {
   protected readonly workspace = inject(Workspace);
   protected readonly preferences = inject(Preferences);
   private readonly renderer = inject(RendererHandle);
-  private readonly destroyRef = inject(DestroyRef);
 
-  private readonly windowState = signal({ maximized: false, fullscreen: false });
-
-  protected readonly maximized = computed(() => this.windowState().maximized);
-  protected readonly fullscreen = computed(() => this.windowState().fullscreen);
   protected readonly darkMode = computed(() => this.preferences.value().colorScheme === 'dark');
-
-  constructor() {
-    afterNextRender(() => {
-      void this.desktop.windowState().then((state) => this.windowState.set(state));
-      const stop = this.desktop.onWindowStateChanged((state) => this.windowState.set(state));
-      this.destroyRef.onDestroy(stop);
-    });
-  }
 
   protected toggle(
     key: keyof Pick<WorkspacePreferences, 'browserOpen' | 'guiVisible' | 'editorOpen'>,

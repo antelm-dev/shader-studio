@@ -16,6 +16,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 
 import { Preferences, type WorkspacePreferences } from '../core/preferences';
+import { DesktopPlatform } from '../core/desktop-platform';
 import { ShaderStore } from '../core/shader-store';
 import { TextureAssets } from '../core/texture-assets';
 import { RendererHandle } from './renderer-handle';
@@ -76,6 +77,15 @@ const RECOMPILE_DEBOUNCE_MS = 400;
         <mat-icon>{{ darkMode() ? 'light_mode' : 'dark_mode' }}</mat-icon>
         <span>{{ darkMode() ? 'Light theme' : 'Dark theme' }}</span>
       </button>
+
+      @if (desktop.available) {
+        <mat-divider />
+        <button mat-menu-item type="button" (click)="desktop.toggleFullscreen()">
+          <mat-icon>{{ desktop.fullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+          <span>{{ desktop.fullscreen() ? 'Exit fullscreen' : 'Enter fullscreen' }}</span>
+          <span class="hint">F11</span>
+        </button>
+      }
     </mat-menu>
   `,
   styles: `
@@ -103,6 +113,7 @@ const RECOMPILE_DEBOUNCE_MS = 400;
 export class ShaderCanvas {
   protected readonly store = inject(ShaderStore);
   protected readonly preferences = inject(Preferences);
+  protected readonly desktop = inject(DesktopPlatform);
   private readonly handle = inject(RendererHandle);
   private readonly destroyRef = inject(DestroyRef);
   private readonly textures = inject(TextureAssets);
