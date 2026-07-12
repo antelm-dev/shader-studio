@@ -15,6 +15,7 @@ import {
 } from '../../shared/model';
 import { Preferences, type WorkspacePreferences } from './preferences';
 import { DEFAULT_EDITOR_APPEARANCE, DEFAULT_EDITOR_WINDOW } from './editor-prefs';
+import { DEFAULT_PANEL_WIDTHS } from './panel-prefs';
 import { ApiError, type UpdateShaderPatch } from './shader-api';
 import { ShaderApi } from './shader-api';
 import { ShaderStore } from './shader-store';
@@ -160,6 +161,9 @@ class FakePreferences implements Partial<Preferences> {
     browserOpen: true,
     editorOpen: false,
     guiVisible: true,
+    browserWidth: DEFAULT_PANEL_WIDTHS.browser,
+    inspectorWidth: DEFAULT_PANEL_WIDTHS.inspector,
+    inspectorTab: 'controls',
     resolutionScale: 1,
     paused: false,
     autoRipples: false,

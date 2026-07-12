@@ -8,6 +8,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
+import { Preferences } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
 import { Workspace } from './workspace';
 
@@ -35,6 +36,17 @@ import { Workspace } from './workspace';
         (click)="workspace.createShader()"
       >
         <mat-icon>add</mat-icon>
+      </button>
+      <!-- The toolbar's menu button opens the browser; this is how you close it
+           from the browser itself, without going looking for what opened it. -->
+      <button
+        matIconButton
+        type="button"
+        matTooltip="Collapse the shader browser"
+        aria-label="Collapse the shader browser"
+        (click)="collapse()"
+      >
+        <mat-icon>chevron_left</mat-icon>
       </button>
     </header>
 
@@ -129,12 +141,12 @@ import { Workspace } from './workspace';
     .browser-header {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 8px;
+      gap: 4px;
       padding: 12px 8px 4px 16px;
     }
 
     .browser-title {
+      flex: 1;
       margin: 0;
       font: var(--mat-sys-title-medium);
     }
@@ -174,6 +186,8 @@ export class ShaderBrowser {
   protected readonly store = inject(ShaderStore);
   protected readonly workspace = inject(Workspace);
 
+  private readonly preferences = inject(Preferences);
+
   protected readonly query = signal('');
 
   protected readonly filtered = computed(() => {
@@ -190,5 +204,9 @@ export class ShaderBrowser {
 
   protected select(id: string): void {
     void this.workspace.selectShader(id);
+  }
+
+  protected collapse(): void {
+    this.preferences.patch({ browserOpen: false });
   }
 }

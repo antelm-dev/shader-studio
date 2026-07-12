@@ -143,6 +143,7 @@
       class="drawer"
       [mode]="isHandset() ? 'over' : 'side'"
       [opened]="drawerOpen()"
+      [style.width.px]="browserWidth()"
       (closedStart)="closeBrowser()"
     >
       <app-shader-browser />
@@ -151,12 +152,51 @@
     <mat-sidenav-content class="content">
       <div class="stage"></div>
 
-      @if (preferences.value().guiVisible && !desktop.fullscreen()) {
-      <aside class="controls" aria-label="Shader controls">
-        <app-preset-panel class="presets" />
-        <app-texture-panel class="textures" />
-        <app-gui-panel class="gui" />
+      <!-- The content box begins exactly where the drawer ends, so the browser's
+           separator is simply pinned to its left edge. Only when the drawer is a
+           rail: dragging the width of a sheet that covers the screen is not a
+           gesture anyone wants. -->
+      @if (drawerOpen() && !isHandset()) {
+      <app-resize-handle
+        class="browser-handle"
+        grow="e"
+        label="Resize the shader browser. Use the left and right arrow keys."
+        [value]="browserWidth()"
+        [min]="panelLimits.browserWidth.min"
+        [max]="panelLimits.browserWidth.max"
+        [defaultValue]="defaultWidths.browser"
+        (preview)="liveBrowserWidth.set($event)"
+        (commit)="commitBrowserWidth($event)"
+      />
+      } @if (inspectorOpen()) {
+      <aside class="inspector" [style.width.px]="inspectorWidth()" aria-label="Inspector">
+        <app-inspector-panel />
       </aside>
+
+      <app-resize-handle
+        class="inspector-handle"
+        grow="w"
+        label="Resize the inspector. Use the left and right arrow keys."
+        [style.right.px]="inspectorWidth() + 7"
+        [value]="inspectorWidth()"
+        [min]="panelLimits.inspectorWidth.min"
+        [max]="panelLimits.inspectorWidth.max"
+        [defaultValue]="defaultWidths.inspector"
+        (preview)="liveInspectorWidth.set($event)"
+        (commit)="commitInspectorWidth($event)"
+      />
+      } @else if (!desktop.fullscreen()) {
+      <!-- Collapsing the inspector has to leave something behind to open it
+           again, or the only way back is a keyboard shortcut and a menu item. -->
+      <button
+        type="button"
+        class="inspector-rail"
+        matTooltip="Show the inspector (H)"
+        aria-label="Show the inspector"
+        (click)="toggle('guiVisible')"
+      >
+        <mat-icon>tune</mat-icon>
+      </button>
       } @if (preferences.value().editorOpen && !desktop.fullscreen()) {
       <app-editor-shell class="editor" />
       }

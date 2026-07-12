@@ -7,6 +7,7 @@ import {
   HostListener,
   PLATFORM_ID,
   afterNextRender,
+  afterRenderEffect,
   computed,
   effect,
   inject,
@@ -21,24 +22,24 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatSidenavContainer, MatSidenavModule } from '@angular/material/sidenav';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { filter, map } from 'rxjs';
 
 import type { ImportMode } from '../shared/model';
+import { DEFAULT_PANEL_WIDTHS, PANEL_LIMITS } from './core/panel-prefs';
 import { Preferences, type WorkspacePreferences } from './core/preferences';
 import { DesktopPlatform } from './core/desktop-platform';
 import { ShaderStore } from './core/shader-store';
-import { GuiPanel } from './gui/gui-panel';
 import { RendererHandle } from './rendering/renderer-handle';
 import { ShaderCanvas } from './rendering/shader-canvas';
 import { EditorShell } from './ui/editor-shell';
 import { AppTitlebar } from './ui/app-titlebar';
-import { PresetPanel } from './ui/preset-panel';
+import { InspectorPanel } from './ui/inspector-panel';
+import { ResizeHandle } from './ui/resize-handle';
 import { ShaderBrowser } from './ui/shader-browser';
-import { TexturePanel } from './ui/texture-panel';
 import { Workspace } from './ui/workspace';
 
 @Component({
@@ -47,7 +48,7 @@ import { Workspace } from './ui/workspace';
   imports: [
     AppTitlebar,
     EditorShell,
-    GuiPanel,
+    InspectorPanel,
     MatButtonModule,
     MatDividerModule,
     MatIconModule,
@@ -56,11 +57,10 @@ import { Workspace } from './ui/workspace';
     MatSidenavModule,
     MatToolbarModule,
     MatTooltipModule,
-    PresetPanel,
+    ResizeHandle,
     RouterOutlet,
     ShaderBrowser,
     ShaderCanvas,
-    TexturePanel,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
@@ -101,7 +101,56 @@ export class App {
 
   protected readonly darkMode = computed(() => this.preferences.value().colorScheme === 'dark');
 
+  protected readonly inspectorOpen = computed(
+    () => this.preferences.value().guiVisible && !this.desktop.fullscreen(),
+  );
+
+  // --- Panel widths -------------------------------------------------------
+
+  protected readonly panelLimits = PANEL_LIMITS;
+  protected readonly defaultWidths = DEFAULT_PANEL_WIDTHS;
+
+  /**
+   * The width a separator is currently being dragged to, if one is.
+   *
+   * While it is set the panel renders from here instead of from `Preferences`,
+   * which is only written once the gesture ends — see `ResizeHandle`.
+   */
+  protected readonly liveBrowserWidth = signal<number | null>(null);
+  protected readonly liveInspectorWidth = signal<number | null>(null);
+
+  protected readonly browserWidth = computed(
+    () => this.liveBrowserWidth() ?? this.preferences.value().browserWidth,
+  );
+  protected readonly inspectorWidth = computed(
+    () => this.liveInspectorWidth() ?? this.preferences.value().inspectorWidth,
+  );
+
+  private readonly sidenavContainer = viewChild.required(MatSidenavContainer);
+
   constructor() {
+    /**
+     * A side drawer offsets the content with a margin that Material measures for
+     * itself — on open, on close, and on a viewport change, but *not* when the
+     * drawer's own width changes underneath it. Dragging the separator is exactly
+     * that case, so it has to be asked.
+     *
+     * It has to be asked *after* the frame is rendered, which is why this is an
+     * `afterRenderEffect` and not an `effect`. `updateContentMargins` does not
+     * take a width — it measures the drawer's `offsetWidth` off the DOM. A plain
+     * effect runs before Angular has flushed the `[style.width.px]` binding, so
+     * Material would measure the width the drawer had *before* the drag and the
+     * content would settle one gesture behind: the drawer grows, the content
+     * stays put and is overlapped by it, and the separator — which is pinned to
+     * the content's left edge — is left stranded inside the drawer, where it can
+     * no longer be grabbed. You get exactly one resize.
+     */
+    afterRenderEffect(() => {
+      this.browserWidth();
+      this.drawerOpen();
+      this.sidenavContainer().updateContentMargins();
+    });
+
     // On the server, render the collection into the HTML. In the browser the
     // same work is deferred until after hydration, so the first client render
     // matches the markup the server produced (see ShaderStore's snapshot).
@@ -199,6 +248,16 @@ export class App {
   protected toggle(key: 'editorOpen' | 'guiVisible'): void {
     const patch = { [key]: !this.preferences.value()[key] } as Partial<WorkspacePreferences>;
     this.preferences.patch(patch);
+  }
+
+  protected commitBrowserWidth(width: number): void {
+    this.liveBrowserWidth.set(null);
+    this.preferences.patch({ browserWidth: width });
+  }
+
+  protected commitInspectorWidth(width: number): void {
+    this.liveInspectorWidth.set(null);
+    this.preferences.patch({ inspectorWidth: width });
   }
 
   protected toggleColorScheme(): void {

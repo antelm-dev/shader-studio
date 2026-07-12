@@ -36,7 +36,6 @@ const DEFAULT_FOLDER = 'Parameters';
   selector: 'app-gui-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <h2 class="panel-title">Parameters</h2>
     <div #host class="gui-host"></div>
     @if (store.controls().length === 0 && store.record()) {
       <p class="empty">This shader declares no controls. Add some in the Config tab.</p>
@@ -45,11 +44,7 @@ const DEFAULT_FOLDER = 'Parameters';
   styles: `
     :host {
       display: block;
-    }
-
-    .panel-title {
-      margin: 0 0 8px;
-      font: var(--mat-sys-title-small);
+      padding: 0 12px;
     }
 
     .empty {

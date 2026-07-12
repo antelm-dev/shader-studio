@@ -26,10 +26,6 @@ const FILTER_OPTIONS: readonly { value: TextureFilterMode; label: string }[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatIconModule, MatProgressSpinnerModule, MatTooltipModule],
   template: `
-    <header class="panel-header">
-      <h2 class="panel-title">Textures</h2>
-    </header>
-
     <div class="grid">
       @for (index of indices; track index) {
         @let channel = store.channels()[index];
@@ -103,19 +99,7 @@ const FILTER_OPTIONS: readonly { value: TextureFilterMode; label: string }[] = [
   styles: `
     :host {
       display: block;
-    }
-
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-
-    .panel-title {
-      margin: 0;
-      font: var(--mat-sys-title-small);
+      padding: 0 12px;
     }
 
     .grid {

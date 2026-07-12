@@ -1,34 +1,21 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { ShaderStore } from '../core/shader-store';
 import { Workspace } from './workspace';
 
+/** The Presets tab. Its heading and its save action belong to `InspectorPanel`. */
 @Component({
   selector: 'app-preset-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, MatChipsModule, MatIconModule, MatMenuModule, MatTooltipModule],
+  imports: [MatChipsModule, MatIconModule, MatMenuModule],
   template: `
-    <header class="panel-header">
-      <h2 class="panel-title">Presets</h2>
-      <button
-        matIconButton
-        type="button"
-        matTooltip="Save the current parameter values as a preset"
-        aria-label="Save preset"
-        [disabled]="!store.record()"
-        (click)="workspace.savePreset()"
-      >
-        <mat-icon>bookmark_add</mat-icon>
-      </button>
-    </header>
-
     @if (store.presets().length === 0) {
-      <p class="empty">No presets. Tune the parameters below, then save them here.</p>
+      <p class="empty">
+        No presets yet. Tune the parameters, then save them with the bookmark button above.
+      </p>
     } @else {
       <mat-chip-listbox
         class="presets"
@@ -67,19 +54,7 @@ import { Workspace } from './workspace';
   styles: `
     :host {
       display: block;
-    }
-
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-
-    .panel-title {
-      margin: 0;
-      font: var(--mat-sys-title-small);
+      padding: 0 12px;
     }
 
     .presets {

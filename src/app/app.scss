@@ -22,7 +22,10 @@
 // ...except on the chrome itself.
 .toolbar,
 .drawer,
-.controls,
+.inspector,
+.inspector-rail,
+.browser-handle,
+.inspector-handle,
 .editor,
 .loading,
 app-titlebar {
@@ -107,6 +110,8 @@ app-titlebar {
   --mat-sidenav-container-divider-color: transparent;
 }
 
+// The width is bound from preferences; this is only the fallback for the very
+// first render, before the stored value has been read back.
 .drawer {
   width: 300px;
   border-right: 1px solid var(--mat-sys-outline-variant);
@@ -120,7 +125,7 @@ app-titlebar {
   grid-template-columns: 1fr auto;
   grid-template-rows: 1fr auto;
   grid-template-areas:
-    'stage controls'
+    'stage inspector'
     'editor editor';
   min-height: 0;
   overflow: hidden;
@@ -130,30 +135,63 @@ app-titlebar {
   grid-area: stage;
 }
 
-.controls {
-  grid-area: controls;
+.inspector {
+  grid-area: inspector;
+  // Bound from preferences; this is the fallback for the first render.
   width: 300px;
+  // The border is part of the width the user dragged to, not 2px on top of it —
+  // otherwise the rail renders wider than the number it persisted, and the
+  // separator sits beside its own border rather than on it.
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   margin: 12px;
-  padding: 12px;
-  overflow-y: auto;
+  // The rail itself never scrolls — the open tab does. See InspectorPanel.
+  overflow: hidden;
   border-radius: var(--mat-sys-corner-small);
   border: 1px solid var(--mat-sys-outline-variant);
   background: color-mix(in srgb, var(--mat-sys-surface-container) 80%, transparent);
   backdrop-filter: blur(18px);
   box-shadow: var(--mat-sys-level2);
-}
 
-.presets {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
   --mat-chip-container-shape-radius: var(--mat-sys-corner-small);
 }
 
-.textures {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
+// The separator sits in the gutter, straddling the rail's left border. `right`
+// is bound, because the gutter moves with the rail.
+.inspector-handle {
+  grid-area: inspector;
+}
+
+// The content box starts where the drawer ends, so the browser's separator is
+// simply its left edge.
+.browser-handle {
+  left: 0;
+}
+
+// What is left of the inspector once it is collapsed: a target to bring it back.
+.inspector-rail {
+  grid-area: inspector;
+  align-self: start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: 12px;
+  padding: 0;
+  border-radius: var(--mat-sys-corner-small);
+  border: 1px solid var(--mat-sys-outline-variant);
+  background: color-mix(in srgb, var(--mat-sys-surface-container) 80%, transparent);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--mat-sys-level2);
+  color: var(--mat-sys-on-surface-variant);
+  cursor: pointer;
+}
+
+.inspector-rail:hover {
+  color: var(--mat-sys-on-surface);
 }
 
 .editor {
@@ -169,14 +207,21 @@ app-titlebar {
     grid-template-columns: 1fr;
     grid-template-areas:
       'stage'
-      'controls'
+      'inspector'
       'editor';
   }
 
-  .controls {
-    width: auto;
+  // Stacked rather than side by side, so a width is no longer a thing you can
+  // drag — and the separators have nothing left to separate.
+  .inspector {
+    width: auto !important;
     max-height: 42dvh;
     margin: 8px;
+  }
+
+  .browser-handle,
+  .inspector-handle {
+    display: none;
   }
 
   .shader-name {

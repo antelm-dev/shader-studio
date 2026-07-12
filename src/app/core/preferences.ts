@@ -9,6 +9,13 @@ import {
   type EditorAppearance,
   type EditorWindowState,
 } from './editor-prefs';
+import {
+  DEFAULT_PANEL_WIDTHS,
+  PANEL_LIMITS,
+  clampPanelWidth,
+  sanitizeInspectorTab,
+  type InspectorTab,
+} from './panel-prefs';
 
 /**
  * UI state that should survive a reload: which shader was open, which panels
@@ -30,7 +37,14 @@ export interface WorkspacePreferences {
   lastShaderId: string | null;
   browserOpen: boolean;
   editorOpen: boolean;
+  /** Whether the inspector rail is showing. Toggled by the H shortcut. */
   guiVisible: boolean;
+  /** Width of the shader browser, in pixels. */
+  browserWidth: number;
+  /** Width of the inspector rail, in pixels. */
+  inspectorWidth: number;
+  /** Which inspector tab was last open. */
+  inspectorTab: InspectorTab;
   resolutionScale: number;
   paused: boolean;
   autoRipples: boolean;
@@ -46,6 +60,9 @@ const DEFAULTS: WorkspacePreferences = {
   browserOpen: true,
   editorOpen: false,
   guiVisible: true,
+  browserWidth: DEFAULT_PANEL_WIDTHS.browser,
+  inspectorWidth: DEFAULT_PANEL_WIDTHS.inspector,
+  inspectorTab: 'controls',
   resolutionScale: 1,
   paused: false,
   autoRipples: false,
@@ -101,6 +118,20 @@ export class Preferences {
         browserOpen: parsed.browserOpen ?? DEFAULTS.browserOpen,
         editorOpen: parsed.editorOpen ?? DEFAULTS.editorOpen,
         guiVisible: parsed.guiVisible ?? DEFAULTS.guiVisible,
+        // Both widths reach the layout as a CSS length. A value from an older
+        // build, a wider monitor or a hand-edited store is clamped back into a
+        // range that always leaves the preview the larger half of the window.
+        browserWidth: clampPanelWidth(
+          parsed.browserWidth,
+          PANEL_LIMITS.browserWidth,
+          DEFAULTS.browserWidth,
+        ),
+        inspectorWidth: clampPanelWidth(
+          parsed.inspectorWidth,
+          PANEL_LIMITS.inspectorWidth,
+          DEFAULTS.inspectorWidth,
+        ),
+        inspectorTab: sanitizeInspectorTab(parsed.inspectorTab),
         resolutionScale:
           typeof parsed.resolutionScale === 'number' &&
           parsed.resolutionScale >= 0.25 &&
