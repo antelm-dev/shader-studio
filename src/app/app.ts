@@ -30,13 +30,21 @@ import { filter, map } from 'rxjs';
 
 import type { ImportMode } from '../shared/model';
 import { DEFAULT_PANEL_WIDTHS, PANEL_LIMITS } from './core/panel-prefs';
-import { Preferences, type WorkspacePreferences } from './core/preferences';
+import {
+  COLOR_SCHEME_OPTIONS,
+  Preferences,
+  colorSchemeIcon,
+  type ColorScheme,
+  type WorkspacePreferences,
+} from './core/preferences';
 import { DesktopPlatform } from './core/desktop-platform';
 import { ShaderStore } from './core/shader-store';
+import { OutputSync } from './core/output-sync';
 import { RendererHandle } from './rendering/renderer-handle';
 import { ShaderCanvas } from './rendering/shader-canvas';
 import { EditorShell } from './ui/editor-shell';
 import { AppTitlebar } from './ui/app-titlebar';
+import { DocumentStatus } from './ui/document-status';
 import { InspectorPanel } from './ui/inspector-panel';
 import { ResizeHandle } from './ui/resize-handle';
 import { ShaderBrowser } from './ui/shader-browser';
@@ -70,11 +78,15 @@ export class App {
   protected readonly preferences = inject(Preferences);
   protected readonly workspace = inject(Workspace);
   protected readonly desktop = inject(DesktopPlatform);
+  protected readonly status = inject(DocumentStatus);
+  protected readonly outputMode =
+    typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/output';
 
   private readonly renderer = inject(RendererHandle);
   private readonly snackBar = inject(MatSnackBar);
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
   private readonly router = inject(Router);
+  private readonly outputSync = inject(OutputSync);
   private routingReady = false;
 
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
@@ -99,7 +111,10 @@ export class App {
     return this.isHandset() ? this.handsetDrawerOpen() : this.preferences.value().browserOpen;
   });
 
-  protected readonly darkMode = computed(() => this.preferences.value().colorScheme === 'dark');
+  protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
+  protected readonly themeIcon = computed(() =>
+    colorSchemeIcon(this.preferences.value().colorScheme),
+  );
 
   protected readonly inspectorOpen = computed(
     () => this.preferences.value().guiVisible && !this.desktop.fullscreen(),
@@ -129,6 +144,8 @@ export class App {
   private readonly sidenavContainer = viewChild.required(MatSidenavContainer);
 
   constructor() {
+    if (this.outputMode) this.outputSync.startOutput();
+    else this.outputSync.startController();
     /**
      * A side drawer offsets the content with a margin that Material measures for
      * itself — on open, on close, and on a viewport change, but *not* when the
@@ -146,6 +163,7 @@ export class App {
      * no longer be grabbed. You get exactly one resize.
      */
     afterRenderEffect(() => {
+      if (this.outputMode) return;
       this.browserWidth();
       this.drawerOpen();
       this.sidenavContainer().updateContentMargins();
@@ -154,15 +172,15 @@ export class App {
     // On the server, render the collection into the HTML. In the browser the
     // same work is deferred until after hydration, so the first client render
     // matches the markup the server produced (see ShaderStore's snapshot).
-    if (this.isServer) {
+    if (this.isServer && !this.outputMode) {
       void this.store.initialize(this.routeShaderId());
     }
 
-    afterNextRender(() => void this.initializeRouting());
+    if (!this.outputMode) afterNextRender(() => void this.initializeRouting());
     afterNextRender(() => {
       this.desktop.onCloseRequested(() => void this.handleDesktopClose());
     });
-    afterNextRender(() => this.hintContextMenus());
+    if (!this.outputMode) afterNextRender(() => this.hintContextMenus());
 
     this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
@@ -260,8 +278,8 @@ export class App {
     this.preferences.patch({ inspectorWidth: width });
   }
 
-  protected toggleColorScheme(): void {
-    this.preferences.patch({ colorScheme: this.darkMode() ? 'light' : 'dark' });
+  protected setColorScheme(colorScheme: ColorScheme): void {
+    this.preferences.patch({ colorScheme });
   }
 
   protected toggleBrowser(): void {
@@ -300,6 +318,25 @@ export class App {
   protected exportCurrent(): void {
     const record = this.store.record();
     if (record) void this.workspace.exportShader(record.id, record.name);
+  }
+
+  protected renameCurrent(): void {
+    const record = this.store.record();
+    if (record) void this.workspace.renameShader(record.id, record.name);
+  }
+
+  protected duplicateCurrent(): void {
+    const record = this.store.record();
+    if (record) void this.workspace.duplicateShader(record.id, record.name);
+  }
+
+  protected captureImage(): void {
+    void this.renderer.screenshot(this.store.record()?.id ?? 'shader');
+  }
+
+  /** Opening the editor is what an error badge is *for*. */
+  protected showEditor(): void {
+    this.preferences.patch({ editorOpen: true });
   }
 
   /**

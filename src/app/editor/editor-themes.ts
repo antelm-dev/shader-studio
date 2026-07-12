@@ -1,4 +1,4 @@
-import type { ColorScheme } from '../core/preferences';
+import type { ResolvedColorScheme } from '../core/preferences';
 import type { EditorThemeId } from '../core/editor-prefs';
 
 /**
@@ -207,7 +207,7 @@ export const EDITOR_THEMES: readonly EditorThemeChoice[] = [
  * one. Everything else is taken literally, including a light editor on a dark
  * app, because someone will want exactly that.
  */
-export function resolveThemeId(theme: EditorThemeId, scheme: ColorScheme): ConcreteThemeId {
+export function resolveThemeId(theme: EditorThemeId, scheme: ResolvedColorScheme): ConcreteThemeId {
   if (theme !== 'auto') return theme;
   return scheme === 'light' ? 'studio-light' : 'studio-dark';
 }

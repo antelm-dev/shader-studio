@@ -34,21 +34,21 @@ npx playwright install chromium
 
 Then drive `http://localhost:4321/` with `chromium.launch()`. Useful handles:
 
-| What | Selector |
-| --- | --- |
-| Shader browser drawer | `mat-sidenav.drawer` |
-| Inspector rail | `aside.inspector` |
-| Inspector tabs | `aside.inspector [role="tab"]` |
-| Panel separators | `app-resize-handle.browser-handle` / `.inspector-handle` |
-| Collapsed-inspector button | `button.inspector-rail` |
-| Editor | `app-editor-shell`, `.monaco-editor` |
-| Generated parameter rows | `.lil-gui .lil-controller` |
+| What                       | Selector                                                 |
+| -------------------------- | -------------------------------------------------------- |
+| Shader browser drawer      | `mat-sidenav.drawer`                                     |
+| Inspector rail             | `aside.inspector`                                        |
+| Inspector tabs             | `aside.inspector [role="tab"]`                           |
+| Panel separators           | `app-resize-handle.browser-handle` / `.inspector-handle` |
+| Collapsed-inspector button | `button.inspector-rail`                                  |
+| Editor                     | `app-editor-shell`, `.monaco-editor`                     |
+| Generated parameter rows   | `.lil-gui .lil-controller`                               |
 
 Persisted UI state is one `localStorage` key — read or corrupt it directly to
 test sanitizing and restore:
 
 ```js
-JSON.parse(localStorage.getItem('shader-studio.preferences'))
+JSON.parse(localStorage.getItem('shader-studio.preferences'));
 ```
 
 Open the docked editor via the toolbar: `button[aria-label="More actions"]` →

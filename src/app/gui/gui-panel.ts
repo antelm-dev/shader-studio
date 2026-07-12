@@ -236,7 +236,9 @@ export class GuiPanel {
       .onChange((value: boolean) => this.preferences.patch({ autoRipples: value }));
 
     folder.add(this.system, 'fps').name('FPS').listen().disable();
-    folder.add(this.system, 'savePng').name('Save PNG (S)');
+    // "Capture image", not "Save PNG": it does not save the shader, and every
+    // command in this app that says Save now means one specific thing.
+    folder.add(this.system, 'savePng').name('Capture Image (S)');
     folder.add(this.system, 'resetParams').name('Reset Parameters');
     folder.close();
   }

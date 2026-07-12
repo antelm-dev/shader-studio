@@ -315,7 +315,7 @@ void main() {
               <span class="theme-text">
                 <span class="theme-name">Match the app</span>
                 <span class="theme-note">
-                  Follows the studio's {{ preferences.value().colorScheme }} theme
+                  Follows the studio's {{ preferences.resolved() }} theme
                 </span>
               </span>
             </button>
@@ -361,7 +361,7 @@ void main() {
         [readOnly]="true"
         [value]="sample"
         [appearance]="appearance()"
-        [colorScheme]="preferences.value().colorScheme"
+        [colorScheme]="preferences.resolved()"
       />
     </mat-dialog-content>
 

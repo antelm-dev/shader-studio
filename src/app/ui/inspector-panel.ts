@@ -73,11 +73,13 @@ import { Workspace } from './workspace';
           </button>
         }
         @case ('presets') {
+          <!-- "Save parameter preset", never just "Save": the toolbar's Save
+               writes the shader, and the two were previously both called Save. -->
           <button
             matIconButton
             type="button"
             matTooltip="Save the current parameter values as a preset"
-            aria-label="Save preset"
+            aria-label="Save parameter preset"
             [disabled]="!store.record()"
             (click)="workspace.savePreset()"
           >

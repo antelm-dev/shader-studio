@@ -5,9 +5,16 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { DesktopPlatform } from '../core/desktop-platform';
-import { Preferences, type WorkspacePreferences } from '../core/preferences';
+import {
+  COLOR_SCHEME_OPTIONS,
+  Preferences,
+  colorSchemeIcon,
+  type ColorScheme,
+  type WorkspacePreferences,
+} from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
 import { RendererHandle } from '../rendering/renderer-handle';
+import { DocumentStatus } from './document-status';
 import { Workspace } from './workspace';
 
 @Component({
@@ -83,21 +90,22 @@ import { Workspace } from './workspace';
       </button>
       <button mat-menu-item type="button" [disabled]="!store.record()" (click)="exportCurrent()">
         <mat-icon>download</mat-icon>
-        <span>Export this shader</span>
+        <span>Export shader…</span>
       </button>
       <button mat-menu-item type="button" (click)="workspace.exportAll()">
         <mat-icon>library_books</mat-icon>
-        <span>Export all shaders</span>
+        <span>Export all shaders…</span>
       </button>
       <mat-divider />
       <button
         mat-menu-item
         type="button"
-        [disabled]="!store.dirty() || store.saving() || !store.configValid()"
+        [disabled]="!status.canSave()"
+        [matTooltip]="status.saveHint()"
         (click)="store.save()"
       >
         <mat-icon>save</mat-icon>
-        <span>Save</span>
+        <span>{{ store.saving() ? 'Saving…' : 'Save shader' }}</span>
         <span class="menu-hint">Ctrl+S</span>
       </button>
       <mat-divider />
@@ -122,9 +130,9 @@ import { Workspace } from './workspace';
         <span>{{ preferences.value().editorOpen ? 'Hide editor' : 'Show editor' }}</span>
       </button>
       <mat-divider />
-      <button mat-menu-item type="button" (click)="toggleColorScheme()">
-        <mat-icon>{{ darkMode() ? 'light_mode' : 'dark_mode' }}</mat-icon>
-        <span>{{ darkMode() ? 'Light theme' : 'Dark theme' }}</span>
+      <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
+        <mat-icon>{{ themeIcon() }}</mat-icon>
+        <span>Theme</span>
       </button>
       <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
         <mat-icon>settings</mat-icon>
@@ -141,6 +149,23 @@ import { Workspace } from './workspace';
         <span>{{ desktop.fullscreen() ? 'Exit fullscreen' : 'Enter fullscreen' }}</span>
         <span class="menu-hint">F11</span>
       </button>
+    </mat-menu>
+
+    <mat-menu #themeMenu="matMenu">
+      @for (option of colorSchemeOptions; track option.value) {
+        <button
+          mat-menu-item
+          type="button"
+          [attr.aria-checked]="preferences.value().colorScheme === option.value"
+          (click)="setColorScheme(option.value)"
+        >
+          <mat-icon>{{ option.icon }}</mat-icon>
+          <span>{{ option.label }}</span>
+          @if (preferences.value().colorScheme === option.value) {
+            <mat-icon class="menu-hint" aria-hidden="true">check</mat-icon>
+          }
+        </button>
+      }
     </mat-menu>
 
     <mat-menu #windowMenu="matMenu">
@@ -171,7 +196,7 @@ import { Workspace } from './workspace';
       display: grid;
       grid-template-columns: 1fr auto 1fr;
       align-items: center;
-      height: 36px;
+      height: 28px;
       padding-inline: 8px 0;
       background: color-mix(in srgb, var(--mat-sys-surface-container) 90%, transparent);
       backdrop-filter: blur(18px);
@@ -260,7 +285,7 @@ import { Workspace } from './workspace';
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 46px;
+      width: 40px;
       height: 100%;
       margin: 0;
       padding: 0;
@@ -270,9 +295,9 @@ import { Workspace } from './workspace';
       cursor: default;
 
       mat-icon {
-        font-size: 16px;
-        width: 16px;
-        height: 16px;
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
       }
 
       &:hover {
@@ -292,9 +317,13 @@ export class AppTitlebar {
   protected readonly store = inject(ShaderStore);
   protected readonly workspace = inject(Workspace);
   protected readonly preferences = inject(Preferences);
+  protected readonly status = inject(DocumentStatus);
   private readonly renderer = inject(RendererHandle);
 
-  protected readonly darkMode = computed(() => this.preferences.value().colorScheme === 'dark');
+  protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
+  protected readonly themeIcon = computed(() =>
+    colorSchemeIcon(this.preferences.value().colorScheme),
+  );
 
   protected toggle(
     key: keyof Pick<WorkspacePreferences, 'browserOpen' | 'guiVisible' | 'editorOpen'>,
@@ -302,8 +331,8 @@ export class AppTitlebar {
     this.preferences.patch({ [key]: !this.preferences.value()[key] });
   }
 
-  protected toggleColorScheme(): void {
-    this.preferences.patch({ colorScheme: this.darkMode() ? 'light' : 'dark' });
+  protected setColorScheme(colorScheme: ColorScheme): void {
+    this.preferences.patch({ colorScheme });
   }
 
   protected exportCurrent(): void {

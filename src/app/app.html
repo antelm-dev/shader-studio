@@ -2,6 +2,8 @@
 <app-shader-canvas />
 <router-outlet />
 
+@if (!outputMode) {
+
 <input
   #fileInput
   type="file"
@@ -28,27 +30,57 @@
       <mat-icon>menu</mat-icon>
     </button>
 
+    <!-- The desktop title bar already carries the app's identity a few pixels
+         above this. Repeating it here is the second of the three stacked titles
+         the toolbar is meant to be replacing. -->
+    @if (!desktop.available) {
     <span class="brand" aria-label="Shader Studio">
       <img class="brand-logo" src="shader-studio-logo.png" alt="" width="32" height="32" />
       <span class="brand-title">Shader Studio</span>
     </span>
-
-    @if (store.record(); as shader) {
-    <span
-      class="shader-name"
-      [title]="shader.description + ' — right-click for actions'"
-      [matContextMenuTriggerFor]="shaderMenu"
-    >
-      {{ shader.name }}
-    </span>
-    @if (store.dirty()) {
-    <span class="dot" matTooltip="Unsaved changes" aria-label="Unsaved changes">•</span>
     }
+
+    <!-- The open document: its name, and what it is doing. Not a pill — a title. -->
+    @if (store.record(); as shader) {
+    <div class="document">
+      <span
+        class="doc-name"
+        [title]="shader.description + ' — right-click for actions'"
+        [matContextMenuTriggerFor]="shaderMenu"
+      >
+        {{ shader.name }}
+      </span>
+
+      <span class="doc-meta">
+        <span class="doc-status" [class]="'is-' + status.state()" aria-live="polite">
+          @if (status.state() === 'unsaved') {
+          <span class="dot" aria-hidden="true">•</span>
+          } @else if (status.state() === 'saved') {
+          <mat-icon class="status-icon" aria-hidden="true">check</mat-icon>
+          } {{ status.label() }}
+        </span>
+
+        <!-- Errors are not a save state: you can save a shader that does not
+             compile. They get their own affordance, which opens the editor. -->
+        @if (status.errorCount(); as errors) {
+        <button
+          type="button"
+          class="doc-errors"
+          [matTooltip]="status.errorHint()"
+          [attr.aria-label]="status.errorHint()"
+          (click)="showEditor()"
+        >
+          <mat-icon aria-hidden="true">error</mat-icon>
+          {{ errors }}
+        </button>
+        }
+      </span>
+    </div>
 
     <mat-menu #shaderMenu="matMenu">
       <button mat-menu-item type="button" (click)="workspace.renameShader(shader.id, shader.name)">
         <mat-icon>edit</mat-icon>
-        <span>Rename</span>
+        <span>Rename shader…</span>
       </button>
       <button
         mat-menu-item
@@ -56,15 +88,15 @@
         (click)="workspace.duplicateShader(shader.id, shader.name)"
       >
         <mat-icon>content_copy</mat-icon>
-        <span>Duplicate</span>
+        <span>Duplicate shader</span>
       </button>
       <button mat-menu-item type="button" (click)="exportCurrent()">
         <mat-icon>download</mat-icon>
-        <span>Export</span>
+        <span>Export shader…</span>
       </button>
       <button mat-menu-item type="button" (click)="workspace.deleteShader(shader.id, shader.name)">
         <mat-icon>delete</mat-icon>
-        <span>Delete</span>
+        <span>Delete shader…</span>
       </button>
     </mat-menu>
     }
@@ -81,55 +113,123 @@
       <mat-icon>more_vert</mat-icon>
     </button>
 
+    <!-- Four sections, because a flat list of nine commands is a list you read
+         rather than a menu you scan. -->
     <mat-menu #moreMenu="matMenu">
+      <h3 class="menu-section">View</h3>
       <button mat-menu-item type="button" (click)="toggle('guiVisible')">
         <mat-icon>tune</mat-icon>
-        <span>{{ preferences.value().guiVisible ? 'Hide controls' : 'Show controls' }}</span>
+        <span>{{ preferences.value().guiVisible ? 'Hide inspector' : 'Show inspector' }}</span>
         <span class="menu-hint">H</span>
       </button>
       <button mat-menu-item type="button" (click)="toggle('editorOpen')">
         <mat-icon>code</mat-icon>
         <span>{{ preferences.value().editorOpen ? 'Hide editor' : 'Show editor' }}</span>
       </button>
-      <button mat-menu-item type="button" (click)="toggleColorScheme()">
-        <mat-icon>{{ darkMode() ? 'light_mode' : 'dark_mode' }}</mat-icon>
-        <span>{{ darkMode() ? 'Light theme' : 'Dark theme' }}</span>
+      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="captureImage()">
+        <mat-icon>photo_camera</mat-icon>
+        <span>Capture image</span>
+        <span class="menu-hint">S</span>
+      </button>
+      @if (desktop.available) {
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="!store.record()"
+        (click)="desktop.outputOpen() ? desktop.closeOutput() : desktop.openOutput()"
+      >
+        <mat-icon>{{ desktop.outputOpen() ? 'close_fullscreen' : 'open_in_new' }}</mat-icon>
+        <span>{{ desktop.outputOpen() ? 'Close output window' : 'Open output window' }}</span>
+      </button>
+      }
+
+      <mat-divider />
+
+      <h3 class="menu-section">Shader</h3>
+      <button mat-menu-item type="button" (click)="workspace.createShader()">
+        <mat-icon>add</mat-icon>
+        <span>New shader…</span>
+      </button>
+      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="renameCurrent()">
+        <mat-icon>edit</mat-icon>
+        <span>Rename shader…</span>
+      </button>
+      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="duplicateCurrent()">
+        <mat-icon>content_copy</mat-icon>
+        <span>Duplicate shader</span>
       </button>
 
       <mat-divider />
 
+      <h3 class="menu-section">Import &amp; export</h3>
       <button mat-menu-item type="button" (click)="pickFile('rename')">
         <mat-icon>upload</mat-icon>
-        <span>Import…</span>
+        <span>Import shader…</span>
       </button>
       <button mat-menu-item type="button" (click)="pickFile('overwrite')">
         <mat-icon>upload_file</mat-icon>
         <span>Import and replace…</span>
       </button>
       <button mat-menu-item type="button" (click)="workspace.importShadertoy()">
-        <mat-icon>code</mat-icon>
+        <mat-icon>public</mat-icon>
         <span>Import from Shadertoy…</span>
       </button>
       <button mat-menu-item type="button" [disabled]="!store.record()" (click)="exportCurrent()">
         <mat-icon>download</mat-icon>
-        <span>Export this shader</span>
+        <span>Export shader…</span>
       </button>
       <button mat-menu-item type="button" (click)="workspace.exportAll()">
         <mat-icon>library_books</mat-icon>
-        <span>Export all shaders</span>
+        <span>Export all shaders…</span>
+      </button>
+
+      <mat-divider />
+
+      <h3 class="menu-section">Settings</h3>
+      <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
+        <mat-icon>{{ themeIcon() }}</mat-icon>
+        <span>Theme</span>
+      </button>
+      <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
+        <mat-icon>settings</mat-icon>
+        <span>Editor appearance…</span>
       </button>
     </mat-menu>
 
+    <mat-menu #themeMenu="matMenu">
+      @for (option of colorSchemeOptions; track option.value) {
+      <button
+        mat-menu-item
+        type="button"
+        [attr.aria-checked]="preferences.value().colorScheme === option.value"
+        (click)="setColorScheme(option.value)"
+      >
+        <mat-icon>{{ option.icon }}</mat-icon>
+        <span>{{ option.label }}</span>
+        @if (preferences.value().colorScheme === option.value) {
+        <mat-icon class="menu-hint" aria-hidden="true">check</mat-icon>
+        }
+      </button>
+      }
+    </mat-menu>
+
+    <!-- `disabledInteractive` keeps the button focusable and hoverable while it
+         is disabled, which is the only way a disabled control can explain itself:
+         a plain `disabled` button takes no pointer events and no focus, so its
+         tooltip can never be read and a screen reader is told nothing but
+         "dimmed". `saveHint` names whichever of the four reasons applies. -->
     <button
       matButton="tonal"
       type="button"
       class="save"
-      matTooltip="Save the source and config (Ctrl+S)"
-      [disabled]="!store.dirty() || store.saving() || !store.configValid()"
+      [disabledInteractive]="true"
+      [disabled]="!status.canSave()"
+      [matTooltip]="status.saveHint()"
+      [attr.aria-label]="'Save shader. ' + status.saveHint()"
       (click)="store.save()"
     >
       <mat-icon>save</mat-icon>
-      Save
+      {{ store.saving() ? 'Saving…' : 'Save shader' }}
     </button>
 
     @if (store.loading() || store.saving()) {
@@ -203,3 +303,4 @@
     </mat-sidenav-content>
   </mat-sidenav-container>
 </div>
+}

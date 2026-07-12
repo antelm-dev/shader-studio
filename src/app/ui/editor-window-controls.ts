@@ -79,12 +79,15 @@ import { Workspace } from './workspace';
     :host {
       display: flex;
       align-items: center;
-      gap: 2px;
+      gap: 0;
     }
 
     .control {
-      --mat-icon-button-state-layer-size: 32px;
-      --mat-icon-button-icon-size: 18px;
+      width: 28px;
+      height: 28px;
+      padding: 5px;
+      --mat-icon-button-state-layer-size: 28px;
+      --mat-icon-button-icon-size: 16px;
     }
   `,
 })

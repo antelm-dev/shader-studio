@@ -3,7 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "description": "A shader collection viewer and editor: browse, edit, tune and share WebGL shaders.",
+  "keywords": [],
+  "license": "ISC",
   "author": "Adel Terki",
+  "directories": {
+    "example": "examples"
+  },
   "type": "module",
   "main": "dist-main/main.cjs",
   "scripts": {

@@ -1,4 +1,4 @@
-import { DOCUMENT, Injectable, PLATFORM_ID, effect, inject, signal } from '@angular/core';
+import { DOCUMENT, Injectable, PLATFORM_ID, computed, effect, inject, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
 import {
@@ -31,7 +31,18 @@ import {
 
 const STORAGE_KEY = 'shader-studio.preferences';
 
-export type ColorScheme = 'dark' | 'light';
+export const COLOR_SCHEME_OPTIONS = [
+  { value: 'light', label: 'Light', icon: 'light_mode' },
+  { value: 'dark', label: 'Dark', icon: 'dark_mode' },
+  { value: 'system', label: 'System', icon: 'contrast' },
+] as const;
+
+export type ColorScheme = (typeof COLOR_SCHEME_OPTIONS)[number]['value'];
+export type ResolvedColorScheme = Exclude<ColorScheme, 'system'>;
+
+export function colorSchemeIcon(scheme: ColorScheme): string {
+  return COLOR_SCHEME_OPTIONS.find((option) => option.value === scheme)?.icon ?? 'dark_mode';
+}
 
 export interface WorkspacePreferences {
   lastShaderId: string | null;
@@ -71,24 +82,48 @@ const DEFAULTS: WorkspacePreferences = {
   editorWindow: DEFAULT_EDITOR_WINDOW,
 };
 
+function sanitizeColorScheme(value: unknown): ColorScheme {
+  return COLOR_SCHEME_OPTIONS.some((option) => option.value === value)
+    ? (value as ColorScheme)
+    : DEFAULTS.colorScheme;
+}
+
 @Injectable({ providedIn: 'root' })
 export class Preferences {
   private readonly document = inject(DOCUMENT);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   private readonly state = signal<WorkspacePreferences>(DEFAULTS);
+  private readonly systemDark = signal(true);
 
   readonly value = this.state.asReadonly();
+
+  /**
+   * The light/dark scheme actually painted. When the preference is `system`,
+   * this tracks the OS; otherwise it is the preference itself.
+   */
+  readonly resolved = computed<ResolvedColorScheme>(() => {
+    const scheme = this.state().colorScheme;
+    if (scheme !== 'system') return scheme;
+    return this.systemDark() ? 'dark' : 'light';
+  });
 
   constructor() {
     if (this.isBrowser) {
       this.state.set(this.load());
+
+      const query = this.document.defaultView?.matchMedia('(prefers-color-scheme: dark)');
+      if (query) {
+        this.systemDark.set(query.matches);
+        query.addEventListener('change', (event) => this.systemDark.set(event.matches));
+      }
+
       effect(() => this.persist(this.state()));
 
       // Every Material colour token is a `light-dark()` pair, so the whole
       // palette follows the root `color-scheme` — nothing else has to change.
       effect(() => {
-        this.document.documentElement.style.colorScheme = this.state().colorScheme;
+        this.document.documentElement.style.colorScheme = this.resolved();
       });
     }
   }
@@ -140,10 +175,7 @@ export class Preferences {
             : DEFAULTS.resolutionScale,
         paused: parsed.paused ?? DEFAULTS.paused,
         autoRipples: parsed.autoRipples ?? DEFAULTS.autoRipples,
-        colorScheme:
-          parsed.colorScheme === 'light' || parsed.colorScheme === 'dark'
-            ? parsed.colorScheme
-            : DEFAULTS.colorScheme,
+        colorScheme: sanitizeColorScheme(parsed.colorScheme),
         // These two are structures rather than scalars, and everything inside
         // them ends up in a Monaco option or a CSS length. They get sanitized
         // field by field, and a value that cannot be salvaged falls back to its

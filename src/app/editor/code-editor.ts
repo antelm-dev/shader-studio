@@ -15,7 +15,7 @@ import {
 } from '@angular/core';
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api.js';
 
-import type { ColorScheme } from '../core/preferences';
+import type { ResolvedColorScheme } from '../core/preferences';
 import {
   DEFAULT_EDITOR_APPEARANCE,
   fontFamilyStack,
@@ -78,7 +78,7 @@ export class CodeEditor {
   readonly language = input<EditorLanguage>('glsl');
   readonly diagnostics = input<readonly CompileDiagnostic[]>([]);
   readonly readOnly = input(false);
-  readonly colorScheme = input<ColorScheme>('dark');
+  readonly colorScheme = input<ResolvedColorScheme>('dark');
   readonly appearance = input<EditorAppearance>(DEFAULT_EDITOR_APPEARANCE);
 
   readonly valueChange = output<string>();

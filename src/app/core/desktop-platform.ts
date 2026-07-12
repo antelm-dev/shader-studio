@@ -14,11 +14,14 @@ export class DesktopPlatform {
 
   readonly maximized = computed(() => this.windowStateSignal().maximized);
   readonly fullscreen = computed(() => this.windowStateSignal().fullscreen);
+  readonly outputOpen = signal(false);
 
   constructor() {
     if (!this.available) return;
     void window.electron.bridge.window.state().then((state) => this.windowStateSignal.set(state));
     window.electron.bridge.window.onStateChanged((state) => this.windowStateSignal.set(state));
+    void window.electron.bridge.window.outputOpen().then((open) => this.outputOpen.set(open));
+    window.electron.bridge.window.onOutputStateChanged((open) => this.outputOpen.set(open));
   }
 
   async openBundle(): Promise<{ name: string; bundle: unknown } | null> {
@@ -87,6 +90,14 @@ export class DesktopPlatform {
 
   toggleFullscreen(): void {
     if (this.available) window.electron.bridge.window.toggleFullscreen();
+  }
+
+  openOutput(): void {
+    if (this.available) window.electron.bridge.window.openOutput();
+  }
+
+  closeOutput(): void {
+    if (this.available) window.electron.bridge.window.closeOutput();
   }
 
   close(): void {

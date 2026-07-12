@@ -76,6 +76,11 @@ not mocked.
 | `S`        | Save the frame as a PNG  |
 | `Ctrl`+`S` | Save the shader          |
 
+On desktop, **More actions → Open output window** opens a clean, independently
+resizable render surface. It follows the active draft, live parameters, pause
+state, render scale, and texture assignments, making it suitable for a second
+monitor or projector while the main window remains the control workspace.
+
 Move the pointer over the background to push the shader around; click to drop a
 ripple. Both are fed to the shader as uniforms (see below) — what a shader does
 with them is up to it.

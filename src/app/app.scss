@@ -36,9 +36,41 @@ app-titlebar {
   position: relative;
   gap: 4px;
   flex: 0 0 auto;
+  height: 44px;
+  min-height: 44px;
+  padding-inline: 8px 12px;
   background: color-mix(in srgb, var(--mat-sys-surface-container) 82%, transparent);
   backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  // Material's default toolbar and icon-button metrics are intentionally roomy.
+  // Keep the app chrome compact so it does not compete with the shader canvas.
+  button[matIconButton] {
+    width: 32px;
+    height: 32px;
+    padding: 6px;
+
+    mat-icon {
+      width: 20px;
+      height: 20px;
+      font-size: 20px;
+      line-height: 20px;
+    }
+  }
+
+  .save {
+    min-width: 0;
+    height: 32px;
+    padding-inline: 12px;
+    font: var(--mat-sys-label-medium);
+
+    mat-icon {
+      width: 18px;
+      height: 18px;
+      font-size: 18px;
+      line-height: 18px;
+    }
+  }
 }
 
 .brand {
@@ -58,25 +90,94 @@ app-titlebar {
   border-radius: 7px;
 }
 
-.shader-name {
+// The open document, treated as a document title rather than a chip: the name
+// reads as the heading of the thing you are working on, with its state beneath
+// it in the same way a word processor does it.
+.document {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
   margin-left: 12px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
-  font: var(--mat-sys-label-large);
+  line-height: 1.2;
+}
+
+.doc-name {
   max-width: 30vw;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-title-small);
   cursor: context-menu;
 }
 
-.dot {
-  margin-left: 6px;
+.doc-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.doc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  white-space: nowrap;
+}
+
+// Unsaved is the one state worth pulling the eye, so it gets the accent — but
+// it also gets a dot and a word, because colour alone is not a status.
+.doc-status.is-unsaved {
   color: var(--mat-sys-tertiary);
-  font-size: 22px;
+}
+
+.doc-status .dot {
+  font-size: 14px;
   line-height: 1;
+}
+
+.status-icon {
+  font-size: 13px;
+  width: 13px;
+  height: 13px;
+}
+
+// A count, not a colour: the number is the information, red is the emphasis.
+.doc-errors {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--mat-sys-error) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mat-sys-error-container) 70%, transparent);
+  color: var(--mat-sys-on-error-container);
+  font: var(--mat-sys-label-small);
+  line-height: 16px;
+  cursor: pointer;
+
+  mat-icon {
+    font-size: 13px;
+    width: 13px;
+    height: 13px;
+  }
+
+  &:hover {
+    background: var(--mat-sys-error-container);
+  }
+}
+
+// Section headings inside the overflow menu.
+::ng-deep .menu-section {
+  margin: 0;
+  padding: 8px 16px 2px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .spacer {
@@ -224,7 +325,9 @@ app-titlebar {
     display: none;
   }
 
-  .shader-name {
+  // The status stays; the name is what the title bar and the browser already
+  // tell you, and it is the first thing that can afford to go.
+  .doc-name {
     display: none;
   }
 

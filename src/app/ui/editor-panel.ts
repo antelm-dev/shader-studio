@@ -19,6 +19,7 @@ import { EditorSettings } from '../editor/editor-settings';
 import { Preferences } from '../core/preferences';
 import type { CompileDiagnostic, DiagnosticSource } from '../core/diagnostic';
 import { ShaderStore } from '../core/shader-store';
+import { DocumentStatus } from './document-status';
 import { EditorWindowControls } from './editor-window-controls';
 import { Workspace } from './workspace';
 
@@ -64,8 +65,8 @@ type Tab = DiagnosticSource;
 
       <div class="spacer"></div>
 
-      @if (store.dirty()) {
-        <span class="dirty" aria-live="polite">Unsaved changes</span>
+      @if (status.state() === 'unsaved' || status.state() === 'saving') {
+        <span class="dirty" aria-live="polite">{{ status.label() }}</span>
       }
 
       <app-editor-window-controls />
@@ -75,11 +76,12 @@ type Tab = DiagnosticSource;
       <button
         mat-menu-item
         type="button"
-        [disabled]="!store.dirty() || store.saving() || !store.configValid()"
+        [disabled]="!status.canSave()"
+        [matTooltip]="status.saveHint()"
         (click)="store.save()"
       >
         <mat-icon>save</mat-icon>
-        <span>{{ store.saving() ? 'Saving…' : 'Save' }}</span>
+        <span>{{ store.saving() ? 'Saving…' : 'Save shader' }}</span>
         <span class="menu-hint">Ctrl+S</span>
       </button>
       <button
@@ -105,7 +107,7 @@ type Tab = DiagnosticSource;
           [class.hidden]="tab() !== 'fragment'"
           language="glsl"
           [value]="draft.fragment"
-          [colorScheme]="preferences.value().colorScheme"
+          [colorScheme]="preferences.resolved()"
           [appearance]="settings.effective()"
           [diagnostics]="diagnosticsFor('fragment')"
           (valueChange)="store.setFragment($event)"
@@ -115,7 +117,7 @@ type Tab = DiagnosticSource;
           [class.hidden]="tab() !== 'vertex'"
           language="glsl"
           [value]="draft.vertex"
-          [colorScheme]="preferences.value().colorScheme"
+          [colorScheme]="preferences.resolved()"
           [appearance]="settings.effective()"
           [diagnostics]="diagnosticsFor('vertex')"
           (valueChange)="store.setVertex($event)"
@@ -125,7 +127,7 @@ type Tab = DiagnosticSource;
           [class.hidden]="tab() !== 'config'"
           language="json"
           [value]="draft.controlsText"
-          [colorScheme]="preferences.value().colorScheme"
+          [colorScheme]="preferences.resolved()"
           [appearance]="settings.effective()"
           [diagnostics]="diagnosticsFor('config')"
           (valueChange)="store.setControlsText($event)"
@@ -166,8 +168,9 @@ type Tab = DiagnosticSource;
     .editor-toolbar {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 8px;
+      gap: 6px;
+      min-height: 34px;
+      padding: 2px 5px 2px 7px;
       border-bottom: 1px solid var(--mat-sys-outline-variant);
       user-select: none;
       cursor: context-menu;
@@ -180,6 +183,13 @@ type Tab = DiagnosticSource;
     .tabs {
       display: flex;
       gap: 2px;
+    }
+
+    .tab {
+      min-width: 0;
+      height: 28px;
+      padding-inline: 11px;
+      font: var(--mat-sys-label-medium);
     }
 
     .tab.active {
@@ -292,6 +302,7 @@ export class EditorPanel {
   protected readonly preferences = inject(Preferences);
   protected readonly settings = inject(EditorSettings);
   protected readonly workspace = inject(Workspace);
+  protected readonly status = inject(DocumentStatus);
 
   readonly collapsed = input(false);
   readonly dragEnabled = input(false);
