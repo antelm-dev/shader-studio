@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 
 import {
+  DEFAULT_CHANNELS,
   type ImportMode,
   type Preset,
   type RenderSettings,
@@ -19,12 +20,15 @@ import {
   type ShaderRecord,
   type ShaderSummary,
   type ParamValue,
+  type TextureChannels,
+  type TextureChannelSettingsPatch,
 } from '../../shared/model';
-import { defaultParams, sanitizeParams, validateControls } from '../../shared/validate';
+import { defaultParams, extFromMime, LIMITS, sanitizeParams, validateControls } from '../../shared/validate';
 import type { CompileDiagnostic } from './diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { ApiError, ShaderApi } from './shader-api';
 import { Preferences } from './preferences';
+import { TextureAssets } from './texture-assets';
 
 /**
  * The single source of truth for the workspace.
@@ -77,6 +81,7 @@ export class ShaderStore {
   private readonly transferState = inject(TransferState);
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
   private readonly recovery = inject(DraftRecovery);
+  private readonly textures = inject(TextureAssets);
 
   /** True once the client has taken over the server's snapshot. */
   private hydrated = false;
@@ -131,6 +136,13 @@ export class ShaderStore {
   readonly selectedId = computed(() => this.record()?.id ?? null);
 
   readonly presets = computed<readonly Preset[]>(() => this.record()?.presets ?? []);
+
+  /**
+   * Not part of the draft: like presets, assigning a texture is an immediate,
+   * persisted action rather than a discardable source edit, so it stays
+   * outside the unsaved-changes/recovery machinery that covers `draft`.
+   */
+  readonly channels = computed<TextureChannels>(() => this.record()?.channels ?? DEFAULT_CHANNELS);
 
   /**
    * The schema the GUI and the uniforms are built from: the draft's, if it
@@ -475,6 +487,7 @@ export class ShaderStore {
     try {
       await this.api.remove(id);
       this.recovery.remove(id);
+      this.textures.releaseShader(id);
       await this.refreshList();
 
       if (this.selectedId() === id) {
@@ -540,6 +553,85 @@ export class ShaderStore {
       if (this.activePresetId() === presetId) this.activePresetId.set(null);
       await this.refreshList();
       this.notice.set({ text: 'Preset deleted', error: false });
+    } catch (error) {
+      this.report(error);
+    }
+  }
+
+  // --- Textures -------------------------------------------------------------
+
+  /**
+   * Decodes the file locally first, both to reject anything that is not
+   * actually an image before spending a round trip on it, and to get the
+   * pixel dimensions the server wants alongside the bytes.
+   */
+  async setTextureImage(channel: 0 | 1 | 2 | 3, file: File): Promise<void> {
+    const record = this.record();
+    if (!record) return;
+
+    const ext = extFromMime(file.type);
+    if (!ext) {
+      this.notice.set({ text: `“${file.name}” must be a PNG, JPEG or WebP image`, error: true });
+      return;
+    }
+    if (file.size > LIMITS.textureBytes) {
+      this.notice.set({
+        text: `“${file.name}” is larger than ${Math.round(LIMITS.textureBytes / (1024 * 1024))} MB`,
+        error: true,
+      });
+      return;
+    }
+
+    let width: number;
+    let height: number;
+    try {
+      const bitmap = await createImageBitmap(file);
+      width = bitmap.width;
+      height = bitmap.height;
+      bitmap.close();
+    } catch {
+      this.notice.set({ text: `“${file.name}” is not a readable image`, error: true });
+      return;
+    }
+
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const updated = await this.api.setTexture(record.id, channel, { ext, bytes, width, height });
+      this.textures.releaseShader(record.id);
+      this.record.set(updated);
+      await this.refreshList();
+      this.notice.set({ text: `Assigned “${file.name}” to iChannel${channel}`, error: false });
+    } catch (error) {
+      this.report(error);
+    }
+  }
+
+  async clearTextureImage(channel: 0 | 1 | 2 | 3): Promise<void> {
+    const record = this.record();
+    if (!record) return;
+
+    try {
+      const updated = await this.api.clearTexture(record.id, channel);
+      this.textures.releaseShader(record.id);
+      this.record.set(updated);
+      await this.refreshList();
+      this.notice.set({ text: `Cleared iChannel${channel}`, error: false });
+    } catch (error) {
+      this.report(error);
+    }
+  }
+
+  async setChannelSettings(channel: 0 | 1 | 2 | 3, patch: TextureChannelSettingsPatch): Promise<void> {
+    const record = this.record();
+    if (!record) return;
+
+    const channels: TextureChannelSettingsPatch[] = [0, 1, 2, 3].map((index) =>
+      index === channel ? patch : {},
+    );
+
+    try {
+      const updated = await this.api.update(record.id, { channels });
+      this.record.set(updated);
     } catch (error) {
       this.report(error);
     }

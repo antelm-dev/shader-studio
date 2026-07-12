@@ -11,8 +11,18 @@ import type {
   ShaderParams,
   ShaderRecord,
   ShaderSummary,
+  TextureChannelSettingsPatch,
 } from '../../shared/model';
+import { mimeFromExt } from '../../shared/validate';
 import { API_BASE_URL } from './api-base-url';
+
+/** The bytes and decoded dimensions of an image about to be assigned to a channel. */
+export interface TextureUpload {
+  ext: string;
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+}
 
 /** A failed API call, carrying the server's own message and field details. */
 export class ApiError extends Error {
@@ -38,6 +48,8 @@ export interface UpdateShaderPatch {
   render?: unknown;
   fragment?: string;
   vertex?: string;
+  /** Settings only (wrap/filter/flipY), one entry per channel — never image bytes. */
+  channels?: readonly TextureChannelSettingsPatch[];
 }
 
 export abstract class ShaderApi {
@@ -52,6 +64,8 @@ export abstract class ShaderApi {
   abstract exportShader(id: string): Promise<Bundle>;
   abstract exportAll(): Promise<Bundle>;
   abstract importBundle(bundle: unknown, mode: ImportMode): Promise<ImportResult>;
+  abstract setTexture(id: string, channel: number, upload: TextureUpload): Promise<ShaderRecord>;
+  abstract clearTexture(id: string, channel: number): Promise<ShaderRecord>;
 }
 
 @Injectable()
@@ -161,5 +175,27 @@ export class HttpShaderApi extends ShaderApi {
 
   override importBundle(bundle: unknown, mode: ImportMode): Promise<ImportResult> {
     return this.post<ImportResult>('/import', { bundle, mode });
+  }
+
+  // --- Textures -------------------------------------------------------------
+
+  override async setTexture(id: string, channel: number, upload: TextureUpload): Promise<ShaderRecord> {
+    const blob = new Blob([upload.bytes.slice()], { type: mimeFromExt(upload.ext) });
+    const query = `?width=${upload.width}&height=${upload.height}`;
+    const response = await this.request(
+      firstValueFrom(
+        this.http.put<{ shader: ShaderRecord }>(this.url(`/shaders/${id}/textures/${channel}${query}`), blob),
+      ),
+    );
+    return response.shader;
+  }
+
+  override async clearTexture(id: string, channel: number): Promise<ShaderRecord> {
+    const response = await this.request(
+      firstValueFrom(
+        this.http.delete<{ shader: ShaderRecord }>(this.url(`/shaders/${id}/textures/${channel}`)),
+      ),
+    );
+    return response.shader;
   }
 }

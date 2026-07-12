@@ -150,6 +150,12 @@ app-titlebar {
   --mat-chip-container-shape-radius: var(--mat-sys-corner-small);
 }
 
+.textures {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
 .editor {
   pointer-events: auto;
 }

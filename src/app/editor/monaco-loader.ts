@@ -95,6 +95,7 @@ const GLSL_PREDEFINED = [
   'projectionMatrix', 'modelViewMatrix', 'modelMatrix', 'viewMatrix', 'normalMatrix',
   'cameraPosition',
   'iTime', 'iResolution', 'iMouse', 'iMouseVel', 'u_clickData',
+  'iChannel0', 'iChannel1', 'iChannel2', 'iChannel3',
 ];
 
 function registerGlsl(monaco: MonacoApi): void {
@@ -184,6 +185,10 @@ function registerGlslCompletions(monaco: MonacoApi): void {
     iMouse: 'vec4 — xy: pointer in pixels, z: 1 while pressed',
     iMouseVel: 'vec2 — pointer velocity, pixels per second',
     u_clickData: 'vec3[] — per click: xy in pixels, z: birth time (<= 0 unused)',
+    iChannel0: 'sampler2D — bound image for this channel, or a 1×1 transparent pixel if unassigned',
+    iChannel1: 'sampler2D — bound image for this channel, or a 1×1 transparent pixel if unassigned',
+    iChannel2: 'sampler2D — bound image for this channel, or a 1×1 transparent pixel if unassigned',
+    iChannel3: 'sampler2D — bound image for this channel, or a 1×1 transparent pixel if unassigned',
   };
 
   monaco.languages.registerCompletionItemProvider(GLSL_LANGUAGE_ID, {

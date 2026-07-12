@@ -17,8 +17,11 @@ import { MatMenuModule } from '@angular/material/menu';
 
 import { Preferences, type WorkspacePreferences } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
+import { TextureAssets } from '../core/texture-assets';
 import { RendererHandle } from './renderer-handle';
-import { ShaderEngine } from './shader-engine';
+import { type ChannelSource, ShaderEngine } from './shader-engine';
+
+const EMPTY_CHANNELS: readonly (ChannelSource | null)[] = [null, null, null, null];
 
 const RECOMPILE_DEBOUNCE_MS = 400;
 
@@ -97,6 +100,7 @@ export class ShaderCanvas {
   protected readonly preferences = inject(Preferences);
   private readonly handle = inject(RendererHandle);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly textures = inject(TextureAssets);
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   private readonly engine = signal<ShaderEngine | null>(null);
@@ -109,6 +113,7 @@ export class ShaderCanvas {
   });
 
   private readonly debouncedSource = signal<{ fragment: string; vertex: string } | null>(null);
+  private readonly channelSources = signal<readonly (ChannelSource | null)[]>(EMPTY_CHANNELS);
 
   constructor() {
     afterNextRender(() => {
@@ -139,6 +144,7 @@ export class ShaderCanvas {
           controls,
           params: this.store.params(),
           render: draft?.render ?? { bloom: { enabled: false, strength: 0, radius: 0, threshold: 1 } },
+          channels: this.channelSources(),
         });
         this.store.setCompileDiagnostics(diagnostics);
       });
@@ -148,6 +154,35 @@ export class ShaderCanvas {
       const engine = this.engine();
       const params = this.store.params();
       engine?.setParams(params);
+    });
+
+    // Resolving a channel to a URL is async (an HTTP fetch, or an IPC round
+    // trip on desktop), so it goes through its own signal rather than
+    // blocking the (synchronous) compile effect above.
+    effect((onCleanup) => {
+      const record = this.store.record();
+      const channels = this.store.channels();
+      if (!record) {
+        this.channelSources.set(EMPTY_CHANNELS);
+        return;
+      }
+
+      let cancelled = false;
+      onCleanup(() => {
+        cancelled = true;
+      });
+
+      void Promise.all(
+        channels.map((channel, index) => this.textures.resolve(record.id, index, channel, record.updatedAt)),
+      ).then((resolved) => {
+        if (!cancelled) this.channelSources.set(resolved);
+      });
+    });
+
+    effect(() => {
+      const engine = this.engine();
+      const channels = this.channelSources();
+      engine?.setChannels(channels);
     });
 
     effect(() => {

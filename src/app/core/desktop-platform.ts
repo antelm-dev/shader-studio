@@ -30,6 +30,12 @@ export class DesktopPlatform {
     return result.status === 'ok';
   }
 
+  /** Raw bytes for a channel's image, or `null` if the shader has nothing assigned to it. */
+  async readTexture(shaderId: string, channel: number): Promise<{ bytes: Uint8Array; ext: string } | null> {
+    if (!this.available) return null;
+    return window.electron.bridge.shader.readTexture(shaderId, channel);
+  }
+
   migrationPending(): Promise<boolean> {
     return this.available ? window.electron.bridge.migration.pending() : Promise.resolve(false);
   }

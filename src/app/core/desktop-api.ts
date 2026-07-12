@@ -9,7 +9,7 @@ import type {
   ShaderRecord,
   ShaderSummary,
 } from '../../shared/model';
-import { ApiError, ShaderApi, type UpdateShaderPatch } from './shader-api';
+import { ApiError, ShaderApi, type TextureUpload, type UpdateShaderPatch } from './shader-api';
 
 function messageOf(error: unknown): string {
   if (error instanceof Error) return error.message.replace(/^Error invoking remote method '[^']+':\s*/, '');
@@ -66,5 +66,13 @@ export class DesktopShaderApi extends ShaderApi {
 
   override importBundle(bundle: unknown, mode: ImportMode): Promise<ImportResult> {
     return this.request(() => window.electron.bridge.shader.importBundle(bundle, mode));
+  }
+
+  override setTexture(id: string, channel: number, upload: TextureUpload): Promise<ShaderRecord> {
+    return this.request(() => window.electron.bridge.shader.setTexture(id, channel, upload));
+  }
+
+  override clearTexture(id: string, channel: number): Promise<ShaderRecord> {
+    return this.request(() => window.electron.bridge.shader.clearTexture(id, channel));
   }
 }

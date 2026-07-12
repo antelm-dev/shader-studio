@@ -59,5 +59,28 @@ export function createShaderIpc(storage: ShaderStorage) {
       if (!parsed.ok) throw new StorageError('invalid', 'The bundle could not be imported', parsed.errors);
       return storage.importPayloads(parsed.value, parsedMode.value);
     }),
+    'set-texture': handle(
+      (
+        _event,
+        id: string,
+        channel: number,
+        input: { ext: string; bytes: Uint8Array; width: number; height: number },
+      ) => {
+        const body = objectArg(input, 'input');
+        return storage.setTexture(stringArg(id, 'id'), channel, {
+          ext: stringArg(body['ext'], 'ext'),
+          bytes: Buffer.from(body['bytes'] as Uint8Array),
+          width: body['width'] as number,
+          height: body['height'] as number,
+        });
+      },
+    ),
+    'clear-texture': handle((_event, id: string, channel: number) =>
+      storage.clearTexture(stringArg(id, 'id'), channel),
+    ),
+    'read-texture': handle(async (_event, id: string, channel: number) => {
+      const texture = await storage.readTexture(stringArg(id, 'id'), channel);
+      return texture ? { bytes: new Uint8Array(texture.bytes), ext: texture.ext } : null;
+    }),
   });
 }

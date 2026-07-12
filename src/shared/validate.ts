@@ -13,6 +13,7 @@
 import {
   BUNDLE_FORMAT,
   DEFAULT_BLOOM,
+  DEFAULT_TEXTURE_CHANNEL,
   type Bundle,
   type ImportMode,
   type Preset,
@@ -20,6 +21,13 @@ import {
   type ShaderControl,
   type ShaderParams,
   type ShaderPayload,
+  type TextureChannel,
+  type TextureChannelPayload,
+  type TextureChannelPayloads,
+  type TextureChannelSettingsPatch,
+  type TextureChannels,
+  type TextureFilterMode,
+  type TextureWrapMode,
 } from './model';
 
 export type Result<T> = { ok: true; value: T } | { ok: false; errors: string[] };
@@ -51,7 +59,38 @@ export const LIMITS = {
   presetCount: 200,
   /** Bundles are capped by Express's body limit too; this guards the contents. */
   bundleShaderCount: 200,
+  /** Per image, raw bytes (before any base64 inflation in a bundle). */
+  textureBytes: 4 * 1024 * 1024,
+  /** Max width or height, in pixels. Comfortably above any hand-authored channel image. */
+  textureDimension: 4096,
 } as const;
+
+/** The only raster formats the engine will load a channel image from. */
+export const TEXTURE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
+
+const TEXTURE_MIME_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+};
+
+/** The MIME type a texture upload/download travels under, given its extension. */
+export function mimeFromExt(ext: string): string {
+  return TEXTURE_MIME_TYPES[ext] ?? 'application/octet-stream';
+}
+
+/** The extension a texture is stored under, given the MIME type it arrived with. Shared between the client (upload) and the server (routing). */
+export function extFromMime(mime: string | undefined | null): string | null {
+  const clean = (mime ?? '').split(';')[0]?.trim().toLowerCase();
+  if (clean === 'image/png') return 'png';
+  if (clean === 'image/jpeg') return 'jpg';
+  if (clean === 'image/webp') return 'webp';
+  return null;
+}
+
+const TEXTURE_WRAP_MODES = new Set(['repeat', 'clamp', 'mirror']);
+const TEXTURE_FILTER_MODES = new Set(['linear', 'nearest']);
 
 /**
  * Shader ids are also directory names. Lowercase alphanumerics and inner
@@ -95,7 +134,17 @@ const KEY_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/;
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
 /** Provided by the engine for every shader; a control may not shadow them. */
-const RESERVED_KEYS = new Set(['clickData', 'time', 'resolution', 'mouse', 'mouseVel']);
+const RESERVED_KEYS = new Set([
+  'clickData',
+  'time',
+  'resolution',
+  'mouse',
+  'mouseVel',
+  'channel0',
+  'channel1',
+  'channel2',
+  'channel3',
+]);
 
 const CONTROL_TYPES = new Set(['number', 'boolean', 'color', 'select']);
 
@@ -471,6 +520,114 @@ export function validateRender(input: unknown): RenderSettings {
 }
 
 // ---------------------------------------------------------------------------
+// Texture channels (iChannel0…3)
+// ---------------------------------------------------------------------------
+
+function wrapMode(value: unknown, fallback: TextureWrapMode): TextureWrapMode {
+  return typeof value === 'string' && TEXTURE_WRAP_MODES.has(value) ? (value as TextureWrapMode) : fallback;
+}
+
+function filterMode(value: unknown, fallback: TextureFilterMode): TextureFilterMode {
+  return typeof value === 'string' && TEXTURE_FILTER_MODES.has(value) ? (value as TextureFilterMode) : fallback;
+}
+
+function positiveInt(value: unknown, max: number, fallback: number): number {
+  if (!isFiniteNumber(value)) return fallback;
+  const rounded = Math.round(value);
+  return rounded > 0 && rounded <= max ? rounded : fallback;
+}
+
+/**
+ * Tolerant, like `validateRender`: a channel slot with a bad or missing
+ * shape falls back to "empty" rather than failing the whole shader. The
+ * `ext`/`width`/`height` triple is only ever trusted together — if the
+ * extension is not one we serve, the slot is treated as empty regardless of
+ * what width/height claimed.
+ */
+function validateChannel(input: unknown): TextureChannel {
+  if (!isRecord(input)) return { ...DEFAULT_TEXTURE_CHANNEL };
+
+  const ext = typeof input['ext'] === 'string' && TEXTURE_EXTENSIONS.has(input['ext']) ? input['ext'] : null;
+  if (ext === null) {
+    return {
+      ...DEFAULT_TEXTURE_CHANNEL,
+      wrap: wrapMode(input['wrap'], DEFAULT_TEXTURE_CHANNEL.wrap),
+      filter: filterMode(input['filter'], DEFAULT_TEXTURE_CHANNEL.filter),
+      flipY: typeof input['flipY'] === 'boolean' ? input['flipY'] : DEFAULT_TEXTURE_CHANNEL.flipY,
+    };
+  }
+
+  return {
+    ext,
+    width: positiveInt(input['width'], LIMITS.textureDimension, 0),
+    height: positiveInt(input['height'], LIMITS.textureDimension, 0),
+    wrap: wrapMode(input['wrap'], DEFAULT_TEXTURE_CHANNEL.wrap),
+    filter: filterMode(input['filter'], DEFAULT_TEXTURE_CHANNEL.filter),
+    flipY: typeof input['flipY'] === 'boolean' ? input['flipY'] : DEFAULT_TEXTURE_CHANNEL.flipY,
+  };
+}
+
+/** Always returns exactly four slots, padding or truncating as needed. */
+export function validateChannels(input: unknown): TextureChannels {
+  const list = Array.isArray(input) ? input : [];
+  return [0, 1, 2, 3].map((index) => validateChannel(list[index])) as unknown as TextureChannels;
+}
+
+/**
+ * Strict counterpart used only by the general `PUT /shaders/:id` patch path:
+ * settings only. It can never smuggle in `ext`/`width`/`height`, so a client
+ * cannot point metadata at a texture file that was never actually uploaded —
+ * that only ever happens through the dedicated upload endpoint, which carries
+ * real bytes.
+ */
+export function validateChannelSettingsPatch(input: unknown): TextureChannelSettingsPatch[] {
+  const list = Array.isArray(input) ? input : [];
+  return [0, 1, 2, 3].map((index) => {
+    const entry = list[index];
+    if (!isRecord(entry)) return {};
+    const patch: TextureChannelSettingsPatch = {};
+    if (typeof entry['wrap'] === 'string' && TEXTURE_WRAP_MODES.has(entry['wrap'])) {
+      patch.wrap = entry['wrap'] as TextureWrapMode;
+    }
+    if (typeof entry['filter'] === 'string' && TEXTURE_FILTER_MODES.has(entry['filter'])) {
+      patch.filter = entry['filter'] as TextureFilterMode;
+    }
+    if (typeof entry['flipY'] === 'boolean') {
+      patch.flipY = entry['flipY'];
+    }
+    return patch;
+  });
+}
+
+const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+
+/**
+ * A channel as carried inside a bundle: same tolerant shape as
+ * `validateChannel`, plus a base64 `data` payload that must actually be
+ * present (and look like base64) whenever `ext` is set — otherwise the slot
+ * is dropped back to empty rather than trusting metadata with no bytes.
+ */
+function validateChannelPayload(input: unknown): TextureChannelPayload {
+  const channel = validateChannel(input);
+  const data = isRecord(input) ? input['data'] : undefined;
+
+  if (channel.ext === null) return { ...channel, data: null };
+  if (typeof data !== 'string' || data.length === 0 || !BASE64_PATTERN.test(data)) {
+    return { ...DEFAULT_TEXTURE_CHANNEL, data: null };
+  }
+  // Roughly 4 bytes of base64 per 3 bytes of data; reject absurdly large payloads up front.
+  if (data.length > (LIMITS.textureBytes * 4) / 3 + 1024) {
+    return { ...DEFAULT_TEXTURE_CHANNEL, data: null };
+  }
+  return { ...channel, data };
+}
+
+export function validateChannelPayloads(input: unknown): TextureChannelPayloads {
+  const list = Array.isArray(input) ? input : [];
+  return [0, 1, 2, 3].map((index) => validateChannelPayload(list[index])) as unknown as TextureChannelPayloads;
+}
+
+// ---------------------------------------------------------------------------
 // Bundles (import / export)
 // ---------------------------------------------------------------------------
 
@@ -562,6 +719,9 @@ export function validateShaderPayload(input: unknown, label = 'shader'): Result<
     fragment: fragmentResult.value,
     vertex: vertexResult.value,
     presets,
+    // Tolerant: an older bundle (or one from a build predating this feature)
+    // has no `channels` field at all, and simply imports with none assigned.
+    channels: validateChannelPayloads(input['channels']),
   });
 }
 

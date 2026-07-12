@@ -87,6 +87,62 @@ export const DEFAULT_BLOOM: BloomSettings = {
 
 export const DEFAULT_RENDER: RenderSettings = { bloom: { ...DEFAULT_BLOOM } };
 
+// ---------------------------------------------------------------------------
+// Texture channels (iChannel0…3)
+// ---------------------------------------------------------------------------
+
+export type TextureWrapMode = 'repeat' | 'clamp' | 'mirror';
+export type TextureFilterMode = 'linear' | 'nearest';
+
+/**
+ * One `iChannel` slot. `ext === null` means nothing is assigned, in which
+ * case `width`/`height` are meaningless and the engine binds a 1×1
+ * transparent placeholder instead.
+ */
+export interface TextureChannel {
+  ext: string | null;
+  width: number;
+  height: number;
+  wrap: TextureWrapMode;
+  filter: TextureFilterMode;
+  flipY: boolean;
+}
+
+/** Always exactly four slots: iChannel0 through iChannel3. */
+export type TextureChannels = readonly [TextureChannel, TextureChannel, TextureChannel, TextureChannel];
+
+export const DEFAULT_TEXTURE_CHANNEL: TextureChannel = {
+  ext: null,
+  width: 0,
+  height: 0,
+  wrap: 'clamp',
+  filter: 'linear',
+  flipY: true,
+};
+
+export const DEFAULT_CHANNELS: TextureChannels = [
+  { ...DEFAULT_TEXTURE_CHANNEL },
+  { ...DEFAULT_TEXTURE_CHANNEL },
+  { ...DEFAULT_TEXTURE_CHANNEL },
+  { ...DEFAULT_TEXTURE_CHANNEL },
+];
+
+/** Settings-only patch: never carries `ext`/`width`/`height`. */
+export type TextureChannelSettingsPatch = Partial<Pick<TextureChannel, 'wrap' | 'filter' | 'flipY'>>;
+
+/** A texture channel as it travels inside an import/export bundle: the image bytes, base64-encoded. */
+export interface TextureChannelPayload extends TextureChannel {
+  /** Base64 body of the image file. Present iff `ext !== null`. */
+  data: string | null;
+}
+
+export type TextureChannelPayloads = readonly [
+  TextureChannelPayload,
+  TextureChannelPayload,
+  TextureChannelPayload,
+  TextureChannelPayload,
+];
+
 /** A named capture of a shader's parameter values. */
 export interface Preset {
   id: string;
@@ -105,6 +161,8 @@ export interface ShaderMeta {
   updatedAt: string;
   controls: ShaderControl[];
   render: RenderSettings;
+  /** Metadata only — no pixel bytes. The files live under `textures/`. */
+  channels: TextureChannels;
 }
 
 /** A complete shader as served by `GET /api/shaders/:id`. */
@@ -135,6 +193,8 @@ export interface ShaderPayload {
   fragment: string;
   vertex: string;
   presets: Preset[];
+  /** Texture images inlined as base64 — this is what makes a bundle portable. */
+  channels: TextureChannelPayloads;
 }
 
 export interface ShaderBundle {
@@ -180,6 +240,11 @@ export function toSummary(record: ShaderRecord): ShaderSummary {
   };
 }
 
+/**
+ * Metadata-only conversion — `channels[n].data` is always `null` here since
+ * this function never touches the filesystem. Callers that need the actual
+ * image bytes (export, or a same-process copy) fill `data` in afterwards.
+ */
 export function toPayload(record: ShaderRecord): ShaderPayload {
   return {
     id: record.id,
@@ -191,5 +256,6 @@ export function toPayload(record: ShaderRecord): ShaderPayload {
     fragment: record.fragment,
     vertex: record.vertex,
     presets: record.presets,
+    channels: record.channels.map((channel) => ({ ...channel, data: null })) as unknown as TextureChannelPayloads,
   };
 }

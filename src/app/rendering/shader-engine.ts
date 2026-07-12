@@ -9,9 +9,22 @@ import {
   type ParamValue,
   type ShaderControl,
   type ShaderParams,
+  type TextureFilterMode,
+  type TextureWrapMode,
 } from '../../shared/model';
 import type { CompileDiagnostic } from '../core/diagnostic';
 import { parseInfoLog, prefixLineCount } from './glsl-diagnostics';
+
+/** A channel resolved to something `THREE.TextureLoader` can actually load. */
+export interface ChannelSource {
+  url: string;
+  wrap: TextureWrapMode;
+  filter: TextureFilterMode;
+  flipY: boolean;
+}
+
+const CHANNEL_COUNT = 4;
+const CHANNEL_UNIFORMS = ['iChannel0', 'iChannel1', 'iChannel2', 'iChannel3'] as const;
 
 /**
  * The WebGL side of the studio. Knows nothing about Angular, HTTP or the
@@ -35,6 +48,8 @@ export interface ShaderSpec {
   controls: readonly ShaderControl[];
   params: ShaderParams;
   render: RenderSettings;
+  /** Exactly four entries: iChannel0…3. `null` means nothing is assigned. */
+  channels: readonly (ChannelSource | null)[];
 }
 
 /** Uniforms the engine supplies to every shader, whether it declares them or not. */
@@ -44,6 +59,10 @@ export const BUILT_IN_UNIFORMS = [
   'iMouse',
   'iMouseVel',
   'u_clickData',
+  'iChannel0',
+  'iChannel1',
+  'iChannel2',
+  'iChannel3',
 ] as const;
 
 const PLACEHOLDER_FRAGMENT = `precision mediump float;
@@ -72,6 +91,10 @@ export class ShaderEngine {
   private uniforms: Record<string, THREE.IUniform> = {};
   private controls: readonly ShaderControl[] = [];
   private material: THREE.ShaderMaterial;
+
+  /** Keyed by `url|wrap|filter|flipY`, so swapping settings on the same image gets its own entry. */
+  private readonly textureCache = new Map<string, THREE.Texture>();
+  private readonly placeholderTexture: THREE.Texture;
 
   private render: RenderSettings = {
     bloom: { enabled: false, strength: 0.3, radius: 0.5, threshold: 0.85 },
@@ -126,6 +149,12 @@ export class ShaderEngine {
     this.probeScene.add(this.probeMesh);
     this.probeTarget = new T.WebGLRenderTarget(1, 1);
 
+    // A fully transparent 1×1 pixel: what an unassigned iChannel samples, so a
+    // shader that declares `uniform sampler2D iChannelN` always compiles and
+    // renders sensibly, with or without an image behind it.
+    this.placeholderTexture = new T.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1, T.RGBAFormat);
+    this.placeholderTexture.needsUpdate = true;
+
     this.attachPointerListeners();
     this.resize();
   }
@@ -169,7 +198,7 @@ export class ShaderEngine {
     const fragment = expandMacros(spec.fragment);
     const vertex = expandMacros(spec.vertex);
 
-    const uniforms = this.buildUniforms(spec.controls, spec.params);
+    const uniforms = this.buildUniforms(spec.controls, spec.params, spec.channels);
     const candidate = new T.ShaderMaterial({ vertexShader: vertex, fragmentShader: fragment, uniforms });
 
     const diagnostics = this.probe(candidate, fragment, vertex);
@@ -186,6 +215,7 @@ export class ShaderEngine {
     previous.dispose();
 
     this.setRenderSettings(spec.render);
+    this.pruneTextureCache(spec.channels);
     return [];
   }
 
@@ -258,6 +288,7 @@ export class ShaderEngine {
   private buildUniforms(
     controls: readonly ShaderControl[],
     params: ShaderParams,
+    channels: readonly (ChannelSource | null)[],
   ): Record<string, THREE.IUniform> {
     const T = this.three;
 
@@ -268,6 +299,10 @@ export class ShaderEngine {
       iMouseVel: { value: new T.Vector2(0, 0) },
       u_clickData: { value: this.clickData },
     };
+
+    for (let index = 0; index < CHANNEL_COUNT; index++) {
+      uniforms[CHANNEL_UNIFORMS[index]] = { value: this.resolveTexture(channels[index] ?? null) };
+    }
 
     for (const control of controls) {
       const value = params[control.key] ?? control.default;
@@ -282,6 +317,66 @@ export class ShaderEngine {
     if (existing) (uniforms['iResolution'].value as THREE.Vector2).copy(existing);
 
     return uniforms;
+  }
+
+  // -------------------------------------------------------------------------
+  // Texture channels (iChannel0…3)
+  // -------------------------------------------------------------------------
+
+  private static cacheKey(spec: ChannelSource): string {
+    return `${spec.url}|${spec.wrap}|${spec.filter}|${spec.flipY}`;
+  }
+
+  private wrapModeFor(wrap: TextureWrapMode): THREE.Wrapping {
+    const T = this.three;
+    switch (wrap) {
+      case 'repeat':
+        return T.RepeatWrapping;
+      case 'mirror':
+        return T.MirroredRepeatWrapping;
+      case 'clamp':
+      default:
+        return T.ClampToEdgeWrapping;
+    }
+  }
+
+  /**
+   * Gets or creates the `THREE.Texture` for a resolved channel. `load()`
+   * returns synchronously — an empty texture that fills itself in once the
+   * image decodes — so binding a channel never blocks a compile on the
+   * network or disk, matching the contract the rest of the engine keeps.
+   */
+  private resolveTexture(spec: ChannelSource | null): THREE.Texture {
+    if (!spec) return this.placeholderTexture;
+
+    const key = ShaderEngine.cacheKey(spec);
+    const cached = this.textureCache.get(key);
+    if (cached) return cached;
+
+    const texture = new this.three.TextureLoader().load(spec.url, undefined, undefined, (error) => {
+      console.warn(`[shader-engine] failed to load texture "${spec.url}":`, error);
+    });
+
+    const wrap = this.wrapModeFor(spec.wrap);
+    texture.wrapS = wrap;
+    texture.wrapT = wrap;
+    texture.magFilter = spec.filter === 'nearest' ? this.three.NearestFilter : this.three.LinearFilter;
+    texture.minFilter = texture.magFilter;
+    texture.generateMipmaps = false;
+    texture.flipY = spec.flipY;
+
+    this.textureCache.set(key, texture);
+    return texture;
+  }
+
+  /** Disposes any cached texture no longer referenced by the current channels. */
+  private pruneTextureCache(channels: readonly (ChannelSource | null)[]): void {
+    const used = new Set(channels.filter((channel): channel is ChannelSource => channel !== null).map(ShaderEngine.cacheKey));
+    for (const [key, texture] of this.textureCache) {
+      if (used.has(key)) continue;
+      texture.dispose();
+      this.textureCache.delete(key);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -305,6 +400,20 @@ export class ShaderEngine {
     } else {
       uniform.value = value;
     }
+  }
+
+  /**
+   * Rebinds iChannel0…3 without touching the compiled program: swapping which
+   * image a channel points at (or its wrap/filter/flip) is just a new uniform
+   * value, never a reason to recompile.
+   */
+  setChannels(channels: readonly (ChannelSource | null)[]): void {
+    if (this.disposed) return;
+    for (let index = 0; index < CHANNEL_COUNT; index++) {
+      const uniform = this.uniforms[CHANNEL_UNIFORMS[index]];
+      if (uniform) uniform.value = this.resolveTexture(channels[index] ?? null);
+    }
+    this.pruneTextureCache(channels);
   }
 
   // -------------------------------------------------------------------------
@@ -571,6 +680,9 @@ export class ShaderEngine {
     this.probeTarget.dispose();
     this.material.dispose();
     this.mesh.geometry.dispose();
+    for (const texture of this.textureCache.values()) texture.dispose();
+    this.textureCache.clear();
+    this.placeholderTexture.dispose();
     this.renderer.dispose();
   }
 }

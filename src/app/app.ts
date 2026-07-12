@@ -38,6 +38,7 @@ import { EditorShell } from './ui/editor-shell';
 import { AppTitlebar } from './ui/app-titlebar';
 import { PresetPanel } from './ui/preset-panel';
 import { ShaderBrowser } from './ui/shader-browser';
+import { TexturePanel } from './ui/texture-panel';
 import { Workspace } from './ui/workspace';
 
 @Component({
@@ -59,6 +60,7 @@ import { Workspace } from './ui/workspace';
     RouterOutlet,
     ShaderBrowser,
     ShaderCanvas,
+    TexturePanel,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',

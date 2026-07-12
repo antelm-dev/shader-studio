@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  DEFAULT_CHANNELS,
   DEFAULT_RENDER,
   toSummary,
   type ImportResult,
@@ -39,6 +40,7 @@ function makeRecord(overrides: Partial<ShaderRecord> = {}): ShaderRecord {
     updatedAt: '2024-01-01T00:00:00.000Z',
     controls: structuredClone(CONTROLS),
     render: structuredClone(DEFAULT_RENDER),
+    channels: structuredClone(DEFAULT_CHANNELS),
     fragment: 'void main() { gl_FragColor = vec4(1.0); }',
     vertex: 'void main() { gl_Position = vec4(position, 1.0); }',
     presets: [],

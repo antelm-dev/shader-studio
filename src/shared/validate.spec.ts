@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BUNDLE_FORMAT, type ShaderControl, type ShaderPayload } from './model';
+import { BUNDLE_FORMAT, DEFAULT_CHANNELS, type ShaderControl, type ShaderPayload } from './model';
 import {
   buildCollectionBundle,
   buildShaderBundle,
@@ -32,6 +32,10 @@ function payload(overrides: Partial<ShaderPayload> = {}): ShaderPayload {
     fragment: 'void main() { gl_FragColor = vec4(1.0); }',
     vertex: 'void main() { gl_Position = vec4(position, 1.0); }',
     presets: [],
+    channels: DEFAULT_CHANNELS.map((channel) => ({
+      ...channel,
+      data: null,
+    })) as unknown as ShaderPayload['channels'],
     ...overrides,
   };
 }

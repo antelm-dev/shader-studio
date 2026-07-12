@@ -13,7 +13,17 @@ import express, { type NextFunction, type Request, type Response, type Router } 
 import type { ApiErrorBody } from '../../shared/model';
 import { buildCollectionBundle, buildShaderBundle, parseBundle, validateImportMode } from '../../shared/validate';
 import { ShaderStorage, StorageError } from '../storage';
-import { attachmentName, BODY_LIMIT, param, route } from './helpers';
+import {
+  attachmentName,
+  BODY_LIMIT,
+  channelParam,
+  extFromContentType,
+  intQuery,
+  mimeFromExt,
+  param,
+  route,
+  TEXTURE_BODY_LIMIT,
+} from './helpers';
 
 export function createApiRouter(storage: ShaderStorage): Router {
   const api = express.Router();
@@ -61,6 +71,7 @@ export function createApiRouter(storage: ShaderStorage): Router {
         ...('render' in body ? { render: body['render'] } : {}),
         ...('fragment' in body ? { fragment: body['fragment'] } : {}),
         ...('vertex' in body ? { vertex: body['vertex'] } : {}),
+        ...('channels' in body ? { channels: body['channels'] } : {}),
       });
       res.json({ shader: updated });
     }),
@@ -108,6 +119,46 @@ export function createApiRouter(storage: ShaderStorage): Router {
     route(async (req, res) => {
       await storage.deletePreset(param(req, 'id'), param(req, 'presetId'));
       res.status(204).end();
+    }),
+  );
+
+  api.put(
+    '/shaders/:id/textures/:channel',
+    express.raw({ type: 'image/*', limit: TEXTURE_BODY_LIMIT }),
+    route(async (req, res) => {
+      if (!Buffer.isBuffer(req.body)) {
+        throw new StorageError('invalid', 'Expected a raw image body with an image/* Content-Type');
+      }
+      const shader = await storage.setTexture(param(req, 'id'), channelParam(req), {
+        ext: extFromContentType(req.headers['content-type']),
+        bytes: req.body,
+        width: intQuery(req, 'width'),
+        height: intQuery(req, 'height'),
+      });
+      res.json({ shader });
+    }),
+  );
+
+  api.delete(
+    '/shaders/:id/textures/:channel',
+    route(async (req, res) => {
+      const shader = await storage.clearTexture(param(req, 'id'), channelParam(req));
+      res.json({ shader });
+    }),
+  );
+
+  api.get(
+    '/shaders/:id/textures/:channel',
+    route(async (req, res) => {
+      const texture = await storage.readTexture(param(req, 'id'), channelParam(req));
+      if (!texture) {
+        res.status(404).end();
+        return;
+      }
+      res
+        .setHeader('Content-Type', mimeFromExt(texture.ext))
+        .setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+        .send(texture.bytes);
     }),
   );
 
