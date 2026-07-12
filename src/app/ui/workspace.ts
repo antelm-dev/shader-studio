@@ -3,6 +3,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 
 import type { ImportMode } from '../../shared/model';
+import { DesktopPlatform } from '../core/desktop-platform';
 import { ShaderStore } from '../core/shader-store';
 import { ConfirmDialog, type ConfirmDialogData } from './confirm-dialog';
 import { EditorSettingsDialog } from './editor-settings-dialog';
@@ -22,6 +23,7 @@ import { UnsavedChangesDialog, type UnsavedChoice } from './unsaved-changes-dial
 export class Workspace {
   private readonly dialog = inject(MatDialog);
   private readonly store = inject(ShaderStore);
+  private readonly desktop = inject(DesktopPlatform);
   private transitionInFlight: Promise<boolean> | null = null;
 
   guardedTransition(action: () => void | Promise<void>): Promise<boolean> {
@@ -59,7 +61,7 @@ export class Workspace {
   }
 
   openEditorSettings(): void {
-    this.dialog.open(EditorSettingsDialog);
+    this.dialog.open(EditorSettingsDialog, { width: '720px', maxWidth: '92vw' });
   }
 
   private prompt(data: PromptDialogData): Promise<string | undefined> {
@@ -145,7 +147,11 @@ export class Workspace {
   async exportShader(id: string, name: string): Promise<void> {
     try {
       const bundle = await this.store.exportShader(id);
-      this.download(bundle, `${id}.shader.json`);
+      if (this.desktop.available) {
+        if (!(await this.desktop.saveBundle(`${id}.shader.json`, bundle as never))) return;
+      } else {
+        this.download(bundle, `${id}.shader.json`);
+      }
       this.store.notice.set({ text: `Exported “${name}”`, error: false });
     } catch (error) {
       this.store.notice.set({ text: `Export failed: ${String(error)}`, error: true });
@@ -155,7 +161,11 @@ export class Workspace {
   async exportAll(): Promise<void> {
     try {
       const bundle = await this.store.exportAll();
-      this.download(bundle, 'shader-studio-collection.shader.json');
+      if (this.desktop.available) {
+        if (!(await this.desktop.saveBundle('shader-studio-collection.shader.json', bundle as never))) return;
+      } else {
+        this.download(bundle, 'shader-studio-collection.shader.json');
+      }
       this.store.notice.set({ text: 'Exported the whole collection', error: false });
     } catch (error) {
       this.store.notice.set({ text: `Export failed: ${String(error)}`, error: true });
@@ -193,6 +203,47 @@ export class Workspace {
     }
 
     await this.guardedTransition(() => this.store.importBundle(bundle, mode));
+  }
+
+  async importDesktop(mode: ImportMode): Promise<void> {
+    try {
+      const picked = await this.desktop.openBundle();
+      if (!picked) return;
+      if (mode === 'overwrite') {
+        const confirmed = await this.confirm({
+          title: 'Import and replace',
+          message: 'Shaders with matching ids will be replaced, including their presets. This cannot be undone.',
+          confirmText: 'Replace',
+          destructive: true,
+        });
+        if (!confirmed) return;
+      }
+      await this.guardedTransition(() => this.store.importBundle(picked.bundle, mode));
+    } catch (error) {
+      this.store.notice.set({ text: `Import failed: ${String(error)}`, error: true });
+    }
+  }
+
+  async resolveFirstRunMigration(): Promise<void> {
+    if (!this.desktop.available || !(await this.desktop.migrationPending())) return;
+    const shouldImport = await this.confirm({
+      title: 'Import an existing library?',
+      message: 'Choose an existing Shader Studio data folder, or continue with the example library.',
+      confirmText: 'Choose folder',
+    });
+    if (!shouldImport) {
+      await this.desktop.declineMigration();
+      return;
+    }
+    try {
+      const notice = await this.desktop.migrate();
+      if (notice) {
+        await this.store.refreshList();
+        this.store.notice.set({ text: notice, error: false });
+      }
+    } catch (error) {
+      this.store.notice.set({ text: `Import failed: ${String(error)}`, error: true });
+    }
   }
 
   private download(bundle: unknown, filename: string): void {

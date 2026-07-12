@@ -1,0 +1,31 @@
+appId: com.adelterki.shaderstudio
+productName: Shader Studio
+directories:
+  output: release
+  buildResources: public
+icon: public/favicon.png
+files:
+  - dist-main/**
+  - dist-renderer/**
+  - public/favicon.png
+  - package.json
+  - '!node_modules/**/*'
+asar: true
+extraResources:
+  - from: examples
+    to: examples
+npmRebuild: false
+win:
+  target:
+    - nsis
+    - portable
+  executableName: shader-studio
+  artifactName: ${name}-${version}-${arch}.${ext}
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  createDesktopShortcut: always
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+portable:
+  artifactName: ${name}-${version}-portable.${ext}

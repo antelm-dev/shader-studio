@@ -87,3 +87,11 @@ body {
 .mat-mdc-dialog-container {
   --mat-dialog-container-shape: var(--mat-sys-corner-medium);
 }
+
+.mat-mdc-menu-item .menu-hint,
+.mat-mdc-menu-item .hint {
+  margin-left: auto;
+  padding-left: 24px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+}

@@ -29,6 +29,12 @@ jobs:
           node-version: '26.5.0'
           cache: pnpm
 
+      - name: Check out local Electron libraries
+        run: |
+          mkdir -p ../electron-libs
+          git clone --depth 1 https://github.com/antelm-dev/electron-ipc-module.git ../electron-libs/ipc-module
+          git clone --depth 1 https://github.com/antelm-dev/electron-run.git ../electron-libs/electron-run
+
       - name: Install
         run: pnpm install --frozen-lockfile
 
@@ -43,3 +49,26 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  desktop:
+    name: Windows desktop package
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26.5.0'
+          cache: pnpm
+      - name: Check out local Electron libraries
+        shell: bash
+        run: |
+          mkdir -p ../electron-libs
+          git clone --depth 1 https://github.com/antelm-dev/electron-ipc-module.git ../electron-libs/ipc-module
+          git clone --depth 1 https://github.com/antelm-dev/electron-run.git ../electron-libs/electron-run
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Package unpacked application
+        run: pnpm pack:win

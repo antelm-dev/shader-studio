@@ -29,6 +29,19 @@ pnpm build
 pnpm serve:ssr        # http://localhost:4000
 ```
 
+Desktop (Windows):
+
+```bash
+pnpm dev:desktop      # Angular dev server + Electron with main-process reload
+pnpm pack:win         # unpacked application in release/win-unpacked
+pnpm dist:win         # NSIS installer and portable executable in release/
+```
+
+The desktop target uses the linked sibling packages
+`../electron-libs/ipc-module` and `../electron-libs/electron-run`. It stores its
+library in Electron's per-user application-data directory and does not start the
+Express server. The web and SSR targets continue to use the REST API.
+
 The dev server runs the same Express app as production — the API is real in both,
 not mocked.
 

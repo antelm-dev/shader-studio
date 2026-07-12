@@ -11,13 +11,6 @@ import { MatInputModule } from '@angular/material/input';
 import { ShaderStore } from '../core/shader-store';
 import { Workspace } from './workspace';
 
-/**
- * The shader collection.
- *
- * A single-select list, so `mat-nav-list` would be wrong: this is a listbox
- * whose selection drives the whole app. Arrow keys move through it, Enter and
- * Space select, and each row carries its own overflow menu.
- */
 @Component({
   selector: 'app-shader-browser',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -70,37 +63,24 @@ import { Workspace } from './workspace';
       >
         @for (shader of filtered(); track shader.id) {
           <mat-list-option
+            class="shader-row"
             [value]="shader.id"
             [selected]="shader.id === store.selectedId()"
             togglePosition="before"
+            title="Right-click for actions"
+            [matContextMenuTriggerFor]="rowMenu"
+            [matContextMenuTriggerData]="{ shader }"
           >
             <span matListItemTitle class="row-title">{{ shader.name }}</span>
             <span matListItemLine class="row-meta">
               {{ shader.controlCount }} control{{ shader.controlCount === 1 ? '' : 's' }} ·
               {{ shader.presetCount }} preset{{ shader.presetCount === 1 ? '' : 's' }}
             </span>
-
-            <button
-              matIconButton
-              type="button"
-              class="row-actions"
-              [attr.aria-label]="'Actions for ' + shader.name"
-              [matMenuTriggerFor]="rowMenu"
-              [matMenuTriggerData]="{ shader }"
-              (click)="$event.stopPropagation()"
-            >
-              <mat-icon>more_vert</mat-icon>
-            </button>
           </mat-list-option>
         }
       </mat-selection-list>
     }
 
-    <!--
-      One menu for the whole list, given the row's shader as context. Declaring
-      it inside the list option instead would project a stray element into the
-      row and break its layout.
-    -->
     <mat-menu #rowMenu="matMenu">
       <ng-template matMenuContent let-shader="shader">
         <button mat-menu-item type="button" (click)="workspace.renameShader(shader.id, shader.name)">
@@ -158,6 +138,10 @@ import { Workspace } from './workspace';
       padding-top: 0;
     }
 
+    .shader-row {
+      cursor: context-menu;
+    }
+
     .row-title {
       font: var(--mat-sys-body-large);
     }
@@ -165,32 +149,6 @@ import { Workspace } from './workspace';
     .row-meta {
       color: var(--mat-sys-on-surface-variant);
       font: var(--mat-sys-body-small);
-    }
-
-    /*
-     * MatListOption has no [matListItemMeta] outlet (MatListItem does), so an
-     * overflow button can only be projected into the unscoped-content slot,
-     * where it stacks underneath the text. Take it out of flow and pin it to
-     * the trailing edge, which is where a meta action belongs anyway.
-     */
-    .shader-list ::ng-deep mat-list-option {
-      position: relative;
-    }
-
-    .shader-list ::ng-deep .mat-mdc-list-item-unscoped-content {
-      position: static;
-    }
-
-    .row-actions {
-      position: absolute;
-      top: 50%;
-      right: 4px;
-      transform: translateY(-50%);
-    }
-
-    /* Keep long names from running underneath the button. */
-    .shader-list ::ng-deep .mdc-list-item__content {
-      padding-right: 40px;
     }
 
     .empty {

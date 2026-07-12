@@ -11,33 +11,65 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 
-import { Preferences } from '../core/preferences';
+import { Preferences, type WorkspacePreferences } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
 import { RendererHandle } from './renderer-handle';
 import { ShaderEngine } from './shader-engine';
 
-/** How long to wait after the last keystroke before recompiling. */
 const RECOMPILE_DEBOUNCE_MS = 400;
 
-/**
- * The application's background: a full-viewport canvas rendering the selected
- * shader, with everything else painted on top of it.
- *
- * This is the only place that connects the store to the engine, and it does so
- * with one effect per concern:
- *
- *   source + schema -> recompile (debounced; a recompile is expensive)
- *   parameters      -> write uniforms (cheap; every frame of a slider drag)
- *   render settings -> post-processing
- *   preferences     -> pause, resolution
- *
- * Separating them is what stops a colour picker from recompiling the shader.
- */
 @Component({
   selector: 'app-shader-canvas',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<canvas #canvas class="shader-canvas" aria-hidden="true"></canvas>`,
+  imports: [MatDividerModule, MatIconModule, MatMenuModule],
+  template: `
+    <canvas
+      #canvas
+      class="shader-canvas"
+      aria-hidden="true"
+      [matContextMenuTriggerFor]="viewMenu"
+    ></canvas>
+
+    <mat-menu #viewMenu="matMenu">
+      <button mat-menu-item type="button" (click)="savePng()">
+        <mat-icon>photo_camera</mat-icon>
+        <span>Save PNG</span>
+        <span class="hint">S</span>
+      </button>
+      <button mat-menu-item type="button" (click)="togglePause()">
+        <mat-icon>{{ preferences.value().paused ? 'play_arrow' : 'pause' }}</mat-icon>
+        <span>{{ preferences.value().paused ? 'Resume' : 'Pause' }}</span>
+        <span class="hint">Space</span>
+      </button>
+      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="store.resetParams()">
+        <mat-icon>restart_alt</mat-icon>
+        <span>Reset parameters</span>
+      </button>
+
+      <mat-divider />
+
+      <button mat-menu-item type="button" (click)="toggle('guiVisible')">
+        <mat-icon>{{ preferences.value().guiVisible ? 'visibility_off' : 'tune' }}</mat-icon>
+        <span>{{ preferences.value().guiVisible ? 'Hide controls' : 'Show controls' }}</span>
+        <span class="hint">H</span>
+      </button>
+      <button mat-menu-item type="button" (click)="toggle('editorOpen')">
+        <mat-icon>code</mat-icon>
+        <span>{{ preferences.value().editorOpen ? 'Hide editor' : 'Show editor' }}</span>
+      </button>
+
+      <mat-divider />
+
+      <button mat-menu-item type="button" (click)="toggleTheme()">
+        <mat-icon>{{ darkMode() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+        <span>{{ darkMode() ? 'Light theme' : 'Dark theme' }}</span>
+      </button>
+    </mat-menu>
+  `,
   styles: `
     :host {
       position: fixed;
@@ -53,18 +85,24 @@ const RECOMPILE_DEBOUNCE_MS = 400;
       height: 100%;
       touch-action: none;
     }
+
+    .hint {
+      margin-left: auto;
+      padding-left: 24px;
+    }
   `,
 })
 export class ShaderCanvas {
-  private readonly store = inject(ShaderStore);
-  private readonly preferences = inject(Preferences);
+  protected readonly store = inject(ShaderStore);
+  protected readonly preferences = inject(Preferences);
   private readonly handle = inject(RendererHandle);
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   private readonly engine = signal<ShaderEngine | null>(null);
 
-  /** The source as typed. Recompiling on every keystroke would be unusable. */
+  protected readonly darkMode = computed(() => this.preferences.value().colorScheme === 'dark');
+
   private readonly source = computed(() => {
     const draft = this.store.draft();
     return draft ? { fragment: draft.fragment, vertex: draft.vertex } : null;
@@ -77,8 +115,6 @@ export class ShaderCanvas {
       void this.boot();
     });
 
-    // Debounce the source, but only in the browser: `afterNextRender` guards
-    // the engine, and a timer on the server would never be cleared.
     effect((onCleanup) => {
       const source = this.source();
       if (!source) {
@@ -89,8 +125,6 @@ export class ShaderCanvas {
       onCleanup(() => clearTimeout(timer));
     });
 
-    // Compile. Params and render settings are read untracked: they have their
-    // own effects, and changing them must not trigger a recompile.
     effect(() => {
       const engine = this.engine();
       const source = this.debouncedSource();
@@ -132,6 +166,26 @@ export class ShaderCanvas {
     });
   }
 
+  protected toggle(key: 'editorOpen' | 'guiVisible'): void {
+    this.preferences.patch({ [key]: !this.preferences.value()[key] } as Partial<WorkspacePreferences>);
+  }
+
+  protected togglePause(): void {
+    this.preferences.patch({ paused: !this.preferences.value().paused });
+  }
+
+  protected toggleTheme(): void {
+    this.preferences.patch({ colorScheme: this.darkMode() ? 'light' : 'dark' });
+  }
+
+  protected async savePng(): Promise<void> {
+    const name = this.store.record()?.id ?? 'shader';
+    const saved = await this.handle.screenshot(name);
+    if (!saved) {
+      this.store.notice.set({ text: 'Nothing to capture yet', error: true });
+    }
+  }
+
   private async boot(): Promise<void> {
     const canvas = this.canvasRef().nativeElement;
 
@@ -139,7 +193,6 @@ export class ShaderCanvas {
     try {
       engine = await ShaderEngine.create(canvas);
     } catch (error) {
-      // No WebGL: the app is still usable as an editor, so say so and move on.
       this.store.notice.set({
         text: `WebGL is unavailable, so the preview is disabled: ${String(error)}`,
         error: true,

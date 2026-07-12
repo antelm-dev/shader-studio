@@ -17,6 +17,7 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -28,29 +29,26 @@ import { filter, map } from 'rxjs';
 
 import type { ImportMode } from '../shared/model';
 import { Preferences, type WorkspacePreferences } from './core/preferences';
+import { DesktopPlatform } from './core/desktop-platform';
 import { ShaderStore } from './core/shader-store';
 import { GuiPanel } from './gui/gui-panel';
 import { RendererHandle } from './rendering/renderer-handle';
 import { ShaderCanvas } from './rendering/shader-canvas';
 import { EditorShell } from './ui/editor-shell';
+import { AppTitlebar } from './ui/app-titlebar';
 import { PresetPanel } from './ui/preset-panel';
 import { ShaderBrowser } from './ui/shader-browser';
 import { Workspace } from './ui/workspace';
 
-/**
- * The application shell.
- *
- * It owns the layout and the global keyboard shortcuts, and nothing else — the
- * store holds the state, the canvas owns the renderer, and `Workspace` owns the
- * dialogs. This component arranges them and gets out of the way.
- */
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AppTitlebar,
     EditorShell,
     GuiPanel,
     MatButtonModule,
+    MatDividerModule,
     MatIconModule,
     MatMenuModule,
     MatProgressBarModule,
@@ -69,6 +67,7 @@ export class App {
   protected readonly store = inject(ShaderStore);
   protected readonly preferences = inject(Preferences);
   protected readonly workspace = inject(Workspace);
+  protected readonly desktop = inject(DesktopPlatform);
 
   private readonly renderer = inject(RendererHandle);
   private readonly snackBar = inject(MatSnackBar);
@@ -108,6 +107,10 @@ export class App {
     }
 
     afterNextRender(() => void this.initializeRouting());
+    afterNextRender(() => {
+      this.desktop.onCloseRequested(() => void this.handleDesktopClose());
+    });
+    afterNextRender(() => this.hintContextMenus());
 
     this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe(() => {
@@ -148,6 +151,7 @@ export class App {
     this.routingReady = true;
     await this.normalizeRoute(requested);
     await this.workspace.resolveStaleRecovery();
+    await this.workspace.resolveFirstRunMigration();
   }
 
   private async applyRoute(): Promise<void> {
@@ -210,6 +214,10 @@ export class App {
   }
 
   protected pickFile(mode: ImportMode): void {
+    if (this.desktop.available) {
+      void this.workspace.importDesktop(mode);
+      return;
+    }
     this.importMode.set(mode);
     const input = this.fileInput().nativeElement;
     // Reset first, so picking the same file twice still fires a change event.
@@ -262,10 +270,15 @@ export class App {
 
   @HostListener('window:beforeunload', ['$event'])
   protected onBeforeUnload(event: BeforeUnloadEvent): void {
-    if (!this.store.dirty()) return;
+    if (this.desktop.available || !this.store.dirty()) return;
     this.store.flushRecovery();
     event.preventDefault();
     event.returnValue = '';
+  }
+
+  private async handleDesktopClose(): Promise<void> {
+    const approved = await this.workspace.guardedTransition(() => undefined);
+    this.desktop.approveClose(approved);
   }
 
   private isTyping(target: EventTarget | null): boolean {
@@ -273,9 +286,22 @@ export class App {
     return (
       target.isContentEditable ||
       ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) ||
-      // Monaco renders its own editable surface rather than a <textarea> that
-      // could be recognised by tag alone.
       target.closest('.monaco-editor') !== null
     );
+  }
+
+  private hintContextMenus(): void {
+    if (this.isServer) return;
+    const key = 'shader-studio.hinted-context-menus';
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, '1');
+    } catch {
+      return;
+    }
+    this.snackBar.open('Tip: right-click the preview, shaders, presets or editor bar for actions', 'Got it', {
+      duration: 6000,
+      politeness: 'polite',
+    });
   }
 }

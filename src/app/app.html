@@ -3,6 +3,10 @@
 <router-outlet />
 
 <div class="shell">
+  @if (desktop.available) {
+    <app-titlebar />
+  }
+
   <mat-toolbar class="toolbar">
     <button
       matIconButton
@@ -21,15 +25,43 @@
     </span>
 
     @if (store.record(); as shader) {
-      <span class="shader-name" [title]="shader.description">{{ shader.name }}</span>
+      <span
+        class="shader-name"
+        [title]="shader.description + ' — right-click for actions'"
+        [matContextMenuTriggerFor]="shaderMenu"
+      >
+        {{ shader.name }}
+      </span>
       @if (store.dirty()) {
         <span class="dot" matTooltip="Unsaved changes" aria-label="Unsaved changes">•</span>
       }
+
+      <mat-menu #shaderMenu="matMenu">
+        <button mat-menu-item type="button" (click)="workspace.renameShader(shader.id, shader.name)">
+          <mat-icon>edit</mat-icon>
+          <span>Rename</span>
+        </button>
+        <button
+          mat-menu-item
+          type="button"
+          (click)="workspace.duplicateShader(shader.id, shader.name)"
+        >
+          <mat-icon>content_copy</mat-icon>
+          <span>Duplicate</span>
+        </button>
+        <button mat-menu-item type="button" (click)="exportCurrent()">
+          <mat-icon>download</mat-icon>
+          <span>Export</span>
+        </button>
+        <button mat-menu-item type="button" (click)="workspace.deleteShader(shader.id, shader.name)">
+          <mat-icon>delete</mat-icon>
+          <span>Delete</span>
+        </button>
+      </mat-menu>
     }
 
     <span class="spacer"></span>
 
-    <!-- Kept out of the layout; the Import menu items click it. -->
     <input
       #fileInput
       type="file"
@@ -43,14 +75,30 @@
     <button
       matIconButton
       type="button"
-      matTooltip="Import / export"
-      aria-label="Import and export"
-      [matMenuTriggerFor]="ioMenu"
+      matTooltip="More actions"
+      aria-label="More actions"
+      [matMenuTriggerFor]="moreMenu"
     >
-      <mat-icon>swap_vert</mat-icon>
+      <mat-icon>more_vert</mat-icon>
     </button>
 
-    <mat-menu #ioMenu="matMenu">
+    <mat-menu #moreMenu="matMenu">
+      <button mat-menu-item type="button" (click)="toggle('guiVisible')">
+        <mat-icon>tune</mat-icon>
+        <span>{{ preferences.value().guiVisible ? 'Hide controls' : 'Show controls' }}</span>
+        <span class="menu-hint">H</span>
+      </button>
+      <button mat-menu-item type="button" (click)="toggle('editorOpen')">
+        <mat-icon>code</mat-icon>
+        <span>{{ preferences.value().editorOpen ? 'Hide editor' : 'Show editor' }}</span>
+      </button>
+      <button mat-menu-item type="button" (click)="toggleColorScheme()">
+        <mat-icon>{{ darkMode() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+        <span>{{ darkMode() ? 'Light theme' : 'Dark theme' }}</span>
+      </button>
+
+      <mat-divider />
+
       <button mat-menu-item type="button" (click)="pickFile('rename')">
         <mat-icon>upload</mat-icon>
         <span>Import…</span>
@@ -68,39 +116,6 @@
         <span>Export all shaders</span>
       </button>
     </mat-menu>
-
-    <button
-      matIconButton
-      type="button"
-      [matTooltip]="darkMode() ? 'Switch to the light theme' : 'Switch to the dark theme'"
-      aria-label="Toggle the light and dark theme"
-      [attr.aria-pressed]="!darkMode()"
-      (click)="toggleColorScheme()"
-    >
-      <mat-icon>{{ darkMode() ? 'light_mode' : 'dark_mode' }}</mat-icon>
-    </button>
-
-    <button
-      matIconButton
-      type="button"
-      matTooltip="Toggle the controls (H)"
-      aria-label="Toggle the controls"
-      [attr.aria-pressed]="preferences.value().guiVisible"
-      (click)="toggle('guiVisible')"
-    >
-      <mat-icon>tune</mat-icon>
-    </button>
-
-    <button
-      matIconButton
-      type="button"
-      matTooltip="Toggle the source editor"
-      aria-label="Toggle the source editor"
-      [attr.aria-pressed]="preferences.value().editorOpen"
-      (click)="toggle('editorOpen')"
-    >
-      <mat-icon>code</mat-icon>
-    </button>
 
     <button
       matButton="filled"
@@ -130,7 +145,6 @@
     </mat-sidenav>
 
     <mat-sidenav-content class="content">
-      <!-- Empty on purpose: the stage is a window onto the canvas underneath. -->
       <div class="stage"></div>
 
       @if (preferences.value().guiVisible) {

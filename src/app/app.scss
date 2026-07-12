@@ -24,7 +24,8 @@
 .drawer,
 .controls,
 .editor,
-.loading {
+.loading,
+app-titlebar {
   pointer-events: auto;
 }
 
@@ -65,6 +66,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: context-menu;
 }
 
 .dot {

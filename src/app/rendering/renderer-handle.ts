@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { DesktopPlatform } from '../core/desktop-platform';
 
 import type { ShaderEngine } from './shader-engine';
 
@@ -12,6 +13,7 @@ import type { ShaderEngine } from './shader-engine';
  */
 @Injectable({ providedIn: 'root' })
 export class RendererHandle {
+  private readonly desktop = inject(DesktopPlatform);
   readonly engine = signal<ShaderEngine | null>(null);
   readonly fps = signal(0);
 
@@ -22,6 +24,10 @@ export class RendererHandle {
 
     const blob = await engine.screenshot();
     if (!blob) return false;
+
+    if (this.desktop.available) {
+      return this.desktop.savePng(`${filename}-${Date.now()}.png`, new Uint8Array(await blob.arrayBuffer()));
+    }
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

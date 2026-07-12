@@ -2,6 +2,9 @@
 
 # Compiled output
 /dist
+/dist-main
+/dist-renderer
+/release
 /tmp
 /out-tsc
 /bazel-out
@@ -48,4 +51,6 @@ Thumbs.db
 /data
 *.log
 *.tsbuildinfo
+/main/generated
+/electron-run-*.json
 

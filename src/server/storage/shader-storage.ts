@@ -69,6 +69,7 @@ export class ShaderStorage {
   private readonly dataDir: string;
   private readonly shadersDir: string;
   private readonly examplesDir: string;
+  private readonly seed: boolean;
   private readonly locks = new Map<string, Promise<unknown>>();
 
   constructor(options: StorageOptions = {}) {
@@ -77,6 +78,7 @@ export class ShaderStorage {
     this.examplesDir = path.resolve(
       options.examplesDir ?? process.env['SHADER_EXAMPLES_DIR'] ?? 'examples',
     );
+    this.seed = options.seed ?? process.env['SHADER_SEED'] !== '0';
   }
 
   private shaderDir(id: string): string {
@@ -524,7 +526,7 @@ export class ShaderStorage {
   }
 
   private async seedIfEmpty(): Promise<void> {
-    if (process.env['SHADER_SEED'] === '0') return;
+    if (!this.seed) return;
     if (await this.exists(path.join(this.dataDir, SEED_MARKER))) return;
     if ((await this.listIds()).length > 0) {
       await this.writeFileAtomic(path.join(this.dataDir, SEED_MARKER), new Date().toISOString());

@@ -85,6 +85,47 @@
           },
           "defaultConfiguration": "development"
         },
+        "desktop": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/main.desktop.ts",
+            "outputPath": { "base": "dist-renderer", "browser": "" },
+            "outputMode": "static",
+            "tsConfig": "tsconfig.app.json",
+            "inlineStyleLanguage": "scss",
+            "assets": [{ "glob": "**/*", "input": "public" }],
+            "styles": [
+              "src/styles.scss",
+              "node_modules/monaco-editor/min/vs/editor/editor.main.css"
+            ],
+            "loader": { ".ttf": "file" },
+            "security": { "allowedHosts": [] }
+          },
+          "configurations": {
+            "production": {
+              "outputHashing": "all",
+              "budgets": [
+                { "type": "initial", "maximumWarning": "1.3MB", "maximumError": "1.6MB" },
+                { "type": "anyComponentStyle", "maximumWarning": "8kB", "maximumError": "16kB" }
+              ]
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "desktop-serve": {
+          "builder": "@angular/build:dev-server",
+          "options": { "port": 4201 },
+          "configurations": {
+            "production": { "buildTarget": "shader-studio:desktop:production" },
+            "development": { "buildTarget": "shader-studio:desktop:development" }
+          },
+          "defaultConfiguration": "development"
+        },
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {

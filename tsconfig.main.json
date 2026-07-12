@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node", "electron"],
+    "moduleResolution": "Bundler",
+    "outDir": "./dist-main",
+    "rootDir": ".",
+    "sourceMap": true
+  },
+  "include": ["main/**/*.ts", "src/server/**/*.ts", "src/shared/**/*.ts", "src/app/core/shader-api.ts"],
+  "exclude": ["main/preload.ts", "main/generated/**", "**/*.spec.ts"]
+}
