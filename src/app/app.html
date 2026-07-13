@@ -52,6 +52,7 @@
       </span>
 
       <span class="doc-meta">
+        @if (status.state() !== 'none') {
         <span class="doc-status" [class]="'is-' + status.state()" aria-live="polite">
           @if (status.state() === 'unsaved') {
           <span class="dot" aria-hidden="true">•</span>
@@ -59,6 +60,7 @@
           <mat-icon class="status-icon" aria-hidden="true">check</mat-icon>
           } {{ status.label() }}
         </span>
+        }
 
         <!-- Errors are not a save state: you can save a shader that does not
              compile. They get their own affordance, which opens the editor. -->

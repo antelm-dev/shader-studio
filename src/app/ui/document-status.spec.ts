@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CompileDiagnostic } from '../core/diagnostic';
 import { ShaderStore } from '../core/shader-store';
@@ -33,12 +33,16 @@ describe('DocumentStatus', () => {
   let status: DocumentStatus;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     store = new FakeStore();
     TestBed.configureTestingModule({
       providers: [DocumentStatus, { provide: ShaderStore, useValue: store }],
     });
     status = TestBed.inject(DocumentStatus);
+    TestBed.tick();
   });
+
+  afterEach(() => vi.useRealTimers());
 
   const set = (patch: Partial<Record<'record' | 'dirty' | 'saving' | 'configValid', unknown>>) => {
     for (const [key, value] of Object.entries(patch)) {
@@ -52,9 +56,22 @@ describe('DocumentStatus', () => {
       expect(status.state()).toBe('none');
     });
 
-    it('is saved when the draft matches the record', () => {
+    it('shows no status when the draft matches the record', () => {
+      expect(status.state()).toBe('none');
+      expect(status.label()).toBe('');
+    });
+
+    it('shows saved for three seconds after a successful save', () => {
+      set({ dirty: true, saving: true });
+      TestBed.tick();
+      set({ dirty: false, saving: false });
+      TestBed.tick();
+
       expect(status.state()).toBe('saved');
       expect(status.label()).toBe('Saved');
+
+      vi.advanceTimersByTime(3_000);
+      expect(status.state()).toBe('none');
     });
 
     it('is unsaved once the draft diverges', () => {

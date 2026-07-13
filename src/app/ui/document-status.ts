@@ -1,4 +1,4 @@
-import { Injectable, computed, inject } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 
 import { ShaderStore } from '../core/shader-store';
 
@@ -35,11 +35,37 @@ const LABELS: Record<DocumentState, string> = {
 @Injectable({ providedIn: 'root' })
 export class DocumentStatus {
   private readonly store = inject(ShaderStore);
+  private readonly savedRecently = signal(false);
+  private savedTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    let wasSaving = false;
+    let previousRecordId = this.store.record()?.id ?? null;
+
+    effect(() => {
+      const recordId = this.store.record()?.id ?? null;
+      const saving = this.store.saving();
+      const dirty = this.store.dirty();
+
+      if (recordId !== previousRecordId || dirty) this.hideSavedConfirmation();
+
+      if (wasSaving && !saving && recordId !== null && !dirty) {
+        this.savedRecently.set(true);
+        this.savedTimer = setTimeout(() => this.savedRecently.set(false), 3_000);
+      }
+
+      wasSaving = saving;
+      previousRecordId = recordId;
+    });
+
+    inject(DestroyRef).onDestroy(() => this.clearSavedTimer());
+  }
 
   readonly state = computed<DocumentState>(() => {
     if (!this.store.record()) return 'none';
     if (this.store.saving()) return 'saving';
-    return this.store.dirty() ? 'unsaved' : 'saved';
+    if (this.store.dirty()) return 'unsaved';
+    return this.savedRecently() ? 'saved' : 'none';
   });
 
   readonly label = computed(() => LABELS[this.state()]);
@@ -70,4 +96,14 @@ export class DocumentStatus {
       count === 1 ? 'it' : 'them'
     }`;
   });
+
+  private hideSavedConfirmation(): void {
+    this.clearSavedTimer();
+    this.savedRecently.set(false);
+  }
+
+  private clearSavedTimer(): void {
+    if (this.savedTimer !== null) clearTimeout(this.savedTimer);
+    this.savedTimer = null;
+  }
 }

@@ -8,7 +8,6 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
-import { Preferences } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
 import { Workspace } from './workspace';
 
@@ -37,17 +36,6 @@ import { Workspace } from './workspace';
       >
         <mat-icon>add</mat-icon>
       </button>
-      <!-- The toolbar's menu button opens the browser; this is how you close it
-           from the browser itself, without going looking for what opened it. -->
-      <button
-        matIconButton
-        type="button"
-        matTooltip="Collapse the shader browser"
-        aria-label="Collapse the shader browser"
-        (click)="collapse()"
-      >
-        <mat-icon>chevron_left</mat-icon>
-      </button>
     </header>
 
     <mat-form-field appearance="fill" subscriptSizing="dynamic" class="search">
@@ -71,14 +59,15 @@ import { Workspace } from './workspace';
         class="shader-list"
         aria-label="Shaders"
         [multiple]="false"
+        [hideSingleSelectionIndicator]="true"
         (selectionChange)="select($event.options[0].value)"
       >
         @for (shader of filtered(); track shader.id) {
           <mat-list-option
             class="shader-row"
+            [class.selected]="shader.id === store.selectedId()"
             [value]="shader.id"
             [selected]="shader.id === store.selectedId()"
-            togglePosition="before"
             title="Right-click for actions"
             [matContextMenuTriggerFor]="rowMenu"
             [matContextMenuTriggerData]="{ shader }"
@@ -164,6 +153,15 @@ import { Workspace } from './workspace';
 
     .shader-row {
       cursor: context-menu;
+      transition: background-color 120ms ease;
+    }
+
+    .shader-row.selected {
+      background: color-mix(in srgb, var(--mat-sys-primary) 16%, transparent);
+    }
+
+    .shader-row.selected:hover {
+      background: color-mix(in srgb, var(--mat-sys-primary) 22%, transparent);
     }
 
     .row-title {
@@ -186,8 +184,6 @@ export class ShaderBrowser {
   protected readonly store = inject(ShaderStore);
   protected readonly workspace = inject(Workspace);
 
-  private readonly preferences = inject(Preferences);
-
   protected readonly query = signal('');
 
   protected readonly filtered = computed(() => {
@@ -204,9 +200,5 @@ export class ShaderBrowser {
 
   protected select(id: string): void {
     void this.workspace.selectShader(id);
-  }
-
-  protected collapse(): void {
-    this.preferences.patch({ browserOpen: false });
   }
 }

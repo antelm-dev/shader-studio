@@ -162,8 +162,19 @@ import { Workspace } from './workspace';
     }
 
     .tabs ::ng-deep .mat-mdc-tab-body-content {
+      box-sizing: border-box;
+      height: 100%;
       overflow-y: auto;
       padding: 12px 0 4px;
+    }
+
+    /* Keep every preserved tab panel stretched to the full body height, even
+       when its own content is short. */
+    .tabs ::ng-deep .mat-mdc-tab-body-content > app-gui-panel,
+    .tabs ::ng-deep .mat-mdc-tab-body-content > app-texture-panel,
+    .tabs ::ng-deep .mat-mdc-tab-body-content > app-preset-panel {
+      box-sizing: border-box;
+      height: 100%;
     }
 
     /* Three tabs have to fit a 260px rail: the label is what gives, not the
