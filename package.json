@@ -27,7 +27,7 @@
     "serve:ssr": "node dist/shader-studio/server/server.mjs",
     "test": "pnpm --filter @shader-studio/shared test && ng test",
     "test:watch": "ng test --watch",
-    "typecheck": "pnpm --filter @shader-studio/shared typecheck && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
+    "typecheck": "pnpm gen:ipc && pnpm --filter @shader-studio/shared typecheck && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",
