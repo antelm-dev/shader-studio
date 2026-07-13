@@ -97,6 +97,16 @@ type Tab = DiagnosticSource;
       <button
         mat-menu-item
         type="button"
+        [disabled]="!store.draft() || tab() === 'config'"
+        (click)="formatSource()"
+      >
+        <mat-icon>format_align_left</mat-icon>
+        <span>Format GLSL</span>
+        <span class="menu-hint">Shift+Alt+F</span>
+      </button>
+      <button
+        mat-menu-item
+        type="button"
         [disabled]="!store.draft()"
         matTooltip="The fragment source with every engine and control uniform declared"
         (click)="workspace.copyFullGlsl()"
@@ -340,6 +350,12 @@ export class EditorPanel {
   focusEditor(): void {
     const index = this.tabs.findIndex((option) => option.id === this.tab());
     this.editors()[index]?.focus();
+  }
+
+  /** Format the source in the open tab. The config tab is JSON, and has none. */
+  protected async formatSource(): Promise<void> {
+    const index = this.tabs.findIndex((option) => option.id === this.tab());
+    await this.editors()[index]?.format();
   }
 
   protected selectTab(tab: Tab): void {

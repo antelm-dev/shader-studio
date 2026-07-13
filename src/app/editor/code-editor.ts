@@ -217,6 +217,15 @@ export class CodeEditor {
     this.editor?.focus();
   }
 
+  /**
+   * Run the language's formatter over the buffer. Goes through Monaco's own
+   * action rather than the provider directly, so the edit arrives on the
+   * editor's undo stack exactly as it would from Shift+Alt+F.
+   */
+  async format(): Promise<void> {
+    await this.editor?.getAction('editor.action.formatDocument')?.run();
+  }
+
   private async boot(): Promise<void> {
     const monaco = await loadMonaco();
 

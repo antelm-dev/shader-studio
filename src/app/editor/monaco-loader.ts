@@ -1,6 +1,8 @@
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api.js';
 
 import { EDITOR_THEMES, monacoThemeId, type EditorThemePalette } from './editor-themes';
+import { formatGlsl } from './glsl-format';
+import { GLSL_SNIPPETS } from './glsl-snippets';
 
 /**
  * Loads Monaco once, on demand, in the browser only.
@@ -240,6 +242,7 @@ function registerGlsl(monaco: MonacoApi): void {
   });
 
   registerGlslCompletions(monaco);
+  registerGlslFormatting(monaco);
 
   monaco.languages.setMonarchTokensProvider(GLSL_LANGUAGE_ID, {
     defaultToken: '',
@@ -328,10 +331,25 @@ function registerGlslCompletions(monaco: MonacoApi): void {
         ...(detail ? { detail } : {}),
       });
 
-      const { CompletionItemKind } = monaco.languages;
+      const { CompletionItemKind, CompletionItemInsertTextRule } = monaco.languages;
+
+      const snippets = GLSL_SNIPPETS.map(
+        (snippet): Monaco.languages.CompletionItem => ({
+          label: snippet.label,
+          kind: CompletionItemKind.Snippet,
+          detail: snippet.detail,
+          insertText: snippet.body,
+          insertTextRules: CompletionItemInsertTextRule.InsertAsSnippet,
+          range,
+          // Ahead of the plain identifiers: someone typing `fbm` in an empty
+          // file wants the function, not a word that happens to start that way.
+          sortText: `0${snippet.label}`,
+        }),
+      );
 
       return {
         suggestions: [
+          ...snippets,
           ...Object.entries(documented).map(([name, detail]) =>
             item(name, CompletionItemKind.Variable, detail),
           ),
@@ -340,6 +358,27 @@ function registerGlslCompletions(monaco: MonacoApi): void {
           ...GLSL_KEYWORDS.map((name) => item(name, CompletionItemKind.Keyword)),
         ],
       };
+    },
+  });
+}
+
+/**
+ * Wires `formatGlsl` in as the language's formatter, which is what gives the
+ * editor its Format Document action (Shift+Alt+F) and lets the toolbar ask for
+ * one by name rather than rewriting the buffer itself.
+ *
+ * The whole document is replaced in a single edit, so it lands as one undo step
+ * and the cursor survives.
+ */
+function registerGlslFormatting(monaco: MonacoApi): void {
+  monaco.languages.registerDocumentFormattingEditProvider(GLSL_LANGUAGE_ID, {
+    provideDocumentFormattingEdits: (model, options) => {
+      const formatted = formatGlsl(model.getValue(), {
+        tabSize: options.tabSize,
+        insertSpaces: options.insertSpaces,
+      });
+
+      return [{ range: model.getFullModelRange(), text: formatted }];
     },
   });
 }
