@@ -4,7 +4,7 @@ import type { CaptureSettings } from '@shader-studio/shared/model';
 import { DesktopPlatform } from '../core/desktop-platform';
 import { ShaderStore } from '../core/shader-store';
 import { I18n } from '../i18n/i18n';
-import { outputIndices, planCapture, type CapturePlan } from './capture-plan';
+import { outputIndices, planCapture, type CapturePlan } from '@shader-studio/shared/capture-plan';
 import { CaptureCancelled, captureFrames } from './frame-capture';
 import { RendererHandle } from './renderer-handle';
 import { openSequence } from './sequence-writer';

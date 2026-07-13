@@ -1,12 +1,6 @@
-import type { ShaderControl } from '@shader-studio/shared/model';
+import type { ShaderControl } from './model';
 
-export const DEFAULT_VERTEX = `varying vec2 vUv;
-
-void main() {
-  vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`;
+export { DEFAULT_VERTEX } from './project';
 
 export const TEMPLATE_CONTROLS: ShaderControl[] = [
   {

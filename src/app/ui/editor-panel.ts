@@ -18,7 +18,7 @@ import { findPass } from '@shader-studio/shared/project';
 import { CodeEditor, type EditorDoc } from '../editor/code-editor';
 import { EditorSettings } from '../editor/editor-settings';
 import { Preferences } from '../core/preferences';
-import type { CompileDiagnostic } from '../core/diagnostic';
+import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { ShaderStore } from '../core/shader-store';
 import { DocumentStatus } from './document-status';
 import { EditorTabs } from './editor-tabs';

@@ -12,7 +12,7 @@ import type { CaptureSettings } from '@shader-studio/shared/model';
 import { Preferences } from '../core/preferences';
 import { I18n } from '../i18n/i18n';
 import { TranslatePipe } from '../i18n/translate.pipe';
-import { ffmpegCommand, planCapture } from '../rendering/capture-plan';
+import { ffmpegCommand, planCapture } from '@shader-studio/shared/capture-plan';
 import { ShaderCapture } from '../rendering/shader-capture';
 
 /** The sizes anyone actually exports at. Anything else is typed in. */

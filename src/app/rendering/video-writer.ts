@@ -1,5 +1,5 @@
 import type { DesktopPlatform } from '../core/desktop-platform';
-import type { CapturePlan } from './capture-plan';
+import type { CapturePlan } from '@shader-studio/shared/capture-plan';
 
 /**
  * Where an encoded video goes.

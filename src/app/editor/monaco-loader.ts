@@ -1,8 +1,8 @@
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api.js';
 
 import { EDITOR_THEMES, monacoThemeId, type EditorThemePalette } from './editor-themes';
-import { formatGlsl } from './glsl-format';
-import { GLSL_BUILTINS, GLSL_KEYWORDS, GLSL_PREDEFINED, GLSL_TYPES } from './glsl-lexicon';
+import { formatGlsl } from '@shader-studio/shared/glsl-format';
+import { GLSL_BUILTINS, GLSL_KEYWORDS, GLSL_PREDEFINED, GLSL_TYPES } from '@shader-studio/shared/glsl-lexicon';
 import { GLSL_SNIPPETS } from './glsl-snippets';
 
 /**

@@ -17,10 +17,10 @@ import {
   type ShaderSummary,
 } from '@shader-studio/shared';
 
-import { CONFIG_DOC, VERTEX_DOC } from './diagnostic';
-import { DEFAULT_EDITOR_APPEARANCE, DEFAULT_EDITOR_WINDOW } from './editor-prefs';
-import { DEFAULT_PREVIEW_WINDOW } from './preview-prefs';
-import { DEFAULT_PANEL_WIDTHS } from './panel-prefs';
+import { CONFIG_DOC, VERTEX_DOC } from '@shader-studio/shared/diagnostic';
+import { DEFAULT_EDITOR_APPEARANCE, DEFAULT_EDITOR_WINDOW } from '@shader-studio/shared/editor-prefs';
+import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
+import { DEFAULT_PANEL_WIDTHS } from '@shader-studio/shared/panel-prefs';
 import { Preferences, type WorkspacePreferences } from './preferences';
 import { ProjectPersistence } from './project-persistence';
 import { ShaderApi, type UpdateShaderPatch } from './shader-api';

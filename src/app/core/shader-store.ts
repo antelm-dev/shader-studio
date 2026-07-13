@@ -66,7 +66,7 @@ import {
   validateControls,
   validateParamValue,
 } from '@shader-studio/shared/validate';
-import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from './diagnostic';
+import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { ProjectPersistence } from './project-persistence';
 import { RendererHandle } from '../rendering/renderer-handle';

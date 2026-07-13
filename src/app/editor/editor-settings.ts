@@ -5,7 +5,7 @@ import {
   DEFAULT_EDITOR_APPEARANCE,
   sanitizeAppearance,
   type EditorAppearance,
-} from '../core/editor-prefs';
+} from '@shader-studio/shared/editor-prefs';
 
 /**
  * How the editor is dressed, in two layers.

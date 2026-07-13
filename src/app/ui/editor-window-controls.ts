@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { EDITOR_DOCK_SIDES, type EditorDockSide } from '../core/editor-prefs';
+import { EDITOR_DOCK_SIDES, type EditorDockSide } from '@shader-studio/shared/editor-prefs';
 import { EditorWindow } from '../editor/editor-window';
 import { I18n } from '../i18n/i18n';
 import { TranslatePipe } from '../i18n/translate.pipe';

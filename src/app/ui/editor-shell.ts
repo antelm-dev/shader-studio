@@ -14,7 +14,8 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { EDITOR_LIMITS, type Rect } from '../core/editor-prefs';
+import { EDITOR_LIMITS } from '@shader-studio/shared/editor-prefs';
+import type { Rect } from '@shader-studio/shared/geometry';
 import { EditorWindow } from '../editor/editor-window';
 import { EditorPanel } from './editor-panel';
 

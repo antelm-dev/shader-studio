@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_WAVES, type ShaderControl } from '@shader-studio/shared/model';
 import { buildFullGlsl, expandMacros, uniformType } from './glsl-export';
+import { MAX_WAVES, type ShaderControl } from './model';
 
 const CONTROLS: ShaderControl[] = [
   { key: 'scale', type: 'number', default: 3, min: 0.5, max: 12 },

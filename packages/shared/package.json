@@ -32,6 +32,54 @@
     "./controller": {
       "types": "./src/controller.ts",
       "default": "./src/controller.ts"
+    },
+    "./diagnostic": {
+      "types": "./src/diagnostic.ts",
+      "default": "./src/diagnostic.ts"
+    },
+    "./glsl-diagnostics": {
+      "types": "./src/glsl-diagnostics.ts",
+      "default": "./src/glsl-diagnostics.ts"
+    },
+    "./glsl-export": {
+      "types": "./src/glsl-export.ts",
+      "default": "./src/glsl-export.ts"
+    },
+    "./capture-plan": {
+      "types": "./src/capture-plan.ts",
+      "default": "./src/capture-plan.ts"
+    },
+    "./shadertoy-import": {
+      "types": "./src/shadertoy-import.ts",
+      "default": "./src/shadertoy-import.ts"
+    },
+    "./glsl-format": {
+      "types": "./src/glsl-format.ts",
+      "default": "./src/glsl-format.ts"
+    },
+    "./glsl-lexicon": {
+      "types": "./src/glsl-lexicon.ts",
+      "default": "./src/glsl-lexicon.ts"
+    },
+    "./geometry": {
+      "types": "./src/geometry.ts",
+      "default": "./src/geometry.ts"
+    },
+    "./editor-prefs": {
+      "types": "./src/editor-prefs.ts",
+      "default": "./src/editor-prefs.ts"
+    },
+    "./preview-prefs": {
+      "types": "./src/preview-prefs.ts",
+      "default": "./src/preview-prefs.ts"
+    },
+    "./panel-prefs": {
+      "types": "./src/panel-prefs.ts",
+      "default": "./src/panel-prefs.ts"
+    },
+    "./templates": {
+      "types": "./src/templates.ts",
+      "default": "./src/templates.ts"
     }
   },
   "scripts": {

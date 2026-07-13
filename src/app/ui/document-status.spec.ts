@@ -5,7 +5,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CompileDiagnostic } from '../core/diagnostic';
+import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { Preferences, type WorkspacePreferences } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
 import { I18nCatalog, type I18nCatalogMap } from '../i18n/catalog';

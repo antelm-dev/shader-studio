@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
-import type { Point, Rect, Size } from '../core/geometry';
+import type { Point, Rect, Size } from '@shader-studio/shared/geometry';
 import { Preferences } from '../core/preferences';
 import {
   DEFAULT_PREVIEW_WINDOW,
@@ -11,7 +11,7 @@ import {
   type PreviewMode,
   type PreviewRestoreMode,
   type PreviewWindowState,
-} from '../core/preview-prefs';
+} from '@shader-studio/shared/preview-prefs';
 
 /**
  * Where the preview is, and every legal way of moving it.

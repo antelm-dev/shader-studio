@@ -1,5 +1,5 @@
 import type { ResolvedColorScheme } from '../core/preferences';
-import type { EditorThemeId } from '../core/editor-prefs';
+import type { EditorThemeId } from '@shader-studio/shared/editor-prefs';
 
 /**
  * The editor's colour schemes.

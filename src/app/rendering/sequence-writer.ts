@@ -1,5 +1,5 @@
 import type { DesktopPlatform } from '../core/desktop-platform';
-import { frameName, sequencePadding, type CapturePlan } from './capture-plan';
+import { frameName, sequencePadding, type CapturePlan } from '@shader-studio/shared/capture-plan';
 import { ZipBuilder } from './zip';
 
 /**

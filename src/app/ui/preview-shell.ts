@@ -4,8 +4,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 
 import { DesktopPlatform } from '../core/desktop-platform';
-import type { Point, Rect, Size } from '../core/geometry';
-import { containPoint, containRect } from '../core/geometry';
+import type { Point, Rect, Size } from '@shader-studio/shared/geometry';
+import { containPoint, containRect } from '@shader-studio/shared/geometry';
 import {
   COLOR_SCHEME_OPTIONS,
   Preferences,
@@ -18,7 +18,7 @@ import {
   PREVIEW_MINIMIZED_WIDTH,
   PREVIEW_MIN_FLOATING,
   type PreviewMode,
-} from '../core/preview-prefs';
+} from '@shader-studio/shared/preview-prefs';
 import { ShaderStore } from '../core/shader-store';
 import { PreviewWindow } from '../rendering/preview-window';
 import { RendererHandle } from '../rendering/renderer-handle';

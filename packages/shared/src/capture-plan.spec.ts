@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_CAPTURE } from '@shader-studio/shared/model';
+import { DEFAULT_CAPTURE } from './model';
 import {
   MAX_CAPTURE_SIZE,
   ffmpegCommand,

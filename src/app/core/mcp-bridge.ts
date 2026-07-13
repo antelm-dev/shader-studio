@@ -11,7 +11,7 @@ import {
   type McpStateSnapshot,
 } from '@shader-studio/shared/mcp-protocol';
 import { DEFAULT_RENDER, type ShaderControl, type ShaderParams } from '@shader-studio/shared/model';
-import type { CompileDiagnostic } from './diagnostic';
+import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { renderFrame } from '../rendering/frame-render';
 import { ShaderStore } from './shader-store';

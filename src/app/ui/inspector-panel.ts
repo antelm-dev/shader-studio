@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { INSPECTOR_TABS, type InspectorTab } from '../core/panel-prefs';
+import { INSPECTOR_TABS, type InspectorTab } from '@shader-studio/shared/panel-prefs';
 import { Preferences } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
 import { GuiPanel } from '../gui/gui-panel';

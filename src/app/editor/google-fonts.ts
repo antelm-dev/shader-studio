@@ -1,7 +1,7 @@
 import { isPlatformBrowser } from '@angular/common';
 import { DOCUMENT, Injectable, PLATFORM_ID, inject, signal } from '@angular/core';
 
-import { isValidFontFamily } from '../core/editor-prefs';
+import { isValidFontFamily } from '@shader-studio/shared/editor-prefs';
 
 import { FONT_CATALOGUE, SYSTEM_FONT, type FontChoice } from './font-catalogue';
 

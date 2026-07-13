@@ -1,4 +1,4 @@
-import type { CaptureFrame, CapturePlan } from './capture-plan';
+import type { CaptureFrame, CapturePlan } from '@shader-studio/shared/capture-plan';
 import type { ShaderEngine } from './shader-engine';
 
 /**

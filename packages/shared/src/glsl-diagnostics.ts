@@ -1,4 +1,4 @@
-import type { CompileDiagnostic } from '../core/diagnostic';
+import type { CompileDiagnostic } from './diagnostic';
 
 /**
  * Turn a driver's shader info log into diagnostics the editor can point at.

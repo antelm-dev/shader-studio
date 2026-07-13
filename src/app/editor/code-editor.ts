@@ -20,8 +20,8 @@ import {
   DEFAULT_EDITOR_APPEARANCE,
   fontFamilyStack,
   type EditorAppearance,
-} from '../core/editor-prefs';
-import type { CompileDiagnostic } from '../core/diagnostic';
+} from '@shader-studio/shared/editor-prefs';
+import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { ReducedMotion } from '../core/reduced-motion';
 import { FontLoader, findFont, nearestWeight } from './google-fonts';
 import { monacoThemeId, resolveThemeId } from './editor-themes';

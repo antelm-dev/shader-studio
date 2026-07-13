@@ -11,7 +11,7 @@
  * the engine can share the macro expansion with it and the tests can read it.
  */
 
-import { MAX_WAVES, UNIFORM_PREFIX, type ShaderControl } from '@shader-studio/shared/model';
+import { MAX_WAVES, UNIFORM_PREFIX, type ShaderControl } from './model';
 
 /** Substitutions the engine makes in every shader before compiling it. */
 export function expandMacros(source: string): string {

@@ -30,7 +30,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { filter, map } from 'rxjs';
 
 import type { ImportMode } from '@shader-studio/shared/model';
-import { DEFAULT_PANEL_WIDTHS, PANEL_LIMITS } from './core/panel-prefs';
+import { DEFAULT_PANEL_WIDTHS, PANEL_LIMITS } from '@shader-studio/shared/panel-prefs';
 import {
   COLOR_SCHEME_OPTIONS,
   Preferences,

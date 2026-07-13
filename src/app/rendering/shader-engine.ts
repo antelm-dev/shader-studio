@@ -17,10 +17,10 @@ import {
   type TextureFilterMode,
   type TextureWrapMode,
 } from '@shader-studio/shared';
-import { VERTEX_DOC, type CompileDiagnostic } from '../core/diagnostic';
+import { VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { GlContext, type GlContextOptions, type ThreeModule } from './gl-context';
-import { parseInfoLog, prefixLineCount } from './glsl-diagnostics';
-import { expandMacros } from './glsl-export';
+import { parseInfoLog, prefixLineCount } from '@shader-studio/shared/glsl-diagnostics';
+import { expandMacros } from '@shader-studio/shared/glsl-export';
 import { BufferTargets, type TargetSpec } from './pass-targets';
 
 /** A channel resolved to something `THREE.TextureLoader` can actually load. */

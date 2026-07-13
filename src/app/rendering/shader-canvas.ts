@@ -14,7 +14,7 @@ import {
 
 import { composePass } from '@shader-studio/shared/pass-source';
 import { Preferences } from '../core/preferences';
-import type { CompileDiagnostic } from '../core/diagnostic';
+import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { ShaderStore } from '../core/shader-store';
 import { TextureAssets } from '../core/texture-assets';
 import type { GlContext } from './gl-context';

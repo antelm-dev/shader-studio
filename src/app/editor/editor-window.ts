@@ -8,9 +8,8 @@ import {
   type EditorDockSide,
   type EditorMode,
   type EditorWindowState,
-  type Rect,
-  type Size,
-} from '../core/editor-prefs';
+} from '@shader-studio/shared/editor-prefs';
+import type { Rect, Size } from '@shader-studio/shared/geometry';
 
 /**
  * Where the editor is, and every legal way of moving it.
