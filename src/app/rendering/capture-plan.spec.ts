@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_CAPTURE } from '../../shared/model';
+import { DEFAULT_CAPTURE } from '@shader-studio/shared/model';
 import {
   MAX_CAPTURE_SIZE,
   ffmpegCommand,
@@ -28,9 +28,9 @@ describe('normalizeCapture', () => {
   it('keeps webm as the default format and only accepts png as the other', () => {
     expect(normalizeCapture().format).toBe('webm');
     expect(normalizeCapture({ format: 'png' }).format).toBe('png');
-    expect(normalizeCapture({ format: 'avi' } as unknown as Partial<typeof DEFAULT_CAPTURE>).format).toBe(
-      'webm',
-    );
+    expect(
+      normalizeCapture({ format: 'avi' } as unknown as Partial<typeof DEFAULT_CAPTURE>).format,
+    ).toBe('webm');
   });
 
   it('makes the dimensions even, because no video encoder takes an odd one', () => {

@@ -8,7 +8,7 @@ import type {
   ControllerCommandType,
   ControllerRequest,
   ControllerResultMap,
-} from '../src/shared/mcp-protocol.js';
+} from '@shader-studio/shared/mcp-protocol';
 
 export const NO_APP =
   'Aucun onglet Shader Studio connecté — lance `pnpm dev` et garde une page ouverte';
@@ -63,12 +63,7 @@ function handleAppMessage(raw: string): void {
     return;
   }
 
-  if (
-    typeof message !== 'object' ||
-    message === null ||
-    !('id' in message) ||
-    !('ok' in message)
-  ) {
+  if (typeof message !== 'object' || message === null || !('id' in message) || !('ok' in message)) {
     return;
   }
 

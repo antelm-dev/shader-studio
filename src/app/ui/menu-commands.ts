@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 
-import type { ImportMode } from '../../shared/model';
+import type { ImportMode } from '@shader-studio/shared/model';
 import { DesktopPlatform } from '../core/desktop-platform';
 import { Preferences, type WorkspacePreferences } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';

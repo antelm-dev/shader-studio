@@ -1,7 +1,11 @@
 import { Injectable, inject } from '@angular/core';
 
-import type { TextureChannel, TextureFilterMode, TextureWrapMode } from '../../shared/model';
-import { mimeFromExt } from '../../shared/validate';
+import type {
+  TextureChannel,
+  TextureFilterMode,
+  TextureWrapMode,
+} from '@shader-studio/shared/model';
+import { mimeFromExt } from '@shader-studio/shared/validate';
 import { API_BASE_URL } from './api-base-url';
 import { DesktopPlatform } from './desktop-platform';
 

@@ -46,8 +46,7 @@ async function main(): Promise<void> {
   server.registerTool(
     'get_state',
     {
-      description:
-        'Snapshot complet : draft, params live, presets, diagnostics, état dirty/saved.',
+      description: 'Snapshot complet : draft, params live, presets, diagnostics, état dirty/saved.',
     },
     async () => textResult(await callApp({ type: 'getState' })),
   );

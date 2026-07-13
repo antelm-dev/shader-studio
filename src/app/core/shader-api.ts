@@ -13,8 +13,8 @@ import type {
   ShaderRecord,
   ShaderSummary,
   TextureChannelSettingsPatch,
-} from '../../shared/model';
-import { mimeFromExt } from '../../shared/validate';
+} from '@shader-studio/shared/model';
+import { mimeFromExt } from '@shader-studio/shared/validate';
 import { API_BASE_URL } from './api-base-url';
 
 /** The bytes and decoded dimensions of an image about to be assigned to a channel. */

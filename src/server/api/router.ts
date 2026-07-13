@@ -10,13 +10,13 @@
 
 import express, { type NextFunction, type Request, type Response, type Router } from 'express';
 
-import type { ApiErrorBody } from '../../shared/model';
+import type { ApiErrorBody } from '@shader-studio/shared/model';
 import {
   buildCollectionBundle,
   buildShaderBundle,
   parseBundle,
   validateImportMode,
-} from '../../shared/validate';
+} from '@shader-studio/shared/validate';
 import { ShaderStorage, StorageError } from '../storage';
 import {
   attachmentName,

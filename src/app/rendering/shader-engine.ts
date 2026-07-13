@@ -11,7 +11,7 @@ import {
   type ShaderParams,
   type TextureFilterMode,
   type TextureWrapMode,
-} from '../../shared/model';
+} from '@shader-studio/shared/model';
 import type { CompileDiagnostic } from '../core/diagnostic';
 import { GlContext, type GlContextOptions, type ThreeModule } from './gl-context';
 import { parseInfoLog, prefixLineCount } from './glsl-diagnostics';

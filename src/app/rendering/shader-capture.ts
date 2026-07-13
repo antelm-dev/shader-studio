@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
-import type { CaptureSettings } from '../../shared/model';
+import type { CaptureSettings } from '@shader-studio/shared/model';
 import { DesktopPlatform } from '../core/desktop-platform';
 import { ShaderStore } from '../core/shader-store';
 import { outputIndices, planCapture, type CapturePlan } from './capture-plan';
@@ -56,9 +56,7 @@ export class ShaderCapture {
     if (!engine || this.running()) return false;
 
     const plan = planCapture(settings);
-    return plan.settings.format === 'webm'
-      ? this.exportVideo(plan)
-      : this.exportPngSequence(plan);
+    return plan.settings.format === 'webm' ? this.exportVideo(plan) : this.exportPngSequence(plan);
   }
 
   private async exportVideo(plan: CapturePlan): Promise<boolean> {

@@ -15,7 +15,13 @@
     "experimentalDecorators": true,
     "importHelpers": true,
     "target": "ES2022",
-    "module": "preserve"
+    "module": "preserve",
+    "paths": {
+      "@shader-studio/shared": ["./packages/shared/src/index.ts"],
+      "@shader-studio/shared/model": ["./packages/shared/src/model.ts"],
+      "@shader-studio/shared/validate": ["./packages/shared/src/validate.ts"],
+      "@shader-studio/shared/mcp-protocol": ["./packages/shared/src/mcp-protocol.ts"]
+    }
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,

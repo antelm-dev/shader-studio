@@ -11,16 +11,13 @@ ENV CI=true \
 
 RUN npm install --global pnpm@10.28.2
 
-# The Electron tooling is linked by path from a sibling checkout
-# (`link:../electron-libs/*`). It takes no part in the web build, but pnpm
-# refuses to install unless the link targets resolve, so stub them out.
-RUN mkdir -p /electron-libs/ipc-module /electron-libs/electron-run \
-    && echo '{"name":"electron-ipc-module","version":"0.0.0"}' > /electron-libs/ipc-module/package.json \
-    && echo '{"name":"electron-run","version":"0.0.0"}' > /electron-libs/electron-run/package.json
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/electron-ipc-module/package.json ./packages/electron-ipc-module/
+COPY packages/electron-run/package.json ./packages/electron-run/
 
-COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
+    pnpm install --frozen-lockfile --ignore-scripts
 
 COPY . .
 

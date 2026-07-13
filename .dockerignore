@@ -14,8 +14,8 @@ __screenshots__
 # User shaders created at runtime — the container seeds its own store from examples/.
 data
 
-# The Electron main process. It is not part of the web build and depends on
-# packages linked from outside this repo — see docker/electron.d.ts.
+# The Electron main process. It is not part of the web build — see
+# docker/electron.d.ts.
 main
 
 *.log

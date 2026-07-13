@@ -1,7 +1,7 @@
 import { isPlatformBrowser } from '@angular/common';
 import { DOCUMENT, Injectable, PLATFORM_ID, inject } from '@angular/core';
 
-import type { RenderSettings } from '../../shared/model';
+import type { RenderSettings } from '@shader-studio/shared/model';
 import type { ShaderDraft } from './shader-store';
 
 const STORAGE_KEY = 'shader-studio.recovered-drafts';

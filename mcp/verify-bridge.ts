@@ -1,5 +1,5 @@
 import { callApp, closeBridge, resetBridgeForTests, startBridge } from './bridge.js';
-import type { ControllerRequest } from '../src/shared/mcp-protocol.js';
+import type { ControllerRequest } from '@shader-studio/shared/mcp-protocol';
 import { WebSocket } from 'ws';
 
 const PORT = Number(process.env['SHADER_STUDIO_MCP_PORT'] ?? 4311);

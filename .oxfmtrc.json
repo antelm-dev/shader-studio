@@ -9,6 +9,8 @@
     "release/**",
     "data/**",
     "main/generated/**",
-    ".angular/**"
+    ".angular/**",
+    "packages/electron-ipc-module/**",
+    "packages/electron-run/**"
   ]
 }

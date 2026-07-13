@@ -15,7 +15,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
-import type { ThumbnailMeta } from '../../shared/model';
+import type { ThumbnailMeta } from '@shader-studio/shared/model';
 import { ShaderStore } from '../core/shader-store';
 import { ThumbnailAssets } from '../core/thumbnail-assets';
 import { Workspace } from './workspace';

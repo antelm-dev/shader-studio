@@ -5,7 +5,7 @@ import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
-import { LIMITS } from '../../shared/validate';
+import { LIMITS } from '@shader-studio/shared/validate';
 
 export interface ShadertoyImportDialogResult {
   name: string;

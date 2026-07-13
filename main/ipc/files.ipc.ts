@@ -4,7 +4,7 @@ import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
-import { parseBundle } from '../../src/shared/validate';
+import { parseBundle } from '@shader-studio/shared/validate';
 
 // A textured shader's bundle inlines its channel images as base64, and a
 // collection can hold many shaders — comfortably larger than the old
@@ -116,12 +116,7 @@ export function createFilesIpc() {
       },
     ),
     'write-frame': handle(
-      async (
-        event,
-        id: string,
-        index: number,
-        bytes: Uint8Array,
-      ): Promise<DialogResult<null>> => {
+      async (event, id: string, index: number, bytes: Uint8Array): Promise<DialogResult<null>> => {
         const session = sequences.get(id);
         if (!session || session.sender !== event.sender.id) {
           return { status: 'error', message: 'That image sequence is not open' };

@@ -1,12 +1,12 @@
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
-import type { ImportMode, RenderSettings, ShaderParams } from '../../src/shared/model';
+import type { ImportMode, RenderSettings, ShaderParams } from '@shader-studio/shared/model';
 import {
   buildCollectionBundle,
   buildShaderBundle,
   parseBundle,
   validateImportMode,
-} from '../../src/shared/validate';
+} from '@shader-studio/shared/validate';
 import type { UpdateShaderPatch } from '../../src/app/core/shader-api';
 import { ShaderStorage, StorageError } from '../../src/server/storage';
 

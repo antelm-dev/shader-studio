@@ -1,4 +1,4 @@
-import type { Result } from '../../shared/validate';
+import type { Result } from '@shader-studio/shared/validate';
 
 export class StorageError extends Error {
   constructor(

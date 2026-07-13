@@ -1,6 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 
-import type { Bundle, ImportMode } from '../../shared/model';
+import type { Bundle, ImportMode } from '@shader-studio/shared/model';
 
 type WindowState = { maximized: boolean; fullscreen: boolean };
 

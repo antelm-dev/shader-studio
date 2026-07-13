@@ -29,7 +29,7 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { filter, map } from 'rxjs';
 
-import type { ImportMode } from '../shared/model';
+import type { ImportMode } from '@shader-studio/shared/model';
 import { DEFAULT_PANEL_WIDTHS, PANEL_LIMITS } from './core/panel-prefs';
 import {
   COLOR_SCHEME_OPTIONS,

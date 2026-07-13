@@ -30,13 +30,6 @@ jobs:
             exit 1
           }
 
-      - name: Check out local Electron libraries
-        shell: bash
-        run: |
-          mkdir -p ../electron-libs
-          git clone --depth 1 https://github.com/antelm-dev/electron-ipc-module.git ../electron-libs/ipc-module
-          git clone --depth 1 https://github.com/antelm-dev/electron-run.git ../electron-libs/electron-run
-
       - name: Install
         run: pnpm install --frozen-lockfile
 

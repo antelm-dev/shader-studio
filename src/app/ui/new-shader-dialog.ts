@@ -6,7 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
-import { LIMITS } from '../../shared/validate';
+import { LIMITS } from '@shader-studio/shared/validate';
 
 export type NewShaderDialogResult = { action: 'create'; name: string } | { action: 'shadertoy' };
 

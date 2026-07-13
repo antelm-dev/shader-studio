@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_WAVES, type ShaderControl } from '../../shared/model';
+import { MAX_WAVES, type ShaderControl } from '@shader-studio/shared/model';
 import { buildFullGlsl, expandMacros, uniformType } from './glsl-export';
 
 const CONTROLS: ShaderControl[] = [

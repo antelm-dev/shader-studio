@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { ShaderPayload } from '../../shared/model';
-import { buildCollectionBundle, parseBundle } from '../../shared/validate';
+import type { ShaderPayload } from '@shader-studio/shared/model';
+import { buildCollectionBundle, parseBundle } from '@shader-studio/shared/validate';
 import { ShaderStorage, StorageError, DEFAULT_VERTEX, TEMPLATE_FRAGMENT } from './index';
 
 let root: string;

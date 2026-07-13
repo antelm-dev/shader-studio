@@ -1,4 +1,4 @@
-import type { ShaderControl } from '../../shared/model';
+import type { ShaderControl } from '@shader-studio/shared/model';
 
 export const DEFAULT_VERTEX = `varying vec2 vUv;
 

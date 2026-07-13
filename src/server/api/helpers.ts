@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 
-import { extFromMime } from '../../shared/validate';
+import { extFromMime } from '@shader-studio/shared/validate';
 import { StorageError } from '../storage/storage-error';
 
 // A textured shader's bundle inlines its channel images as base64 (~33%
@@ -12,7 +12,7 @@ export const TEXTURE_BODY_LIMIT = '4mb';
 /** A 480×270 preview. Tighter still — anything near this is already suspect. */
 export const THUMBNAIL_BODY_LIMIT = '1mb';
 
-export { mimeFromExt } from '../../shared/validate';
+export { mimeFromExt } from '@shader-studio/shared/validate';
 
 export function attachmentName(name: string): string {
   const ascii = name.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'shaders';

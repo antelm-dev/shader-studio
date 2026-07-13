@@ -3,7 +3,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import type { TextureFilterMode, TextureWrapMode } from '../../shared/model';
+import type { TextureFilterMode, TextureWrapMode } from '@shader-studio/shared/model';
 import { ShaderStore } from '../core/shader-store';
 import { TextureAssets } from '../core/texture-assets';
 

@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 
-import type { ImportMode } from '../../shared/model';
+import type { ImportMode } from '@shader-studio/shared/model';
 import { DesktopPlatform } from '../core/desktop-platform';
 import { ShaderStore } from '../core/shader-store';
 import { buildFullGlsl } from '../rendering/glsl-export';

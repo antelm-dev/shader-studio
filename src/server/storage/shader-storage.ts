@@ -49,7 +49,7 @@ import {
   type TextureChannelSettingsPatch,
   type ThumbnailMeta,
   type ThumbnailPayload,
-} from '../../shared/model';
+} from '@shader-studio/shared/model';
 import {
   LIMITS,
   sanitizeParams,
@@ -66,7 +66,7 @@ import {
   validateRender,
   validateSource,
   validateThumbnailMeta,
-} from '../../shared/validate';
+} from '@shader-studio/shared/validate';
 import { expect, StorageError } from './storage-error';
 import { DEFAULT_VERTEX, TEMPLATE_CONTROLS, TEMPLATE_FRAGMENT } from './templates';
 import type { StorageOptions } from './types';

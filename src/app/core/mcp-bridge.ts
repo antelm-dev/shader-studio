@@ -6,8 +6,8 @@ import type {
   McpDiagnostic,
   McpScreenshot,
   McpStateSnapshot,
-} from '../../shared/mcp-protocol';
-import { isHelloMessage } from '../../shared/mcp-protocol';
+} from '@shader-studio/shared/mcp-protocol';
+import { isHelloMessage } from '@shader-studio/shared/mcp-protocol';
 import type { CompileDiagnostic } from './diagnostic';
 import { RECOMPILE_DEBOUNCE_MS } from '../rendering/shader-canvas';
 import { RendererHandle } from '../rendering/renderer-handle';

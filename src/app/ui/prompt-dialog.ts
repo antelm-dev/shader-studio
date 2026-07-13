@@ -6,7 +6,7 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
-import { LIMITS } from '../../shared/validate';
+import { LIMITS } from '@shader-studio/shared/validate';
 
 /** An extra yes/no the prompt can carry alongside the name. */
 export interface PromptDialogOption {

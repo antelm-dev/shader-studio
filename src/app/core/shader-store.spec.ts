@@ -14,7 +14,7 @@ import {
   type ShaderParams,
   type ShaderRecord,
   type ShaderSummary,
-} from '../../shared/model';
+} from '@shader-studio/shared/model';
 import { Preferences, type WorkspacePreferences } from './preferences';
 import { DEFAULT_EDITOR_APPEARANCE, DEFAULT_EDITOR_WINDOW } from './editor-prefs';
 import { DEFAULT_PANEL_WIDTHS } from './panel-prefs';

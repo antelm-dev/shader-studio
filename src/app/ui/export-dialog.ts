@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 
-import type { CaptureSettings } from '../../shared/model';
+import type { CaptureSettings } from '@shader-studio/shared/model';
 import { Preferences } from '../core/preferences';
 import { ffmpegCommand, planCapture } from '../rendering/capture-plan';
 import { ShaderCapture } from '../rendering/shader-capture';
@@ -298,9 +298,10 @@ export class ExportDialog {
     const plan = this.plan();
     const size = `${plan.width}×${plan.height}`;
     const rendered =
-      plan.renderWidth === plan.width ? size : `${size} (drawn at ${plan.renderWidth}×${plan.renderHeight})`;
-    const draws =
-      plan.draws === plan.loopFrames ? '' : ` · ${plan.draws.toLocaleString()} draws`;
+      plan.renderWidth === plan.width
+        ? size
+        : `${size} (drawn at ${plan.renderWidth}×${plan.renderHeight})`;
+    const draws = plan.draws === plan.loopFrames ? '' : ` · ${plan.draws.toLocaleString()} draws`;
     const kind = plan.settings.format === 'webm' ? 'WebM' : 'PNG';
 
     return `${kind} · ${plan.outputFrames.toLocaleString()} frames · ${plan.outputDuration.toFixed(1)}s · ${rendered}${draws}`;

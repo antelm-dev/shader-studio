@@ -22,14 +22,14 @@ import {
   type ParamValue,
   type TextureChannels,
   type TextureChannelSettingsPatch,
-} from '../../shared/model';
+} from '@shader-studio/shared/model';
 import {
   defaultParams,
   extFromMime,
   LIMITS,
   sanitizeParams,
   validateControls,
-} from '../../shared/validate';
+} from '@shader-studio/shared/validate';
 import type { CompileDiagnostic } from './diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { RendererHandle } from '../rendering/renderer-handle';

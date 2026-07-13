@@ -59,21 +59,14 @@ last valid version running and places compiler diagnostics in the editor.
 - Node.js `^22.22.3 || ^24.15.0 || >=26`
 - [pnpm](https://pnpm.io/) 10
 
-Clone the repository and its two linked Electron helpers, then start the
-development server:
+Clone the repository and start the development server:
 
 ```bash
 git clone https://github.com/antelm-dev/shader-studio.git
 cd shader-studio
-mkdir -p ../electron-libs
-git clone https://github.com/antelm-dev/electron-ipc-module.git ../electron-libs/ipc-module
-git clone https://github.com/antelm-dev/electron-run.git ../electron-libs/electron-run
 pnpm install
 pnpm dev
 ```
-
-The linked helpers are currently required during dependency installation even
-when you only intend to run the web application.
 
 Open [http://localhost:4200](http://localhost:4200). The development server runs
 the real Express API and SSR application; the API is not mocked.
@@ -82,8 +75,7 @@ the real Express API and SSR application; the API is not mocked.
 
 ### Docker
 
-The fastest way to run Shader Studio. It needs nothing but Docker — neither
-Node.js nor the linked Electron helpers:
+The fastest way to run Shader Studio. It needs nothing but Docker:
 
 ```bash
 git clone https://github.com/antelm-dev/shader-studio.git
@@ -146,8 +138,8 @@ pnpm pack:win     # unpacked app in release/win-unpacked
 pnpm dist:win     # NSIS installer and portable executable in release/
 ```
 
-The desktop target uses the linked sibling packages
-`../electron-libs/ipc-module` and `../electron-libs/electron-run`. It stores its
+The desktop target uses the workspace packages
+`electron-ipc-module` and `electron-run` under `packages/`. It stores its
 library in Electron's per-user application-data directory and does not start the
 Express server. The web and SSR targets continue to use the REST API.
 
@@ -221,12 +213,15 @@ with them is up to it.
 Four concerns, kept apart on purpose. Nothing below the line knows about Angular.
 
 ```
-src/
-  shared/          model + validation — imported by BOTH the server and the client
+packages/
+  shared/          model + validation — imported by server, client, main, and MCP
     model.ts         the shader document: controls, presets, bundles
     validate.ts      every rule, in one place. The API is the authority; the
                      client reuses it to pre-validate the config editor.
+  electron-ipc-module/   typed Electron IPC + preload bridge generation
+  electron-run/          Rollup plugin that live-reloads Electron on rebuild
 
+src/
   server/          Node only
     storage.ts       file-backed persistence: atomic writes, per-shader locks,
                      path-traversal defence, example seeding
@@ -533,7 +528,7 @@ pnpm test
 
 201 tests, focused where a bug would actually cost you something:
 
-- **`shared/validate.spec.ts`** — ids (every traversal and reserved-name case),
+- **`packages/shared/validate.spec.ts`** — ids (every traversal and reserved-name case),
   the control schema, preset sanitization and clamping, and bundle round-trips.
 - **`server/storage/shader-storage.spec.ts`** — runs against a real temp
   directory, not a mocked fs, because the whole point of that layer is what it

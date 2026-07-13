@@ -3,7 +3,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 
-import type { Preset } from '../../shared/model';
+import type { Preset } from '@shader-studio/shared/model';
 import { ShaderStore } from '../core/shader-store';
 import { Workspace } from './workspace';
 

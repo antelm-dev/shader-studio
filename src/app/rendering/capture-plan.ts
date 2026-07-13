@@ -1,4 +1,4 @@
-import { DEFAULT_CAPTURE, type CaptureSettings } from '../../shared/model';
+import { DEFAULT_CAPTURE, type CaptureSettings } from '@shader-studio/shared/model';
 
 /**
  * The timetable a capture is played from.

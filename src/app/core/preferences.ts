@@ -1,7 +1,7 @@
 import { DOCUMENT, Injectable, PLATFORM_ID, computed, effect, inject, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
-import { DEFAULT_CAPTURE, type CaptureSettings } from '../../shared/model';
+import { DEFAULT_CAPTURE, type CaptureSettings } from '@shader-studio/shared/model';
 import { normalizeCapture } from '../rendering/capture-plan';
 import {
   DEFAULT_EDITOR_APPEARANCE,

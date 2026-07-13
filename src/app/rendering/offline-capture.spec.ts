@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_RENDER } from '../../shared/model';
+import { DEFAULT_RENDER } from '@shader-studio/shared/model';
 import { GlContextRegistry } from './gl-context-registry';
 import type { GlContext } from './gl-context';
 import { ShaderEngine, type ShaderSpec } from './shader-engine';
