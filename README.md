@@ -1,40 +1,121 @@
-# Shader Studio
+<div align="center">
+  <img src="public/shader-studio-logo.svg" alt="Shader Studio logo" width="112" />
+  <h1>Shader Studio</h1>
+  <p><strong>Your self-hosted workspace for building, tuning, and collecting WebGL shaders.</strong></p>
+  <p>
+    Browse a shader library, edit GLSL with live diagnostics, generate controls from a schema,
+    save presets, and move everything between installations as portable JSON.
+  </p>
 
-A shader collection viewer and editor. Browse your shaders, edit their GLSL, tune
-their parameters with an auto-generated GUI, save presets, and take the whole
-thing somewhere else as a portable JSON bundle.
+  <p>
+    <a href="https://github.com/antelm-dev/shader-studio/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/antelm-dev/shader-studio/actions/workflows/ci.yml/badge.svg" /></a>
+    <a href="https://angular.dev/"><img alt="Angular 22" src="https://img.shields.io/badge/Angular-22-DD0031?logo=angular&amp;logoColor=white" /></a>
+    <a href="https://nodejs.org/"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-22%2B-5FA04E?logo=nodedotjs&amp;logoColor=white" /></a>
+    <a href="https://pnpm.io/"><img alt="pnpm 10" src="https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&amp;logoColor=white" /></a>
+  </p>
+</div>
 
-The selected shader **is** the application background: you edit the thing you are
-looking at. A shader that fails to compile does not black out the screen — the
-last one that worked keeps rendering while the compiler's diagnostics appear
-under the editor.
+<br />
 
-Angular 22 (zoneless, SSR) · Angular Material · Express · three.js · lil-gui · Monaco.
+![Shader Studio showing the Aurora Veil shader and its generated controls](docs/shader-studio-preview.jpg)
 
----
+The shader you select becomes the application canvas, so you edit the thing you
+are looking at. A broken draft never blanks the preview: Shader Studio keeps the
+last valid version running and places compiler diagnostics in the editor.
 
-## Install and run
+## Highlights
 
-Requires Node `^22.22.3 || ^24.15.0 || >=26` (Angular 22's minimum) and pnpm.
+- **Live GLSL workflow** — Monaco editing, driver-backed diagnostics, and a safe
+  compile pipeline that preserves the last working render.
+- **Schema-generated controls** — describe numbers, booleans, colors, and selects
+  once; Shader Studio builds the control panel and uniforms for you.
+- **A library that stays yours** — shaders and presets live as readable files on
+  disk, with atomic writes and no external database.
+- **Portable by design** — export one shader or the complete collection to a
+  versioned JSON bundle and import it elsewhere.
+- **Interactive previews** — pointer velocity, click ripples, pause, screenshots,
+  bloom, render scaling, and texture inputs are built in.
+- **Web and desktop** — run the SSR web app on your own machine or package the
+  Electron desktop app for Windows.
+
+## Contents
+
+- [Quick start](#quick-start)
+- [Self-hosting](#self-hosting)
+- [Desktop app](#desktop-app)
+- [Using Shader Studio](#using-shader-studio)
+- [Shader format](#shader-format)
+- [Import and export](#import-and-export)
+- [API](#api)
+- [Included shaders](#included-shaders)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Tests](#tests)
+- [Known limitations](#known-limitations)
+
+## Quick start
+
+### Requirements
+
+- Node.js `^22.22.3 || ^24.15.0 || >=26`
+- [pnpm](https://pnpm.io/) 10
+
+Clone the repository and its two linked Electron helpers, then start the
+development server:
 
 ```bash
+git clone https://github.com/antelm-dev/shader-studio.git
+cd shader-studio
+mkdir -p ../electron-libs
+git clone https://github.com/antelm-dev/electron-ipc-module.git ../electron-libs/ipc-module
+git clone https://github.com/antelm-dev/electron-run.git ../electron-libs/electron-run
 pnpm install
-pnpm dev              # http://localhost:4200 — API and SSR both live
+pnpm dev
 ```
 
-Production:
+The linked helpers are currently required during dependency installation even
+when you only intend to run the web application.
+
+Open [http://localhost:4200](http://localhost:4200). The development server runs
+the real Express API and SSR application; the API is not mocked.
+
+## Self-hosting
+
+Build the production application and run its Node server:
 
 ```bash
 pnpm build
-pnpm serve:ssr        # http://localhost:4000
+pnpm serve:ssr
 ```
 
-Desktop (Windows):
+Shader Studio is then available at [http://localhost:4000](http://localhost:4000).
+Persist the directory configured by `SHADER_DATA_DIR`; it contains the complete
+shader library. When exposing the app beyond localhost, set `NG_ALLOWED_HOSTS`
+to the hostnames that are allowed to reach SSR.
+
+> [!IMPORTANT]
+> Shader Studio has no authentication or multi-user isolation. Deploy it only on
+> a trusted private network, behind an authenticated reverse proxy, or through a
+> private access layer.
+
+### Configuration
+
+| Variable              | Default                     | Purpose                                                           |
+| --------------------- | --------------------------- | ----------------------------------------------------------------- |
+| `PORT`                | `4000`                      | Port for the SSR server                                           |
+| `SHADER_DATA_DIR`     | `./data`                    | Persistent shader storage                                         |
+| `SHADER_EXAMPLES_DIR` | `./examples`                | Source directory for bundled examples                             |
+| `SHADER_SEED`         | —                           | Set to `0` to disable seeding an empty store                      |
+| `NG_ALLOWED_HOSTS`    | `localhost,127.0.0.1,[::1]` | Comma-separated hosts SSR may render for; set this when deploying |
+
+## Desktop app
+
+The Electron target currently packages for Windows:
 
 ```bash
-pnpm dev:desktop      # Angular dev server + Electron with main-process reload
-pnpm pack:win         # unpacked application in release/win-unpacked
-pnpm dist:win         # NSIS installer and portable executable in release/
+pnpm dev:desktop  # Angular dev server + Electron with main-process reload
+pnpm pack:win     # unpacked app in release/win-unpacked
+pnpm dist:win     # NSIS installer and portable executable in release/
 ```
 
 The desktop target uses the linked sibling packages
@@ -42,8 +123,10 @@ The desktop target uses the linked sibling packages
 library in Electron's per-user application-data directory and does not start the
 Express server. The web and SSR targets continue to use the REST API.
 
-The dev server runs the same Express app as production — the API is real in both,
-not mocked.
+## Development
+
+The application uses Angular 22 (zoneless SSR), Angular Material, Express,
+three.js, lil-gui, and Monaco.
 
 | Script           | What it does                         |
 | ---------------- | ------------------------------------ |
@@ -55,19 +138,9 @@ not mocked.
 | `pnpm format`    | Oxfmt                                |
 | `pnpm typecheck` | `tsc -b`, strict                     |
 
-### Environment
+## Using Shader Studio
 
-| Variable              | Default                     | Purpose                                                          |
-| --------------------- | --------------------------- | ---------------------------------------------------------------- |
-| `PORT`                | `4000`                      | Port for the SSR server                                          |
-| `SHADER_DATA_DIR`     | `./data`                    | Where shaders are stored                                         |
-| `SHADER_EXAMPLES_DIR` | `./examples`                | Where the seed examples are read from                            |
-| `SHADER_SEED`         | —                           | `0` disables seeding an empty store                              |
-| `NG_ALLOWED_HOSTS`    | `localhost,127.0.0.1,[::1]` | Hosts SSR will render for (SSRF guard). Set this when deploying. |
-
----
-
-## Keyboard
+### Keyboard shortcuts
 
 | Key        | Action                   |
 | ---------- | ------------------------ |
@@ -158,7 +231,7 @@ diagnostic lands on the line you are actually looking at.
 
 ---
 
-## Storage format
+## Shader format
 
 One directory per shader. The directory name is the id — it is the primary key,
 which is why it is validated before it is ever joined onto a path.
@@ -202,7 +275,7 @@ shader changes its display name only; the id, and therefore the path, is stable.
 
 ---
 
-## The shader configuration schema
+### Control schema
 
 A shader declares its parameters; the GUI is generated from that declaration. No
 shader ever writes GUI code. Add a control in the **Config** tab and its knob
@@ -286,7 +359,7 @@ saving, and leaves the working GUI alone.
 
 ---
 
-## Import / export
+## Import and export
 
 One documented format, used for both a single shader and a whole collection.
 Everything needed to reproduce a shader elsewhere is in it: source, schema, render
@@ -358,7 +431,7 @@ never carry a value for a control that does not exist.
 
 ---
 
-## The example shaders
+## Included shaders
 
 | Shader           | Shows                                                                                                                                                                                                                         |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
