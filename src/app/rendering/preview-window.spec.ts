@@ -3,7 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { Preferences, type WorkspacePreferences } from '../core/preferences';
-import { DEFAULT_PREVIEW_WINDOW, type PreviewWindowState } from '@shader-studio/shared/preview-prefs';
+import {
+  DEFAULT_PREVIEW_WINDOW,
+  type PreviewWindowState,
+} from '@shader-studio/shared/preview-prefs';
 import { PreviewWindow } from './preview-window';
 
 /**

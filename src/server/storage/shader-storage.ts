@@ -68,7 +68,11 @@ import {
   validateThumbnailMeta,
 } from '@shader-studio/shared/validate';
 import { expect, StorageError } from './storage-error';
-import { DEFAULT_VERTEX, TEMPLATE_CONTROLS, TEMPLATE_FRAGMENT } from '@shader-studio/shared/templates';
+import {
+  DEFAULT_VERTEX,
+  TEMPLATE_CONTROLS,
+  TEMPLATE_FRAGMENT,
+} from '@shader-studio/shared/templates';
 import type { StorageOptions } from './types';
 
 const META_FILE = 'meta.json';
