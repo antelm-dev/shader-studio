@@ -480,6 +480,10 @@ export function validatePreset(
     name: nameResult.value,
     createdAt,
     values: sanitizeParams(controls, input['values']),
+    // Only when the caller actually sent one. `validateRender` is tolerant and
+    // would happily invent a full set of defaults out of `undefined`, which
+    // would silently give every legacy preset the power to reset bloom.
+    ...(isRecord(input['render']) ? { render: validateRender(input['render']) } : {}),
   });
 }
 

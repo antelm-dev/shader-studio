@@ -8,6 +8,7 @@ import {
   toSummary,
   type ImportResult,
   type Preset,
+  type RenderSettings,
   type ShaderControl,
   type ShaderParams,
   type ShaderRecord,
@@ -134,12 +135,18 @@ class FakeApi implements Partial<ShaderApi> {
     });
   }
 
-  savePreset(_id: string, name: string, values: ShaderParams): Promise<Preset> {
+  savePreset(
+    _id: string,
+    name: string,
+    values: ShaderParams,
+    render?: RenderSettings,
+  ): Promise<Preset> {
     return this.track('savePreset', () => ({
       id: name.toLowerCase(),
       name,
       createdAt: '2024-03-03T00:00:00.000Z',
       values: structuredClone(values),
+      ...(render ? { render: structuredClone(render) } : {}),
     }));
   }
 
@@ -581,6 +588,52 @@ describe('ShaderStore: presets', () => {
 
     expect(store.presets()).toEqual([]);
     expect(store.activePresetId()).toBeNull();
+  });
+
+  it('captures the draft render settings only when asked to', async () => {
+    const { store } = setup(makeRecord());
+    await store.initialize();
+
+    store.setRender({ bloom: { enabled: true, strength: 1, radius: 0.5, threshold: 0.8 } });
+    await store.savePreset('Values only');
+    await store.savePreset('With bloom', true);
+
+    expect(store.presets()[0].render).toBeUndefined();
+    expect(store.presets()[1].render?.bloom.enabled).toBe(true);
+  });
+
+  it('restores the render settings a preset captured, leaving the draft dirty', async () => {
+    const glow: Preset = {
+      id: 'glow',
+      name: 'Glow',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      values: { speed: 2, glow: true },
+      render: { bloom: { enabled: true, strength: 1.2, radius: 0.4, threshold: 0.7 } },
+    };
+    const { store } = setup(makeRecord({ presets: [glow] }));
+    await store.initialize();
+
+    store.applyPreset('glow');
+
+    expect(store.draft()?.render.bloom).toEqual({
+      enabled: true,
+      strength: 1.2,
+      radius: 0.4,
+      threshold: 0.7,
+    });
+    // Bloom is part of the saved shader, so restoring it is an unsaved edit —
+    // pretending otherwise would drop it on the next load.
+    expect(store.dirty()).toBe(true);
+  });
+
+  it('leaves the render settings alone for a preset that captured none', async () => {
+    const { store } = setup(makeRecord({ presets: [preset] }));
+    await store.initialize();
+    store.setRender({ bloom: { enabled: true, strength: 1, radius: 0.5, threshold: 0.8 } });
+
+    store.applyPreset('calm');
+
+    expect(store.draft()?.render.bloom.enabled).toBe(true);
   });
 });
 

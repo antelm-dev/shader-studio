@@ -66,7 +66,7 @@ export type ParamValue = number | boolean | string;
 /** Every parameter of a shader, keyed by control key (not uniform name). */
 export type ShaderParams = Record<string, ParamValue>;
 
-/** Post-processing, stored with the shader rather than with its presets. */
+/** Post-processing. Belongs to the shader; a preset may also capture a copy. */
 export interface BloomSettings {
   enabled: boolean;
   strength: number;
@@ -156,6 +156,12 @@ export interface Preset {
   name: string;
   createdAt: string;
   values: ShaderParams;
+  /**
+   * The render settings captured alongside the values. Optional, and absent on
+   * every preset saved before this existed: bloom stays the shader's, and
+   * applying such a preset leaves it exactly as it was.
+   */
+  render?: RenderSettings;
 }
 
 /** `meta.json` on disk. */

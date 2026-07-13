@@ -1,6 +1,6 @@
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
-import type { ImportMode, ShaderParams } from '../../src/shared/model';
+import type { ImportMode, RenderSettings, ShaderParams } from '../../src/shared/model';
 import {
   buildCollectionBundle,
   buildShaderBundle,
@@ -38,11 +38,16 @@ export function createShaderIpc(storage: ShaderStorage) {
       storage.duplicate(stringArg(id, 'id'), name),
     ),
     remove: handle(async (_event, id: string) => storage.remove(stringArg(id, 'id'))),
-    'save-preset': handle((_event, id: string, input: { name: string; values: ShaderParams }) =>
-      storage.savePreset(
-        stringArg(id, 'id'),
-        objectArg(input, 'preset') as { name: unknown; values: unknown },
-      ),
+    'save-preset': handle(
+      (
+        _event,
+        id: string,
+        input: { name: string; values: ShaderParams; render?: RenderSettings },
+      ) =>
+        storage.savePreset(
+          stringArg(id, 'id'),
+          objectArg(input, 'preset') as { name: unknown; values: unknown; render?: unknown },
+        ),
     ),
     'delete-preset': handle((_event, id: string, presetId: string) =>
       storage.deletePreset(stringArg(id, 'id'), stringArg(presetId, 'presetId')),

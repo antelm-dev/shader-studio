@@ -3,6 +3,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 
+import type { Preset } from '../../shared/model';
 import { ShaderStore } from '../core/shader-store';
 import { Workspace } from './workspace';
 
@@ -28,10 +29,13 @@ import { Workspace } from './workspace';
             class="preset-chip"
             [value]="preset.id"
             [selected]="preset.id === store.activePresetId()"
-            title="Right-click to delete"
+            [title]="hint(preset)"
             [matContextMenuTriggerFor]="presetMenu"
             [matContextMenuTriggerData]="{ preset }"
           >
+            @if (preset.render) {
+              <mat-icon matChipAvatar aria-hidden="true">blur_on</mat-icon>
+            }
             {{ preset.name }}
           </mat-chip-option>
         }
@@ -78,5 +82,11 @@ export class PresetPanel {
 
   protected apply(presetId: string | null): void {
     if (presetId) this.store.applyPreset(presetId);
+  }
+
+  protected hint(preset: Preset): string {
+    return preset.render
+      ? 'Restores the parameter values and the render settings. Right-click to delete'
+      : 'Restores the parameter values. Right-click to delete';
   }
 }

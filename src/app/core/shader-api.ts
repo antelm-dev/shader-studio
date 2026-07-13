@@ -8,6 +8,7 @@ import type {
   ImportMode,
   ImportResult,
   Preset,
+  RenderSettings,
   ShaderParams,
   ShaderRecord,
   ShaderSummary,
@@ -59,7 +60,13 @@ export abstract class ShaderApi {
   abstract update(id: string, patch: UpdateShaderPatch): Promise<ShaderRecord>;
   abstract duplicate(id: string, name?: string): Promise<ShaderRecord>;
   abstract remove(id: string): Promise<void>;
-  abstract savePreset(id: string, name: string, values: ShaderParams): Promise<Preset>;
+  /** Omitting `render` saves a values-only preset, which leaves bloom alone when applied. */
+  abstract savePreset(
+    id: string,
+    name: string,
+    values: ShaderParams,
+    render?: RenderSettings,
+  ): Promise<Preset>;
   abstract deletePreset(id: string, presetId: string): Promise<void>;
   abstract exportShader(id: string): Promise<Bundle>;
   abstract exportAll(): Promise<Bundle>;
@@ -151,10 +158,16 @@ export class HttpShaderApi extends ShaderApi {
 
   // --- Presets ------------------------------------------------------------
 
-  override async savePreset(id: string, name: string, values: ShaderParams): Promise<Preset> {
+  override async savePreset(
+    id: string,
+    name: string,
+    values: ShaderParams,
+    render?: RenderSettings,
+  ): Promise<Preset> {
     const response = await this.post<{ preset: Preset }>(`/shaders/${id}/presets`, {
       name,
       values,
+      ...(render ? { render } : {}),
     });
     return response.preset;
   }

@@ -253,6 +253,30 @@ describe('presets', () => {
     });
   });
 
+  it('captures the render settings when it is given some, and clamps them', async () => {
+    const id = await seed();
+
+    const preset = await storage.savePreset(id, {
+      name: 'Glow',
+      values: {},
+      render: { bloom: { enabled: true, strength: 99, radius: 0.4, threshold: 0.7 } },
+    });
+
+    expect(preset.render).toEqual({
+      bloom: { enabled: true, strength: 3, radius: 0.4, threshold: 0.7 },
+    });
+    expect((await storage.read(id)).presets[0].render?.bloom.enabled).toBe(true);
+  });
+
+  it('leaves render off a preset saved without it, rather than storing the defaults', async () => {
+    const id = await seed();
+    await storage.savePreset(id, { name: 'Values only', values: {} });
+
+    // A values-only preset must not carry bloom at all: applying it would
+    // otherwise reset the shader's own render settings to the defaults.
+    expect((await storage.read(id)).presets[0].render).toBeUndefined();
+  });
+
   it('deletes a preset', async () => {
     const id = await seed();
     const preset = await storage.savePreset(id, { name: 'Look', values: {} });

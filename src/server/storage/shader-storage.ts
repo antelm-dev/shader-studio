@@ -665,7 +665,10 @@ export class ShaderStorage {
     }
   }
 
-  async savePreset(id: string, input: { name: unknown; values: unknown }): Promise<Preset> {
+  async savePreset(
+    id: string,
+    input: { name: unknown; values: unknown; render?: unknown },
+  ): Promise<Preset> {
     return this.withLock(id, async () => {
       const shader = await this.read(id);
       const dir = this.shaderDir(id);
@@ -691,6 +694,11 @@ export class ShaderStorage {
         name,
         createdAt: existing?.createdAt ?? new Date().toISOString(),
         values: sanitizeParams(shader.controls, input.values as ShaderParams),
+        // A caller that sends no render settings is saying "values only", not
+        // "the defaults" — so the field stays off the preset entirely.
+        ...(input.render === undefined || input.render === null
+          ? {}
+          : { render: validateRender(input.render) }),
       };
 
       const presets = existing

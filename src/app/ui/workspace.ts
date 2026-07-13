@@ -10,7 +10,7 @@ import { convertShadertoy } from '../rendering/shadertoy-import';
 import { ConfirmDialog, type ConfirmDialogData } from './confirm-dialog';
 import { EditorSettingsDialog } from './editor-settings-dialog';
 import { NewShaderDialog, type NewShaderDialogResult } from './new-shader-dialog';
-import { PromptDialog, type PromptDialogData } from './prompt-dialog';
+import { PromptDialog, type PromptDialogData, type PromptDialogResult } from './prompt-dialog';
 import { RecoveryDialog } from './recovery-dialog';
 import { ShadertoyImportDialog, type ShadertoyImportDialogResult } from './shadertoy-import-dialog';
 import { UnsavedChangesDialog, type UnsavedChoice } from './unsaved-changes-dialog';
@@ -74,8 +74,17 @@ export class Workspace {
     this.dialog.open(EditorSettingsDialog, { width: '720px', maxWidth: '92vw' });
   }
 
-  private prompt(data: PromptDialogData): Promise<string | undefined> {
-    return firstValueFrom(this.dialog.open(PromptDialog, { data }).afterClosed());
+  private promptFor(data: PromptDialogData): Promise<PromptDialogResult | undefined> {
+    return firstValueFrom(
+      this.dialog
+        .open<PromptDialog, PromptDialogData, PromptDialogResult>(PromptDialog, { data })
+        .afterClosed(),
+    );
+  }
+
+  /** The name only — for the prompts that carry no extra option. */
+  private async prompt(data: PromptDialogData): Promise<string | undefined> {
+    return (await this.promptFor(data))?.value;
   }
 
   private confirm(data: ConfirmDialogData): Promise<boolean> {
@@ -160,13 +169,17 @@ export class Workspace {
   // --- Presets ------------------------------------------------------------
 
   async savePreset(): Promise<void> {
-    const name = await this.prompt({
+    const result = await this.promptFor({
       title: 'Save preset',
       label: 'Preset name',
       confirmText: 'Save',
       hint: 'Captures the current parameter values. Reusing a name overwrites it.',
+      option: {
+        label: 'Also capture the render settings',
+        hint: 'Applying the preset then restores bloom too, leaving the shader unsaved.',
+      },
     });
-    if (name) await this.store.savePreset(name);
+    if (result) await this.store.savePreset(result.value, result.checked);
   }
 
   async deletePreset(presetId: string, name: string): Promise<void> {

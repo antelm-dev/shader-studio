@@ -12,6 +12,7 @@ import {
   validateControls,
   validateId,
   validateName,
+  validatePreset,
   validateSource,
 } from './validate';
 
@@ -232,6 +233,38 @@ describe('defaultParams / sanitizeParams', () => {
   it('fills in a missing key with its default', () => {
     expect(sanitizeParams(controls, {})).toEqual(defaultParams(controls));
     expect(sanitizeParams(controls, null)).toEqual(defaultParams(controls));
+  });
+});
+
+describe('validatePreset', () => {
+  it('sanitizes the values against the schema', () => {
+    const result = validatePreset({ name: 'Fast', values: { speed: 99 } }, controls, 'fast');
+
+    expect(result.ok && result.value.values['speed']).toBe(2);
+  });
+
+  it('keeps the render settings when the preset carries some, clamped', () => {
+    const result = validatePreset(
+      {
+        name: 'Glow',
+        values: {},
+        render: { bloom: { enabled: true, strength: 99, radius: 0.4, threshold: 0.7 } },
+      },
+      controls,
+      'glow',
+    );
+
+    expect(result.ok && result.value.render).toEqual({
+      bloom: { enabled: true, strength: 3, radius: 0.4, threshold: 0.7 },
+    });
+  });
+
+  it('leaves render undefined on a preset that has none', () => {
+    // Not "the defaults": a preset predating render capture must not silently
+    // gain the power to reset the shader's bloom when it is applied.
+    const result = validatePreset({ name: 'Plain', values: {} }, controls, 'plain');
+
+    expect(result.ok && 'render' in result.value).toBe(false);
   });
 });
 

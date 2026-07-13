@@ -517,12 +517,23 @@ export class ShaderStore {
 
   // --- Presets ------------------------------------------------------------
 
-  async savePreset(name: string): Promise<void> {
+  /**
+   * Capture the live params under a name. `withRender` also stores the render
+   * settings currently in the draft, which is what makes a preset able to bring
+   * its own bloom back with it.
+   */
+  async savePreset(name: string, withRender = false): Promise<void> {
     const record = this.record();
-    if (!record) return;
+    const draft = this.draft();
+    if (!record || !draft) return;
 
     try {
-      const preset = await this.api.savePreset(record.id, name, this.params());
+      const preset = await this.api.savePreset(
+        record.id,
+        name,
+        this.params(),
+        withRender ? draft.render : undefined,
+      );
       const presets = record.presets.some((entry) => entry.id === preset.id)
         ? record.presets.map((entry) => (entry.id === preset.id ? preset : entry))
         : [...record.presets, preset];
@@ -540,12 +551,17 @@ export class ShaderStore {
    * Apply a preset to the live params. Values are projected onto the *current*
    * schema, so a preset stored against an older set of controls still applies
    * cleanly — anything it does not mention falls back to that control's default.
+   *
+   * A preset that captured render settings also writes them into the draft, and
+   * so can leave the document dirty: bloom is part of the saved shader, not a
+   * live knob, and pretending otherwise would lose the change on the next load.
    */
   applyPreset(presetId: string): void {
     const preset = this.presets().find((entry) => entry.id === presetId);
     if (!preset) return;
 
     this.params.set(sanitizeParams(this.controls(), preset.values));
+    if (preset.render) this.setRender(structuredClone(preset.render));
     this.activePresetId.set(preset.id);
   }
 

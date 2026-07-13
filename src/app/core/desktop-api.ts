@@ -5,6 +5,7 @@ import type {
   ImportMode,
   ImportResult,
   Preset,
+  RenderSettings,
   ShaderParams,
   ShaderRecord,
   ShaderSummary,
@@ -49,8 +50,19 @@ export class DesktopShaderApi extends ShaderApi {
     return this.request(() => window.electron.bridge.shader.remove(id));
   }
 
-  override savePreset(id: string, name: string, values: ShaderParams): Promise<Preset> {
-    return this.request(() => window.electron.bridge.shader.savePreset(id, { name, values }));
+  override savePreset(
+    id: string,
+    name: string,
+    values: ShaderParams,
+    render?: RenderSettings,
+  ): Promise<Preset> {
+    return this.request(() =>
+      window.electron.bridge.shader.savePreset(id, {
+        name,
+        values,
+        ...(render ? { render } : {}),
+      }),
+    );
   }
 
   override deletePreset(id: string, presetId: string): Promise<void> {

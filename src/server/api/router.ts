@@ -114,6 +114,7 @@ export function createApiRouter(storage: ShaderStorage): Router {
       const preset = await storage.savePreset(param(req, 'id'), {
         name: body['name'],
         values: body['values'],
+        render: body['render'],
       });
       res.status(201).json({ preset });
     }),
