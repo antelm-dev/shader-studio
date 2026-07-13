@@ -177,6 +177,12 @@
         <mat-icon>settings</mat-icon>
         <span>Editor appearance…</span>
       </button>
+      @if (desktop.available) {
+      <button mat-menu-item type="button" (click)="workspace.openDesktopVersion()">
+        <mat-icon>info</mat-icon>
+        <span>Version desktop…</span>
+      </button>
+      }
     </mat-menu>
 
     <mat-menu #themeMenu="matMenu">

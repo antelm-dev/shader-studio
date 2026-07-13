@@ -6,10 +6,12 @@ import { createIpcContainer } from 'electron-ipc-module';
 import { ShaderStorage } from '../src/server/storage';
 import { prepare } from './core/bootstrap';
 import { createCustomScheme } from './core/electron';
+import { UpdateController } from './core/updater';
 import { env } from './env';
 import { createFilesIpc } from './ipc/files.ipc';
 import { createMigrationIpc } from './ipc/migration.ipc';
 import { createShaderIpc } from './ipc/shader.ipc';
+import { createUpdateIpc } from './ipc/update.ipc';
 import { createWindowIpc, type CloseController } from './ipc/window.ipc';
 
 const scheme = createCustomScheme(env.scheme, {
@@ -124,11 +126,15 @@ prepare({
     await storage.init();
 
     const ipc = createIpcContainer();
+    const updates = new UpdateController(() => {
+      for (const window of BrowserWindow.getAllWindows()) closeController.approved.add(window);
+    });
     await ipc.loadAll({
       shader: createShaderIpc(storage),
       files: createFilesIpc(),
       migration: createMigrationIpc(storage, migrationPath),
       window: createWindowIpc(closeController),
+      update: createUpdateIpc(updates),
     });
 
     const win = new BrowserWindow({
@@ -246,6 +252,7 @@ prepare({
       win.webContents.on('did-fail-load', () => setTimeout(load, 300));
       load();
     }
+    void updates.check();
   },
 });
 

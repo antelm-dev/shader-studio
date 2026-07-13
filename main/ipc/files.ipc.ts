@@ -26,8 +26,137 @@ async function atomicWrite(path: string, data: string | Uint8Array): Promise<voi
   }
 }
 
+// ---------------------------------------------------------------------------
+// Image sequences
+// ---------------------------------------------------------------------------
+
+/**
+ * An export in progress: a folder the user chose, and the frames written into it
+ * so far.
+ *
+ * A sequence is thousands of files, so it cannot be a save dialog per frame —
+ * but that is exactly the shape a renderer could abuse. So the renderer never
+ * names a file and never sees a path: it opens a session, and from then on it
+ * may only say "here are the bytes of frame *n*". The folder, the file name and
+ * the extension are all decided here, from a stem stripped of everything that
+ * could climb out of the directory the user picked.
+ */
+interface SequenceSession {
+  /** The window that opened it. Another window's frames are not welcome. */
+  readonly sender: number;
+  readonly directory: string;
+  readonly stem: string;
+  readonly padding: number;
+  readonly written: string[];
+}
+
+const sequences = new Map<string, SequenceSession>();
+
+/** No frame of a shader render has any business being this big; a 4K PNG is a few MB. */
+const MAX_FRAME_BYTES = 64 * 1024 * 1024;
+const MAX_SEQUENCE_FRAMES = 100_000;
+
+/** Whatever the shader was called, reduced to something that is only ever a file name. */
+function sanitizeStem(stem: string): string {
+  const cleaned = stem
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^[-.]+/, '')
+    .slice(0, 64);
+  return cleaned || 'shader';
+}
+
 export function createFilesIpc() {
   return defineIpcModule('files', {
+    'begin-sequence': handle(
+      async (
+        event,
+        stem: string,
+        padding: number,
+      ): Promise<DialogResult<{ id: string; directory: string }>> => {
+        const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+        const options: OpenDialogOptions = {
+          title: 'Choose a folder for the image sequence',
+          properties: ['openDirectory', 'createDirectory'],
+        };
+        const picked = owner
+          ? await dialog.showOpenDialog(owner, options)
+          : await dialog.showOpenDialog(options);
+        if (picked.canceled || !picked.filePaths[0]) return { status: 'cancelled' };
+
+        const id = randomBytes(16).toString('hex');
+        sequences.set(id, {
+          sender: event.sender.id,
+          directory: picked.filePaths[0],
+          stem: sanitizeStem(stem),
+          padding: Math.min(Math.max(Math.round(padding) || 4, 4), 9),
+          written: [],
+        });
+        return { status: 'ok', value: { id, directory: picked.filePaths[0] } };
+      },
+    ),
+    'write-frame': handle(
+      async (
+        event,
+        id: string,
+        index: number,
+        bytes: Uint8Array,
+      ): Promise<DialogResult<null>> => {
+        const session = sequences.get(id);
+        if (!session || session.sender !== event.sender.id) {
+          return { status: 'error', message: 'That image sequence is not open' };
+        }
+        if (!Number.isInteger(index) || index < 0 || index >= MAX_SEQUENCE_FRAMES) {
+          return { status: 'error', message: `Frame ${index} is not a frame number` };
+        }
+        if (!(bytes instanceof Uint8Array) || bytes.byteLength > MAX_FRAME_BYTES) {
+          return { status: 'error', message: 'Invalid or oversized frame data' };
+        }
+
+        const name = `${session.stem}-${String(index).padStart(session.padding, '0')}.png`;
+        const path = join(session.directory, name);
+        try {
+          // Not an atomic write: a sequence is thousands of frames, and the
+          // temp-file-then-rename dance would double the I/O for a file whose
+          // half-written state is only ever visible inside a capture the user is
+          // watching a progress bar for. A cancelled capture removes them all.
+          await writeFile(path, bytes);
+          session.written.push(path);
+          return { status: 'ok', value: null };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+    ),
+    'end-sequence': handle(
+      async (
+        event,
+        id: string,
+        cancelled: boolean,
+      ): Promise<DialogResult<{ directory: string; frames: number }>> => {
+        const session = sequences.get(id);
+        if (!session || session.sender !== event.sender.id) {
+          return { status: 'error', message: 'That image sequence is not open' };
+        }
+        sequences.delete(id);
+
+        // A cancelled capture leaves no half-sequence behind: a folder of frames
+        // that stop in the middle is worse than no folder at all, because it
+        // looks like a finished export until you play it.
+        if (cancelled) {
+          await Promise.all(session.written.map((path) => rm(path, { force: true })));
+          return { status: 'cancelled' };
+        }
+
+        return {
+          status: 'ok',
+          value: { directory: session.directory, frames: session.written.length },
+        };
+      },
+    ),
     'open-bundle': handle(
       async (event): Promise<DialogResult<{ name: string; bundle: unknown }>> => {
         const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;

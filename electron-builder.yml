@@ -29,3 +29,8 @@ nsis:
   allowToChangeInstallationDirectory: true
 portable:
   artifactName: ${name}-${version}-portable.${ext}
+publish:
+  provider: github
+  owner: antelm-dev
+  repo: shader-studio
+  releaseType: release

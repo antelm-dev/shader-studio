@@ -44,6 +44,7 @@
     "@angular/platform-server": "^22.0.0",
     "@angular/router": "^22.0.0",
     "@angular/ssr": "^22.0.6",
+    "electron-updater": "6.8.9",
     "express": "^5.1.0",
     "lil-gui": "^0.21.0",
     "monaco-editor": "^0.55.1",

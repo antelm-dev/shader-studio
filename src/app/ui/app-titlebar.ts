@@ -31,6 +31,7 @@ import { Workspace } from './workspace';
           <button type="button" class="menu-trigger" [matMenuTriggerFor]="windowMenu">
             Window
           </button>
+          <button type="button" class="menu-trigger" [matMenuTriggerFor]="helpMenu">Help</button>
         </nav>
       </div>
 
@@ -172,6 +173,13 @@ import { Workspace } from './workspace';
       <button mat-menu-item type="button" (click)="desktop.close()">
         <mat-icon>close</mat-icon>
         <span>Close</span>
+      </button>
+    </mat-menu>
+
+    <mat-menu #helpMenu="matMenu">
+      <button mat-menu-item type="button" (click)="workspace.openDesktopVersion()">
+        <mat-icon>info</mat-icon>
+        <span>Version desktop…</span>
       </button>
     </mat-menu>
   `,

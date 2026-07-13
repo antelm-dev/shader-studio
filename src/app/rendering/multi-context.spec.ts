@@ -3,14 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_RENDER } from '../../shared/model';
 import { GlContextRegistry } from './gl-context-registry';
-import {
-  GlContext,
-  WrongContextError,
-  ownerOf,
-  type GlBackend,
-  type ThreeModule,
-} from './gl-context';
+import { GlContext, WrongContextError, ownerOf, type GlBackend } from './gl-context';
 import { ShaderEngine, type ChannelSource, type ShaderSpec } from './shader-engine';
+import { FakeFrames, fakeBackend, type FakeRenderer, type FakeTexture } from './testing/fake-gl';
 
 /**
  * Two WebGL contexts, side by side, in jsdom — which has no WebGL at all.
@@ -22,165 +17,6 @@ import { ShaderEngine, type ChannelSource, type ShaderSpec } from './shader-engi
  * non-deterministic. So three.js and the renderer come in through the backend
  * seam as fakes that record what was asked of them.
  */
-
-// -----------------------------------------------------------------------------
-// A fake three.js
-// -----------------------------------------------------------------------------
-
-class FakeVector {
-  constructor(
-    public x = 0,
-    public y = 0,
-    public z = 0,
-    public w = 0,
-  ) {}
-  set(x: number, y: number, z = 0, w = 0): this {
-    this.x = x;
-    this.y = y;
-    this.z = z;
-    this.w = w;
-    return this;
-  }
-  copy(other: FakeVector): this {
-    return this.set(other.x, other.y, other.z, other.w);
-  }
-  clone(): FakeVector {
-    return new FakeVector(this.x, this.y, this.z, this.w);
-  }
-  lerp(): this {
-    return this;
-  }
-  subVectors(): this {
-    return this;
-  }
-  divideScalar(): this {
-    return this;
-  }
-  multiplyScalar(): this {
-    return this;
-  }
-}
-
-class FakeDisposable {
-  disposed = false;
-  dispose(): void {
-    this.disposed = true;
-  }
-}
-
-class FakeTexture extends FakeDisposable {
-  needsUpdate = false;
-  wrapS = 0;
-  wrapT = 0;
-  magFilter = 0;
-  minFilter = 0;
-  generateMipmaps = true;
-  flipY = true;
-  constructor(readonly url = '') {
-    super();
-  }
-}
-
-class FakeMaterial extends FakeDisposable {
-  vertexShader: string;
-  fragmentShader: string;
-  uniforms: Record<string, { value: unknown }>;
-  constructor(options: {
-    vertexShader: string;
-    fragmentShader: string;
-    uniforms: Record<string, { value: unknown }>;
-  }) {
-    super();
-    this.vertexShader = options.vertexShader;
-    this.fragmentShader = options.fragmentShader;
-    this.uniforms = options.uniforms;
-  }
-}
-
-class FakeRenderer {
-  readonly debug = { checkShaderErrors: false, onShaderError: null as unknown };
-  disposed = false;
-  draws = 0;
-  private target: unknown = null;
-
-  setPixelRatio(): void {}
-  setSize(): void {}
-  getRenderTarget(): unknown {
-    return this.target;
-  }
-  setRenderTarget(target: unknown): void {
-    this.target = target;
-  }
-  render(): void {
-    this.draws++;
-  }
-  dispose(): void {
-    this.disposed = true;
-  }
-}
-
-const fakeThree = {
-  Scene: class {
-    add(): void {}
-  },
-  OrthographicCamera: class {},
-  Mesh: class {
-    constructor(
-      public geometry: unknown,
-      public material: unknown,
-    ) {}
-  },
-  PlaneGeometry: FakeDisposable,
-  ShaderMaterial: FakeMaterial,
-  WebGLRenderTarget: FakeDisposable,
-  DataTexture: class extends FakeTexture {},
-  TextureLoader: class {
-    load(url: string): FakeTexture {
-      return new FakeTexture(url);
-    }
-  },
-  Vector2: FakeVector,
-  Vector3: FakeVector,
-  Vector4: FakeVector,
-  Color: class {
-    set(): void {}
-  },
-  ColorManagement: { enabled: true },
-  RGBAFormat: 1023,
-  RepeatWrapping: 1000,
-  MirroredRepeatWrapping: 1002,
-  ClampToEdgeWrapping: 1001,
-  NearestFilter: 1003,
-  LinearFilter: 1006,
-};
-
-/** Every fake renderer this backend handed out, in creation order. */
-function fakeBackend(): { backend: GlBackend; renderers: FakeRenderer[] } {
-  const renderers: FakeRenderer[] = [];
-  const backend: GlBackend = {
-    three: fakeThree as unknown as ThreeModule,
-    createRenderer: () => {
-      const renderer = new FakeRenderer();
-      renderers.push(renderer);
-      return renderer as unknown as ReturnType<GlBackend['createRenderer']>;
-    },
-  };
-  return { backend, renderers };
-}
-
-// -----------------------------------------------------------------------------
-// A controllable animation frame
-// -----------------------------------------------------------------------------
-
-let frames = new Map<number, FrameRequestCallback>();
-let nextFrame = 0;
-
-/** Runs exactly one round of whatever the engines have scheduled. */
-function runFrame(): void {
-  const pending = [...frames.values()];
-  frames.clear();
-  for (const callback of pending) callback(performance.now());
-}
 
 // -----------------------------------------------------------------------------
 // Fixtures
@@ -216,6 +52,7 @@ describe('multiple WebGL contexts', () => {
   let registry: GlContextRegistry;
   let renderers: FakeRenderer[];
   let backend: GlBackend;
+  let frames: FakeFrames;
 
   let canvasA: HTMLCanvasElement;
   let canvasB: HTMLCanvasElement;
@@ -224,17 +61,11 @@ describe('multiple WebGL contexts', () => {
   let engineA: ShaderEngine;
   let engineB: ShaderEngine;
 
+  const runFrame = (): void => frames.run();
+
   beforeEach(async () => {
-    frames = new Map();
-    nextFrame = 0;
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-      const id = ++nextFrame;
-      frames.set(id, callback);
-      return id;
-    });
-    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
-      frames.delete(id);
-    });
+    frames = new FakeFrames();
+    frames.install();
 
     ({ backend, renderers } = fakeBackend());
     registry = TestBed.inject(GlContextRegistry);

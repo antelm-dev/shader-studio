@@ -60,6 +60,16 @@ export interface ShaderSpec {
   channels: readonly (ChannelSource | null)[];
 }
 
+/** The live state an offline capture displaces, kept so `endOffline` can put it back. */
+interface OfflineState {
+  time: number;
+  paused: boolean;
+  autoRipples: boolean;
+  /** The drawing buffer the capture owns. Every `resize` during it lands back here. */
+  width: number;
+  height: number;
+}
+
 /** Uniforms the engine supplies to every shader, whether it declares them or not. */
 export const BUILT_IN_UNIFORMS = [
   'iTime',
@@ -113,6 +123,9 @@ export class ShaderEngine {
   private autoRipples = false;
   private nextAutoRipple = 0;
   private resolutionScale = 1;
+
+  /** Set for as long as the clock belongs to a caller rather than to the wall. */
+  private offline: OfflineState | null = null;
 
   private fpsAccumulator = 0;
   private fpsFrames = 0;
@@ -552,12 +565,21 @@ export class ShaderEngine {
     this.bloomPass = null;
   }
 
+  /**
+   * While a capture runs, these three are the live preview's business, not the
+   * capture's — and the preview's settings keep arriving, because the panel that
+   * pushes them has no idea a capture is happening. So they are recorded against
+   * the state `endOffline` will restore rather than applied to a clock, a
+   * randomness and a resolution the capture has taken ownership of.
+   */
   setPaused(paused: boolean): void {
-    this.paused = paused;
+    if (this.offline) this.offline.paused = paused;
+    else this.paused = paused;
   }
 
   setAutoRipples(enabled: boolean): void {
-    this.autoRipples = enabled;
+    if (this.offline) this.offline.autoRipples = enabled;
+    else this.autoRipples = enabled;
   }
 
   setResolutionScale(scale: number): void {
@@ -572,20 +594,150 @@ export class ShaderEngine {
   resize(): void {
     if (this.disposed) return;
 
+    // A capture owns the drawing buffer for its duration. The window can be
+    // dragged, the panel re-laid-out, the ResizeObserver can fire as often as it
+    // likes: every one of them lands back on the capture's size. Routing rather
+    // than ignoring also means anything that legitimately needs a resize while a
+    // capture runs — a composer built the moment bloom is switched on — is sized
+    // for the frames being captured, not for the panel behind them.
+    const offline = this.offline;
+    if (offline) {
+      this.setDrawingBufferSize(offline.width, offline.height, 1);
+      return;
+    }
+
     const width = this.canvas.clientWidth || 1;
     const height = this.canvas.clientHeight || 1;
-    const scale = this.resolutionScale;
 
+    this.setDrawingBufferSize(width, height, this.resolutionScale);
+  }
+
+  /**
+   * Sizes the renderer, the composer and the bloom together, and tells the
+   * shader about it. `iResolution` is in drawing-buffer pixels — the space
+   * `iMouse` and `u_clickData` are in — so it is the *scaled* size that goes in,
+   * never the CSS one.
+   */
+  private setDrawingBufferSize(width: number, height: number, scale: number): void {
     this.renderer.setPixelRatio(scale);
+    // `false`: never touch the CSS size. On screen that keeps the canvas filling
+    // its panel; during a capture it is what lets a 4K buffer sit behind an
+    // 800px canvas without the layout so much as flinching.
     this.renderer.setSize(width, height, false);
 
     this.composer?.setPixelRatio(scale);
     this.composer?.setSize(width, height);
     this.bloomPass?.setSize(width * scale, height * scale);
 
-    // Drawing-buffer pixels: the space iMouse and u_clickData live in.
     const resolution = this.uniforms['iResolution']?.value as THREE.Vector2 | undefined;
     resolution?.set(width * scale, height * scale);
+  }
+
+  // -------------------------------------------------------------------------
+  // Offline capture
+  // -------------------------------------------------------------------------
+
+  /**
+   * The surface the frames land on. Only meaningful between `beginOffline` and
+   * `endOffline`, where its backing store is the capture's size.
+   */
+  get surface(): HTMLCanvasElement {
+    return this.canvas;
+  }
+
+  get capturing(): boolean {
+    return this.offline !== null;
+  }
+
+  /**
+   * Takes the clock away from the wall and hands it to the caller.
+   *
+   * Everything that made the live picture depend on *when* it was drawn is shut
+   * off here: the animation loop (frames now come from `renderAt`, one per
+   * call), the pointer (frozen off-screen, its listeners inert), the ripples the
+   * pointer left behind, and the auto-ripples, which are seeded from
+   * `Math.random()` and so could never be reproduced. What is left is a pure
+   * function from `iTime` to pixels — which is what makes a capture repeatable.
+   *
+   * The drawing buffer is resized to the capture, and the CSS size is untouched,
+   * so the preview keeps its place in the layout while it fills with 4K frames.
+   */
+  beginOffline(width: number, height: number): void {
+    if (this.disposed) throw new Error('This engine has been disposed.');
+    if (this.offline) throw new Error('This engine is already capturing.');
+    if (this.context.status() !== 'live') {
+      throw new Error('The WebGL context is not live, so there is nothing to capture.');
+    }
+
+    cancelAnimationFrame(this.frame);
+
+    this.offline = {
+      time: this.time,
+      paused: this.paused,
+      autoRipples: this.autoRipples,
+      width,
+      height,
+    };
+
+    this.autoRipples = false;
+    this.paused = true;
+
+    this.pointer.set(-1000, -1000);
+    this.pointerVelocity.set(0, 0);
+    this.lastPointer = null;
+    this.mouseUniform?.set(-1000, -1000, 0, 0);
+    const velocity = this.uniforms['iMouseVel']?.value as THREE.Vector2 | undefined;
+    velocity?.set(0, 0);
+    // Ripples carry the timestamp of the click that made them. Left in, they
+    // would fire — or worse, half-fire — somewhere in the middle of the capture.
+    for (const wave of this.clickData) wave.set(0, 0, 0);
+    this.nextWaveIndex = 0;
+
+    // Pixel ratio 1: the capture's size *is* the buffer's size, and the caller
+    // has already folded any supersampling into it.
+    this.resize();
+  }
+
+  /**
+   * Draws one frame at exactly `time`, synchronously.
+   *
+   * The frame is on the canvas when this returns — `preserveDrawingBuffer` is on
+   * (see `GlContext`), so it stays there to be read back rather than being
+   * discarded at the end of the tick.
+   */
+  renderAt(time: number): void {
+    if (!this.offline)
+      throw new Error('renderAt is only valid between beginOffline and endOffline.');
+    if (this.disposed) return;
+
+    this.time = time;
+    const iTime = this.uniforms['iTime'];
+    if (iTime) iTime.value = time;
+
+    this.draw();
+  }
+
+  /** Gives the clock back to the wall, and the canvas back to its panel. */
+  endOffline(): void {
+    const offline = this.offline;
+    if (!offline) return;
+
+    this.offline = null;
+
+    // The preview resumes where it was, not where the capture left off: filming
+    // the shader is not the same as scrubbing it.
+    this.time = offline.time;
+    this.paused = offline.paused;
+    this.autoRipples = offline.autoRipples;
+
+    const iTime = this.uniforms['iTime'];
+    if (iTime) iTime.value = this.time;
+
+    if (this.disposed) return;
+
+    this.resize();
+    this.lastFrameTime = performance.now();
+    this.start();
   }
 
   // -------------------------------------------------------------------------
@@ -612,6 +764,10 @@ export class ShaderEngine {
   }
 
   private readonly onPointerMove = (event: PointerEvent): void => {
+    // A capture is a function of `iTime` alone. A mouse crossing the canvas
+    // while it runs would write itself into the frames.
+    if (this.offline) return;
+
     const position = this.toBufferSpace(event);
     const now = performance.now();
 
@@ -631,6 +787,7 @@ export class ShaderEngine {
   };
 
   private readonly onPointerDown = (event: PointerEvent): void => {
+    if (this.offline) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     const position = this.toBufferSpace(event);
     this.pointer.copy(position);
@@ -639,11 +796,13 @@ export class ShaderEngine {
   };
 
   private readonly onPointerUp = (): void => {
+    if (this.offline) return;
     const mouse = this.mouseUniform;
     if (mouse) mouse.z = 0;
   };
 
   private readonly onPointerLeave = (): void => {
+    if (this.offline) return;
     this.pointer.set(-1000, -1000);
     this.pointerVelocity.set(0, 0);
     this.lastPointer = null;
@@ -668,6 +827,11 @@ export class ShaderEngine {
   // -------------------------------------------------------------------------
 
   private start(): void {
+    // During a capture the frames come from `renderAt`, one per call. A context
+    // restored mid-capture must not quietly hand the clock back to the wall —
+    // `endOffline` is the only thing that starts the loop again.
+    if (this.offline) return;
+
     this.lastFrameTime = performance.now();
     const loop = (): void => {
       if (this.disposed) return;

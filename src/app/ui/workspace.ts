@@ -8,6 +8,7 @@ import { ShaderStore } from '../core/shader-store';
 import { buildFullGlsl } from '../rendering/glsl-export';
 import { convertShadertoy } from '../rendering/shadertoy-import';
 import { ConfirmDialog, type ConfirmDialogData } from './confirm-dialog';
+import { DesktopVersionDialog } from './desktop-version-dialog';
 import { EditorSettingsDialog } from './editor-settings-dialog';
 import { NewShaderDialog, type NewShaderDialogResult } from './new-shader-dialog';
 import { PromptDialog, type PromptDialogData, type PromptDialogResult } from './prompt-dialog';
@@ -72,6 +73,12 @@ export class Workspace {
 
   openEditorSettings(): void {
     this.dialog.open(EditorSettingsDialog, { width: '720px', maxWidth: '92vw' });
+  }
+
+  openDesktopVersion(): void {
+    if (this.desktop.available) {
+      this.dialog.open(DesktopVersionDialog, { width: '480px', maxWidth: '92vw' });
+    }
   }
 
   private promptFor(data: PromptDialogData): Promise<PromptDialogResult | undefined> {

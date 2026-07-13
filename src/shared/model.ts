@@ -88,6 +88,56 @@ export const DEFAULT_BLOOM: BloomSettings = {
 export const DEFAULT_RENDER: RenderSettings = { bloom: { ...DEFAULT_BLOOM } };
 
 // ---------------------------------------------------------------------------
+// Capture
+// ---------------------------------------------------------------------------
+
+/** What a capture is written out as. */
+export type CaptureFormat = 'webm' | 'png';
+
+/**
+ * How a shader is filmed.
+ *
+ * Every field is a *request*: the numbers a user typed, not the numbers the
+ * capture will run at. `planCapture` is what turns one of these into a frame
+ * timetable, and it clamps and rounds along the way — an odd width is not a
+ * width a video encoder will accept, and 0.7 of a frame is not a frame.
+ */
+export interface CaptureSettings {
+  format: CaptureFormat;
+  width: number;
+  height: number;
+  fps: number;
+  /** Seconds of footage in one pass of the loop. */
+  duration: number;
+  /**
+   * How many times the loop is written out. The frames are rendered *once* and
+   * repeated — a loop is the same period played again, not more shader time.
+   */
+  loops: number;
+  /** The `iTime` the first frame is taken at: how far in the shader has settled. */
+  startTime: number;
+  /** Instants averaged into each frame. 1 is no motion blur. */
+  subframes: number;
+  /** Fraction of the frame interval the shutter stays open. Ignored when `subframes` is 1. */
+  shutter: number;
+  /** Render scale. Frames are drawn this much larger, then downsampled — supersampled AA. */
+  supersample: number;
+}
+
+export const DEFAULT_CAPTURE: CaptureSettings = {
+  format: 'webm',
+  width: 1920,
+  height: 1080,
+  fps: 60,
+  duration: 8,
+  loops: 1,
+  startTime: 0,
+  subframes: 1,
+  shutter: 0.5,
+  supersample: 1,
+};
+
+// ---------------------------------------------------------------------------
 // Texture channels (iChannel0…3)
 // ---------------------------------------------------------------------------
 

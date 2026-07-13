@@ -38,7 +38,7 @@ async function packageDesktop() {
 
   const artifacts = await buildInstaller({
     targets: platform.createTarget(target, ...arch),
-    publish: 'never',
+    publish: process.env.ELECTRON_BUILDER_PUBLISH ?? 'never',
   });
 
   for (const artifact of artifacts) {
