@@ -43,6 +43,7 @@ function makeRecord(overrides: Partial<ShaderRecord> = {}): ShaderRecord {
     controls: structuredClone(CONTROLS),
     render: structuredClone(DEFAULT_RENDER),
     channels: structuredClone(DEFAULT_CHANNELS),
+    thumbnail: null,
     fragment: 'void main() { gl_FragColor = vec4(1.0); }',
     vertex: 'void main() { gl_Position = vec4(position, 1.0); }',
     presets: [],

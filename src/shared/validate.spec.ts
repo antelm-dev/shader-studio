@@ -37,6 +37,7 @@ function payload(overrides: Partial<ShaderPayload> = {}): ShaderPayload {
       ...channel,
       data: null,
     })) as unknown as ShaderPayload['channels'],
+    thumbnail: null,
     ...overrides,
   };
 }

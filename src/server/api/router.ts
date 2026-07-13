@@ -28,6 +28,7 @@ import {
   param,
   route,
   TEXTURE_BODY_LIMIT,
+  THUMBNAIL_BODY_LIMIT,
 } from './helpers';
 
 export function createApiRouter(storage: ShaderStorage): Router {
@@ -165,6 +166,37 @@ export function createApiRouter(storage: ShaderStorage): Router {
         .setHeader('Content-Type', mimeFromExt(texture.ext))
         .setHeader('Cache-Control', 'private, max-age=31536000, immutable')
         .send(texture.bytes);
+    }),
+  );
+
+  api.put(
+    '/shaders/:id/thumbnail',
+    express.raw({ type: 'image/*', limit: THUMBNAIL_BODY_LIMIT }),
+    route(async (req, res) => {
+      if (!Buffer.isBuffer(req.body)) {
+        throw new StorageError('invalid', 'Expected a raw image body with an image/* Content-Type');
+      }
+      const shader = await storage.setThumbnail(param(req, 'id'), {
+        ext: extFromContentType(req.headers['content-type']),
+        bytes: req.body,
+      });
+      res.json({ shader });
+    }),
+  );
+
+  api.get(
+    '/shaders/:id/thumbnail',
+    route(async (req, res) => {
+      const thumbnail = await storage.readThumbnail(param(req, 'id'));
+      if (!thumbnail) {
+        res.status(404).end();
+        return;
+      }
+      // Safe to cache hard: the client always asks for `?v=<thumbnail.updatedAt>`.
+      res
+        .setHeader('Content-Type', mimeFromExt(thumbnail.ext))
+        .setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+        .send(thumbnail.bytes);
     }),
   );
 

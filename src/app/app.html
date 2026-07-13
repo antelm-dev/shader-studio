@@ -14,10 +14,13 @@
   (change)="onFilePicked($event)"
 />
 
-<div class="shell" [class.fullscreen]="desktop.fullscreen()">
+<div class="shell">
+  <!-- Fullscreen only takes away the window chrome: the OS frame is gone, so the
+       title bar that stands in for it goes with it. The app's own surfaces stay. -->
   @if (desktop.available && !desktop.fullscreen()) {
   <app-titlebar />
-  } @if (!desktop.fullscreen()) {
+  }
+
   <mat-toolbar class="toolbar">
     <button
       matIconButton
@@ -80,26 +83,12 @@
     </div>
 
     <mat-menu #shaderMenu="matMenu">
-      <button mat-menu-item type="button" (click)="workspace.renameShader(shader.id, shader.name)">
-        <mat-icon>edit</mat-icon>
-        <span>Rename shader…</span>
+      @for (item of documentCommands; track item.id) {
+      <button mat-menu-item type="button" (click)="item.action()">
+        <mat-icon>{{ item.icon() }}</mat-icon>
+        <span>{{ item.label() }}</span>
       </button>
-      <button
-        mat-menu-item
-        type="button"
-        (click)="workspace.duplicateShader(shader.id, shader.name)"
-      >
-        <mat-icon>content_copy</mat-icon>
-        <span>Duplicate shader</span>
-      </button>
-      <button mat-menu-item type="button" (click)="exportCurrent()">
-        <mat-icon>download</mat-icon>
-        <span>Export shader…</span>
-      </button>
-      <button mat-menu-item type="button" (click)="workspace.deleteShader(shader.id, shader.name)">
-        <mat-icon>delete</mat-icon>
-        <span>Delete shader…</span>
-      </button>
+      }
     </mat-menu>
     }
 
@@ -119,20 +108,22 @@
          rather than a menu you scan. -->
     <mat-menu #moreMenu="matMenu">
       <h3 class="menu-section">View</h3>
-      <button mat-menu-item type="button" (click)="toggle('guiVisible')">
-        <mat-icon>tune</mat-icon>
-        <span>{{ preferences.value().guiVisible ? 'Hide inspector' : 'Show inspector' }}</span>
-        <span class="menu-hint">H</span>
+      @for (item of viewCommands; track item.id) {
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="item.disabled?.() ?? false"
+        (click)="item.action()"
+      >
+        <mat-icon>{{ item.icon() }}</mat-icon>
+        <span>{{ item.label() }}</span>
+        @if (item.shortcut) {
+        <span class="menu-hint">{{ item.shortcut }}</span>
+        }
       </button>
-      <button mat-menu-item type="button" (click)="toggle('editorOpen')">
-        <mat-icon>code</mat-icon>
-        <span>{{ preferences.value().editorOpen ? 'Hide editor' : 'Show editor' }}</span>
-      </button>
-      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="captureImage()">
-        <mat-icon>photo_camera</mat-icon>
-        <span>Capture image</span>
-        <span class="menu-hint">S</span>
-      </button>
+      }
+      <!-- The output window is the desktop's alone, and it is a toggle over a
+           window that may not exist — it does not reduce to a command. -->
       @if (desktop.available) {
       <button
         mat-menu-item
@@ -148,42 +139,32 @@
       <mat-divider />
 
       <h3 class="menu-section">Shader</h3>
-      <button mat-menu-item type="button" (click)="workspace.createShader()">
-        <mat-icon>add</mat-icon>
-        <span>New shader…</span>
+      @for (item of shaderCommands; track item.id) {
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="item.disabled?.() ?? false"
+        (click)="item.action()"
+      >
+        <mat-icon>{{ item.icon() }}</mat-icon>
+        <span>{{ item.label() }}</span>
       </button>
-      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="renameCurrent()">
-        <mat-icon>edit</mat-icon>
-        <span>Rename shader…</span>
-      </button>
-      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="duplicateCurrent()">
-        <mat-icon>content_copy</mat-icon>
-        <span>Duplicate shader</span>
-      </button>
+      }
 
       <mat-divider />
 
       <h3 class="menu-section">Import &amp; export</h3>
-      <button mat-menu-item type="button" (click)="pickFile('rename')">
-        <mat-icon>upload</mat-icon>
-        <span>Import shader…</span>
+      @for (item of importExportCommands; track item.id) {
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="item.disabled?.() ?? false"
+        (click)="item.action()"
+      >
+        <mat-icon>{{ item.icon() }}</mat-icon>
+        <span>{{ item.label() }}</span>
       </button>
-      <button mat-menu-item type="button" (click)="pickFile('overwrite')">
-        <mat-icon>upload_file</mat-icon>
-        <span>Import and replace…</span>
-      </button>
-      <button mat-menu-item type="button" (click)="workspace.importShadertoy()">
-        <mat-icon>public</mat-icon>
-        <span>Import from Shadertoy…</span>
-      </button>
-      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="exportCurrent()">
-        <mat-icon>download</mat-icon>
-        <span>Export shader…</span>
-      </button>
-      <button mat-menu-item type="button" (click)="workspace.exportAll()">
-        <mat-icon>library_books</mat-icon>
-        <span>Export all shaders…</span>
-      </button>
+      }
 
       <mat-divider />
 
@@ -238,7 +219,6 @@
     <mat-progress-bar class="loading" mode="indeterminate" aria-label="Working" />
     }
   </mat-toolbar>
-  }
 
   <mat-sidenav-container class="body" [hasBackdrop]="isHandset()">
     <mat-sidenav
@@ -287,7 +267,7 @@
         (preview)="liveInspectorWidth.set($event)"
         (commit)="commitInspectorWidth($event)"
       />
-      } @else if (!desktop.fullscreen()) {
+      } @else {
       <!-- Collapsing the inspector has to leave something behind to open it
            again, or the only way back is a keyboard shortcut and a menu item. -->
       <button
@@ -295,11 +275,11 @@
         class="inspector-rail"
         matTooltip="Show the inspector (H)"
         aria-label="Show the inspector"
-        (click)="toggle('guiVisible')"
+        (click)="commands.toggle('guiVisible')"
       >
         <mat-icon>tune</mat-icon>
       </button>
-      } @if (preferences.value().editorOpen && !desktop.fullscreen()) {
+      } @if (preferences.value().editorOpen) {
       <app-editor-shell class="editor" />
       }
     </mat-sidenav-content>

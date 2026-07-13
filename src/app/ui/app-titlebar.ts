@@ -10,11 +10,10 @@ import {
   Preferences,
   colorSchemeIcon,
   type ColorScheme,
-  type WorkspacePreferences,
 } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
-import { RendererHandle } from '../rendering/renderer-handle';
 import { DocumentStatus } from './document-status';
+import { MenuCommands, type MenuCommand } from './menu-commands';
 import { Workspace } from './workspace';
 
 @Component({
@@ -75,28 +74,27 @@ import { Workspace } from './workspace';
     </header>
 
     <mat-menu #fileMenu="matMenu">
-      <button mat-menu-item type="button" (click)="workspace.createShader()">
-        <mat-icon>add</mat-icon>
-        <span>New shader…</span>
-      </button>
+      @for (item of newCommands; track item.id) {
+        <button mat-menu-item type="button" (click)="item.action()">
+          <mat-icon>{{ item.icon() }}</mat-icon>
+          <span>{{ item.label() }}</span>
+        </button>
+      }
       <mat-divider />
-      <button mat-menu-item type="button" (click)="workspace.importDesktop('rename')">
-        <mat-icon>upload</mat-icon>
-        <span>Import…</span>
-      </button>
-      <button mat-menu-item type="button" (click)="workspace.importDesktop('overwrite')">
-        <mat-icon>upload_file</mat-icon>
-        <span>Import and replace…</span>
-      </button>
-      <button mat-menu-item type="button" [disabled]="!store.record()" (click)="exportCurrent()">
-        <mat-icon>download</mat-icon>
-        <span>Export shader…</span>
-      </button>
-      <button mat-menu-item type="button" (click)="workspace.exportAll()">
-        <mat-icon>library_books</mat-icon>
-        <span>Export all shaders…</span>
-      </button>
+      @for (item of importExportCommands; track item.id) {
+        <button
+          mat-menu-item
+          type="button"
+          [disabled]="item.disabled?.() ?? false"
+          (click)="item.action()"
+        >
+          <mat-icon>{{ item.icon() }}</mat-icon>
+          <span>{{ item.label() }}</span>
+        </button>
+      }
       <mat-divider />
+      <!-- Save carries the tooltip that explains why it is dimmed, so it keeps
+           its own markup — see the toolbar's save button. -->
       <button
         mat-menu-item
         type="button"
@@ -116,19 +114,15 @@ import { Workspace } from './workspace';
     </mat-menu>
 
     <mat-menu #viewMenu="matMenu">
-      <button mat-menu-item type="button" (click)="toggle('browserOpen')">
-        <mat-icon>view_sidebar</mat-icon>
-        <span>{{ preferences.value().browserOpen ? 'Hide browser' : 'Show browser' }}</span>
-      </button>
-      <button mat-menu-item type="button" (click)="toggle('guiVisible')">
-        <mat-icon>tune</mat-icon>
-        <span>{{ preferences.value().guiVisible ? 'Hide controls' : 'Show controls' }}</span>
-        <span class="menu-hint">H</span>
-      </button>
-      <button mat-menu-item type="button" (click)="toggle('editorOpen')">
-        <mat-icon>code</mat-icon>
-        <span>{{ preferences.value().editorOpen ? 'Hide editor' : 'Show editor' }}</span>
-      </button>
+      @for (item of viewCommands; track item.id) {
+        <button mat-menu-item type="button" (click)="item.action()">
+          <mat-icon>{{ item.icon() }}</mat-icon>
+          <span>{{ item.label() }}</span>
+          @if (item.shortcut) {
+            <span class="menu-hint">{{ item.shortcut }}</span>
+          }
+        </button>
+      }
       <mat-divider />
       <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
         <mat-icon>{{ themeIcon() }}</mat-icon>
@@ -139,16 +133,15 @@ import { Workspace } from './workspace';
         <span>Editor appearance…</span>
       </button>
       <mat-divider />
-      <button mat-menu-item type="button" (click)="takeScreenshot()">
-        <mat-icon>photo_camera</mat-icon>
-        <span>Screenshot</span>
-        <span class="menu-hint">S</span>
-      </button>
-      <button mat-menu-item type="button" (click)="desktop.toggleFullscreen()">
-        <mat-icon>{{ desktop.fullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
-        <span>{{ desktop.fullscreen() ? 'Exit fullscreen' : 'Enter fullscreen' }}</span>
-        <span class="menu-hint">F11</span>
-      </button>
+      @for (item of captureCommands; track item.id) {
+        <button mat-menu-item type="button" (click)="item.action()">
+          <mat-icon>{{ item.icon() }}</mat-icon>
+          <span>{{ item.label() }}</span>
+          @if (item.shortcut) {
+            <span class="menu-hint">{{ item.shortcut }}</span>
+          }
+        </button>
+      }
     </mat-menu>
 
     <mat-menu #themeMenu="matMenu">
@@ -169,14 +162,12 @@ import { Workspace } from './workspace';
     </mat-menu>
 
     <mat-menu #windowMenu="matMenu">
-      <button mat-menu-item type="button" (click)="desktop.minimize()">
-        <mat-icon>remove</mat-icon>
-        <span>Minimize</span>
-      </button>
-      <button mat-menu-item type="button" (click)="desktop.toggleMaximize()">
-        <mat-icon>{{ desktop.maximized() ? 'filter_none' : 'crop_square' }}</mat-icon>
-        <span>{{ desktop.maximized() ? 'Restore' : 'Maximize' }}</span>
-      </button>
+      @for (item of windowCommands; track item.id) {
+        <button mat-menu-item type="button" (click)="item.action()">
+          <mat-icon>{{ item.icon() }}</mat-icon>
+          <span>{{ item.label() }}</span>
+        </button>
+      }
       <mat-divider />
       <button mat-menu-item type="button" (click)="desktop.close()">
         <mat-icon>close</mat-icon>
@@ -318,30 +309,78 @@ export class AppTitlebar {
   protected readonly workspace = inject(Workspace);
   protected readonly preferences = inject(Preferences);
   protected readonly status = inject(DocumentStatus);
-  private readonly renderer = inject(RendererHandle);
+  private readonly commands = inject(MenuCommands);
 
   protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
   protected readonly themeIcon = computed(() =>
     colorSchemeIcon(this.preferences.value().colorScheme),
   );
 
-  protected toggle(
-    key: keyof Pick<WorkspacePreferences, 'browserOpen' | 'guiVisible' | 'editorOpen'>,
-  ): void {
-    this.preferences.patch({ [key]: !this.preferences.value()[key] });
-  }
+  // --- Menus --------------------------------------------------------------
+  // One group of one menu each — the groups the dividers separate. Save, Quit,
+  // Close and the Theme submenu are none of them plain rows, and stay written
+  // out above.
+
+  protected readonly newCommands: readonly MenuCommand[] = [this.commands.newShader];
+
+  protected readonly importExportCommands: readonly MenuCommand[] = [
+    this.commands.import('rename', 'Import…'),
+    this.commands.import('overwrite', 'Import and replace…'),
+    this.commands.exportShader,
+    this.commands.exportAll,
+  ];
+
+  protected readonly viewCommands: readonly MenuCommand[] = [
+    {
+      id: 'toggle-browser',
+      icon: () => 'view_sidebar',
+      label: () => (this.preferences.value().browserOpen ? 'Hide browser' : 'Show browser'),
+      action: () => this.commands.toggle('browserOpen'),
+    },
+    {
+      id: 'toggle-controls',
+      icon: () => 'tune',
+      label: () => (this.preferences.value().guiVisible ? 'Hide controls' : 'Show controls'),
+      shortcut: 'H',
+      action: () => this.commands.toggle('guiVisible'),
+    },
+    this.commands.toggleEditor,
+  ];
+
+  protected readonly captureCommands: readonly MenuCommand[] = [
+    {
+      id: 'screenshot',
+      icon: () => 'photo_camera',
+      label: () => 'Screenshot',
+      shortcut: 'S',
+      action: () => this.commands.captureImage(),
+    },
+    {
+      id: 'toggle-fullscreen',
+      icon: () => (this.desktop.fullscreen() ? 'fullscreen_exit' : 'fullscreen'),
+      label: () => (this.desktop.fullscreen() ? 'Exit fullscreen' : 'Enter fullscreen'),
+      shortcut: 'F11',
+      action: () => this.desktop.toggleFullscreen(),
+    },
+  ];
+
+  protected readonly windowCommands: readonly MenuCommand[] = [
+    {
+      id: 'minimize',
+      icon: () => 'remove',
+      label: () => 'Minimize',
+      action: () => this.desktop.minimize(),
+    },
+    {
+      id: 'maximize',
+      icon: () => (this.desktop.maximized() ? 'filter_none' : 'crop_square'),
+      label: () => (this.desktop.maximized() ? 'Restore' : 'Maximize'),
+      action: () => this.desktop.toggleMaximize(),
+    },
+  ];
 
   protected setColorScheme(colorScheme: ColorScheme): void {
     this.preferences.patch({ colorScheme });
-  }
-
-  protected exportCurrent(): void {
-    const record = this.store.record();
-    if (record) void this.workspace.exportShader(record.id, record.name);
-  }
-
-  protected takeScreenshot(): void {
-    void this.renderer.screenshot(this.store.record()?.id ?? 'shader');
   }
 
   protected onTitlebarDblClick(event: MouseEvent): void {

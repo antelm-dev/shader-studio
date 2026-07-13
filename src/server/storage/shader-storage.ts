@@ -11,6 +11,7 @@
  *         fragment.glsl        the fragment shader source
  *         vertex.glsl          the vertex shader source
  *         presets.json         { "presets": [ ... ] }
+ *         thumbnail.<ext>      the preview the client captured on the last save
  *
  * The id is both the primary key and the directory name, which is why it is
  * validated (`validateId`) before it is ever joined onto a path, and why the
@@ -46,6 +47,8 @@ import {
   type TextureChannelPayloads,
   type TextureChannels,
   type TextureChannelSettingsPatch,
+  type ThumbnailMeta,
+  type ThumbnailPayload,
 } from '../../shared/model';
 import {
   LIMITS,
@@ -62,6 +65,7 @@ import {
   validatePreset,
   validateRender,
   validateSource,
+  validateThumbnailMeta,
 } from '../../shared/validate';
 import { expect, StorageError } from './storage-error';
 import { DEFAULT_VERTEX, TEMPLATE_CONTROLS, TEMPLATE_FRAGMENT } from './templates';
@@ -72,6 +76,7 @@ const FRAGMENT_FILE = 'fragment.glsl';
 const VERTEX_FILE = 'vertex.glsl';
 const PRESETS_FILE = 'presets.json';
 const TEXTURES_DIR = 'textures';
+const THUMBNAIL_BASENAME = 'thumbnail';
 const SEED_MARKER = '.seeded';
 
 const CHANNEL_INDICES = [0, 1, 2, 3] as const;
@@ -144,20 +149,33 @@ export class ShaderStorage {
     return path.join(this.texturesDir(dir), `${channel}.${ext}`);
   }
 
-  /** Removes whatever file currently occupies a channel slot, regardless of its extension. */
-  private async removeTextureFile(dir: string, channel: ChannelIndex): Promise<void> {
+  private thumbnailFile(dir: string, ext: string): string {
+    return path.join(dir, `${THUMBNAIL_BASENAME}.${ext}`);
+  }
+
+  /**
+   * Removes every `<basename>.*` in a directory. An image slot — a channel, or
+   * the thumbnail — keeps its name and changes its extension when the format
+   * changes, so replacing one means clearing whatever is there under any
+   * extension, not just the one we are about to write.
+   */
+  private async removeSlotFiles(dir: string, basename: string): Promise<void> {
     let entries;
     try {
-      entries = await fs.readdir(this.texturesDir(dir));
+      entries = await fs.readdir(dir);
     } catch {
       return;
     }
-    const prefix = `${channel}.`;
+    const prefix = `${basename}.`;
     await Promise.all(
       entries
         .filter((entry) => entry.startsWith(prefix))
-        .map((entry) => fs.rm(path.join(this.texturesDir(dir), entry), { force: true })),
+        .map((entry) => fs.rm(path.join(dir, entry), { force: true })),
     );
+  }
+
+  private removeTextureFile(dir: string, channel: ChannelIndex): Promise<void> {
+    return this.removeSlotFiles(this.texturesDir(dir), String(channel));
   }
 
   private async copyTextures(
@@ -281,6 +299,7 @@ export class ShaderStorage {
       controls,
       render: validateRender(record['render']),
       channels: validateChannels(record['channels']),
+      thumbnail: validateThumbnailMeta(record['thumbnail']),
     };
   }
 
@@ -323,6 +342,7 @@ export class ShaderStorage {
       controls: meta.controls,
       render: meta.render,
       channels: meta.channels,
+      thumbnail: meta.thumbnail,
     };
 
     await this.writeFileAtomic(
@@ -358,6 +378,10 @@ export class ShaderStorage {
       flipY: channel.flipY,
     })) as unknown as TextureChannels;
 
+    const thumbnail: ThumbnailMeta | null = payload.thumbnail
+      ? { ext: payload.thumbnail.ext, updatedAt: payload.thumbnail.updatedAt }
+      : null;
+
     const meta: ShaderMeta = {
       id: payload.id,
       name: payload.name,
@@ -368,6 +392,7 @@ export class ShaderStorage {
       controls: payload.controls,
       render: payload.render,
       channels,
+      thumbnail,
     };
 
     const textureWrites = CHANNEL_INDICES.map(async (channel) => {
@@ -385,6 +410,12 @@ export class ShaderStorage {
       this.writeFileAtomic(path.join(dir, VERTEX_FILE), payload.vertex),
       this.writePresets(dir, payload.presets),
       ...textureWrites,
+      payload.thumbnail
+        ? this.writeFileAtomic(
+            this.thumbnailFile(dir, payload.thumbnail.ext),
+            Buffer.from(payload.thumbnail.data, 'base64'),
+          )
+        : Promise.resolve(),
     ]);
 
     return {
@@ -435,6 +466,9 @@ export class ShaderStorage {
           ...channel,
           data: null,
         })) as unknown as TextureChannelPayloads,
+        // A brand-new shader has never been rendered, so there is nothing to
+        // preview yet. Its first save captures one.
+        thumbnail: null,
       }),
     );
   }
@@ -547,12 +581,17 @@ export class ShaderStorage {
     );
     const copyId = uniqueId(slugify(copyName), await this.listIds());
 
+    const thumbnail = await this.readThumbnailPayload(source);
+
     return this.withLock(copyId, async () => {
       const record = await this.writeAll({
         ...toPayload(source),
         id: copyId,
         name: copyName,
         presets: source.presets.map((preset) => ({ ...preset })),
+        // The copy is pixel-for-pixel the same shader, so it inherits the
+        // original's preview rather than looking blank until its first save.
+        thumbnail,
       });
       // `toPayload` never touches disk, so its channels carry no image bytes
       // (`data` is always `null`) — copy the actual files across ourselves.
@@ -665,6 +704,77 @@ export class ShaderStorage {
     }
   }
 
+  // --- Thumbnail -----------------------------------------------------------
+
+  /**
+   * Stores the preview the client captured from the renderer.
+   *
+   * This deliberately leaves `updatedAt` alone: a thumbnail is a picture *of*
+   * the document, not a change *to* it, and bumping it would reorder a
+   * "recently modified" listing every time a preview was refreshed.
+   */
+  async setThumbnail(id: string, input: { ext: string; bytes: Buffer }): Promise<ShaderRecord> {
+    const ext = input.ext.toLowerCase();
+    if (!TEXTURE_EXTENSIONS.has(ext)) {
+      throw new StorageError('invalid', `Unsupported image type ".${input.ext}"`);
+    }
+    if (!Buffer.isBuffer(input.bytes) || input.bytes.byteLength === 0) {
+      throw new StorageError('invalid', 'Thumbnail data is empty');
+    }
+    if (input.bytes.byteLength > LIMITS.thumbnailBytes) {
+      throw new StorageError(
+        'invalid',
+        `Thumbnail must be at most ${Math.round(LIMITS.thumbnailBytes / 1024)} KB`,
+      );
+    }
+
+    return this.withLock(id, async () => {
+      const current = await this.read(id);
+      const dir = this.shaderDir(id);
+
+      await this.removeSlotFiles(dir, THUMBNAIL_BASENAME);
+      await this.writeFileAtomic(this.thumbnailFile(dir, ext), input.bytes);
+
+      const meta: ShaderMeta = {
+        ...current,
+        thumbnail: { ext, updatedAt: new Date().toISOString() },
+      };
+      await this.writeMeta(dir, meta);
+      return {
+        ...meta,
+        fragment: current.fragment,
+        vertex: current.vertex,
+        presets: current.presets,
+      };
+    });
+  }
+
+  /** Reads the preview's raw image bytes back, for serving to the client. */
+  async readThumbnail(id: string): Promise<{ bytes: Buffer; ext: string } | null> {
+    const record = await this.read(id);
+    if (!record.thumbnail) return null;
+
+    const { ext } = record.thumbnail;
+    try {
+      const bytes = await fs.readFile(this.thumbnailFile(this.shaderDir(id), ext));
+      return { bytes, ext };
+    } catch {
+      return null;
+    }
+  }
+
+  /** The preview as a bundle carries it. `null` when the shader has none, or its file is gone. */
+  private async readThumbnailPayload(record: ShaderRecord): Promise<ThumbnailPayload | null> {
+    if (!record.thumbnail) return null;
+
+    const thumbnail = await this.readThumbnail(record.id);
+    if (!thumbnail) {
+      console.warn(`[storage] thumbnail of "${record.id}" is missing on disk`);
+      return null;
+    }
+    return { ...record.thumbnail, data: thumbnail.bytes.toString('base64') };
+  }
+
   async savePreset(
     id: string,
     input: { name: unknown; values: unknown; render?: unknown },
@@ -734,7 +844,8 @@ export class ShaderStorage {
 
   /** Embeds each assigned channel's image as base64 — this is what makes the bundle portable. */
   async exportOne(id: string): Promise<ShaderPayload> {
-    const payload = toPayload(await this.read(id));
+    const record = await this.read(id);
+    const payload = toPayload(record);
     const dir = this.shaderDir(id);
 
     const channels = await Promise.all(
@@ -751,7 +862,11 @@ export class ShaderStorage {
       }),
     );
 
-    return { ...payload, channels: channels as unknown as TextureChannelPayloads };
+    return {
+      ...payload,
+      channels: channels as unknown as TextureChannelPayloads,
+      thumbnail: await this.readThumbnailPayload(record),
+    };
   }
 
   async exportAll(): Promise<ShaderPayload[]> {

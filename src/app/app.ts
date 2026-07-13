@@ -35,17 +35,16 @@ import {
   Preferences,
   colorSchemeIcon,
   type ColorScheme,
-  type WorkspacePreferences,
 } from './core/preferences';
 import { DesktopPlatform } from './core/desktop-platform';
 import { ShaderStore } from './core/shader-store';
 import { OutputSync } from './core/output-sync';
-import { RendererHandle } from './rendering/renderer-handle';
 import { ShaderCanvas } from './rendering/shader-canvas';
 import { EditorShell } from './ui/editor-shell';
 import { AppTitlebar } from './ui/app-titlebar';
 import { DocumentStatus } from './ui/document-status';
 import { InspectorPanel } from './ui/inspector-panel';
+import { MenuCommands, type MenuCommand } from './ui/menu-commands';
 import { ResizeHandle } from './ui/resize-handle';
 import { ShaderBrowser } from './ui/shader-browser';
 import { Workspace } from './ui/workspace';
@@ -79,10 +78,10 @@ export class App {
   protected readonly workspace = inject(Workspace);
   protected readonly desktop = inject(DesktopPlatform);
   protected readonly status = inject(DocumentStatus);
+  protected readonly commands = inject(MenuCommands);
   protected readonly outputMode =
     typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/output';
 
-  private readonly renderer = inject(RendererHandle);
   private readonly snackBar = inject(MatSnackBar);
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
   private readonly router = inject(Router);
@@ -106,19 +105,72 @@ export class App {
    */
   private readonly handsetDrawerOpen = signal(false);
 
-  protected readonly drawerOpen = computed(() => {
-    if (this.desktop.fullscreen()) return false;
-    return this.isHandset() ? this.handsetDrawerOpen() : this.preferences.value().browserOpen;
-  });
+  protected readonly drawerOpen = computed(() =>
+    this.isHandset() ? this.handsetDrawerOpen() : this.preferences.value().browserOpen,
+  );
 
   protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
   protected readonly themeIcon = computed(() =>
     colorSchemeIcon(this.preferences.value().colorScheme),
   );
 
-  protected readonly inspectorOpen = computed(
-    () => this.preferences.value().guiVisible && !this.desktop.fullscreen(),
-  );
+  protected readonly inspectorOpen = computed(() => this.preferences.value().guiVisible);
+
+  // --- Menus --------------------------------------------------------------
+  // One section of the "More actions" menu each. The items that are not plain
+  // icon-label-verb rows — the Theme submenu, the desktop-only output window —
+  // stay written out in the template, where their exceptions are visible.
+
+  protected readonly viewCommands: readonly MenuCommand[] = [
+    {
+      id: 'toggle-inspector',
+      icon: () => 'tune',
+      label: () => (this.preferences.value().guiVisible ? 'Hide inspector' : 'Show inspector'),
+      shortcut: 'H',
+      action: () => this.commands.toggle('guiVisible'),
+    },
+    this.commands.toggleEditor,
+    {
+      id: 'capture-image',
+      icon: () => 'photo_camera',
+      label: () => 'Capture image',
+      disabled: () => !this.store.record(),
+      shortcut: 'S',
+      action: () => this.commands.captureImage(),
+    },
+  ];
+
+  protected readonly shaderCommands: readonly MenuCommand[] = [
+    this.commands.newShader,
+    this.commands.renameShader,
+    this.commands.duplicateShader,
+  ];
+
+  protected readonly importExportCommands: readonly MenuCommand[] = [
+    this.commands.import('rename', 'Import shader…'),
+    this.commands.import('overwrite', 'Import and replace…'),
+    {
+      id: 'import-shadertoy',
+      icon: () => 'public',
+      label: () => 'Import from Shadertoy…',
+      action: () => void this.workspace.importShadertoy(),
+    },
+    this.commands.exportShader,
+    this.commands.exportAll,
+  ];
+
+  /** The context menu on the document title. It only opens over a shader. */
+  protected readonly documentCommands: readonly MenuCommand[] = [
+    this.commands.renameShader,
+    this.commands.duplicateShader,
+    this.commands.exportShader,
+    {
+      id: 'delete-shader',
+      icon: () => 'delete',
+      label: () => 'Delete shader…',
+      action: () => this.commands.deleteCurrent(),
+    },
+  ];
 
   // --- Panel widths -------------------------------------------------------
 
@@ -146,6 +198,9 @@ export class App {
   constructor() {
     if (this.outputMode) this.outputSync.startOutput();
     else this.outputSync.startController();
+
+    // The hidden input the browser imports go through is in this template.
+    if (!this.outputMode) this.commands.useFilePicker((mode) => this.pickFile(mode));
     /**
      * A side drawer offsets the content with a margin that Material measures for
      * itself — on open, on close, and on a viewport change, but *not* when the
@@ -263,11 +318,6 @@ export class App {
     }
   }
 
-  protected toggle(key: 'editorOpen' | 'guiVisible'): void {
-    const patch = { [key]: !this.preferences.value()[key] } as Partial<WorkspacePreferences>;
-    this.preferences.patch(patch);
-  }
-
   protected commitBrowserWidth(width: number): void {
     this.liveBrowserWidth.set(null);
     this.preferences.patch({ browserWidth: width });
@@ -298,11 +348,8 @@ export class App {
     }
   }
 
-  protected pickFile(mode: ImportMode): void {
-    if (this.desktop.available) {
-      void this.workspace.importDesktop(mode);
-      return;
-    }
+  /** The browser half of an import: the desktop opens its own dialog instead. */
+  private pickFile(mode: ImportMode): void {
     this.importMode.set(mode);
     const input = this.fileInput().nativeElement;
     // Reset first, so picking the same file twice still fires a change event.
@@ -313,25 +360,6 @@ export class App {
   protected async onFilePicked(event: Event): Promise<void> {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (file) await this.workspace.importFile(file, this.importMode());
-  }
-
-  protected exportCurrent(): void {
-    const record = this.store.record();
-    if (record) void this.workspace.exportShader(record.id, record.name);
-  }
-
-  protected renameCurrent(): void {
-    const record = this.store.record();
-    if (record) void this.workspace.renameShader(record.id, record.name);
-  }
-
-  protected duplicateCurrent(): void {
-    const record = this.store.record();
-    if (record) void this.workspace.duplicateShader(record.id, record.name);
-  }
-
-  protected captureImage(): void {
-    void this.renderer.screenshot(this.store.record()?.id ?? 'shader');
   }
 
   /** Opening the editor is what an error badge is *for*. */
@@ -368,10 +396,10 @@ export class App {
         this.preferences.patch({ paused: !this.preferences.value().paused });
         break;
       case 'h':
-        this.toggle('guiVisible');
+        this.commands.toggle('guiVisible');
         break;
       case 's':
-        void this.renderer.screenshot(this.store.record()?.id ?? 'shader');
+        this.commands.captureImage();
         break;
       default:
         break;

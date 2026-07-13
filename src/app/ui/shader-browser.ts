@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,7 +15,9 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
+import type { ThumbnailMeta } from '../../shared/model';
 import { ShaderStore } from '../core/shader-store';
+import { ThumbnailAssets } from '../core/thumbnail-assets';
 import { Workspace } from './workspace';
 
 @Component({
@@ -72,6 +81,14 @@ import { Workspace } from './workspace';
             [matContextMenuTriggerFor]="rowMenu"
             [matContextMenuTriggerData]="{ shader }"
           >
+            @let preview = previews()[shader.id];
+            @if (preview) {
+              <img matListItemAvatar class="row-preview" [src]="preview" alt="" />
+            } @else {
+              <span matListItemAvatar class="row-preview row-preview-empty" aria-hidden="true">
+                <mat-icon>image</mat-icon>
+              </span>
+            }
             <span matListItemTitle class="row-title">{{ shader.name }}</span>
             <span matListItemLine class="row-meta">
               {{ shader.controlCount }} control{{ shader.controlCount === 1 ? '' : 's' }} ·
@@ -154,6 +171,35 @@ import { Workspace } from './workspace';
     .shader-row {
       cursor: context-menu;
       transition: background-color 120ms ease;
+      /* Reserve the width of a 16:9 preview in the leading slot, not a square. */
+      --mat-list-list-item-leading-avatar-size: 64px;
+    }
+
+    /*
+     * A leading avatar is a round 40px portrait by Material's own rules, and a
+     * shader preview is a 16:9 frame. Overriding both takes the same
+     * specificity Material uses (class + class), hence the doubled selector.
+     */
+    .shader-row .row-preview.row-preview {
+      width: 64px;
+      height: 36px;
+      border-radius: 4px;
+      object-fit: cover;
+      background: var(--mat-sys-surface-container-highest);
+    }
+
+    .row-preview-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .row-preview-empty mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      opacity: 0.6;
     }
 
     .shader-row.selected {
@@ -183,8 +229,49 @@ import { Workspace } from './workspace';
 export class ShaderBrowser {
   protected readonly store = inject(ShaderStore);
   protected readonly workspace = inject(Workspace);
+  private readonly thumbnails = inject(ThumbnailAssets);
 
   protected readonly query = signal('');
+
+  /** Preview URL per shader id, for the shaders that have one. */
+  protected readonly previews = computed(() => {
+    const blobs = this.blobs();
+    const previews: Record<string, string> = {};
+
+    for (const shader of this.store.shaders()) {
+      // On the web this is the URL itself; on desktop it is null until the
+      // bytes have come over IPC, and `blobs` fills in behind it.
+      const url = this.thumbnails.url(shader.id, shader.thumbnail) ?? blobs[shader.id];
+      if (url) previews[shader.id] = url;
+    }
+    return previews;
+  });
+
+  /** Desktop only: blob URLs, filled in as the IPC reads land. */
+  private readonly blobs = signal<Record<string, string>>({});
+
+  /** Which `<id>:<capture>` pairs have already been asked for, so a re-save re-reads. */
+  private readonly requested = new Set<string>();
+
+  constructor() {
+    effect(() => {
+      for (const shader of this.store.shaders()) {
+        if (!shader.thumbnail) continue;
+
+        const key = `${shader.id}:${shader.thumbnail.updatedAt}`;
+        if (this.requested.has(key)) continue;
+        this.requested.add(key);
+        void this.resolveBlob(shader.id, shader.thumbnail);
+      }
+    });
+  }
+
+  private async resolveBlob(id: string, thumbnail: ThumbnailMeta): Promise<void> {
+    const url = await this.thumbnails.resolve(id, thumbnail);
+    if (url === null) return;
+
+    this.blobs.update((blobs) => ({ ...blobs, [id]: url }));
+  }
 
   protected readonly filtered = computed(() => {
     const query = this.query().trim().toLowerCase();

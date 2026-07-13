@@ -13,6 +13,7 @@ import {
   type TextureWrapMode,
 } from '../../shared/model';
 import type { CompileDiagnostic } from '../core/diagnostic';
+import { GlContext, type GlContextOptions, type ThreeModule } from './gl-context';
 import { parseInfoLog, prefixLineCount } from './glsl-diagnostics';
 import { expandMacros } from './glsl-export';
 
@@ -37,6 +38,12 @@ const CHANNEL_UNIFORMS = ['iChannel0', 'iChannel1', 'iChannel2', 'iChannel3'] as
  * live material is only swapped in once the driver has accepted it. If it did
  * not, the previous shader keeps rendering and the driver's log comes back as
  * diagnostics.
+ *
+ * An engine belongs to exactly one `GlContext`, and every GPU resource it makes
+ * — materials, textures, the probe target — is tagged with that context's id.
+ * Two engines can therefore run side by side without either being able to reach
+ * into the other's GPU state, and a context lost under one of them suspends
+ * only that one. Nothing here is shared at module scope.
  *
  * three.js and its post-processing passes are imported dynamically: none of
  * this exists on the server, and keeping it out of the initial bundle means the
@@ -70,8 +77,6 @@ const PLACEHOLDER_FRAGMENT = `precision mediump float;
 void main() { gl_FragColor = vec4(0.02, 0.03, 0.05, 1.0); }`;
 
 const PLACEHOLDER_VERTEX = `void main() { gl_Position = vec4(position, 1.0); }`;
-
-type ThreeModule = typeof import('three');
 
 export class ShaderEngine {
   private readonly clickData: THREE.Vector3[];
@@ -119,14 +124,30 @@ export class ShaderEngine {
 
   private disposed = false;
 
+  /**
+   * The last spec the driver accepted. Kept so a restored context can be
+   * brought back to exactly what it was showing when it died — the shader is
+   * the only thing a lost context cannot reconstruct on its own.
+   */
+  private lastSpec: ShaderSpec | null = null;
+
+  private readonly unsubscribe: (() => void)[] = [];
+
   onFps: ((fps: number) => void) | null = null;
 
-  private constructor(
-    private readonly three: ThreeModule,
-    private readonly canvas: HTMLCanvasElement,
-    private readonly renderer: THREE.WebGLRenderer,
-  ) {
-    const T = three;
+  /** Fired when this engine's context is lost or comes back. Never fired for a sibling's. */
+  onContextLost: (() => void) | null = null;
+  onContextRestored: (() => void) | null = null;
+
+  private readonly three: ThreeModule;
+  private readonly canvas: HTMLCanvasElement;
+  private readonly renderer: THREE.WebGLRenderer;
+
+  private constructor(readonly context: GlContext) {
+    const T = context.three;
+    this.three = T;
+    this.canvas = context.canvas;
+    this.renderer = context.renderer;
 
     this.scene = new T.Scene();
     this.camera = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -135,48 +156,53 @@ export class ShaderEngine {
     this.pointer = new T.Vector2(-1000, -1000);
     this.pointerVelocity = new T.Vector2();
 
-    this.material = new T.ShaderMaterial({
-      vertexShader: PLACEHOLDER_VERTEX,
-      fragmentShader: PLACEHOLDER_FRAGMENT,
-      uniforms: {},
-    });
+    this.material = context.own(
+      new T.ShaderMaterial({
+        vertexShader: PLACEHOLDER_VERTEX,
+        fragmentShader: PLACEHOLDER_FRAGMENT,
+        uniforms: {},
+      }),
+    );
 
-    const geometry = new T.PlaneGeometry(2, 2);
+    const geometry = context.own(new T.PlaneGeometry(2, 2));
     this.mesh = new T.Mesh(geometry, this.material);
     this.scene.add(this.mesh);
 
     this.probeScene = new T.Scene();
     this.probeMesh = new T.Mesh(geometry, this.material);
     this.probeScene.add(this.probeMesh);
-    this.probeTarget = new T.WebGLRenderTarget(1, 1);
+    this.probeTarget = context.own(new T.WebGLRenderTarget(1, 1));
 
     // A fully transparent 1×1 pixel: what an unassigned iChannel samples, so a
     // shader that declares `uniform sampler2D iChannelN` always compiles and
     // renders sensibly, with or without an image behind it.
-    this.placeholderTexture = new T.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1, T.RGBAFormat);
+    this.placeholderTexture = context.own(
+      new T.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1, T.RGBAFormat),
+    );
     this.placeholderTexture.needsUpdate = true;
+
+    this.unsubscribe.push(
+      context.onLost(() => this.handleContextLost()),
+      context.onRestored(() => this.handleContextRestored()),
+      context.onDispose(() => this.dispose()),
+    );
 
     this.attachPointerListeners();
     this.resize();
   }
 
-  static async create(canvas: HTMLCanvasElement): Promise<ShaderEngine> {
-    const three = await import('three');
+  /**
+   * Creates an engine on a context. Passing a bare canvas still works and gives
+   * the engine a context of its own, which is what the single-preview case has
+   * always been — it is now just the one-context case of the general one.
+   */
+  static async create(
+    target: HTMLCanvasElement | GlContext,
+    options: GlContextOptions = {},
+  ): Promise<ShaderEngine> {
+    const context = target instanceof GlContext ? target : await GlContext.create(target, options);
 
-    // Shader colour uniforms are authored as display-space sRGB. Leave three's
-    // colour management off so it does not silently convert them to linear.
-    three.ColorManagement.enabled = false;
-
-    const renderer = new three.WebGLRenderer({
-      canvas,
-      antialias: true,
-      // Required for `screenshot()`: without it the buffer may be cleared
-      // before we get a chance to read it back.
-      preserveDrawingBuffer: true,
-    });
-    renderer.debug.checkShaderErrors = true;
-
-    const engine = new ShaderEngine(three, canvas, renderer);
+    const engine = new ShaderEngine(context);
     engine.start();
     return engine;
   }
@@ -195,16 +221,26 @@ export class ShaderEngine {
   setShader(spec: ShaderSpec): CompileDiagnostic[] {
     if (this.disposed) return [];
 
+    // A lost context has no driver to compile against. Remember what was asked
+    // for and apply it on restore, rather than reporting a compile failure the
+    // shader is not responsible for.
+    if (this.context.status() === 'lost') {
+      this.lastSpec = spec;
+      return [];
+    }
+
     const T = this.three;
     const fragment = expandMacros(spec.fragment);
     const vertex = expandMacros(spec.vertex);
 
     const uniforms = this.buildUniforms(spec.controls, spec.params, spec.channels);
-    const candidate = new T.ShaderMaterial({
-      vertexShader: vertex,
-      fragmentShader: fragment,
-      uniforms,
-    });
+    const candidate = this.context.own(
+      new T.ShaderMaterial({
+        vertexShader: vertex,
+        fragmentShader: fragment,
+        uniforms,
+      }),
+    );
 
     const diagnostics = this.probe(candidate, fragment, vertex);
     if (diagnostics.length > 0) {
@@ -219,9 +255,18 @@ export class ShaderEngine {
     this.mesh.material = candidate;
     previous.dispose();
 
+    this.lastSpec = spec;
     this.setRenderSettings(spec.render);
     this.pruneTextureCache(spec.channels);
     return [];
+  }
+
+  /** The shader currently on screen: the last one the driver accepted. */
+  get activeShader(): { fragment: string; vertex: string } {
+    return {
+      fragment: this.material.fragmentShader,
+      vertex: this.material.vertexShader,
+    };
   }
 
   /**
@@ -358,9 +403,11 @@ export class ShaderEngine {
     const cached = this.textureCache.get(key);
     if (cached) return cached;
 
-    const texture = new this.three.TextureLoader().load(spec.url, undefined, undefined, (error) => {
-      console.warn(`[shader-engine] failed to load texture "${spec.url}":`, error);
-    });
+    const texture = this.context.own(
+      new this.three.TextureLoader().load(spec.url, undefined, undefined, (error) => {
+        console.warn(`[shader-engine] failed to load texture "${spec.url}":`, error);
+      }),
+    );
 
     const wrap = this.wrapModeFor(spec.wrap);
     texture.wrapS = wrap;
@@ -424,6 +471,32 @@ export class ShaderEngine {
       if (uniform) uniform.value = this.resolveTexture(channels[index] ?? null);
     }
     this.pruneTextureCache(channels);
+  }
+
+  /** The texture a channel currently samples, placeholder included. */
+  channelTexture(index: number): THREE.Texture | null {
+    const uniform = this.uniforms[CHANNEL_UNIFORMS[index]];
+    return (uniform?.value as THREE.Texture | undefined) ?? null;
+  }
+
+  /**
+   * Binds an already-created texture to a channel.
+   *
+   * The ownership check is the point: a `THREE.Texture` from another engine
+   * looks perfectly valid here, and three would take it and quietly upload a
+   * second copy into this context — two GPU allocations behind one object, and
+   * whichever engine disposes first pulls the texture out from under the other.
+   * Refuse it loudly instead.
+   */
+  setChannelTexture(index: number, texture: THREE.Texture): void {
+    if (this.disposed) return;
+    if (index < 0 || index >= CHANNEL_COUNT) {
+      throw new RangeError(`Channel ${index} does not exist: there are ${CHANNEL_COUNT}.`);
+    }
+    this.context.assertOwns(texture, `texture for iChannel${index}`);
+
+    const uniform = this.uniforms[CHANNEL_UNIFORMS[index]];
+    if (uniform) uniform.value = texture;
   }
 
   // -------------------------------------------------------------------------
@@ -604,6 +677,44 @@ export class ShaderEngine {
     this.frame = requestAnimationFrame(loop);
   }
 
+  // -------------------------------------------------------------------------
+  // Context loss
+  // -------------------------------------------------------------------------
+
+  /**
+   * The GPU state is gone; the CPU state is not. Stop the loop — drawing into a
+   * dead context is a stream of console errors and nothing on screen — and drop
+   * the composer, whose render targets died with the context. The shader spec,
+   * the parameters, the clock and the texture *descriptors* all survive in
+   * memory, which is what makes the restore a replay rather than a reload.
+   */
+  private handleContextLost(): void {
+    if (this.disposed) return;
+
+    cancelAnimationFrame(this.frame);
+    this.disposeComposer();
+    this.onContextLost?.();
+  }
+
+  private handleContextRestored(): void {
+    if (this.disposed) return;
+
+    // three re-uploads a texture on the next draw, but only if it is told the
+    // pixels it holds are new. Nothing survived on the GPU, so they all are.
+    for (const texture of this.textureCache.values()) texture.needsUpdate = true;
+    this.placeholderTexture.needsUpdate = true;
+
+    // Every program the driver held is gone with the context. Recompiling the
+    // last accepted spec puts the material — and the composer behind it — back.
+    const spec = this.lastSpec;
+    if (spec) this.setShader(spec);
+    else this.setRenderSettings(this.render);
+
+    this.resize();
+    this.start();
+    this.onContextRestored?.();
+  }
+
   private tick(): void {
     const now = performance.now();
     // Clamp: a backgrounded tab hands back a multi-second delta, which would
@@ -657,6 +768,8 @@ export class ShaderEngine {
   }
 
   private draw(): void {
+    if (this.disposed || this.context.status() !== 'live') return;
+
     if (this.render.bloom.enabled && this.composer) {
       this.composer.render();
     } else {
@@ -674,11 +787,19 @@ export class ShaderEngine {
     return new Promise((resolve) => this.canvas.toBlob(resolve, 'image/png'));
   }
 
+  /**
+   * Frees everything this engine put on the GPU, then tears down its context.
+   * Only this context: a sibling engine keeps its renderer, its resources and
+   * its loop, because it never shared any of them.
+   */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
 
     cancelAnimationFrame(this.frame);
+
+    for (const off of this.unsubscribe) off();
+    this.unsubscribe.length = 0;
 
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
@@ -693,6 +814,9 @@ export class ShaderEngine {
     for (const texture of this.textureCache.values()) texture.dispose();
     this.textureCache.clear();
     this.placeholderTexture.dispose();
-    this.renderer.dispose();
+
+    // Disposes the renderer. Re-entrant: this is also what runs when the
+    // context is destroyed from the registry rather than from here.
+    this.context.dispose();
   }
 }

@@ -193,6 +193,91 @@ describe('duplicate', () => {
   });
 });
 
+describe('thumbnail', () => {
+  const WEBP = Buffer.from('a fake webp');
+  const PNG = Buffer.from('a fake png');
+
+  it('stores the preview and points the meta at it', async () => {
+    const id = await seed();
+
+    const saved = await storage.setThumbnail(id, { ext: 'webp', bytes: WEBP });
+
+    expect(saved.thumbnail?.ext).toBe('webp');
+    const read = await storage.readThumbnail(id);
+    expect(read?.bytes).toEqual(WEBP);
+    expect((await storage.read(id)).thumbnail?.updatedAt).toBe(saved.thumbnail?.updatedAt);
+  });
+
+  it('has none until one is captured', async () => {
+    const id = await seed();
+    expect((await storage.read(id)).thumbnail).toBeNull();
+    expect(await storage.readThumbnail(id)).toBeNull();
+  });
+
+  it('leaves the shader itself untouched — a preview is not an edit', async () => {
+    const id = await seed();
+    const before = await storage.read(id);
+
+    const after = await storage.setThumbnail(id, { ext: 'webp', bytes: WEBP });
+
+    expect(after.updatedAt).toBe(before.updatedAt);
+    expect(after.fragment).toBe(before.fragment);
+  });
+
+  it('replaces a preview stored under a different extension', async () => {
+    const id = await seed();
+    await storage.setThumbnail(id, { ext: 'webp', bytes: WEBP });
+
+    await storage.setThumbnail(id, { ext: 'png', bytes: PNG });
+
+    const dir = path.join(root, 'data', 'shaders', id);
+    await expect(readFile(path.join(dir, 'thumbnail.webp'))).rejects.toThrow();
+    expect((await storage.readThumbnail(id))?.ext).toBe('png');
+  });
+
+  it('rejects an unsupported image type', async () => {
+    const id = await seed();
+    await expect(storage.setThumbnail(id, { ext: 'gif', bytes: WEBP })).rejects.toMatchObject({
+      code: 'invalid',
+    });
+  });
+
+  it('degrades to no preview when the meta points at a file that is gone', async () => {
+    const id = await seed();
+    await storage.setThumbnail(id, { ext: 'webp', bytes: WEBP });
+
+    await rm(path.join(root, 'data', 'shaders', id, 'thumbnail.webp'));
+
+    expect(await storage.readThumbnail(id)).toBeNull();
+    expect((await storage.exportOne(id)).thumbnail).toBeNull();
+  });
+
+  it('follows a duplicate', async () => {
+    const id = await seed('Original');
+    await storage.setThumbnail(id, { ext: 'webp', bytes: WEBP });
+
+    const copy = await storage.duplicate(id, 'Copy');
+
+    expect(copy.thumbnail?.ext).toBe('webp');
+    expect((await storage.readThumbnail(copy.id))?.bytes).toEqual(WEBP);
+  });
+
+  it('survives an export/import round trip', async () => {
+    const id = await seed('Original');
+    await storage.setThumbnail(id, { ext: 'webp', bytes: WEBP });
+
+    const bundle = buildCollectionBundle([await storage.exportOne(id)]);
+    const parsed = parseBundle(JSON.parse(JSON.stringify(bundle)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    await storage.remove(id);
+    await storage.importPayloads(parsed.value, 'rename');
+
+    expect((await storage.readThumbnail(id))?.bytes).toEqual(WEBP);
+  });
+});
+
 describe('remove', () => {
   it('deletes the shader directory', async () => {
     const id = await seed();

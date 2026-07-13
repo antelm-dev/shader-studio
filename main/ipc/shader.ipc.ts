@@ -88,5 +88,16 @@ export function createShaderIpc(storage: ShaderStorage) {
       const texture = await storage.readTexture(stringArg(id, 'id'), channel);
       return texture ? { bytes: new Uint8Array(texture.bytes), ext: texture.ext } : null;
     }),
+    'set-thumbnail': handle((_event, id: string, input: { ext: string; bytes: Uint8Array }) => {
+      const body = objectArg(input, 'input');
+      return storage.setThumbnail(stringArg(id, 'id'), {
+        ext: stringArg(body['ext'], 'ext'),
+        bytes: Buffer.from(body['bytes'] as Uint8Array),
+      });
+    }),
+    'read-thumbnail': handle(async (_event, id: string) => {
+      const thumbnail = await storage.readThumbnail(stringArg(id, 'id'));
+      return thumbnail ? { bytes: new Uint8Array(thumbnail.bytes), ext: thumbnail.ext } : null;
+    }),
   });
 }

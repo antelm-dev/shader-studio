@@ -55,6 +55,12 @@ export class DesktopPlatform {
     return window.electron.bridge.shader.readTexture(shaderId, channel);
   }
 
+  /** Raw bytes for a shader's preview, or `null` if it has never been saved with one. */
+  async readThumbnail(shaderId: string): Promise<{ bytes: Uint8Array; ext: string } | null> {
+    if (!this.available) return null;
+    return window.electron.bridge.shader.readThumbnail(shaderId);
+  }
+
   migrationPending(): Promise<boolean> {
     return this.available ? window.electron.bridge.migration.pending() : Promise.resolve(false);
   }

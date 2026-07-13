@@ -25,6 +25,8 @@ import {
 import { DesktopPlatform } from '../core/desktop-platform';
 import { ShaderStore } from '../core/shader-store';
 import { TextureAssets } from '../core/texture-assets';
+import type { GlContext } from './gl-context';
+import { GlContextRegistry } from './gl-context-registry';
 import { RendererHandle } from './renderer-handle';
 import { type ChannelSource, ShaderEngine } from './shader-engine';
 
@@ -44,11 +46,7 @@ const RECOMPILE_DEBOUNCE_MS = 400;
   },
   template: `
     @if (detached()) {
-      <div
-        class="window-bar"
-        (pointerdown)="startMove($event)"
-        (dblclick)="showFullSize()"
-      >
+      <div class="window-bar" (pointerdown)="startMove($event)" (dblclick)="showFullSize()">
         <mat-icon aria-hidden="true">blur_on</mat-icon>
         <span>Shader preview</span>
         <button
@@ -244,6 +242,7 @@ export class ShaderCanvas {
   protected readonly preferences = inject(Preferences);
   protected readonly desktop = inject(DesktopPlatform);
   private readonly handle = inject(RendererHandle);
+  private readonly contexts = inject(GlContextRegistry);
   private readonly destroyRef = inject(DestroyRef);
   private readonly textures = inject(TextureAssets);
 
@@ -443,8 +442,10 @@ export class ShaderCanvas {
     const canvas = this.canvasRef().nativeElement;
 
     let engine: ShaderEngine;
+    let context: GlContext;
     try {
-      engine = await ShaderEngine.create(canvas);
+      context = await this.contexts.create(canvas);
+      engine = await ShaderEngine.create(context);
     } catch (error) {
       this.store.notice.set({
         text: `WebGL is unavailable, so the preview is disabled: ${String(error)}`,
@@ -454,16 +455,29 @@ export class ShaderCanvas {
     }
 
     engine.onFps = (fps) => this.handle.fps.set(fps);
+
+    // A lost context is recoverable and usually brief (a driver reset, a GPU
+    // switch), so say so rather than reporting a failure: the shader, the
+    // parameters and the clock are all still here, waiting to be replayed.
+    engine.onContextLost = () =>
+      this.store.notice.set({
+        text: 'The GPU context was lost. Restoring the preview…',
+        error: false,
+      });
+    engine.onContextRestored = () =>
+      this.store.notice.set({ text: 'The GPU context was restored.', error: false });
+
     this.engine.set(engine);
-    this.handle.engine.set(engine);
+    this.handle.register(context.id, engine);
 
     const observer = new ResizeObserver(() => engine.resize());
     observer.observe(canvas);
 
     this.destroyRef.onDestroy(() => {
       observer.disconnect();
-      this.handle.engine.set(null);
-      engine.dispose();
+      this.handle.unregister(context.id);
+      // Disposes this context and nothing else: any other preview keeps running.
+      this.contexts.destroy(context.id);
     });
   }
 }

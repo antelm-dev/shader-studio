@@ -32,9 +32,11 @@ import {
 } from '../../shared/validate';
 import type { CompileDiagnostic } from './diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
+import { RendererHandle } from '../rendering/renderer-handle';
 import { ApiError, ShaderApi } from './shader-api';
 import { Preferences } from './preferences';
 import { TextureAssets } from './texture-assets';
+import { ThumbnailAssets } from './thumbnail-assets';
 
 /**
  * The single source of truth for the workspace.
@@ -88,6 +90,8 @@ export class ShaderStore {
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
   private readonly recovery = inject(DraftRecovery);
   private readonly textures = inject(TextureAssets);
+  private readonly thumbnails = inject(ThumbnailAssets);
+  private readonly renderer = inject(RendererHandle);
 
   /** True once the client has taken over the server's snapshot. */
   private hydrated = false;
@@ -441,12 +445,48 @@ export class ShaderStore {
       await this.refreshList();
       this.notice.set({ text: `Saved “${saved.name}”`, error: false });
       this.recovery.remove(saved.id);
+      void this.capturePreview(saved.id);
       return true;
     } catch (error) {
       this.report(error);
       return false;
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  /**
+   * Photographs the shader that was just saved, so the library can show it
+   * without opening it.
+   *
+   * Deliberately *not* awaited by `save`. The document is safely on disk the
+   * moment the API answers, and reading a frame back off the GPU and encoding
+   * it takes long enough (much longer on a software renderer) that waiting on
+   * it would keep `saving` true — swallowing the next Ctrl+S, which the guard
+   * at the top of `save` drops while one is in flight.
+   *
+   * Best-effort for the same reason: a preview is a convenience, and failing to
+   * take one must never turn a successful save into a failed one. On any
+   * problem the shader keeps whatever preview it had, and the next save tries
+   * again. With no renderer — SSR, a test — there is simply nothing to capture.
+   */
+  private async capturePreview(id: string): Promise<void> {
+    try {
+      const upload = await this.renderer.captureThumbnail();
+      if (!upload) return;
+
+      const { thumbnail } = await this.api.setThumbnail(id, upload);
+      this.thumbnails.releaseShader(id);
+
+      // Patch the capture into what is already on screen rather than adopting
+      // the server's whole record: a newer save may have landed in the
+      // meantime, and its source is the one the user is looking at.
+      this.record.update((current) => (current?.id === id ? { ...current, thumbnail } : current));
+      this.shaders.update((shaders) =>
+        shaders.map((shader) => (shader.id === id ? { ...shader, thumbnail } : shader)),
+      );
+    } catch (error) {
+      console.warn(`[store] could not capture a preview of "${id}"`, error);
     }
   }
 
@@ -498,6 +538,7 @@ export class ShaderStore {
       await this.api.remove(id);
       this.recovery.remove(id);
       this.textures.releaseShader(id);
+      this.thumbnails.releaseShader(id);
       await this.refreshList();
 
       if (this.selectedId() === id) {

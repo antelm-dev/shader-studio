@@ -150,6 +150,29 @@ export type TextureChannelPayloads = readonly [
   TextureChannelPayload,
 ];
 
+// ---------------------------------------------------------------------------
+// Thumbnails
+// ---------------------------------------------------------------------------
+
+/** The size the client encodes a preview to. 16:9, like the render surface. */
+export const THUMBNAIL_WIDTH = 480;
+export const THUMBNAIL_HEIGHT = 270;
+
+/**
+ * A shader's preview image, captured from the renderer when the shader is
+ * saved. `ext` is whatever the browser managed to encode (`webp`, falling back
+ * to `png`), and `updatedAt` doubles as the cache-buster on the image URL.
+ */
+export interface ThumbnailMeta {
+  ext: string;
+  updatedAt: string;
+}
+
+/** A thumbnail as it travels inside an import/export bundle: the image bytes, base64-encoded. */
+export interface ThumbnailPayload extends ThumbnailMeta {
+  data: string;
+}
+
 /** A named capture of a shader's parameter values. */
 export interface Preset {
   id: string;
@@ -176,6 +199,8 @@ export interface ShaderMeta {
   render: RenderSettings;
   /** Metadata only — no pixel bytes. The files live under `textures/`. */
   channels: TextureChannels;
+  /** Metadata only — the image lives next to `meta.json`. `null` until the shader is first saved. */
+  thumbnail: ThumbnailMeta | null;
 }
 
 /** A complete shader as served by `GET /api/shaders/:id`. */
@@ -193,6 +218,8 @@ export interface ShaderSummary {
   updatedAt: string;
   controlCount: number;
   presetCount: number;
+  /** Enough to build the preview's URL, without ever putting pixels in the listing. */
+  thumbnail: ThumbnailMeta | null;
 }
 
 /** The unit of import/export: one shader, its config and its presets. */
@@ -208,6 +235,8 @@ export interface ShaderPayload {
   presets: Preset[];
   /** Texture images inlined as base64 — this is what makes a bundle portable. */
   channels: TextureChannelPayloads;
+  /** The preview, inlined as base64. `null` on a shader that has never been saved with one. */
+  thumbnail: ThumbnailPayload | null;
 }
 
 export interface ShaderBundle {
@@ -250,13 +279,15 @@ export function toSummary(record: ShaderRecord): ShaderSummary {
     updatedAt: record.updatedAt,
     controlCount: record.controls.length,
     presetCount: record.presets.length,
+    thumbnail: record.thumbnail,
   };
 }
 
 /**
- * Metadata-only conversion — `channels[n].data` is always `null` here since
- * this function never touches the filesystem. Callers that need the actual
- * image bytes (export, or a same-process copy) fill `data` in afterwards.
+ * Metadata-only conversion — `channels[n].data` and `thumbnail` are always
+ * `null` here since this function never touches the filesystem. Callers that
+ * need the actual image bytes (export, or a same-process copy) fill them in
+ * afterwards.
  */
 export function toPayload(record: ShaderRecord): ShaderPayload {
   return {
@@ -273,5 +304,6 @@ export function toPayload(record: ShaderRecord): ShaderPayload {
       ...channel,
       data: null,
     })) as unknown as TextureChannelPayloads,
+    thumbnail: null,
   };
 }

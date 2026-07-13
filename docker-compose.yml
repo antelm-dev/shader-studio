@@ -1,0 +1,22 @@
+services:
+  shader-studio:
+    build: .
+    image: shader-studio:latest
+    container_name: shader-studio
+    restart: unless-stopped
+    ports:
+      - '${SHADER_PORT:-4000}:4000'
+    environment:
+      # Hosts the SSR engine will answer for. Requests arriving under any other
+      # hostname are rejected, so add your machine name or domain here when you
+      # reach the app as something other than localhost:
+      #   SHADER_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],nas.local,shaders.example.com
+      NG_ALLOWED_HOSTS: ${SHADER_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}
+      # Set to 0 to start with an empty store instead of seeding it from examples/.
+      SHADER_SEED: ${SHADER_SEED:-1}
+    volumes:
+      # Shaders you create and edit. Everything else in the image is disposable.
+      - shader-data:/data
+
+volumes:
+  shader-data:

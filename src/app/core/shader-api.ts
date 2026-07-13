@@ -25,6 +25,12 @@ export interface TextureUpload {
   height: number;
 }
 
+/** An encoded preview frame on its way to disk. Its size is fixed by the encoder. */
+export interface ThumbnailUpload {
+  ext: string;
+  bytes: Uint8Array;
+}
+
 /** A failed API call, carrying the server's own message and field details. */
 export class ApiError extends Error {
   constructor(
@@ -73,6 +79,7 @@ export abstract class ShaderApi {
   abstract importBundle(bundle: unknown, mode: ImportMode): Promise<ImportResult>;
   abstract setTexture(id: string, channel: number, upload: TextureUpload): Promise<ShaderRecord>;
   abstract clearTexture(id: string, channel: number): Promise<ShaderRecord>;
+  abstract setThumbnail(id: string, upload: ThumbnailUpload): Promise<ShaderRecord>;
 }
 
 @Injectable()
@@ -214,6 +221,18 @@ export class HttpShaderApi extends ShaderApi {
     const response = await this.request(
       firstValueFrom(
         this.http.delete<{ shader: ShaderRecord }>(this.url(`/shaders/${id}/textures/${channel}`)),
+      ),
+    );
+    return response.shader;
+  }
+
+  // --- Thumbnail ------------------------------------------------------------
+
+  override async setThumbnail(id: string, upload: ThumbnailUpload): Promise<ShaderRecord> {
+    const blob = new Blob([upload.bytes.slice()], { type: mimeFromExt(upload.ext) });
+    const response = await this.request(
+      firstValueFrom(
+        this.http.put<{ shader: ShaderRecord }>(this.url(`/shaders/${id}/thumbnail`), blob),
       ),
     );
     return response.shader;

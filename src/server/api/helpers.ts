@@ -9,6 +9,8 @@ import { StorageError } from '../storage/storage-error';
 export const BODY_LIMIT = '64mb';
 /** Raw image uploads travel outside JSON, so they get their own (smaller) limit. */
 export const TEXTURE_BODY_LIMIT = '4mb';
+/** A 480×270 preview. Tighter still — anything near this is already suspect. */
+export const THUMBNAIL_BODY_LIMIT = '1mb';
 
 export { mimeFromExt } from '../../shared/validate';
 

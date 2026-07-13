@@ -28,6 +28,8 @@ import {
   type TextureChannels,
   type TextureFilterMode,
   type TextureWrapMode,
+  type ThumbnailMeta,
+  type ThumbnailPayload,
 } from './model';
 
 export type Result<T> = { ok: true; value: T } | { ok: false; errors: string[] };
@@ -61,6 +63,8 @@ export const LIMITS = {
   bundleShaderCount: 200,
   /** Per image, raw bytes (before any base64 inflation in a bundle). */
   textureBytes: 4 * 1024 * 1024,
+  /** A 480×270 preview weighs tens of KB; this only exists to stop an absurd upload. */
+  thumbnailBytes: 512 * 1024,
   /** Max width or height, in pixels. Comfortably above any hand-authored channel image. */
   textureDimension: 4096,
 } as const;
@@ -626,6 +630,39 @@ export function validateChannelPayloads(input: unknown): TextureChannelPayloads 
 }
 
 // ---------------------------------------------------------------------------
+// Thumbnails
+// ---------------------------------------------------------------------------
+
+/**
+ * A shader with an unreadable thumbnail is still a perfectly good shader, so
+ * anything malformed here degrades to "no preview" rather than failing the
+ * shader outright. The next save regenerates it.
+ */
+export function validateThumbnailMeta(input: unknown): ThumbnailMeta | null {
+  if (!isRecord(input)) return null;
+
+  const ext = typeof input['ext'] === 'string' ? input['ext'].toLowerCase() : null;
+  const updatedAt = input['updatedAt'];
+  if (ext === null || !TEXTURE_EXTENSIONS.has(ext)) return null;
+  if (typeof updatedAt !== 'string' || updatedAt.length === 0) return null;
+
+  return { ext, updatedAt };
+}
+
+/** The same, plus the base64 body a bundle carries. Bytes with no valid meta are dropped. */
+export function validateThumbnailPayload(input: unknown): ThumbnailPayload | null {
+  const meta = validateThumbnailMeta(input);
+  if (!meta || !isRecord(input)) return null;
+
+  const data = input['data'];
+  if (typeof data !== 'string' || data.length === 0 || !BASE64_PATTERN.test(data)) return null;
+  // Roughly 4 bytes of base64 per 3 bytes of data; reject absurdly large payloads up front.
+  if (data.length > (LIMITS.thumbnailBytes * 4) / 3 + 1024) return null;
+
+  return { ...meta, data };
+}
+
+// ---------------------------------------------------------------------------
 // Bundles (import / export)
 // ---------------------------------------------------------------------------
 
@@ -730,6 +767,7 @@ export function validateShaderPayload(input: unknown, label = 'shader'): Result<
     // Tolerant: an older bundle (or one from a build predating this feature)
     // has no `channels` field at all, and simply imports with none assigned.
     channels: validateChannelPayloads(input['channels']),
+    thumbnail: validateThumbnailPayload(input['thumbnail']),
   });
 }
 

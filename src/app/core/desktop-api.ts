@@ -10,7 +10,13 @@ import type {
   ShaderRecord,
   ShaderSummary,
 } from '../../shared/model';
-import { ApiError, ShaderApi, type TextureUpload, type UpdateShaderPatch } from './shader-api';
+import {
+  ApiError,
+  ShaderApi,
+  type TextureUpload,
+  type ThumbnailUpload,
+  type UpdateShaderPatch,
+} from './shader-api';
 
 function messageOf(error: unknown): string {
   if (error instanceof Error)
@@ -87,5 +93,9 @@ export class DesktopShaderApi extends ShaderApi {
 
   override clearTexture(id: string, channel: number): Promise<ShaderRecord> {
     return this.request(() => window.electron.bridge.shader.clearTexture(id, channel));
+  }
+
+  override setThumbnail(id: string, upload: ThumbnailUpload): Promise<ShaderRecord> {
+    return this.request(() => window.electron.bridge.shader.setThumbnail(id, upload));
   }
 }
