@@ -81,6 +81,35 @@ the real Express API and SSR application; the API is not mocked.
 
 ## Self-hosting
 
+### Docker
+
+The fastest way to run Shader Studio. It needs nothing but Docker — neither
+Node.js nor the linked Electron helpers:
+
+```bash
+git clone https://github.com/antelm-dev/shader-studio.git
+cd shader-studio
+docker compose up -d
+```
+
+Shader Studio is then available at [http://localhost:4000](http://localhost:4000),
+with the four example shaders already seeded.
+
+Your shaders live in the `shader-data` volume, mounted at `/data`; everything
+else in the image is disposable. Reaching the app under any name other than
+`localhost` — a machine name on your LAN, a domain behind a reverse proxy —
+means telling SSR about it, otherwise the request is rejected:
+
+```bash
+SHADER_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],shaders.example.com docker compose up -d
+```
+
+`docker-compose.yml` also reads `SHADER_PORT` (host port, default `4000`) and
+`SHADER_SEED`. To upgrade, pull and rebuild with `docker compose up -d --build`;
+the volume is left alone.
+
+### From source
+
 Build the production application and run its Node server:
 
 ```bash
@@ -142,12 +171,40 @@ three.js, lil-gui, and Monaco.
 
 ### Keyboard shortcuts
 
-| Key        | Action                   |
-| ---------- | ------------------------ |
-| `Space`    | Pause / resume time      |
-| `H`        | Show / hide the controls |
-| `S`        | Save the frame as a PNG  |
-| `Ctrl`+`S` | Save the shader          |
+| Key               | Action                        |
+| ----------------- | ----------------------------- |
+| `Space`           | Pause / resume time           |
+| `H`               | Show / hide the controls      |
+| `S`               | Save the frame as a PNG       |
+| `Ctrl`+`S`        | Save the shader               |
+| `Shift`+`Alt`+`F` | Format the GLSL in the editor |
+
+### The editor
+
+Right-click the editor's toolbar for its menu.
+
+- **Format GLSL** re-indents by block depth and does nothing else. No rewrapping,
+  no spacing opinions: a shader is dense numeric code whose columns are usually
+  aligned on purpose, and a formatter that argues with that is one people turn
+  off.
+- **Copy full GLSL** copies the fragment as a file that stands on its own — the
+  source plus the declarations the engine would otherwise have supplied: the
+  precision qualifier, the built-in uniforms, and one `uniform` per control.
+  Anything the source already declares is left alone, so the result never
+  redeclares its way into a compile error somewhere else.
+
+Typing offers snippets for the things you would otherwise be looking up: `main`,
+`uv`, `ripple` (the `u_clickData` loop), `channel`, `palette`, `hash21`, `noise`,
+`fbm`, `rot2` and `uniform`.
+
+### Presets
+
+A preset captures the live parameter values under a name. Ticking **Also capture
+the render settings** when saving stores the shader's bloom alongside them, and
+applying that preset brings it back — which, since bloom belongs to the shader
+rather than to the knobs, leaves the document with unsaved changes. Presets
+saved without it never touch bloom. The ones that carry it are marked with a
+bloom icon on their chip.
 
 On desktop, **More actions → Open output window** opens a clean, independently
 resizable render surface. It follows the active draft, live parameters, pause
@@ -272,6 +329,30 @@ shader changes its display name only; the id, and therefore the path, is stable.
   }
 }
 ```
+
+### `presets.json`
+
+```json
+{
+  "presets": [
+    {
+      "id": "solar-storm",
+      "name": "Solar Storm",
+      "createdAt": "2026-07-12T00:00:00.000Z",
+      "values": { "timeScale": 1.4, "colorLine": "#ff7a3d" },
+      "render": {
+        "bloom": { "enabled": true, "strength": 1.2, "radius": 0.4, "threshold": 0.7 }
+      }
+    }
+  ]
+}
+```
+
+`render` is optional and usually absent: a preset without it restores the values
+and leaves the shader's own bloom alone. `values` are projected onto the current
+control schema when applied — anything the schema no longer declares is dropped,
+and a number outside a narrowed range is clamped rather than discarded, so a
+preset outlives the edits made to the shader underneath it.
 
 ---
 
@@ -451,7 +532,7 @@ out of, and are the reference for what the format can express.
 pnpm test
 ```
 
-175 tests, focused where a bug would actually cost you something:
+201 tests, focused where a bug would actually cost you something:
 
 - **`shared/validate.spec.ts`** — ids (every traversal and reserved-name case),
   the control schema, preset sanitization and clamping, and bundle round-trips.
@@ -468,6 +549,11 @@ pnpm test
   survives a reload: unsaved drafts, and panel sizes.
 - **`rendering/glsl-diagnostics.spec.ts`** — both driver log dialects, and the
   prelude offset that makes a line number point at the right line.
+- **`rendering/glsl-export.spec.ts`** — the generated uniform prelude, and above
+  all what it declines to generate: a declaration the source already carries
+  would be a redeclaration error wherever the copy is pasted.
+- **`editor/glsl-format.spec.ts`** — indentation depth, braces that are only
+  part of a comment, and idempotence.
 - **`rendering/shadertoy-import.spec.ts`** — the Shadertoy source rewrite.
 
 ---
