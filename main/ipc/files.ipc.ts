@@ -52,9 +52,23 @@ interface SequenceSession {
 
 const sequences = new Map<string, SequenceSession>();
 
+/**
+ * A video export in progress: the path the user picked, held until the renderer
+ * either commits the encoded bytes or aborts. Nothing is written until commit —
+ * cancelling mid-encode leaves no half-file behind.
+ */
+interface VideoSession {
+  readonly sender: number;
+  readonly path: string;
+}
+
+const videos = new Map<string, VideoSession>();
+
 /** No frame of a shader render has any business being this big; a 4K PNG is a few MB. */
 const MAX_FRAME_BYTES = 64 * 1024 * 1024;
 const MAX_SEQUENCE_FRAMES = 100_000;
+/** A few minutes of 4K VP9 can land here; past this the renderer should have streamed. */
+const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;
 
 /** Whatever the shader was called, reduced to something that is only ever a file name. */
 function sanitizeStem(stem: string): string {
@@ -92,6 +106,12 @@ export function createFilesIpc() {
           padding: Math.min(Math.max(Math.round(padding) || 4, 4), 9),
           written: [],
         });
+
+        // A window closed mid-capture never sends `end-sequence`. Without this the
+        // session — and the list of paths it is holding — would outlive the app's
+        // interest in it.
+        event.sender.once('destroyed', () => sequences.delete(id));
+
         return { status: 'ok', value: { id, directory: picked.filePaths[0] } };
       },
     ),
@@ -238,5 +258,54 @@ export function createFilesIpc() {
         }
       },
     ),
+    'begin-video': handle(
+      async (event, stem: string): Promise<DialogResult<{ id: string; path: string }>> => {
+        const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+        const options = {
+          title: 'Save video',
+          defaultPath: `${sanitizeStem(stem)}.webm`,
+          filters: [{ name: 'WebM video', extensions: ['webm'] }],
+        };
+        const picked = owner
+          ? await dialog.showSaveDialog(owner, options)
+          : await dialog.showSaveDialog(options);
+        if (picked.canceled || !picked.filePath) return { status: 'cancelled' };
+
+        const id = randomBytes(16).toString('hex');
+        videos.set(id, { sender: event.sender.id, path: picked.filePath });
+        event.sender.once('destroyed', () => videos.delete(id));
+
+        return { status: 'ok', value: { id, path: picked.filePath } };
+      },
+    ),
+    'commit-video': handle(
+      async (event, id: string, bytes: Uint8Array): Promise<DialogResult<{ path: string }>> => {
+        const session = videos.get(id);
+        if (!session || session.sender !== event.sender.id) {
+          return { status: 'error', message: 'That video export is not open' };
+        }
+        if (!(bytes instanceof Uint8Array) || bytes.byteLength > MAX_VIDEO_BYTES) {
+          return { status: 'error', message: 'Invalid or oversized video data' };
+        }
+        videos.delete(id);
+        try {
+          await atomicWrite(session.path, bytes);
+          return { status: 'ok', value: { path: session.path } };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+    ),
+    'abort-video': handle(async (event, id: string): Promise<DialogResult<null>> => {
+      const session = videos.get(id);
+      if (!session || session.sender !== event.sender.id) {
+        return { status: 'error', message: 'That video export is not open' };
+      }
+      videos.delete(id);
+      return { status: 'ok', value: null };
+    }),
   });
 }

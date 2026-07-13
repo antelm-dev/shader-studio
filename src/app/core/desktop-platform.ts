@@ -46,6 +46,68 @@ export class DesktopPlatform {
     return result.status === 'ok';
   }
 
+  /**
+   * Opens a save dialog for a WebM export. `null` if the user declined.
+   *
+   * The path is held in a main-process session until `commitVideo` writes the
+   * bytes or `abortVideo` throws the session away — nothing touches the disk
+   * until the encode has finished.
+   */
+  async beginVideo(stem: string): Promise<{ id: string; path: string } | null> {
+    if (!this.available) return null;
+    const result = await window.electron.bridge.files.beginVideo(stem);
+    if (result.status === 'error') throw new Error(result.message);
+    return result.status === 'ok' ? result.value : null;
+  }
+
+  async commitVideo(id: string, bytes: Uint8Array): Promise<string> {
+    if (!this.available) throw new Error('Desktop video export is not available');
+    const result = await window.electron.bridge.files.commitVideo(id, bytes);
+    if (result.status === 'error') throw new Error(result.message);
+    if (result.status !== 'ok') throw new Error('The video export was cancelled');
+    return result.value.path;
+  }
+
+  async abortVideo(id: string): Promise<void> {
+    if (!this.available) return;
+    const result = await window.electron.bridge.files.abortVideo(id);
+    if (result.status === 'error') throw new Error(result.message);
+  }
+
+  /**
+   * Opens a folder to write an image sequence into. `null` if the user declined.
+   *
+   * A sequence is thousands of files, so it is a *session*: the folder is chosen
+   * once, and from then on the renderer only ever says which frame number it is
+   * handing over. It never names a file and never learns a path.
+   */
+  async beginSequence(
+    stem: string,
+    padding: number,
+  ): Promise<{ id: string; directory: string } | null> {
+    if (!this.available) return null;
+    const result = await window.electron.bridge.files.beginSequence(stem, padding);
+    if (result.status === 'error') throw new Error(result.message);
+    return result.status === 'ok' ? result.value : null;
+  }
+
+  async writeFrame(id: string, index: number, bytes: Uint8Array): Promise<void> {
+    if (!this.available) return;
+    const result = await window.electron.bridge.files.writeFrame(id, index, bytes);
+    if (result.status === 'error') throw new Error(result.message);
+  }
+
+  /** Closes a sequence. Cancelling it removes every frame already written. */
+  async endSequence(
+    id: string,
+    cancelled: boolean,
+  ): Promise<{ directory: string; frames: number } | null> {
+    if (!this.available) return null;
+    const result = await window.electron.bridge.files.endSequence(id, cancelled);
+    if (result.status === 'error') throw new Error(result.message);
+    return result.status === 'ok' ? result.value : null;
+  }
+
   /** Raw bytes for a channel's image, or `null` if the shader has nothing assigned to it. */
   async readTexture(
     shaderId: string,

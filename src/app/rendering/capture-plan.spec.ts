@@ -25,6 +25,14 @@ describe('normalizeCapture', () => {
     expect(normalizeCapture({ fps: 30 })).toEqual({ ...DEFAULT_CAPTURE, fps: 30 });
   });
 
+  it('keeps webm as the default format and only accepts png as the other', () => {
+    expect(normalizeCapture().format).toBe('webm');
+    expect(normalizeCapture({ format: 'png' }).format).toBe('png');
+    expect(normalizeCapture({ format: 'avi' } as unknown as Partial<typeof DEFAULT_CAPTURE>).format).toBe(
+      'webm',
+    );
+  });
+
   it('makes the dimensions even, because no video encoder takes an odd one', () => {
     const settings = normalizeCapture({ width: 1081, height: 607 });
 

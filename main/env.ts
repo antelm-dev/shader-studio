@@ -11,7 +11,6 @@ export const env = Object.freeze({
   paths: {
     preload: join(rootDir, 'preload.cjs'),
     clientDir: join(rootDir, '../dist-renderer'),
-    icon: join(rootDir, '../public/favicon.png'),
   },
   urls: { renderer: 'shader-studio://bundle/' },
 });

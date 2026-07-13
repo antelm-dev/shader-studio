@@ -32,7 +32,8 @@ import { type ChannelSource, ShaderEngine } from './shader-engine';
 
 const EMPTY_CHANNELS: readonly (ChannelSource | null)[] = [null, null, null, null];
 
-const RECOMPILE_DEBOUNCE_MS = 400;
+/** Also used by `McpBridge` to know how long to wait before reading back diagnostics. */
+export const RECOMPILE_DEBOUNCE_MS = 400;
 
 @Component({
   selector: 'app-shader-canvas',

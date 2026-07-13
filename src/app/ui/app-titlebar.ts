@@ -23,8 +23,6 @@ import { Workspace } from './workspace';
   template: `
     <header class="titlebar" (dblclick)="onTitlebarDblClick($event)">
       <div class="leading no-drag">
-        <img class="logo" src="shader-studio-logo.png" alt="" width="18" height="18" />
-
         <nav class="menus" aria-label="Application menu">
           <button type="button" class="menu-trigger" [matMenuTriggerFor]="fileMenu">File</button>
           <button type="button" class="menu-trigger" [matMenuTriggerFor]="viewMenu">View</button>
@@ -225,15 +223,6 @@ import { Workspace } from './workspace';
       -webkit-app-region: no-drag;
     }
 
-    .logo {
-      width: 18px;
-      height: 18px;
-      margin-inline: 6px 4px;
-      border-radius: 4px;
-      display: block;
-      flex: 0 0 auto;
-    }
-
     .menus {
       display: flex;
       align-items: center;
@@ -363,6 +352,7 @@ export class AppTitlebar {
       shortcut: 'S',
       action: () => this.commands.captureImage(),
     },
+    this.commands.exportSequence,
     {
       id: 'toggle-fullscreen',
       icon: () => (this.desktop.fullscreen() ? 'fullscreen_exit' : 'fullscreen'),

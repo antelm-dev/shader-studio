@@ -184,6 +184,21 @@ export function planCapture(settings: Partial<CaptureSettings> = {}): CapturePla
   };
 }
 
+/**
+ * Where a rendered frame lands in the output — in more than one place, once the
+ * loop repeats.
+ *
+ * This is what lets a looped capture be encoded without being re-rendered: the
+ * frame is drawn once, and the same pixels are written out at every position the
+ * timeline sends them to.
+ */
+export function outputIndices(plan: CapturePlan, frameIndex: number): number[] {
+  return Array.from(
+    { length: plan.settings.loops },
+    (_, loop) => frameIndex + loop * plan.loopFrames,
+  );
+}
+
 // -----------------------------------------------------------------------------
 // Naming
 // -----------------------------------------------------------------------------

@@ -82,14 +82,6 @@ app-titlebar {
   white-space: nowrap;
 }
 
-.brand-logo {
-  width: 32px;
-  height: 32px;
-  display: block;
-  flex: 0 0 auto;
-  border-radius: 7px;
-}
-
 // The open document, treated as a document title rather than a chip: the name
 // reads as the heading of the thing you are working on, with its state beneath
 // it in the same way a word processor does it.

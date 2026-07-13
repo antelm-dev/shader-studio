@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%" role="img" aria-labelledby="title desc">
+  <title id="title">Shader Studio mesh</title>
+  <desc id="desc">A blue procedural wireframe surface folded into a flowing wave.</desc>
+
+  <defs>
+    <linearGradient id="surface" x1="92" y1="94" x2="397" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF8D9" />
+      <stop offset="0.3" stop-color="#8FF7FF" />
+      <stop offset="0.68" stop-color="#38D7F2" />
+      <stop offset="1" stop-color="#A5FAFF" />
+    </linearGradient>
+    <clipPath id="wave-clip">
+      <path d="M42 309C78 287 68 218 122 198c45-17 55-104 111-121 67-20 72 80 127 86 57 7 59 73 113 93-38 30-26 100-80 116-51 15-61 60-116 68-48 7-68-67-116-70-57-4-70-49-119-61Z" />
+    </clipPath>
+  </defs>
+
+  <!-- The surface is one continuous transparent-background silhouette. -->
+  <path
+    d="M42 309C78 287 68 218 122 198c45-17 55-104 111-121 67-20 72 80 127 86 57 7 59 73 113 93-38 30-26 100-80 116-51 15-61 60-116 68-48 7-68-67-116-70-57-4-70-49-119-61Z"
+    fill="url(#surface)"
+    stroke="#1354D8"
+    stroke-width="12"
+    stroke-linejoin="round"
+  />
+
+  <!-- Curved latitude lines describe the rises and valleys. -->
+  <g clip-path="url(#wave-clip)" fill="none" stroke="#1354D8" stroke-width="5" stroke-linecap="round">
+    <path d="M26 260C96 229 146 248 196 275s108 11 150-25 92-19 147 2" />
+    <path d="M23 298C91 270 143 287 190 315s109 18 154-18 96-27 151-5" />
+    <path d="M33 337C95 306 145 324 192 351s105 25 154-12 100-32 151-12" />
+    <path d="M53 374C112 344 156 358 203 387s101 29 149-6 91-38 136-22" />
+    <path d="M72 213C129 184 171 199 217 223s103 12 146-19 85-22 126-5" />
+    <path d="M101 164C152 143 187 156 229 179s91 15 130-12 74-24 112-10" />
+
+    <!-- Curved longitude lines bend around the procedural peaks. -->
+    <path d="M91 163C116 223 107 272 93 315s7 86 43 113" />
+    <path d="M143 112C174 176 160 229 144 274s3 100 39 137" />
+    <path d="M194 68C221 139 204 198 188 249s-1 112 38 156" />
+    <path d="M244 55C266 129 250 193 236 247s5 118 43 164" />
+    <path d="M296 85C312 151 300 208 289 260s14 109 51 146" />
+    <path d="M348 125C360 181 350 229 345 275s18 89 53 116" />
+    <path d="M401 161C407 213 398 252 400 292s22 67 52 82" />
+    <path d="M451 201C446 241 439 269 445 300s20 48 39 57" />
+  </g>
+
+  <!-- A few highlight strokes keep the mesh bright on dark application chrome. -->
+  <g clip-path="url(#wave-clip)" fill="none" stroke="#FFFFFF" stroke-opacity="0.72" stroke-width="6" stroke-linecap="round">
+    <path d="M118 197c33-9 54-66 80-96" />
+    <path d="M321 167c25 3 39 23 52 43" />
+    <path d="M208 361c30 17 45 52 69 78" />
+  </g>
+</svg>

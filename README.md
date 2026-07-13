@@ -1,5 +1,4 @@
 <div align="center">
-  <img src="public/shader-studio-logo.svg" alt="Shader Studio logo" width="112" />
   <h1>Shader Studio</h1>
   <p><strong>Your self-hosted workspace for building, tuning, and collecting WebGL shaders.</strong></p>
   <p>

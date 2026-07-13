@@ -3,11 +3,9 @@ productName: Shader Studio
 directories:
   output: release
   buildResources: public
-icon: public/favicon.png
 files:
   - dist-main/**
   - dist-renderer/**
-  - public/favicon.png
   - package.json
   - '!node_modules/**/*'
 asar: true

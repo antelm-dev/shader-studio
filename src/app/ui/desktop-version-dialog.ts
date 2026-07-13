@@ -14,7 +14,6 @@ import { DesktopUpdater } from '../core/desktop-updater';
     <h2 mat-dialog-title>Version desktop</h2>
     <mat-dialog-content>
       <div class="identity">
-        <img src="shader-studio-logo.png" alt="" width="64" height="64" />
         <div>
           <strong>Shader Studio</strong
           ><span>Version {{ updater.state().currentVersion || '—' }}</span>
@@ -51,9 +50,6 @@ import { DesktopUpdater } from '../core/desktop-updater';
       align-items: center;
       gap: 18px;
       padding-block: 8px 24px;
-    }
-    .identity img {
-      border-radius: 14px;
     }
     .identity div {
       display: grid;

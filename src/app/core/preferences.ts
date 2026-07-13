@@ -1,6 +1,8 @@
 import { DOCUMENT, Injectable, PLATFORM_ID, computed, effect, inject, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
+import { DEFAULT_CAPTURE, type CaptureSettings } from '../../shared/model';
+import { normalizeCapture } from '../rendering/capture-plan';
 import {
   DEFAULT_EDITOR_APPEARANCE,
   DEFAULT_EDITOR_WINDOW,
@@ -64,6 +66,12 @@ export interface WorkspacePreferences {
   editorAppearance: EditorAppearance;
   /** Where the editor sits: docked, floating, maximized or collapsed. */
   editorWindow: EditorWindowState;
+  /**
+   * What the last export was set to. A capture is a form with eight fields, and
+   * nobody fills it in twice — an export is almost always a re-export at a
+   * slightly different length.
+   */
+  capture: CaptureSettings;
 }
 
 const DEFAULTS: WorkspacePreferences = {
@@ -80,6 +88,7 @@ const DEFAULTS: WorkspacePreferences = {
   colorScheme: 'dark',
   editorAppearance: DEFAULT_EDITOR_APPEARANCE,
   editorWindow: DEFAULT_EDITOR_WINDOW,
+  capture: DEFAULT_CAPTURE,
 };
 
 function sanitizeColorScheme(value: unknown): ColorScheme {
@@ -182,6 +191,10 @@ export class Preferences {
         // default rather than to whatever was in storage.
         editorAppearance: sanitizeAppearance(parsed.editorAppearance),
         editorWindow: sanitizeWindowState(parsed.editorWindow),
+        // Every field of a capture ends up as a render target size, a frame
+        // count or a divisor. `normalizeCapture` is the same clamp the planner
+        // applies, so storage can hold nothing the planner would refuse.
+        capture: normalizeCapture(parsed.capture),
       };
     } catch {
       return DEFAULTS;

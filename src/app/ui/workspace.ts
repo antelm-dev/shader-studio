@@ -10,6 +10,7 @@ import { convertShadertoy } from '../rendering/shadertoy-import';
 import { ConfirmDialog, type ConfirmDialogData } from './confirm-dialog';
 import { DesktopVersionDialog } from './desktop-version-dialog';
 import { EditorSettingsDialog } from './editor-settings-dialog';
+import { ExportDialog } from './export-dialog';
 import { NewShaderDialog, type NewShaderDialogResult } from './new-shader-dialog';
 import { PromptDialog, type PromptDialogData, type PromptDialogResult } from './prompt-dialog';
 import { RecoveryDialog } from './recovery-dialog';
@@ -73,6 +74,11 @@ export class Workspace {
 
   openEditorSettings(): void {
     this.dialog.open(EditorSettingsDialog, { width: '720px', maxWidth: '92vw' });
+  }
+
+  /** `disableClose`: a stray Escape mid-capture would leave the render running behind a closed dialog. */
+  openExport(): void {
+    this.dialog.open(ExportDialog, { maxWidth: '92vw', disableClose: true });
   }
 
   openDesktopVersion(): void {

@@ -2,9 +2,8 @@ precision highp float;
 
 uniform vec2 iResolution;
 uniform float iTime;
-uniform vec4 iMouse;      // xy: pixel coords, z: pointer down, w: unused
-uniform vec2 iMouseVel;   // pointer velocity, pixels/second
-uniform vec3 u_clickData[__MAX_WAVES__]; // xy: click pixel coords, z: click time (<=0 = slot unused)
+uniform vec4 iMouse;
+uniform vec2 iMouseVel;
 
 // --- Structure ---
 uniform float u_timeScale;
@@ -12,7 +11,6 @@ uniform float u_warpIntensity;
 uniform float u_warpScale;
 uniform float u_detailScale;
 uniform float u_roughnessAmount;
-uniform float u_strataStretch;  // <1 elongates features along X into poured strata
 uniform float u_flowSpeed;
 
 // Poured paint pools into discrete steps rather than a smooth gradient.
@@ -24,21 +22,9 @@ uniform float u_layerVariation;
 uniform float u_edgeDark;
 uniform float u_edgeGloss;
 
-// --- Click ripples ---
-uniform float u_waveSpeed;
-uniform float u_waveFrequency;
-uniform float u_waveAmplitude;
-uniform float u_wavePacketWidth;
-uniform float u_waveDuration;
-uniform float u_waveInitialFadeIn;
-uniform float u_waveHueShiftStrength;
-uniform float u_waveCrestGlow;
-uniform float u_chromaticAberration;
-
-// --- Pointer ---
-uniform float u_continuousDistortionStrength;
-uniform float u_continuousEffectRadius;
-uniform float u_smearStrength;
+const float CONTINUOUS_DISTORTION_STRENGTH = 0.045;
+const float CONTINUOUS_EFFECT_RADIUS = 0.32;
+const float SMEAR_STRENGTH = 0.05;
 
 // --- Wet paint lighting ---
 uniform float u_lightAngle;
@@ -66,7 +52,6 @@ uniform float u_grain;
 
 varying vec2 vUv;
 
-const int C_MAX_WAVES = __MAX_WAVES__;
 const float TAU = 6.2831853;
 
 // ============================================================
@@ -169,11 +154,8 @@ vec2 domainWarp(vec2 p, float t, out vec2 q, out vec2 r) {
   return p + u_warpIntensity * 2.0 * r;
 }
 
-// Screen space -> flow space. Compressing X makes the noise vary slowly along
-// that axis, so every field built on top of it (warp, height, veins) comes out
-// elongated horizontally: paint that has been poured and dragged sideways.
 vec2 toFlow(vec2 p) {
-  return vec2(p.x * u_strataStretch, p.y);
+  return p;
 }
 
 // Height of the paint surface, sampled in flow space.
@@ -281,41 +263,9 @@ void main() {
   float time = iTime * u_timeScale;
 
   // ---------------------------------------------------------
-  // Interaction: ripples and pointer smear displace the sampling
-  // position BEFORE the warp, so interaction deforms the paint
-  // structure itself rather than just tinting the surface.
+  // Interaction: pointer smear displace the sampling position BEFORE the warp.
   // ---------------------------------------------------------
   vec2 p = uv;
-  float rippleField = 0.0; // signed, drives hue shift
-  float crestField = 0.0;  // unsigned, drives glow + aberration
-
-  for (int i = 0; i < C_MAX_WAVES; ++i) {
-    float clickTime = u_clickData[i].z;
-    if (clickTime <= 0.0) continue;
-
-    float age = iTime - clickTime;
-    if (age < 0.0 || age >= u_waveDuration) continue;
-
-    vec2 center = toAspect(u_clickData[i].xy / iResolution.xy, aspect);
-    vec2 toCenter = p - center;
-    float dist = length(toCenter);
-
-    float frontRadius = age * u_waveSpeed;
-    float offset = dist - frontRadius;
-
-    float envelope = smoothstep(u_wavePacketWidth, 0.0, abs(offset));
-    float ripple = sin(offset * u_waveFrequency) * envelope;
-
-    // Expanding rings lose energy as their circumference grows.
-    float spread = 1.0 / (1.0 + 2.0 * frontRadius);
-    float fadeIn = smoothstep(0.0, u_waveInitialFadeIn, age);
-    float fadeOut = 1.0 - smoothstep(u_waveDuration * 0.65, u_waveDuration, age);
-    ripple *= fadeIn * fadeOut * spread;
-
-    p += safeNorm(toCenter) * ripple * u_waveAmplitude;
-    rippleField += ripple;
-    crestField += abs(ripple);
-  }
 
   bool pointerActive = iMouse.x >= 0.0 && iMouse.x <= iResolution.x &&
                        iMouse.y >= 0.0 && iMouse.y <= iResolution.y;
@@ -325,18 +275,18 @@ void main() {
     vec2 toPointer = p - pointerUv;
     float dist = length(toPointer);
 
-    if (dist < u_continuousEffectRadius) {
-      float falloff = smoothstep(u_continuousEffectRadius, 0.0, dist);
+    if (dist < CONTINUOUS_EFFECT_RADIUS) {
+      float falloff = smoothstep(CONTINUOUS_EFFECT_RADIUS, 0.0, dist);
 
       // Radial push, stronger while the pointer is held down.
-      float push = u_continuousDistortionStrength * (1.0 + iMouse.z * 0.6);
+      float push = CONTINUOUS_DISTORTION_STRENGTH * (1.0 + iMouse.z * 0.6);
       p += safeNorm(toPointer) * push * falloff;
 
       // Directional smear: dragging drags the paint with you. Clamped, since
       // a fast flick can otherwise report thousands of px/s and tear the UVs.
       vec2 vel = iMouseVel / max(iResolution.y, 1.0);
       if (length(vel) > 3.0) vel = safeNorm(vel) * 3.0;
-      p -= vel * u_smearStrength * falloff;
+      p -= vel * SMEAR_STRENGTH * falloff;
     }
   }
 
@@ -408,25 +358,7 @@ void main() {
   float variation = u_layerVariation * resolve;
 
   vec3 lab = paintLab(t, veins, jitter, variation, okDeep, okMid, okLight, okAccent, okHi);
-
-  // Ripples shear the hue as they pass — iridescent, like oil on water.
-  if (abs(rippleField) > 0.0005) {
-    lab = okHueRotate(lab, rippleField * u_waveHueShiftStrength);
-  }
-
-  vec3 color;
-  float ab = crestField * u_chromaticAberration * 0.15;
-  if (ab > 0.0005) {
-    // Split the ramp per channel across the wave crest: the dispersion
-    // reads as a thin prismatic edge riding the ripple front.
-    color = vec3(
-      oklab2lin(paintLab(t + ab, veins, jitter, variation, okDeep, okMid, okLight, okAccent, okHi)).r,
-      oklab2lin(lab).g,
-      oklab2lin(paintLab(t - ab, veins, jitter, variation, okDeep, okMid, okLight, okAccent, okHi)).b
-    );
-  } else {
-    color = oklab2lin(lab);
-  }
+  vec3 color = oklab2lin(lab);
 
   // ---------------------------------------------------------
   // Lighting + grade (all in linear light)
@@ -442,7 +374,6 @@ void main() {
 
   color += hiLin * spec;
   color += hiLin * fresnel * 0.10;
-  color += hiLin * crestField * u_waveCrestGlow;
 
   color *= u_exposure;
   color = aces(color);

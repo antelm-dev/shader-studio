@@ -97,6 +97,10 @@ export class MenuCommands {
     void this.renderer.screenshot(this.store.record()?.id ?? 'shader');
   }
 
+  captureSequence(): void {
+    this.workspace.openExport();
+  }
+
   // --- Commands -----------------------------------------------------------
 
   readonly newShader: MenuCommand = {
@@ -128,6 +132,14 @@ export class MenuCommands {
     label: () => 'Export shader…',
     disabled: this.noShader,
     action: () => this.exportCurrent(),
+  };
+
+  readonly exportSequence: MenuCommand = {
+    id: 'export-sequence',
+    icon: () => 'movie',
+    label: () => 'Export…',
+    disabled: () => !this.renderer.engine(),
+    action: () => this.captureSequence(),
   };
 
   readonly exportAll: MenuCommand = {

@@ -11,6 +11,7 @@ import {
   computed,
   effect,
   inject,
+  isDevMode,
   signal,
   untracked,
   viewChild,
@@ -37,6 +38,7 @@ import {
   type ColorScheme,
 } from './core/preferences';
 import { DesktopPlatform } from './core/desktop-platform';
+import { McpBridge } from './core/mcp-bridge';
 import { ShaderStore } from './core/shader-store';
 import { OutputSync } from './core/output-sync';
 import { ShaderCanvas } from './rendering/shader-canvas';
@@ -86,6 +88,7 @@ export class App {
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
   private readonly router = inject(Router);
   private readonly outputSync = inject(OutputSync);
+  private readonly mcpBridge = inject(McpBridge);
   private routingReady = false;
 
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
@@ -138,6 +141,7 @@ export class App {
       shortcut: 'S',
       action: () => this.commands.captureImage(),
     },
+    this.commands.exportSequence,
   ];
 
   protected readonly shaderCommands: readonly MenuCommand[] = [
@@ -236,6 +240,14 @@ export class App {
       this.desktop.onCloseRequested(() => void this.handleDesktopClose());
     });
     if (!this.outputMode) afterNextRender(() => this.hintContextMenus());
+
+    // Dev-only bridge for `mcp/server.ts`: lets an agent drive this tab's
+    // store live. Never runs in a production build, and skipped on the
+    // secondary output window, which mirrors the main tab rather than
+    // hosting the editing session itself.
+    if (!this.outputMode && isDevMode()) {
+      afterNextRender(() => this.mcpBridge.start());
+    }
 
     this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))

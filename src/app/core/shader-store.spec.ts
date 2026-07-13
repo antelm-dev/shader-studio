@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  DEFAULT_CAPTURE,
   DEFAULT_CHANNELS,
   DEFAULT_RENDER,
   toSummary,
@@ -178,6 +179,7 @@ class FakePreferences implements Partial<Preferences> {
     colorScheme: 'dark',
     editorAppearance: DEFAULT_EDITOR_APPEARANCE,
     editorWindow: DEFAULT_EDITOR_WINDOW,
+    capture: DEFAULT_CAPTURE,
   });
 
   readonly value = this.state.asReadonly();

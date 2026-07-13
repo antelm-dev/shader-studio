@@ -147,7 +147,6 @@ prepare({
       show: false,
       frame: false,
       backgroundColor: '#090b10',
-      icon: env.paths.icon,
       webPreferences: {
         preload: env.paths.preload,
         sandbox: true,
@@ -174,7 +173,6 @@ prepare({
         show: false,
         autoHideMenuBar: true,
         backgroundColor: '#090b10',
-        icon: env.paths.icon,
         webPreferences: {
           preload: env.paths.preload,
           sandbox: true,
