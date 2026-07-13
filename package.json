@@ -15,6 +15,7 @@
     "build": "ng build",
     "clean:desktop": "node scripts/clean.mjs",
     "gen:ipc": "node scripts/gen-ipc.mjs",
+    "gen:fonts": "node scripts/gen-fonts.mjs",
     "build:renderer": "ng run shader-studio:desktop:production",
     "build:main": "rollup -c --environment NODE_ENV:production",
     "build:desktop": "node scripts/build.mjs",

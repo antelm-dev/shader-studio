@@ -19,6 +19,8 @@
     "paths": {
       "@shader-studio/shared": ["./packages/shared/src/index.ts"],
       "@shader-studio/shared/model": ["./packages/shared/src/model.ts"],
+      "@shader-studio/shared/project": ["./packages/shared/src/project.ts"],
+      "@shader-studio/shared/pass-source": ["./packages/shared/src/pass-source.ts"],
       "@shader-studio/shared/validate": ["./packages/shared/src/validate.ts"],
       "@shader-studio/shared/mcp-protocol": ["./packages/shared/src/mcp-protocol.ts"]
     }

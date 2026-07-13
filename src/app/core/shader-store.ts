@@ -24,14 +24,50 @@ import {
   type TextureChannelSettingsPatch,
 } from '@shader-studio/shared/model';
 import {
+  addBuffer,
+  addFile,
+  bufferPasses,
+  displayPasses,
+  duplicateFile,
+  duplicatePass,
+  findFile,
+  findPass,
+  freeSlot,
+  imagePass,
+  migrateLegacyProject,
+  moveFile,
+  movePass,
+  removeFile,
+  removePass,
+  renameFile,
+  renamePass,
+  resolvePassOrder,
+  setChannelBinding,
+  setFileSource,
+  setPassEnabled,
+  setPassResolution,
+  setPassSampling,
+  setPassSource,
+  setVertexSource,
+  type BufferSlot,
+  type ChannelBinding,
+  type ChannelIndex,
+  type PassKind,
+  type PassResolution,
+  type ProjectError,
+  type RenderPass,
+  type ShaderProject,
+} from '@shader-studio/shared/project';
+import {
   defaultParams,
   extFromMime,
   LIMITS,
   sanitizeParams,
   validateControls,
 } from '@shader-studio/shared/validate';
-import type { CompileDiagnostic } from './diagnostic';
+import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from './diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
+import { ProjectPersistence } from './project-persistence';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { ApiError, ShaderApi } from './shader-api';
 import { Preferences } from './preferences';
@@ -41,30 +77,85 @@ import { ThumbnailAssets } from './thumbnail-assets';
 /**
  * The single source of truth for the workspace.
  *
- * Three layers of state, deliberately distinct:
+ * Four layers of state, deliberately distinct:
  *
  *  - `record`  — the shader exactly as the server last gave it to us.
- *  - `draft`   — the editor buffers. Diverges from `record` while editing;
- *                `dirty` is the difference. Saving pushes it to the API.
+ *  - `saved`   — the project as last committed: the record's fragment and vertex,
+ *                plus the passes and files that only exist locally. `dirty` is
+ *                the difference between this and the draft.
+ *  - `draft`   — the editor buffers: the whole project, the config text, and the
+ *                render settings. Saving pushes it to the API and to storage.
  *  - `params`  — the live uniform values. These are *not* part of the draft:
  *                turning a knob is not an unsaved edit to the source, it is a
  *                value you can capture as a preset.
  *
  * Rendering, editing and persistence all read from here and none of them know
- * about each other.
+ * about each other. In particular, nothing outside this file knows that a
+ * project is stored in two places — the store is what makes a record and its
+ * passes look like one document.
  */
 
 /** The editable buffers behind the source editor. */
 export interface ShaderDraft {
-  fragment: string;
-  vertex: string;
+  /**
+   * Every source the user can edit: the Image pass, Common, the buffers, the
+   * vertex shader and the plain files. The Image pass's source is what the
+   * server knows as `fragment`, which is why `fragment` below is derived rather
+   * than stored — two copies of the same string is one copy too many.
+   */
+  project: ShaderProject;
   /** The control schema, as JSON text — this is what the config tab edits. */
   controlsText: string;
   render: RenderSettings;
 }
 
+/**
+ * Anything the editor can open a tab for.
+ *
+ * Passes and files are deliberately in one namespace with `@vertex` and
+ * `@config`: a tab is a tab, a diagnostic points at one of these ids whatever
+ * kind of thing it is, and the tab bar's only job is to *show* the difference
+ * between a render pass and a plain file rather than to model it twice.
+ */
+export type DocumentKind = 'pass' | 'file' | 'vertex' | 'config';
+
+export interface EditorDocument {
+  id: string;
+  kind: DocumentKind;
+  name: string;
+  language: 'glsl' | 'json';
+  source: string;
+  /** Passes only: which of Image / Common / Buffer this is. */
+  passKind?: PassKind;
+  slot?: BufferSlot | null;
+  /** Passes only. A disabled buffer is still editable — it just does not render. */
+  enabled?: boolean;
+}
+
 function controlsToText(controls: readonly ShaderControl[]): string {
   return JSON.stringify(controls, null, 2);
+}
+
+/**
+ * One error, once.
+ *
+ * The Common pass is compiled into every pass that uses it, so a typo in Common
+ * comes back from the driver once per pass — three passes, three identical
+ * complaints about the same line of the same file. The user made one mistake and
+ * should be shown one error.
+ */
+function dedupe(diagnostics: readonly CompileDiagnostic[]): CompileDiagnostic[] {
+  const seen = new Set<string>();
+  const unique: CompileDiagnostic[] = [];
+
+  for (const diagnostic of diagnostics) {
+    const key = `${diagnostic.docId ?? ''}|${diagnostic.line}|${diagnostic.severity}|${diagnostic.message}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(diagnostic);
+  }
+
+  return unique;
 }
 
 /**
@@ -89,6 +180,7 @@ export class ShaderStore {
   private readonly transferState = inject(TransferState);
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
   private readonly recovery = inject(DraftRecovery);
+  private readonly projects = inject(ProjectPersistence);
   private readonly textures = inject(TextureAssets);
   private readonly thumbnails = inject(ThumbnailAssets);
   private readonly renderer = inject(RendererHandle);
@@ -100,6 +192,12 @@ export class ShaderStore {
     this.recovery.onWarning = () =>
       this.notice.set({
         text: 'Local draft recovery is unavailable in this browser session',
+        error: true,
+      });
+
+    this.projects.onWarning = () =>
+      this.notice.set({
+        text: 'Local storage is full, so buffers and files may not survive a reload',
         error: true,
       });
 
@@ -133,12 +231,28 @@ export class ShaderStore {
   readonly draft = signal<ShaderDraft | null>(null);
   readonly params = signal<ShaderParams>({});
 
+  /**
+   * The project as last committed — what `dirty` is measured against.
+   *
+   * Kept apart from `record` because the record cannot express it: the server
+   * only knows the Image pass and the vertex shader, so a change to Buffer B
+   * would otherwise be invisible to the unsaved-changes machinery, and closing
+   * the tab would take it with no warning at all.
+   */
+  private readonly savedProject = signal<ShaderProject | null>(null);
+
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly activePresetId = signal<string | null>(null);
 
+  /** The document the editor is showing. One of `documents()`. */
+  readonly activeDocId = signal<string | null>(null);
+
   /** Compile + config diagnostics for the current draft. */
   readonly diagnostics = signal<readonly CompileDiagnostic[]>([]);
+
+  /** Passes that are currently being recompiled, so their tabs can say so. */
+  readonly compiling = signal<ReadonlySet<string>>(new Set());
 
   /** Last message worth showing the user (error or confirmation). */
   readonly notice = signal<{ text: string; error: boolean } | null>(null);
@@ -157,6 +271,103 @@ export class ShaderStore {
    */
   readonly channels = computed<TextureChannels>(() => this.record()?.channels ?? DEFAULT_CHANNELS);
 
+  // --- The project --------------------------------------------------------
+
+  readonly project = computed<ShaderProject | null>(() => this.draft()?.project ?? null);
+
+  /** The Image pass's source. What the server calls the shader's `fragment`. */
+  readonly fragment = computed(() => {
+    const project = this.project();
+    return project ? imagePass(project).source : '';
+  });
+
+  readonly vertex = computed(() => this.project()?.vertex ?? '');
+
+  readonly passes = computed<readonly RenderPass[]>(() => {
+    const project = this.project();
+    return project ? displayPasses(project) : [];
+  });
+
+  readonly buffers = computed<readonly RenderPass[]>(() => {
+    const project = this.project();
+    return project ? bufferPasses(project) : [];
+  });
+
+  readonly canAddBuffer = computed(() => {
+    const project = this.project();
+    return project !== null && freeSlot(project) !== null;
+  });
+
+  /**
+   * The render order, and everything wrong with the wiring that produced it.
+   *
+   * Both come out of the same walk of the graph, because they are the same
+   * question: a cycle *is* the reason an order could not be found. Splitting them
+   * would mean walking twice and risking two different answers.
+   */
+  private readonly graph = computed(() => {
+    const project = this.project();
+    return project
+      ? resolvePassOrder(project)
+      : { order: [] as RenderPass[], errors: [] as ProjectError[] };
+  });
+
+  readonly renderOrder = computed<readonly RenderPass[]>(() => this.graph().order);
+  readonly projectErrors = computed<readonly ProjectError[]>(() => this.graph().errors);
+
+  /** Every tab the editor can show, in the order it shows them. */
+  readonly documents = computed<readonly EditorDocument[]>(() => {
+    const draft = this.draft();
+    if (!draft) return [];
+
+    const project = draft.project;
+
+    return [
+      ...displayPasses(project).map(
+        (pass): EditorDocument => ({
+          id: pass.id,
+          kind: 'pass',
+          name: pass.name,
+          language: 'glsl',
+          source: pass.source,
+          passKind: pass.kind,
+          slot: pass.slot,
+          enabled: pass.enabled,
+        }),
+      ),
+      ...project.files.map(
+        (file): EditorDocument => ({
+          id: file.id,
+          kind: 'file',
+          name: file.name,
+          language: 'glsl',
+          source: file.source,
+        }),
+      ),
+      { id: VERTEX_DOC, kind: 'vertex', name: 'Vertex', language: 'glsl', source: project.vertex },
+      {
+        id: CONFIG_DOC,
+        kind: 'config',
+        name: 'Config',
+        language: 'json',
+        source: draft.controlsText,
+      },
+    ];
+  });
+
+  /**
+   * The open document. Falls back to the Image pass rather than to nothing: a
+   * tab can be deleted while it is open, and an editor showing nothing at all is
+   * a worse answer than an editor showing the one document that always exists.
+   */
+  readonly activeDoc = computed<EditorDocument | null>(() => {
+    const documents = this.documents();
+    if (documents.length === 0) return null;
+
+    const id = this.activeDocId();
+    return documents.find((document) => document.id === id) ?? documents[0];
+  });
+
   /**
    * The schema the GUI and the uniforms are built from: the draft's, if it
    * parses, otherwise the last known-good one from the record. A half-typed
@@ -174,21 +385,62 @@ export class ShaderStore {
     return draft === null || this.parseControls(draft.controlsText) !== null;
   });
 
+  /**
+   * The project is compared against `savedProject`, not against the record: the
+   * record has no idea Buffer B exists, so measuring dirtiness against it would
+   * silently discard every change to a buffer, a file or a channel binding — the
+   * exact edits this whole feature is about.
+   */
   readonly dirty = computed(() => {
     const record = this.record();
     const draft = this.draft();
+    const saved = this.savedProject();
     if (!record || !draft) return false;
+
     return (
-      draft.fragment !== record.fragment ||
-      draft.vertex !== record.vertex ||
+      JSON.stringify(draft.project) !== JSON.stringify(saved) ||
       draft.controlsText !== controlsToText(record.controls) ||
       JSON.stringify(draft.render) !== JSON.stringify(record.render)
     );
   });
 
+  /**
+   * A broken graph is an error like any other, and belongs in the same list: a
+   * circular buffer dependency is exactly as much a reason the shader is not
+   * doing what you asked as a missing semicolon, and hiding it somewhere else
+   * would leave the editor showing no errors while the picture stayed frozen.
+   */
+  readonly allDiagnostics = computed<readonly CompileDiagnostic[]>(() => {
+    const project = this.project();
+
+    const graph = this.projectErrors().map((error): CompileDiagnostic => {
+      const pass = error.passId && project ? findPass(project, error.passId) : null;
+      return {
+        severity: 'error',
+        line: 0,
+        message: error.message,
+        source: 'fragment',
+        ...(error.passId ? { docId: error.passId } : {}),
+        ...(pass ? { docName: pass.name } : {}),
+      };
+    });
+
+    return dedupe([...graph, ...this.diagnostics()]);
+  });
+
   readonly hasErrors = computed(() =>
-    this.diagnostics().some((diagnostic) => diagnostic.severity === 'error'),
+    this.allDiagnostics().some((diagnostic) => diagnostic.severity === 'error'),
   );
+
+  /** Errors belonging to one document — what its tab shows a badge for. */
+  diagnosticsFor(docId: string): CompileDiagnostic[] {
+    return this.allDiagnostics().filter((diagnostic) => diagnostic.docId === docId);
+  }
+
+  errorCountFor(docId: string): number {
+    return this.diagnosticsFor(docId).filter((diagnostic) => diagnostic.severity === 'error')
+      .length;
+  }
 
   // --- Loading ------------------------------------------------------------
 
@@ -265,20 +517,50 @@ export class ShaderStore {
 
   /** Take a server record as the new truth and reset the draft and params onto it. */
   private adopt(record: ShaderRecord): void {
+    const project = this.projectFor(record);
+
     this.record.set(record);
+    this.savedProject.set(structuredClone(project));
     this.draft.set({
-      fragment: record.fragment,
-      vertex: record.vertex,
+      project,
       controlsText: controlsToText(record.controls),
       render: structuredClone(record.render),
     });
     this.params.set(defaultParams(record.controls));
     this.activePresetId.set(null);
     this.diagnostics.set([]);
+    this.activeDocId.set(imagePass(project).id);
 
     const recovered = this.isServer ? null : this.recovery.get(record.id);
     if (recovered?.baselineUpdatedAt === record.updatedAt) this.applyRecoveredDraft(recovered);
     else this.staleRecovery.set(recovered);
+  }
+
+  /**
+   * The project behind a record: the one in storage, or one built from the record.
+   *
+   * This is the whole of the legacy story, and the reason there is no migration
+   * step to run and nothing to go wrong on first load. A shader with nothing in
+   * storage is not out of date — it is a project with one pass, and
+   * `migrateLegacyProject` says so in one line, binding the four texture slots
+   * exactly as the old single-pass engine did.
+   *
+   * When storage *does* have something but the record has moved on underneath it
+   * — an import, an edit in another tab, a desktop sync — the record wins for the
+   * two things the record actually owns (the Image source and the vertex shader)
+   * and the passes and files are kept. The alternative, throwing the buffers away
+   * because the fragment changed, would lose far more than it protects.
+   */
+  private projectFor(record: ShaderRecord): ShaderProject {
+    if (this.isServer) return migrateLegacyProject(record.fragment, record.vertex);
+
+    const stored = this.projects.load(record.id, record.fragment, record.vertex);
+    if (!stored) return migrateLegacyProject(record.fragment, record.vertex);
+
+    if (stored.baselineUpdatedAt === record.updatedAt) return stored.project;
+
+    const image = imagePass(stored.project);
+    return setVertexSource(setPassSource(stored.project, image.id, record.fragment), record.vertex);
   }
 
   resolveRecovery(restore: boolean): void {
@@ -296,6 +578,17 @@ export class ShaderStore {
     this.adopt(record);
   }
 
+  /**
+   * A reload is not always something the user chose, so the draft — the *whole*
+   * project, buffers and files and wiring included — is mirrored to storage
+   * while it is dirty, and `adopt` puts it straight back.
+   *
+   * This is why nothing else needs to write the project to storage as it is
+   * edited. `ProjectPersistence` holds what was *saved*, so that `dirty` has
+   * something to measure against; `DraftRecovery` holds what was not. Blurring
+   * the two — persisting the live project as though it were saved — would make
+   * every unsaved edit look saved the moment the page was reloaded.
+   */
   flushRecovery(): void {
     const record = this.record();
     const draft = this.draft();
@@ -304,8 +597,7 @@ export class ShaderStore {
 
   private applyRecoveredDraft(recovered: RecoveredDraft): void {
     this.draft.set({
-      fragment: recovered.fragment,
-      vertex: recovered.vertex,
+      project: structuredClone(recovered.project),
       controlsText: recovered.controlsText,
       render: structuredClone(recovered.render),
     });
@@ -314,12 +606,195 @@ export class ShaderStore {
 
   // --- Editing ------------------------------------------------------------
 
+  /** The Image pass's source — the shader's `fragment`, by any other name. */
   setFragment(fragment: string): void {
-    this.patchDraft({ fragment });
+    const project = this.project();
+    if (!project) return;
+    this.patchProject(setPassSource(project, imagePass(project).id, fragment));
   }
 
   setVertex(vertex: string): void {
-    this.patchDraft({ vertex });
+    const project = this.project();
+    if (!project) return;
+    this.patchProject(setVertexSource(project, vertex));
+  }
+
+  /**
+   * Write to whichever document the editor is showing.
+   *
+   * The tab bar does not need to know that a pass, a file, the vertex shader and
+   * the config schema are stored in four different places — it has an id and a
+   * string, and this is where the id decides what that means.
+   */
+  setDocSource(id: string, source: string): void {
+    const project = this.project();
+    if (!project) return;
+
+    if (id === CONFIG_DOC) {
+      this.setControlsText(source);
+      return;
+    }
+    if (id === VERTEX_DOC) {
+      this.patchProject(setVertexSource(project, source));
+      return;
+    }
+    if (findPass(project, id)) {
+      this.patchProject(setPassSource(project, id, source));
+      return;
+    }
+    if (findFile(project, id)) {
+      this.patchProject(setFileSource(project, id, source));
+    }
+  }
+
+  selectDoc(id: string): void {
+    this.activeDocId.set(id);
+  }
+
+  /** Next or previous tab, wrapping. What Ctrl+PageDown does everywhere else. */
+  cycleDoc(step: 1 | -1): void {
+    const documents = this.documents();
+    if (documents.length === 0) return;
+
+    const current = documents.findIndex((doc) => doc.id === this.activeDoc()?.id);
+    const next = (current + step + documents.length) % documents.length;
+    this.activeDocId.set(documents[next].id);
+  }
+
+  /**
+   * Force a recompile now, rather than when the debounce elapses.
+   *
+   * The renderer recompiles a pass whose *composed source* changed, which means
+   * asking for a recompile of a source nobody touched would be a no-op. So the
+   * request is a signal the canvas watches, not a source edit: it says "compile,
+   * even though nothing changed", which is what the user means by Ctrl+Enter
+   * after the driver has been sulking or a texture has finished loading.
+   */
+  readonly recompileRequest = signal(0);
+
+  recompile(): void {
+    this.recompileRequest.update((n) => n + 1);
+  }
+
+  // --- Passes -------------------------------------------------------------
+
+  addBufferPass(): void {
+    const project = this.project();
+    if (!project) return;
+
+    if (!freeSlot(project)) {
+      this.notice.set({ text: 'All four buffer slots are in use', error: true });
+      return;
+    }
+
+    const next = addBuffer(project);
+    this.patchProject(next);
+    // Open what was just created: making a buffer and then having to go and find
+    // it is not a workflow anybody wants.
+    this.activeDocId.set(bufferPasses(next).at(-1)?.id ?? this.activeDocId());
+  }
+
+  duplicateBufferPass(id: string): void {
+    const project = this.project();
+    if (!project) return;
+
+    if (!freeSlot(project)) {
+      this.notice.set({ text: 'All four buffer slots are in use', error: true });
+      return;
+    }
+
+    const next = duplicatePass(project, id);
+    this.patchProject(next);
+
+    const copy = bufferPasses(next).find(
+      (pass) => !bufferPasses(project).some((old) => old.id === pass.id),
+    );
+    if (copy) this.activeDocId.set(copy.id);
+  }
+
+  removeBufferPass(id: string): void {
+    const project = this.project();
+    if (!project) return;
+
+    this.patchProject(removePass(project, id));
+    if (this.activeDocId() === id) this.activeDocId.set(imagePass(project).id);
+  }
+
+  renamePassById(id: string, name: string): void {
+    const project = this.project();
+    if (project) this.patchProject(renamePass(project, id, name));
+  }
+
+  setPassEnabledById(id: string, enabled: boolean): void {
+    const project = this.project();
+    if (project) this.patchProject(setPassEnabled(project, id, enabled));
+  }
+
+  movePassTo(id: string, toIndex: number): void {
+    const project = this.project();
+    if (project) this.patchProject(movePass(project, id, toIndex));
+  }
+
+  setPassResolutionById(id: string, patch: Partial<PassResolution>): void {
+    const project = this.project();
+    if (project) this.patchProject(setPassResolution(project, id, patch));
+  }
+
+  setPassSamplingById(
+    id: string,
+    patch: { filter?: RenderPass['filter']; wrap?: RenderPass['wrap'] },
+  ): void {
+    const project = this.project();
+    if (project) this.patchProject(setPassSampling(project, id, patch));
+  }
+
+  setChannel(id: string, channel: ChannelIndex, binding: ChannelBinding): void {
+    const project = this.project();
+    if (project) this.patchProject(setChannelBinding(project, id, channel, binding));
+  }
+
+  // --- Files --------------------------------------------------------------
+
+  addSourceFile(name?: string): void {
+    const project = this.project();
+    if (!project) return;
+
+    const next = addFile(project, name);
+    this.patchProject(next);
+    this.activeDocId.set(next.files.at(-1)?.id ?? this.activeDocId());
+  }
+
+  duplicateSourceFile(id: string): void {
+    const project = this.project();
+    if (!project) return;
+
+    const next = duplicateFile(project, id);
+    this.patchProject(next);
+
+    const copy = next.files.find((file) => !project.files.some((old) => old.id === file.id));
+    if (copy) this.activeDocId.set(copy.id);
+  }
+
+  removeSourceFile(id: string): void {
+    const project = this.project();
+    if (!project) return;
+
+    this.patchProject(removeFile(project, id));
+    if (this.activeDocId() === id) this.activeDocId.set(imagePass(project).id);
+  }
+
+  renameSourceFile(id: string, name: string): void {
+    const project = this.project();
+    if (project) this.patchProject(renameFile(project, id, name));
+  }
+
+  moveSourceFile(id: string, toIndex: number): void {
+    const project = this.project();
+    if (project) this.patchProject(moveFile(project, id, toIndex));
+  }
+
+  private patchProject(project: ShaderProject): void {
+    this.patchDraft({ project });
   }
 
   /**
@@ -421,21 +896,30 @@ export class ShaderStore {
 
     this.saving.set(true);
     try {
+      // The record gets the two things it can hold: the Image pass's source and
+      // the vertex shader. Everything else about the project — the buffers, the
+      // Common pass, the files, the wiring — goes to local storage, because the
+      // record has nowhere to put it and inventing somewhere would break every
+      // existing shader, export and desktop install at once.
       const saved = await this.api.update(record.id, {
-        fragment: draft.fragment,
-        vertex: draft.vertex,
+        fragment: imagePass(draft.project).source,
+        vertex: draft.project.vertex,
         controls,
         render: draft.render,
       });
+
+      const project = structuredClone(draft.project);
+      this.projects.save(saved.id, saved.updatedAt, project);
 
       // Keep the live params and the open preset across a save: the user was
       // editing the source, not resetting the knobs.
       const params = this.params();
       const presetId = this.activePresetId();
+
       this.record.set(saved);
+      this.savedProject.set(structuredClone(project));
       this.draft.set({
-        fragment: saved.fragment,
-        vertex: saved.vertex,
+        project,
         controlsText: controlsToText(saved.controls),
         render: structuredClone(saved.render),
       });
@@ -537,6 +1021,7 @@ export class ShaderStore {
     try {
       await this.api.remove(id);
       this.recovery.remove(id);
+      this.projects.remove(id);
       this.textures.releaseShader(id);
       this.thumbnails.releaseShader(id);
       await this.refreshList();
@@ -544,6 +1029,7 @@ export class ShaderStore {
       if (this.selectedId() === id) {
         this.record.set(null);
         this.draft.set(null);
+        this.savedProject.set(null);
         this.params.set({});
         this.preferences.patch({ lastShaderId: null });
 

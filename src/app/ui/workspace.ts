@@ -3,8 +3,10 @@ import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 
 import type { ImportMode } from '@shader-studio/shared/model';
+import { composePass } from '@shader-studio/shared/pass-source';
+import { imagePass } from '@shader-studio/shared/project';
 import { DesktopPlatform } from '../core/desktop-platform';
-import { ShaderStore } from '../core/shader-store';
+import { ShaderStore, type EditorDocument } from '../core/shader-store';
 import { buildFullGlsl } from '../rendering/glsl-export';
 import { convertShadertoy } from '../rendering/shadertoy-import';
 import { ConfirmDialog, type ConfirmDialogData } from './confirm-dialog';
@@ -156,6 +158,83 @@ export class Workspace {
     }
   }
 
+  // --- Files and passes ---------------------------------------------------
+
+  async createFile(): Promise<void> {
+    if (!this.store.draft()) return;
+
+    const name = await this.prompt({
+      title: 'New file',
+      label: 'File name',
+      value: 'untitled.glsl',
+      confirmText: 'Create',
+      hint: 'Include it from a pass with #include "the-name"',
+    });
+    if (name) this.store.addSourceFile(name);
+  }
+
+  async renameDocument(doc: EditorDocument): Promise<void> {
+    const name = await this.prompt({
+      title: doc.kind === 'file' ? 'Rename file' : 'Rename pass',
+      label: 'Name',
+      value: doc.name,
+      confirmText: 'Rename',
+      hint:
+        doc.kind === 'file'
+          ? 'Every #include that names this file has to be updated by hand'
+          : 'The slot (Buffer A–D) does not change, so nothing that samples it breaks',
+    });
+    if (!name || name === doc.name) return;
+
+    if (doc.kind === 'file') this.store.renameSourceFile(doc.id, name);
+    else this.store.renamePassById(doc.id, name);
+  }
+
+  /**
+   * Deleting a buffer is not the same size of action as deleting a file, and the
+   * confirmation says so: a file is text, but a buffer is something other passes
+   * may be *sampling*, and removing it silently unbinds every channel that named
+   * it. Naming those consumers is the difference between a confirmation and a
+   * formality.
+   */
+  async deleteDocument(doc: EditorDocument): Promise<void> {
+    const project = this.store.project();
+    if (!project) return;
+
+    if (doc.kind === 'file') {
+      const confirmed = await this.confirm({
+        title: 'Delete file',
+        message: `“${doc.name}” will be removed from the project. Any #include that names it will stop resolving.`,
+        confirmText: 'Delete',
+        destructive: true,
+      });
+      if (confirmed) this.store.removeSourceFile(doc.id);
+      return;
+    }
+
+    const consumers = project.passes
+      .filter(
+        (pass) =>
+          pass.id !== doc.id &&
+          pass.channels.some((binding) => binding.kind === 'buffer' && binding.passId === doc.id),
+      )
+      .map((pass) => pass.name);
+
+    const confirmed = await this.confirm({
+      title: 'Delete buffer pass',
+      message:
+        `“${doc.name}” and its render targets will be removed.` +
+        (consumers.length > 0
+          ? ` ${consumers.join(' and ')} ${consumers.length === 1 ? 'samples' : 'sample'} it, and ${
+              consumers.length === 1 ? 'its channel' : 'their channels'
+            } will be cleared.`
+          : ''),
+      confirmText: 'Delete',
+      destructive: true,
+    });
+    if (confirmed) this.store.removeBufferPass(doc.id);
+  }
+
   // --- Source ---------------------------------------------------------------
 
   /**
@@ -167,7 +246,11 @@ export class Workspace {
     const draft = this.store.draft();
     if (!draft) return;
 
-    const glsl = buildFullGlsl(draft.fragment, this.store.controls());
+    // The Image pass, composed: Common and any `#include`s folded in, so what
+    // lands on the clipboard is what the driver actually saw — not a source with
+    // half its declarations in another tab.
+    const { source } = composePass(draft.project, imagePass(draft.project));
+    const glsl = buildFullGlsl(source, this.store.controls());
 
     try {
       await navigator.clipboard.writeText(glsl);

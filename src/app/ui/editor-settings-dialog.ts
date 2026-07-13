@@ -14,7 +14,7 @@ import { MatSliderModule } from '@angular/material/slider';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { CodeEditor } from '../editor/code-editor';
+import { CodeEditor, type EditorDoc } from '../editor/code-editor';
 import { EditorSettings } from '../editor/editor-settings';
 import { EDITOR_THEMES } from '../editor/editor-themes';
 import { FONT_CATALOGUE, FontLoader, SYSTEM_FONT, findFont } from '../editor/google-fonts';
@@ -357,9 +357,8 @@ void main() {
       <!-- Read-only, and pointedly so: this is a swatch, not a scratchpad. -->
       <app-code-editor
         class="sample"
-        language="glsl"
+        [doc]="sample"
         [readOnly]="true"
-        [value]="sample"
         [appearance]="appearance()"
         [colorScheme]="preferences.resolved()"
       />
@@ -642,7 +641,12 @@ export class EditorSettingsDialog {
   protected readonly limits = EDITOR_LIMITS;
   protected readonly themes = EDITOR_THEMES;
   protected readonly tabSizes = [2, 4, 8];
-  protected readonly sample = SAMPLE;
+  /** A document of its own, so the preview's model never collides with a real file's. */
+  protected readonly sample: EditorDoc = {
+    id: '@appearance-sample',
+    language: 'glsl',
+    value: SAMPLE,
+  };
 
   protected readonly wrapModes: readonly { value: WordWrapMode; label: string }[] = [
     { value: 'off', label: 'Off — scroll horizontally' },

@@ -174,8 +174,8 @@ export class McpBridge {
       record: this.store.record(),
       draft: draft
         ? {
-            fragment: draft.fragment,
-            vertex: draft.vertex,
+            fragment: this.store.fragment(),
+            vertex: this.store.vertex(),
             controlsText: draft.controlsText,
             render: draft.render,
           }

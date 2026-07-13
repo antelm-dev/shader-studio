@@ -29,18 +29,40 @@ import { GLSL_LANGUAGE_ID, JSON_LANGUAGE_ID, loadMonaco, type MonacoApi } from '
 
 export type EditorLanguage = 'glsl' | 'json';
 
+/** One document the editor can show. The id is what its state is filed under. */
+export interface EditorDoc {
+  id: string;
+  language: EditorLanguage;
+  value: string;
+}
+
 /**
  * A Monaco instance bound to a signal.
  *
- * Deliberately dumb: it renders whatever `value` it is given, dresses itself in
+ * Deliberately dumb: it renders whatever `doc` it is given, dresses itself in
  * whatever `appearance` it is given, and reports edits through `valueChange`. It
- * holds no opinion about shaders, which is what lets the same component back the
- * fragment, vertex and config tabs.
+ * holds no opinion about shaders, which is what lets the same component back
+ * every pass, every file, the vertex shader and the config tab.
  *
- * It also never rebuilds itself. Every input is applied to the *live* editor
- * through `updateOptions`, because tearing down a Monaco instance takes the undo
- * stack, the cursor and the scroll position with it — and this component is
- * moved between a docked panel and a floating window at the user's whim.
+ * It also never rebuilds itself, and this is the whole design.
+ *
+ * A Monaco *editor* is a view. A Monaco *model* is the document: the text, and —
+ * critically — the undo/redo stack. Tearing down an editor, or reassigning its
+ * text, destroys both. So the editor here is created exactly once and lives for
+ * as long as the component, and switching tabs swaps the **model** underneath
+ * it: `setModel` for the text and the undo history, `saveViewState`/
+ * `restoreViewState` for the cursor, the selection and the scroll position.
+ *
+ * The alternative — one editor per document, or one editor whose value is
+ * reassigned — is what makes an editor "lose your place": switch to Buffer A and
+ * back, and the cursor is at the top, the scroll is at the top, and Ctrl+Z does
+ * nothing. Keeping a model per document is what makes all three survive, and it
+ * costs one object per open file.
+ *
+ * The same reasoning is why nothing here recreates the editor for appearance
+ * either: every option is applied to the live instance through `updateOptions`,
+ * because this component is also moved between a docked panel and a floating
+ * window at the user's whim.
  */
 @Component({
   selector: 'app-code-editor',
@@ -74,14 +96,25 @@ export type EditorLanguage = 'glsl' | 'json';
   `,
 })
 export class CodeEditor {
-  readonly value = input.required<string>();
-  readonly language = input<EditorLanguage>('glsl');
+  readonly doc = input.required<EditorDoc>();
+  /**
+   * Every document that still exists. A model whose document is gone — a deleted
+   * buffer, a deleted file — is disposed: its undo stack is not worth keeping for
+   * a tab that can never be opened again.
+   */
+  readonly liveIds = input<readonly string[] | null>(null);
   readonly diagnostics = input<readonly CompileDiagnostic[]>([]);
   readonly readOnly = input(false);
   readonly colorScheme = input<ResolvedColorScheme>('dark');
   readonly appearance = input<EditorAppearance>(DEFAULT_EDITOR_APPEARANCE);
 
-  readonly valueChange = output<string>();
+  /**
+   * Carries the document id, not just the text. The alternative — the parent
+   * assuming an edit belongs to whichever tab it thinks is open — is a very
+   * efficient way to write one file's contents into another the instant those
+   * two disagree.
+   */
+  readonly valueChange = output<{ id: string; value: string }>();
 
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
   private readonly destroyRef = inject(DestroyRef);
@@ -90,6 +123,15 @@ export class CodeEditor {
 
   private readonly monaco = signal<MonacoApi | null>(null);
   private editor: Monaco.editor.IStandaloneCodeEditor | null = null;
+
+  /** One model per document: the text, and the undo/redo stack behind it. */
+  private readonly models = new Map<string, Monaco.editor.ITextModel>();
+
+  /** Cursor, selection and scroll, per document. Monaco does not keep these. */
+  private readonly viewStates = new Map<string, Monaco.editor.ICodeEditorViewState>();
+
+  /** Which document's model is currently in the editor. */
+  private mounted: string | null = null;
 
   readonly ready = signal(false);
 
@@ -139,31 +181,41 @@ export class CodeEditor {
 
     effect(() => {
       const monaco = this.monaco();
-      const value = this.value();
+      const doc = this.doc();
       if (!monaco || !this.editor) return;
 
-      // Only when it genuinely differs: assigning the value resets the cursor
-      // and the undo stack, which would be maddening mid-keystroke.
-      if (this.editor.getValue() !== value) {
-        this.applying = true;
-        this.editor.setValue(value);
-        this.applying = false;
-      }
+      untracked(() => this.mount(monaco, doc));
+    });
+
+    // Prune the models of documents that no longer exist.
+    effect(() => {
+      const live = this.liveIds();
+      if (!live) return;
+
+      untracked(() => {
+        const keep = new Set(live);
+        for (const [id, model] of this.models) {
+          if (keep.has(id) || id === this.mounted) continue;
+          model.dispose();
+          this.models.delete(id);
+          this.viewStates.delete(id);
+        }
+      });
     });
 
     effect(() => {
       const monaco = this.monaco();
       const diagnostics = this.diagnostics();
-      const language = this.language();
+      const doc = this.doc();
       if (!monaco || !this.editor) return;
 
-      const model = this.editor.getModel();
+      const model = this.models.get(doc.id);
       if (!model) return;
 
       monaco.editor.setModelMarkers(
         model,
         'shader-studio',
-        diagnostics.map((diagnostic) => this.toMarker(monaco, model, diagnostic, language)),
+        diagnostics.map((diagnostic) => this.toMarker(monaco, model, diagnostic, doc.language)),
       );
     });
 
@@ -204,6 +256,69 @@ export class CodeEditor {
   }
 
   /**
+   * Put a document in the editor, taking the outgoing one's place with it.
+   *
+   * The order matters. The view state of the document being *left* has to be
+   * captured before its model is swapped out, because `saveViewState` reads the
+   * editor's live cursor and scroll — a moment later they belong to the new
+   * document and the old ones are gone for good.
+   */
+  private mount(monaco: MonacoApi, doc: EditorDoc): void {
+    const editor = this.editor;
+    if (!editor) return;
+
+    if (this.mounted === doc.id) {
+      // Same document, new text from outside — a revert, a recovered draft.
+      // Never for text the user just typed: that already round-tripped through
+      // `valueChange`, and reassigning it here would flatten the undo stack.
+      const model = this.models.get(doc.id);
+      if (model && model.getValue() !== doc.value) {
+        this.applying = true;
+        model.setValue(doc.value);
+        this.applying = false;
+      }
+      this.flushPendingReveal(doc.id);
+      return;
+    }
+
+    if (this.mounted) {
+      const state = editor.saveViewState();
+      if (state) this.viewStates.set(this.mounted, state);
+    }
+
+    let model = this.models.get(doc.id);
+    if (!model) {
+      model = monaco.editor.createModel(doc.value, this.monacoLanguage(doc.language));
+      this.models.set(doc.id, model);
+    } else if (model.getValue() !== doc.value) {
+      this.applying = true;
+      model.setValue(doc.value);
+      this.applying = false;
+    }
+
+    this.applying = true;
+    editor.setModel(model);
+    this.applying = false;
+
+    const state = this.viewStates.get(doc.id);
+    if (state) editor.restoreViewState(state);
+
+    this.mounted = doc.id;
+
+    // After the view state, never before: a held reveal is a deliberate jump to a
+    // line, and it has to beat the cursor this document was last left at.
+    this.flushPendingReveal(doc.id);
+  }
+
+  private flushPendingReveal(docId: string): void {
+    const pending = this.pendingReveal;
+    if (!pending || pending.docId !== docId) return;
+
+    this.pendingReveal = null;
+    this.revealLine(pending.line);
+  }
+
+  /**
    * Re-measure and re-lay-out. Monaco's `automaticLayout` watches the host with a
    * ResizeObserver, which covers dragging and resizing; this exists for the cases
    * it cannot see — a tab that was hidden while its container changed size, and a
@@ -218,6 +333,46 @@ export class CodeEditor {
   }
 
   /**
+   * Put the cursor on a line of a given document — what clicking a diagnostic
+   * does.
+   *
+   * The document is named, not assumed, because the caller almost always asks
+   * for a document that is not open yet: selecting the tab and revealing the line
+   * happen in one gesture, and the tab has not been *mounted* by the time this is
+   * called — mounting is an effect, and effects have not run.
+   *
+   * Revealing anyway would put the cursor on line N of the document being
+   * navigated *away* from, and the mount that followed would then restore the
+   * incoming document's saved cursor right over the top of it. The line would
+   * simply never be shown, and the whole feature would look like it did nothing.
+   *
+   * So a reveal for a document that is not mounted is *held*, and `mount` applies
+   * it once the model is in — after the view state has been restored, so it wins.
+   */
+  revealIn(docId: string, line: number): void {
+    if (this.mounted === docId) {
+      this.revealLine(line);
+      return;
+    }
+    this.pendingReveal = { docId, line };
+  }
+
+  private pendingReveal: { docId: string; line: number } | null = null;
+
+  private revealLine(line: number): void {
+    const editor = this.editor;
+    const model = editor?.getModel();
+    if (!editor || !model) return;
+
+    const target = Math.min(Math.max(line, 1), model.getLineCount());
+    const column = Math.max(1, model.getLineFirstNonWhitespaceColumn(target));
+
+    editor.setPosition({ lineNumber: target, column });
+    editor.revealLineInCenterIfOutsideViewport(target);
+    editor.focus();
+  }
+
+  /**
    * Run the language's formatter over the buffer. Goes through Monaco's own
    * action rather than the provider directly, so the edit arrives on the
    * editor's undo stack exactly as it would from Shift+Alt+F.
@@ -229,9 +384,13 @@ export class CodeEditor {
   private async boot(): Promise<void> {
     const monaco = await loadMonaco();
 
+    const doc = untracked(this.doc);
+    const model = monaco.editor.createModel(doc.value, this.monacoLanguage(doc.language));
+    this.models.set(doc.id, model);
+    this.mounted = doc.id;
+
     const editor = monaco.editor.create(this.host().nativeElement, {
-      value: untracked(this.value),
-      language: this.monacoLanguage(untracked(this.language)),
+      model,
       theme: monacoThemeId(
         resolveThemeId(untracked(this.appearance).theme, untracked(this.colorScheme)),
       ),
@@ -244,9 +403,15 @@ export class CodeEditor {
       ...untracked(this.options),
     });
 
+    // Reads the *model*, not the editor: a change event can land in the gap
+    // between a model being swapped in and the editor settling on it, and
+    // `editor.getValue()` would then attribute one document's text to another —
+    // which is a very efficient way to overwrite a file you were not looking at.
     editor.onDidChangeModelContent(() => {
       if (this.applying) return;
-      this.valueChange.emit(editor.getValue());
+      const id = this.mounted;
+      const model = id ? this.models.get(id) : null;
+      if (id && model) this.valueChange.emit({ id, value: model.getValue() });
     });
 
     this.editor = editor;
@@ -254,8 +419,10 @@ export class CodeEditor {
     this.ready.set(true);
 
     this.destroyRef.onDestroy(() => {
-      editor.getModel()?.dispose();
       editor.dispose();
+      for (const model of this.models.values()) model.dispose();
+      this.models.clear();
+      this.viewStates.clear();
     });
   }
 

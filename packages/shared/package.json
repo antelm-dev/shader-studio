@@ -13,6 +13,14 @@
       "types": "./src/model.ts",
       "default": "./src/model.ts"
     },
+    "./project": {
+      "types": "./src/project.ts",
+      "default": "./src/project.ts"
+    },
+    "./pass-source": {
+      "types": "./src/pass-source.ts",
+      "default": "./src/pass-source.ts"
+    },
     "./validate": {
       "types": "./src/validate.ts",
       "default": "./src/validate.ts"

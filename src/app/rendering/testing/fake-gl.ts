@@ -85,10 +85,61 @@ export class FakeMaterial extends FakeDisposable {
   }
 }
 
+/**
+ * A render target, and the texture behind it.
+ *
+ * The texture object's *identity* is what the multi-pass tests turn on: a
+ * feedback buffer is correct exactly when the texture it samples is the one the
+ * other target wrote last frame, and wrong — invisibly, on a real GPU — when it
+ * is the one it is currently drawing into. An object you can compare with
+ * `toBe` is the whole point.
+ */
+export class FakeRenderTarget extends FakeDisposable {
+  /**
+   * Every target ever handed out, newest last. A test cannot ask the engine
+   * which targets it allocated — that is exactly the private bookkeeping under
+   * test — so the fake records it instead. Call `reset()` between tests.
+   */
+  static readonly created: FakeRenderTarget[] = [];
+
+  static reset(): void {
+    FakeRenderTarget.created.length = 0;
+  }
+
+  readonly texture = new FakeTexture();
+
+  /** How many times this target has been reallocated. A resize is never free. */
+  resizes = 0;
+
+  constructor(
+    public width = 1,
+    public height = 1,
+    readonly options: Record<string, unknown> = {},
+  ) {
+    super();
+    FakeRenderTarget.created.push(this);
+  }
+
+  setSize(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
+    this.resizes++;
+  }
+}
+
+/** One `render()` call: what was drawn, and where it landed. */
+export interface FakeDraw {
+  scene: unknown;
+  target: unknown;
+}
+
 export class FakeRenderer {
   readonly debug = { checkShaderErrors: false, onShaderError: null as unknown };
   disposed = false;
   draws = 0;
+
+  /** Every draw, in order, with the target it was aimed at. */
+  readonly drawLog: FakeDraw[] = [];
 
   /** The last drawing-buffer size asked for, and every one before it. */
   pixelRatio = 1;
@@ -112,28 +163,36 @@ export class FakeRenderer {
   setRenderTarget(target: unknown): void {
     this.target = target;
   }
-  render(): void {
+  render(scene?: unknown): void {
     this.draws++;
+    this.drawLog.push({ scene, target: this.target });
   }
   dispose(): void {
     this.disposed = true;
   }
 }
 
+export class FakeScene {
+  readonly children: unknown[] = [];
+  add(child: unknown): void {
+    this.children.push(child);
+  }
+}
+
+export class FakeMesh {
+  constructor(
+    public geometry: unknown,
+    public material: unknown,
+  ) {}
+}
+
 export const fakeThree = {
-  Scene: class {
-    add(): void {}
-  },
+  Scene: FakeScene,
   OrthographicCamera: class {},
-  Mesh: class {
-    constructor(
-      public geometry: unknown,
-      public material: unknown,
-    ) {}
-  },
+  Mesh: FakeMesh,
   PlaneGeometry: FakeDisposable,
   ShaderMaterial: FakeMaterial,
-  WebGLRenderTarget: FakeDisposable,
+  WebGLRenderTarget: FakeRenderTarget,
   DataTexture: class extends FakeTexture {},
   TextureLoader: class {
     load(url: string): FakeTexture {
@@ -148,6 +207,7 @@ export const fakeThree = {
   },
   ColorManagement: { enabled: true },
   RGBAFormat: 1023,
+  HalfFloatType: 1016,
   RepeatWrapping: 1000,
   MirroredRepeatWrapping: 1002,
   ClampToEdgeWrapping: 1001,

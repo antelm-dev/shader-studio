@@ -222,12 +222,15 @@ describe('ShaderStore: loading', () => {
 
     const record = store.record();
     expect(record?.id).toBe('waves');
-    expect(store.draft()).toEqual({
-      fragment: record!.fragment,
-      vertex: record!.vertex,
-      controlsText: controlsText(record!.controls),
-      render: record!.render,
-    });
+
+    // A shader with nothing in project storage — every shader, before passes
+    // existed — opens as a project with one pass: its fragment is the Image
+    // pass, and nothing else about it has changed.
+    expect(store.fragment()).toBe(record!.fragment);
+    expect(store.vertex()).toBe(record!.vertex);
+    expect(store.draft()?.controlsText).toBe(controlsText(record!.controls));
+    expect(store.draft()?.render).toEqual(record!.render);
+
     expect(store.params()).toEqual({ speed: 1, glow: false });
     expect(store.dirty()).toBe(false);
   });
@@ -482,7 +485,7 @@ describe('ShaderStore: saving', () => {
 
     await store.save();
 
-    expect(store.draft()?.fragment).toBe('void main() {}');
+    expect(store.fragment()).toBe('void main() {}');
     expect(store.dirty()).toBe(true);
     expect(store.saving()).toBe(false);
     expect(store.notice()).toEqual({ text: 'Write failed: disk full', error: true });
@@ -497,7 +500,7 @@ describe('ShaderStore: saving', () => {
     store.setParam('speed', 8);
     store.revert();
 
-    expect(store.draft()?.fragment).toBe(original);
+    expect(store.fragment()).toBe(original);
     expect(store.dirty()).toBe(false);
     // Reverting the source resets the knobs too: `adopt` is a full reset.
     expect(store.params()).toEqual({ speed: 1, glow: false });
@@ -671,7 +674,7 @@ describe('ShaderStore: collection', () => {
     await store.rename('waves', 'Ripples');
 
     expect(store.record()?.name).toBe('Ripples');
-    expect(store.draft()?.fragment).toBe('void main() {}');
+    expect(store.fragment()).toBe('void main() {}');
     expect(store.dirty()).toBe(true);
   });
 

@@ -5,17 +5,23 @@ import type { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBl
 import {
   MAX_WAVES,
   UNIFORM_PREFIX,
+  legacyTextureBindings,
+  locate,
+  type ChannelBindings,
+  type PassResolution,
   type RenderSettings,
   type ParamValue,
   type ShaderControl,
   type ShaderParams,
+  type SourceSpan,
   type TextureFilterMode,
   type TextureWrapMode,
-} from '@shader-studio/shared/model';
-import type { CompileDiagnostic } from '../core/diagnostic';
+} from '@shader-studio/shared';
+import { VERTEX_DOC, type CompileDiagnostic } from '../core/diagnostic';
 import { GlContext, type GlContextOptions, type ThreeModule } from './gl-context';
 import { parseInfoLog, prefixLineCount } from './glsl-diagnostics';
 import { expandMacros } from './glsl-export';
+import { BufferTargets, type TargetSpec } from './pass-targets';
 
 /** A channel resolved to something `THREE.TextureLoader` can actually load. */
 export interface ChannelSource {
@@ -60,6 +66,56 @@ export interface ShaderSpec {
   channels: readonly (ChannelSource | null)[];
 }
 
+/**
+ * One pass, as the engine wants it: the source already composed (Common and any
+ * `#include`s folded in), with the map back to the files it came from so a
+ * driver error can be blamed on the right one.
+ *
+ * The channel bindings arrive *unresolved* — as the document model wrote them —
+ * because resolving them is the engine's job and it has to be redone every frame
+ * anyway: a binding to a buffer names a texture that ping-pongs, so there is no
+ * stable object a caller could have handed us.
+ */
+export interface EnginePass {
+  id: string;
+  kind: 'image' | 'buffer';
+  /** Composed fragment source. Compared against the last one to skip a recompile. */
+  fragment: string;
+  spans: readonly SourceSpan[];
+  channels: ChannelBindings;
+  resolution: PassResolution;
+  filter: TextureFilterMode;
+  wrap: TextureWrapMode;
+}
+
+/**
+ * A whole project, ready to render. `passes` is already in dependency order —
+ * the buffers that have to go first, then the Image pass last. The engine does
+ * not build the graph; it executes the order the graph produced.
+ */
+export interface MultiPassSpec {
+  vertex: string;
+  controls: readonly ShaderControl[];
+  params: ShaderParams;
+  render: RenderSettings;
+  /** Buffers in render order, Image last. */
+  passes: readonly EnginePass[];
+  /** The shader's four image slots, which a `texture` binding points into. */
+  textures: readonly (ChannelSource | null)[];
+}
+
+/** A pass the driver has accepted, and everything needed to draw and rebind it. */
+interface CompiledPass {
+  id: string;
+  kind: 'image' | 'buffer';
+  material: THREE.ShaderMaterial;
+  uniforms: Record<string, THREE.IUniform>;
+  channels: ChannelBindings;
+  /** What it was compiled from — an identical source next time is not recompiled. */
+  fragment: string;
+  vertex: string;
+}
+
 /** The live state an offline capture displaces, kept so `endOffline` can put it back. */
 interface OfflineState {
   time: number;
@@ -88,6 +144,34 @@ void main() { gl_FragColor = vec4(0.02, 0.03, 0.05, 1.0); }`;
 
 const PLACEHOLDER_VERTEX = `void main() { gl_Position = vec4(position, 1.0); }`;
 
+/**
+ * Blame a pass's compile errors on the file they actually came from.
+ *
+ * The driver reports a line in the source *it* was given, which is Common, plus
+ * every `#include`, plus the pass — a file that exists nowhere and that the user
+ * has never seen. `parseInfoLog` has already subtracted three.js's prelude; the
+ * span map subtracts the rest, and what comes out is a file and a line the
+ * editor can actually put a cursor on.
+ *
+ * A diagnostic with no line (a link failure, most often) has nothing to map, so
+ * it is pinned to the pass itself — the one file that is certainly involved.
+ */
+function attribute(
+  diagnostics: readonly CompileDiagnostic[],
+  pass: EnginePass,
+): CompileDiagnostic[] {
+  return diagnostics.map((diagnostic) => {
+    if (diagnostic.source === 'vertex') {
+      return { ...diagnostic, docId: VERTEX_DOC, docName: 'Vertex' };
+    }
+
+    const at = diagnostic.line > 0 ? locate(pass.spans, diagnostic.line) : null;
+    if (!at) return { ...diagnostic, docId: pass.id };
+
+    return { ...diagnostic, line: at.line, docId: at.docId, docName: at.docName };
+  });
+}
+
 export class ShaderEngine {
   private readonly clickData: THREE.Vector3[];
   private nextWaveIndex = 0;
@@ -101,12 +185,36 @@ export class ShaderEngine {
   private readonly probeMesh: THREE.Mesh;
   private readonly probeTarget: THREE.WebGLRenderTarget;
 
+  /**
+   * The quad the buffers are drawn with. Kept apart from `scene` — which the
+   * composer holds a reference to — so that swapping a material through it to
+   * render four buffers cannot disturb what bloom thinks it is post-processing.
+   */
+  private readonly bufferScene: THREE.Scene;
+  private readonly bufferMesh: THREE.Mesh;
+
   private composer: EffectComposer | null = null;
   private bloomPass: UnrealBloomPass | null = null;
 
   private uniforms: Record<string, THREE.IUniform> = {};
   private controls: readonly ShaderControl[] = [];
   private material: THREE.ShaderMaterial;
+
+  /** The buffer passes, in the order the dependency graph said they must run. */
+  private buffers: CompiledPass[] = [];
+  /** The Image pass, as a compiled pass. Its material is also `this.material`. */
+  private image: CompiledPass | null = null;
+
+  private readonly targets: BufferTargets;
+
+  /** The bindings the Image pass' channels were last set from. */
+  private imageChannels: ChannelBindings = legacyTextureBindings();
+
+  /** iChannel0…3 of the *shader record*: what a `texture` binding points into. */
+  private textureSlots: readonly (ChannelSource | null)[] = [null, null, null, null];
+
+  /** What the buffers need from `BufferTargets`, kept so a resize can re-sync. */
+  private targetSpecs: TargetSpec[] = [];
 
   /** Keyed by `url|wrap|filter|flipY`, so swapping settings on the same image gets its own entry. */
   private readonly textureCache = new Map<string, THREE.Texture>();
@@ -142,7 +250,7 @@ export class ShaderEngine {
    * brought back to exactly what it was showing when it died — the shader is
    * the only thing a lost context cannot reconstruct on its own.
    */
-  private lastSpec: ShaderSpec | null = null;
+  private lastSpec: MultiPassSpec | null = null;
 
   private readonly unsubscribe: (() => void)[] = [];
 
@@ -186,6 +294,12 @@ export class ShaderEngine {
     this.probeScene.add(this.probeMesh);
     this.probeTarget = context.own(new T.WebGLRenderTarget(1, 1));
 
+    this.bufferScene = new T.Scene();
+    this.bufferMesh = new T.Mesh(geometry, this.material);
+    this.bufferScene.add(this.bufferMesh);
+
+    this.targets = new BufferTargets(context);
+
     // A fully transparent 1×1 pixel: what an unassigned iChannel samples, so a
     // shader that declares `uniform sampler2D iChannelN` always compiles and
     // renders sensibly, with or without an image behind it.
@@ -225,13 +339,50 @@ export class ShaderEngine {
   // -------------------------------------------------------------------------
 
   /**
-   * Compile a shader and, if the driver accepts it, make it the live one.
-   *
-   * Returns the diagnostics. An empty array means it compiled; a non-empty one
-   * means the *previous* shader is still on screen and these are the reasons
-   * why the new one is not.
+   * Compile a single-pass shader. The original entry point, and now the
+   * one-pass case of the general one: a lone Image pass sampling the four
+   * texture slots, which is exactly what every shader was before buffers.
    */
   setShader(spec: ShaderSpec): CompileDiagnostic[] {
+    return this.setPasses({
+      vertex: spec.vertex,
+      controls: spec.controls,
+      params: spec.params,
+      render: spec.render,
+      textures: spec.channels,
+      passes: [
+        {
+          id: 'image',
+          kind: 'image',
+          fragment: spec.fragment,
+          spans: [],
+          channels: legacyTextureBindings(),
+          resolution: { mode: 'viewport', scale: 1, width: 1, height: 1 },
+          filter: 'linear',
+          wrap: 'clamp',
+        },
+      ],
+    });
+  }
+
+  /**
+   * Compile a whole project and, if the driver accepts it, make it the live one.
+   *
+   * The contract the single-pass engine kept is kept here per pass, and it is
+   * the reason this is not simply "recompile everything and swap": a candidate
+   * is probed offscreen, and a pass whose new source the driver rejects leaves
+   * the *previously accepted* material in place. So a project whose Buffer B has
+   * a typo in it keeps rendering — with the last Buffer B that worked — instead
+   * of collapsing to black while you fix it, and the errors come back as
+   * diagnostics rather than as a blank canvas.
+   *
+   * A pass whose composed source is byte-for-byte what it already compiled is
+   * skipped entirely. That is what makes an edit to Buffer C recompile Buffer C
+   * and nothing else, and an edit to Common recompile every pass that actually
+   * uses it — the caller does not have to work out which passes are affected,
+   * because an unaffected pass composes to the same string it did last time.
+   */
+  setPasses(spec: MultiPassSpec, force = false): CompileDiagnostic[] {
     if (this.disposed) return [];
 
     // A lost context has no driver to compile against. Remember what was asked
@@ -242,36 +393,129 @@ export class ShaderEngine {
       return [];
     }
 
-    const T = this.three;
-    const fragment = expandMacros(spec.fragment);
-    const vertex = expandMacros(spec.vertex);
+    // Before anything is compiled: `buildUniforms` resolves a `texture` binding
+    // through these, and a pass built against stale slots would come out of the
+    // compiler bound to the placeholder.
+    this.setTextureSlots(spec.textures);
 
-    const uniforms = this.buildUniforms(spec.controls, spec.params, spec.channels);
-    const candidate = this.context.own(
-      new T.ShaderMaterial({
-        vertexShader: vertex,
-        fragmentShader: fragment,
-        uniforms,
-      }),
+    const vertex = expandMacros(spec.vertex);
+    const diagnostics: CompileDiagnostic[] = [];
+
+    const previous = new Map(
+      [...this.buffers, ...(this.image ? [this.image] : [])].map((pass) => [pass.id, pass]),
     );
 
-    const diagnostics = this.probe(candidate, fragment, vertex);
-    if (diagnostics.length > 0) {
-      candidate.dispose();
-      return diagnostics;
+    const compiled: CompiledPass[] = [];
+
+    for (const pass of spec.passes) {
+      const fragment = expandMacros(pass.fragment);
+      const existing = previous.get(pass.id);
+
+      // Same source, same vertex: the program on the GPU is already the right
+      // one. Rebind its channels and its params and move on. `force` is what
+      // Ctrl+Enter means — recompile even though nothing changed.
+      if (!force && existing && existing.fragment === fragment && existing.vertex === vertex) {
+        existing.channels = pass.channels;
+        this.applyParams(existing, spec.controls, spec.params);
+        compiled.push(existing);
+        previous.delete(pass.id);
+        continue;
+      }
+
+      const result = this.compilePass(pass, fragment, vertex, spec);
+
+      if (result.diagnostics.length > 0) {
+        diagnostics.push(...result.diagnostics);
+
+        // Rejected. Keep whatever was on the GPU for this pass, so the picture
+        // survives the failure — that is the whole contract.
+        if (existing) {
+          existing.channels = pass.channels;
+          compiled.push(existing);
+          previous.delete(pass.id);
+        }
+        continue;
+      }
+
+      if (existing) existing.material.dispose();
+      previous.delete(pass.id);
+      compiled.push(result.pass);
     }
 
-    const previous = this.material;
-    this.material = candidate;
-    this.uniforms = uniforms;
-    this.controls = spec.controls;
-    this.mesh.material = candidate;
-    previous.dispose();
+    // Anything left in `previous` belongs to a pass that is no longer in the
+    // project — a deleted or disabled buffer. Its program is now garbage.
+    for (const orphan of previous.values()) orphan.material.dispose();
 
+    this.controls = spec.controls;
     this.lastSpec = spec;
+
+    const image = compiled.find((pass) => pass.kind === 'image') ?? null;
+    this.buffers = compiled.filter((pass) => pass.kind === 'buffer');
+
+    if (image) {
+      this.image = image;
+      this.material = image.material;
+      this.uniforms = image.uniforms;
+      this.imageChannels = image.channels;
+      this.mesh.material = image.material;
+    }
+
+    this.targetSpecs = spec.passes
+      .filter((pass) => pass.kind === 'buffer')
+      .map((pass) => ({
+        id: pass.id,
+        resolution: pass.resolution,
+        filter: pass.filter,
+        wrap: pass.wrap,
+      }));
+
+    // Targets first, so that a binding to a brand-new buffer has something to
+    // resolve to; then bind, so the channels are right the instant this returns
+    // rather than only once the next frame is drawn.
+    this.syncTargets();
+    for (const pass of this.eachPass()) this.bindChannels(pass);
+
     this.setRenderSettings(spec.render);
-    this.pruneTextureCache(spec.channels);
-    return [];
+
+    return diagnostics;
+  }
+
+  /**
+   * Build and probe one pass. On success the material is live but not yet
+   * installed — `setPasses` decides that, because it is the only thing that
+   * knows whether the rest of the project compiled too.
+   */
+  private compilePass(
+    pass: EnginePass,
+    fragment: string,
+    vertex: string,
+    spec: MultiPassSpec,
+  ): { pass: CompiledPass; diagnostics: CompileDiagnostic[] } {
+    const T = this.three;
+
+    const uniforms = this.buildUniforms(spec.controls, spec.params, pass.channels);
+    const material = this.context.own(
+      new T.ShaderMaterial({ vertexShader: vertex, fragmentShader: fragment, uniforms }),
+    );
+
+    const raw = this.probe(material, fragment, vertex);
+    if (raw.length > 0) {
+      material.dispose();
+      return { pass: null as never, diagnostics: attribute(raw, pass) };
+    }
+
+    return {
+      pass: {
+        id: pass.id,
+        kind: pass.kind,
+        material,
+        uniforms,
+        channels: pass.channels,
+        fragment,
+        vertex,
+      },
+      diagnostics: [],
+    };
   }
 
   /** The shader currently on screen: the last one the driver accepted. */
@@ -280,6 +524,39 @@ export class ShaderEngine {
       fragment: this.material.fragmentShader,
       vertex: this.material.vertexShader,
     };
+  }
+
+  /** The passes the driver has accepted, in render order. Image last. */
+  get activePasses(): readonly { id: string; kind: 'image' | 'buffer' }[] {
+    return [...this.eachPass()].map((pass) => ({ id: pass.id, kind: pass.kind }));
+  }
+
+  /**
+   * The program a pass is currently running.
+   *
+   * Its *identity* is the observable fact worth having: an unchanged object
+   * across two `setPasses` calls is the engine telling you it did not recompile
+   * that pass, and a changed one that it did.
+   */
+  passMaterial(passId: string): THREE.ShaderMaterial | null {
+    for (const pass of this.eachPass()) {
+      if (pass.id === passId) return pass.material;
+    }
+    return null;
+  }
+
+  /** The texture one pass's `iChannelN` is bound to right now. */
+  passChannelTexture(passId: string, channel: number): THREE.Texture | null {
+    for (const pass of this.eachPass()) {
+      if (pass.id !== passId) continue;
+      return (pass.uniforms[CHANNEL_UNIFORMS[channel]]?.value as THREE.Texture) ?? null;
+    }
+    return null;
+  }
+
+  /** The texture holding a buffer's most recently finished frame. */
+  bufferTexture(passId: string): THREE.Texture | null {
+    return this.targets.front(passId);
   }
 
   /**
@@ -351,7 +628,7 @@ export class ShaderEngine {
   private buildUniforms(
     controls: readonly ShaderControl[],
     params: ShaderParams,
-    channels: readonly (ChannelSource | null)[],
+    channels: ChannelBindings,
   ): Record<string, THREE.IUniform> {
     const T = this.three;
 
@@ -363,8 +640,13 @@ export class ShaderEngine {
       u_clickData: { value: this.clickData },
     };
 
+    // A placeholder to begin with: a binding to a buffer names a texture that
+    // ping-pongs, so there is nothing stable to put here. `bindChannels` fills
+    // them in for real, every frame, just before the pass is drawn.
     for (let index = 0; index < CHANNEL_COUNT; index++) {
-      uniforms[CHANNEL_UNIFORMS[index]] = { value: this.resolveTexture(channels[index] ?? null) };
+      uniforms[CHANNEL_UNIFORMS[index]] = {
+        value: this.resolveBinding(channels[index]) ?? this.placeholderTexture,
+      };
     }
 
     for (const control of controls) {
@@ -380,6 +662,76 @@ export class ShaderEngine {
     if (existing) (uniforms['iResolution'].value as THREE.Vector2).copy(existing);
 
     return uniforms;
+  }
+
+  /** Re-apply the control values to a pass whose program was left alone. */
+  private applyParams(
+    pass: CompiledPass,
+    controls: readonly ShaderControl[],
+    params: ShaderParams,
+  ): void {
+    for (const control of controls) {
+      const uniform = pass.uniforms[UNIFORM_PREFIX + control.key];
+      if (!uniform) continue;
+
+      const value = params[control.key] ?? control.default;
+      if (control.type === 'color') (uniform.value as THREE.Color).set(String(value));
+      else uniform.value = value;
+    }
+  }
+
+  /**
+   * The texture a binding names, at this instant.
+   *
+   * `null` for a buffer whose target does not exist yet — the very first frame
+   * after a buffer is added, before `syncTargets` has run — which the callers
+   * turn into the transparent placeholder rather than a broken bind.
+   */
+  private resolveBinding(binding: ChannelBindings[number]): THREE.Texture | null {
+    switch (binding.kind) {
+      case 'texture':
+        return this.resolveTexture(this.textureSlots[binding.slot] ?? null);
+      case 'buffer':
+        return binding.feedback
+          ? this.targets.previous(binding.passId)
+          : this.targets.front(binding.passId);
+      case 'none':
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Point a pass's four samplers at the textures its bindings currently name.
+   *
+   * Done immediately before the pass is drawn, every frame, because that is the
+   * only moment at which the answer is knowable: the buffers this pass depends
+   * on have by then rendered (the order guarantees it), and the ping-pong has
+   * put this frame's result in front — while a feedback binding still reads the
+   * snapshot taken before any of it happened.
+   */
+  private bindChannels(pass: CompiledPass): void {
+    for (let index = 0; index < CHANNEL_COUNT; index++) {
+      const uniform = pass.uniforms[CHANNEL_UNIFORMS[index]];
+      if (!uniform) continue;
+      uniform.value = this.resolveBinding(pass.channels[index]) ?? this.placeholderTexture;
+    }
+  }
+
+  private syncTargets(): void {
+    const width = this.canvas.clientWidth || 1;
+    const height = this.canvas.clientHeight || 1;
+    const offline = this.offline;
+
+    this.targets.sync(
+      this.targetSpecs,
+      offline
+        ? { width: offline.width, height: offline.height }
+        : {
+            width: width * this.resolutionScale,
+            height: height * this.resolutionScale,
+          },
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -460,15 +812,44 @@ export class ShaderEngine {
     }
   }
 
+  /**
+   * A control drives the same uniform in every pass that declares it. Turning a
+   * knob has to reach the buffers too, or a parameter the whole pipeline is
+   * built around would only affect the last step of it.
+   */
   setParam(key: string, value: ParamValue): void {
-    const uniform = this.uniforms[UNIFORM_PREFIX + key];
-    if (!uniform) return;
-
     const control = this.controls.find((entry) => entry.key === key);
-    if (control?.type === 'color') {
-      (uniform.value as THREE.Color).set(String(value));
-    } else {
-      uniform.value = value;
+
+    for (const pass of this.eachPass()) {
+      const uniform = pass.uniforms[UNIFORM_PREFIX + key];
+      if (!uniform) continue;
+
+      if (control?.type === 'color') (uniform.value as THREE.Color).set(String(value));
+      else uniform.value = value;
+    }
+  }
+
+  /** Every live pass: the buffers, then the Image pass. */
+  private *eachPass(): Generator<CompiledPass> {
+    for (const pass of this.buffers) yield pass;
+    if (this.image) yield this.image;
+  }
+
+  /**
+   * Set a uniform that the engine — not the shader author — owns, on every pass.
+   * `iTime` has to tick in a buffer exactly as it does in the Image pass.
+   */
+  private setBuiltIn(name: string, apply: (uniform: THREE.IUniform) => void): void {
+    for (const pass of this.eachPass()) {
+      const uniform = pass.uniforms[name];
+      if (uniform) apply(uniform);
+    }
+
+    // The single-pass path keeps its uniforms in `this.uniforms` without an
+    // `image` behind them (a shader set while the context was lost, say).
+    if (!this.image) {
+      const uniform = this.uniforms[name];
+      if (uniform) apply(uniform);
     }
   }
 
@@ -476,14 +857,39 @@ export class ShaderEngine {
    * Rebinds iChannel0…3 without touching the compiled program: swapping which
    * image a channel points at (or its wrap/filter/flip) is just a new uniform
    * value, never a reason to recompile.
+   *
+   * What changes here are the shader's four *image* slots. Which passes sample
+   * them, and through which channel, is the project's business and is untouched:
+   * a pass bound to `texture 2` keeps sampling slot 2, and simply sees the new
+   * image in it on the next frame.
    */
   setChannels(channels: readonly (ChannelSource | null)[]): void {
     if (this.disposed) return;
-    for (let index = 0; index < CHANNEL_COUNT; index++) {
-      const uniform = this.uniforms[CHANNEL_UNIFORMS[index]];
-      if (uniform) uniform.value = this.resolveTexture(channels[index] ?? null);
+
+    this.setTextureSlots(channels);
+
+    // The Image pass in a single-pass shader has no `bindChannels` before it —
+    // the buffer loop is what normally does the rebinding — so do it here, which
+    // also keeps `channelTexture()` honest the moment this returns.
+    if (this.image) this.bindChannels(this.image);
+    else {
+      for (let index = 0; index < CHANNEL_COUNT; index++) {
+        const uniform = this.uniforms[CHANNEL_UNIFORMS[index]];
+        if (uniform) {
+          uniform.value = this.resolveBinding(this.imageChannels[index]) ?? this.placeholderTexture;
+        }
+      }
     }
-    this.pruneTextureCache(channels);
+  }
+
+  private setTextureSlots(channels: readonly (ChannelSource | null)[]): void {
+    this.textureSlots = [
+      channels[0] ?? null,
+      channels[1] ?? null,
+      channels[2] ?? null,
+      channels[3] ?? null,
+    ];
+    this.pruneTextureCache(this.textureSlots);
   }
 
   /** The texture a channel currently samples, placeholder included. */
@@ -629,8 +1035,18 @@ export class ShaderEngine {
     this.composer?.setSize(width, height);
     this.bloomPass?.setSize(width * scale, height * scale);
 
-    const resolution = this.uniforms['iResolution']?.value as THREE.Vector2 | undefined;
+    // Only the Image pass' resolution is the canvas's. A buffer's is its own
+    // target's, and `drawBuffers` sets it from the target it is about to fill.
+    const image = this.image?.uniforms ?? this.uniforms;
+    const resolution = image['iResolution']?.value as THREE.Vector2 | undefined;
     resolution?.set(width * scale, height * scale);
+
+    // A viewport- or scale-relative buffer is now the wrong size. Re-syncing is
+    // guarded inside `BufferTargets`, so a resize that did not actually change a
+    // target's dimensions costs nothing — which matters, because a
+    // `ResizeObserver` fires far more often than the size really changes, and a
+    // reallocation would wipe every feedback buffer's history each time.
+    this.targets.sync(this.targetSpecs, { width: width * scale, height: height * scale });
   }
 
   // -------------------------------------------------------------------------
@@ -685,9 +1101,8 @@ export class ShaderEngine {
     this.pointer.set(-1000, -1000);
     this.pointerVelocity.set(0, 0);
     this.lastPointer = null;
-    this.mouseUniform?.set(-1000, -1000, 0, 0);
-    const velocity = this.uniforms['iMouseVel']?.value as THREE.Vector2 | undefined;
-    velocity?.set(0, 0);
+    this.setMouse((mouse) => mouse.set(-1000, -1000, 0, 0));
+    this.setBuiltIn('iMouseVel', (uniform) => (uniform.value as THREE.Vector2).set(0, 0));
     // Ripples carry the timestamp of the click that made them. Left in, they
     // would fire — or worse, half-fire — somewhere in the middle of the capture.
     for (const wave of this.clickData) wave.set(0, 0, 0);
@@ -711,8 +1126,7 @@ export class ShaderEngine {
     if (this.disposed) return;
 
     this.time = time;
-    const iTime = this.uniforms['iTime'];
-    if (iTime) iTime.value = time;
+    this.setBuiltIn('iTime', (uniform) => (uniform.value = time));
 
     this.draw();
   }
@@ -730,8 +1144,7 @@ export class ShaderEngine {
     this.paused = offline.paused;
     this.autoRipples = offline.autoRipples;
 
-    const iTime = this.uniforms['iTime'];
-    if (iTime) iTime.value = this.time;
+    this.setBuiltIn('iTime', (uniform) => (uniform.value = this.time));
 
     if (this.disposed) return;
 
@@ -791,14 +1204,13 @@ export class ShaderEngine {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     const position = this.toBufferSpace(event);
     this.pointer.copy(position);
-    this.mouseUniform?.set(position.x, position.y, 1, 0);
+    this.setMouse((mouse) => mouse.set(position.x, position.y, 1, 0));
     this.spawnRipple(position.x, position.y);
   };
 
   private readonly onPointerUp = (): void => {
     if (this.offline) return;
-    const mouse = this.mouseUniform;
-    if (mouse) mouse.z = 0;
+    this.setMouse((mouse) => (mouse.z = 0));
   };
 
   private readonly onPointerLeave = (): void => {
@@ -806,17 +1218,22 @@ export class ShaderEngine {
     this.pointer.set(-1000, -1000);
     this.pointerVelocity.set(0, 0);
     this.lastPointer = null;
-    const mouse = this.mouseUniform;
-    if (mouse) mouse.z = 0;
+    this.setMouse((mouse) => (mouse.z = 0));
   };
 
   private readonly onContextMenu = (event: Event): void => event.preventDefault();
 
-  private get mouseUniform(): THREE.Vector4 | undefined {
-    return this.uniforms['iMouse']?.value as THREE.Vector4 | undefined;
+  private setMouse(apply: (mouse: THREE.Vector4) => void): void {
+    this.setBuiltIn('iMouse', (uniform) => apply(uniform.value as THREE.Vector4));
   }
 
-  /** Ripples live in a fixed ring of slots, oldest overwritten first. */
+  /**
+   * Ripples live in a fixed ring of slots, oldest overwritten first.
+   *
+   * Nothing has to be pushed to the passes here: every pass's `u_clickData`
+   * uniform holds *the same* array of vectors — the engine's — so writing into a
+   * slot is already visible to all of them.
+   */
   private spawnRipple(x: number, y: number): void {
     this.clickData[this.nextWaveIndex].set(x, y, this.time);
     this.nextWaveIndex = (this.nextWaveIndex + 1) % MAX_WAVES;
@@ -868,10 +1285,19 @@ export class ShaderEngine {
     for (const texture of this.textureCache.values()) texture.needsUpdate = true;
     this.placeholderTexture.needsUpdate = true;
 
-    // Every program the driver held is gone with the context. Recompiling the
-    // last accepted spec puts the material — and the composer behind it — back.
+    // The render targets are husks: the textures behind them died with the
+    // context. Rebuilt at the size they had — empty, because their contents are
+    // genuinely gone, which for a feedback buffer means its history restarts.
+    this.targets.invalidate(this.targetSpecs);
+
+    // Every program the driver held is gone too. Forgetting the compiled passes
+    // is what stops `setPasses` recognising their sources as unchanged and
+    // "reusing" materials that no longer exist on the GPU.
+    this.buffers = [];
+    this.image = null;
+
     const spec = this.lastSpec;
-    if (spec) this.setShader(spec);
+    if (spec) this.setPasses(spec);
     else this.setRenderSettings(this.render);
 
     this.resize();
@@ -899,16 +1325,16 @@ export class ShaderEngine {
       // does not fast-forward the simulation on resume.
       this.time += delta;
 
-      const iTime = this.uniforms['iTime'];
-      if (iTime) iTime.value = this.time;
+      this.setBuiltIn('iTime', (uniform) => (uniform.value = this.time));
 
-      const mouse = this.mouseUniform;
-      if (mouse) {
+      this.setBuiltIn('iMouse', (uniform) => {
+        const mouse = uniform.value as THREE.Vector4;
         mouse.x = this.pointer.x;
         mouse.y = this.pointer.y;
-      }
-      const velocity = this.uniforms['iMouseVel']?.value as THREE.Vector2 | undefined;
-      velocity?.copy(this.pointerVelocity);
+      });
+      this.setBuiltIn('iMouseVel', (uniform) =>
+        (uniform.value as THREE.Vector2).copy(this.pointerVelocity),
+      );
       // Shaders can opt into a tunable amount of pointer inertia. Treat the
       // value as retention per 60 Hz frame so the feel stays stable at other
       // refresh rates; shaders without the control retain the original decay.
@@ -931,14 +1357,62 @@ export class ShaderEngine {
     this.draw();
   }
 
+  /**
+   * One frame: every buffer, in dependency order, into its own target — then the
+   * Image pass onto the canvas.
+   *
+   * The order came from the graph, so by the time a pass is drawn everything it
+   * samples without feedback has already been drawn this frame. The snapshot
+   * taken by `beginFrame` is what the feedback bindings read, and it is taken
+   * before any of this, so "the previous frame" means the same thing to every
+   * pass regardless of where its owner sits in the order.
+   */
   private draw(): void {
     if (this.disposed || this.context.status() !== 'live') return;
+
+    this.drawBuffers();
+
+    if (this.image) this.bindChannels(this.image);
 
     if (this.render.bloom.enabled && this.composer) {
       this.composer.render();
     } else {
       this.renderer.render(this.scene, this.camera);
     }
+  }
+
+  private drawBuffers(): void {
+    if (this.buffers.length === 0) return;
+
+    this.targets.beginFrame();
+
+    const previousTarget = this.renderer.getRenderTarget();
+
+    for (const pass of this.buffers) {
+      const target = this.targets.write(pass.id);
+      if (!target) continue;
+
+      this.bindChannels(pass);
+
+      // A buffer's `iResolution` is *its* target's size, not the canvas's. A
+      // half-resolution buffer that thought it was full-size would sample and
+      // step at the wrong scale, which is the sort of thing that looks like a
+      // shader bug for an hour.
+      const size = this.targets.size(pass.id);
+      const resolution = pass.uniforms['iResolution']?.value as THREE.Vector2 | undefined;
+      if (size && resolution) resolution.set(size.width, size.height);
+
+      this.bufferMesh.material = pass.material;
+      this.renderer.setRenderTarget(target);
+      this.renderer.render(this.bufferScene, this.camera);
+
+      // What was just drawn becomes the buffer's current frame, and the target
+      // holding the frame before it becomes the one we draw into next time.
+      this.targets.swap(pass.id);
+    }
+
+    this.renderer.setRenderTarget(previousTarget);
+    this.bufferMesh.material = this.material;
   }
 
   // -------------------------------------------------------------------------
@@ -973,6 +1447,14 @@ export class ShaderEngine {
 
     this.disposeComposer();
     this.probeTarget.dispose();
+    this.targets.dispose();
+
+    // The Image pass's material *is* `this.material`, so dispose the buffers and
+    // then it — once each.
+    for (const pass of this.buffers) pass.material.dispose();
+    this.buffers = [];
+    this.image = null;
+
     this.material.dispose();
     this.mesh.geometry.dispose();
     for (const texture of this.textureCache.values()) texture.dispose();

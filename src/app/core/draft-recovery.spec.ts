@@ -3,6 +3,7 @@ import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { addBuffer, bufferPasses, imagePass, migrateLegacyProject } from '@shader-studio/shared';
 import { DraftRecovery } from './draft-recovery';
 import type { ShaderDraft } from './shader-store';
 
@@ -29,8 +30,7 @@ class MemoryStorage implements Storage {
 }
 
 const draft: ShaderDraft = {
-  fragment: 'void main() {}',
-  vertex: 'void main() {}',
+  project: migrateLegacyProject('void main() {}', 'void main() {}'),
   controlsText: '[]',
   render: { bloom: { enabled: false, strength: 0.3, radius: 0.5, threshold: 0.85 } },
 };
@@ -56,9 +56,46 @@ describe('DraftRecovery', () => {
     expect(recovery.get('waves')).toMatchObject({
       shaderId: 'waves',
       baselineUpdatedAt: 'saved-at',
-      fragment: draft.fragment,
     });
+    expect(imagePass(recovery.get('waves')!.project).source).toBe('void main() {}');
+
     recovery.remove('waves');
+    expect(recovery.get('waves')).toBeNull();
+  });
+
+  it('recovers the buffers and files of an unsaved project, not just the fragment', () => {
+    // The whole point of the draft now being a project: a buffer you created and
+    // did not save is unsaved *work*, and a reload has to give it back.
+    const withBuffer: ShaderDraft = { ...draft, project: addBuffer(draft.project) };
+
+    recovery.put('waves', 'saved-at', withBuffer);
+
+    const recovered = recovery.get('waves')!;
+    expect(bufferPasses(recovered.project)).toHaveLength(1);
+    expect(bufferPasses(recovered.project)[0].slot).toBe('A');
+  });
+
+  it('refuses a draft from before projects existed rather than guessing', () => {
+    // A v1 draft holds a fragment and a vertex and no passes at all. There is no
+    // honest way to read it as a project, so it is dropped.
+    storage.setItem(
+      'shader-studio.recovered-drafts',
+      JSON.stringify({
+        version: 1,
+        drafts: {
+          waves: {
+            shaderId: 'waves',
+            baselineUpdatedAt: 'saved-at',
+            draftUpdatedAt: 'then',
+            fragment: 'old',
+            vertex: 'old',
+            controlsText: '[]',
+            render: { bloom: { enabled: false, strength: 0, radius: 0, threshold: 1 } },
+          },
+        },
+      }),
+    );
+
     expect(recovery.get('waves')).toBeNull();
   });
 

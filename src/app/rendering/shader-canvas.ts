@@ -15,6 +15,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 
+import { composePass } from '@shader-studio/shared/pass-source';
 import {
   COLOR_SCHEME_OPTIONS,
   Preferences,
@@ -23,12 +24,13 @@ import {
   type WorkspacePreferences,
 } from '../core/preferences';
 import { DesktopPlatform } from '../core/desktop-platform';
+import type { CompileDiagnostic } from '../core/diagnostic';
 import { ShaderStore } from '../core/shader-store';
 import { TextureAssets } from '../core/texture-assets';
 import type { GlContext } from './gl-context';
 import { GlContextRegistry } from './gl-context-registry';
 import { RendererHandle } from './renderer-handle';
-import { type ChannelSource, ShaderEngine } from './shader-engine';
+import { type ChannelSource, type EnginePass, ShaderEngine } from './shader-engine';
 
 const EMPTY_CHANNELS: readonly (ChannelSource | null)[] = [null, null, null, null];
 
@@ -258,48 +260,111 @@ export class ShaderCanvas {
     colorSchemeIcon(this.preferences.value().colorScheme),
   );
 
-  private readonly source = computed(() => {
-    const draft = this.store.draft();
-    return draft ? { fragment: draft.fragment, vertex: draft.vertex } : null;
+  /**
+   * The project, composed into the passes the engine wants.
+   *
+   * Composition is what turns "which passes does this edit affect?" from a
+   * question somebody has to answer into one nobody has to ask: a pass that an
+   * edit did not touch composes to the same string it did last time, and the
+   * engine skips it. Editing Buffer C recompiles Buffer C. Editing Common — or a
+   * file two passes include — recompiles exactly the passes that use it.
+   */
+  private readonly passes = computed<readonly EnginePass[] | null>(() => {
+    const project = this.store.project();
+    if (!project) return null;
+
+    return this.store.renderOrder().map((pass): EnginePass => {
+      const { source, spans } = composePass(project, pass);
+      return {
+        id: pass.id,
+        kind: pass.kind === 'image' ? 'image' : 'buffer',
+        fragment: source,
+        spans,
+        channels: pass.channels,
+        resolution: pass.resolution,
+        filter: pass.filter,
+        wrap: pass.wrap,
+      };
+    });
   });
 
-  private readonly debouncedSource = signal<{ fragment: string; vertex: string } | null>(null);
+  /** The `#include` failures, which are ours to report — the driver never sees them. */
+  private readonly compositionErrors = computed<readonly CompileDiagnostic[]>(() => {
+    const project = this.store.project();
+    if (!project) return [];
+
+    return this.store.renderOrder().flatMap((pass) =>
+      composePass(project, pass).errors.map(
+        (error): CompileDiagnostic => ({
+          severity: 'error',
+          line: error.line,
+          message: error.message,
+          source: 'fragment',
+          docId: error.docId,
+        }),
+      ),
+    );
+  });
+
+  private readonly debouncedPasses = signal<readonly EnginePass[] | null>(null);
   private readonly channelSources = signal<readonly (ChannelSource | null)[]>(EMPTY_CHANNELS);
+
+  /** The last `recompileRequest` acted on, so a new one can be told from a redraw. */
+  private lastRecompile = 0;
 
   constructor() {
     afterNextRender(() => {
       void this.boot();
     });
 
+    // Debounced: a compile is expensive and a keystroke is not an edit. Every
+    // pass whose composed source is unchanged when the dust settles is skipped
+    // by the engine anyway, so the cost of a burst of typing is one recompile of
+    // the one pass being typed into.
     effect((onCleanup) => {
-      const source = this.source();
-      if (!source) {
-        this.debouncedSource.set(null);
+      const passes = this.passes();
+      if (!passes) {
+        this.debouncedPasses.set(null);
         return;
       }
-      const timer = setTimeout(() => this.debouncedSource.set(source), RECOMPILE_DEBOUNCE_MS);
+
+      this.store.compiling.set(new Set(passes.map((pass) => pass.id)));
+
+      const timer = setTimeout(() => this.debouncedPasses.set(passes), RECOMPILE_DEBOUNCE_MS);
       onCleanup(() => clearTimeout(timer));
     });
 
     effect(() => {
       const engine = this.engine();
-      const source = this.debouncedSource();
+      const passes = this.debouncedPasses();
       const controls = this.store.controls();
-      if (!engine || !source) return;
+
+      // Ctrl+Enter. Tracked, so asking for a recompile of a source nobody touched
+      // still runs one — which is the entire point of asking.
+      const requested = this.store.recompileRequest();
+      const force = requested !== this.lastRecompile;
+      this.lastRecompile = requested;
+
+      if (!engine || !passes) return;
 
       untracked(() => {
         const draft = this.store.draft();
-        const diagnostics = engine.setShader({
-          fragment: source.fragment,
-          vertex: source.vertex,
-          controls,
-          params: this.store.params(),
-          render: draft?.render ?? {
-            bloom: { enabled: false, strength: 0, radius: 0, threshold: 1 },
+        const diagnostics = engine.setPasses(
+          {
+            vertex: this.store.vertex(),
+            controls,
+            params: this.store.params(),
+            render: draft?.render ?? {
+              bloom: { enabled: false, strength: 0, radius: 0, threshold: 1 },
+            },
+            passes,
+            textures: this.channelSources(),
           },
-          channels: this.channelSources(),
-        });
-        this.store.setCompileDiagnostics(diagnostics);
+          force,
+        );
+
+        this.store.setCompileDiagnostics([...this.compositionErrors(), ...diagnostics]);
+        this.store.compiling.set(new Set());
       });
     });
 

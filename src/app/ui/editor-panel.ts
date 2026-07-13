@@ -6,7 +6,7 @@ import {
   input,
   output,
   signal,
-  viewChildren,
+  viewChild,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
@@ -14,28 +14,31 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { CodeEditor } from '../editor/code-editor';
+import { findPass } from '@shader-studio/shared/project';
+import { CodeEditor, type EditorDoc } from '../editor/code-editor';
 import { EditorSettings } from '../editor/editor-settings';
 import { Preferences } from '../core/preferences';
-import type { CompileDiagnostic, DiagnosticSource } from '../core/diagnostic';
+import type { CompileDiagnostic } from '../core/diagnostic';
 import { ShaderStore } from '../core/shader-store';
 import { DocumentStatus } from './document-status';
+import { EditorTabs } from './editor-tabs';
 import { EditorWindowControls } from './editor-window-controls';
+import { PassConfigPanel } from './pass-config-panel';
 import { Workspace } from './workspace';
-
-type Tab = DiagnosticSource;
 
 @Component({
   selector: 'app-editor-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CodeEditor,
+    EditorTabs,
     EditorWindowControls,
     MatButtonModule,
     MatDividerModule,
     MatIconModule,
     MatMenuModule,
     MatTooltipModule,
+    PassConfigPanel,
   ],
   template: `
     <div
@@ -44,29 +47,32 @@ type Tab = DiagnosticSource;
       [matContextMenuTriggerFor]="editorMenu"
       (pointerdown)="onToolbarPointerDown($event)"
     >
-      <nav class="tabs" role="tablist" aria-label="Shader source">
-        @for (option of tabs; track option.id) {
-          <button
-            [matButton]="tab() === option.id ? 'tonal' : 'text'"
-            type="button"
-            role="tab"
-            class="tab"
-            [class.active]="tab() === option.id"
-            [attr.aria-selected]="tab() === option.id"
-            (click)="selectTab(option.id)"
-          >
-            {{ option.label }}
-            @if (errorCount(option.id); as count) {
-              <span class="tab-errors" [attr.aria-label]="count + ' errors'">{{ count }}</span>
-            }
-          </button>
-        }
-      </nav>
+      <app-editor-tabs
+        class="tabs"
+        [activeId]="store.activeDoc()?.id ?? null"
+        (select)="selectDoc($event)"
+        (rename)="workspace.renameDocument($event)"
+        (remove)="workspace.deleteDocument($event)"
+        (newFile)="workspace.createFile()"
+      />
 
       <div class="spacer"></div>
 
       @if (status.state() === 'unsaved' || status.state() === 'saving') {
         <span class="dirty" aria-live="polite">{{ status.label() }}</span>
+      }
+
+      @if (activePass()) {
+        <button
+          type="button"
+          class="config-toggle"
+          [matButton]="configOpen() ? 'tonal' : 'text'"
+          [attr.aria-pressed]="configOpen()"
+          matTooltip="Pass settings: channels, resolution, filtering"
+          (click)="configOpen.set(!configOpen())"
+        >
+          <mat-icon>tune</mat-icon>
+        </button>
       }
 
       <app-editor-window-controls />
@@ -97,7 +103,27 @@ type Tab = DiagnosticSource;
       <button
         mat-menu-item
         type="button"
-        [disabled]="!store.draft() || tab() === 'config'"
+        [disabled]="!store.canAddBuffer()"
+        (click)="store.addBufferPass()"
+      >
+        <mat-icon>layers</mat-icon>
+        <span>New buffer pass</span>
+      </button>
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="!store.draft()"
+        (click)="workspace.createFile()"
+      >
+        <mat-icon>description</mat-icon>
+        <span>New file…</span>
+        <span class="menu-hint">Ctrl+N</span>
+      </button>
+      <mat-divider />
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="!store.draft() || activeDoc()?.language !== 'glsl'"
         (click)="formatSource()"
       >
         <mat-icon>format_align_left</mat-icon>
@@ -108,7 +134,7 @@ type Tab = DiagnosticSource;
         mat-menu-item
         type="button"
         [disabled]="!store.draft()"
-        matTooltip="The fragment source with every engine and control uniform declared"
+        matTooltip="The Image pass, composed, with every engine and control uniform declared"
         (click)="workspace.copyFullGlsl()"
       >
         <mat-icon>content_copy</mat-icon>
@@ -122,56 +148,45 @@ type Tab = DiagnosticSource;
     </mat-menu>
 
     <div class="editor-body" [class.collapsed]="collapsed()" [attr.inert]="collapsed() || null">
-      @if (store.draft(); as draft) {
+      @if (editorDoc(); as doc) {
         <app-code-editor
           class="editor"
-          [class.hidden]="tab() !== 'fragment'"
-          language="glsl"
-          [value]="draft.fragment"
+          [doc]="doc"
+          [liveIds]="liveIds()"
           [colorScheme]="preferences.resolved()"
           [appearance]="settings.effective()"
-          [diagnostics]="diagnosticsFor('fragment')"
-          (valueChange)="store.setFragment($event)"
+          [diagnostics]="activeDiagnostics()"
+          (valueChange)="store.setDocSource($event.id, $event.value)"
         />
-        <app-code-editor
-          class="editor"
-          [class.hidden]="tab() !== 'vertex'"
-          language="glsl"
-          [value]="draft.vertex"
-          [colorScheme]="preferences.resolved()"
-          [appearance]="settings.effective()"
-          [diagnostics]="diagnosticsFor('vertex')"
-          (valueChange)="store.setVertex($event)"
-        />
-        <app-code-editor
-          class="editor"
-          [class.hidden]="tab() !== 'config'"
-          language="json"
-          [value]="draft.controlsText"
-          [colorScheme]="preferences.resolved()"
-          [appearance]="settings.effective()"
-          [diagnostics]="diagnosticsFor('config')"
-          (valueChange)="store.setControlsText($event)"
-        />
+
+        @if (activePass(); as pass) {
+          @if (configOpen()) {
+            <app-pass-config-panel class="config" [pass]="pass" />
+          }
+        }
       } @else {
         <p class="empty">Select a shader to edit it.</p>
       }
     </div>
 
-    @if (visibleDiagnostics().length > 0 && !collapsed()) {
+    @if (diagnostics().length > 0 && !collapsed()) {
       <ul class="diagnostics" aria-label="Diagnostics" aria-live="polite">
-        @for (diagnostic of visibleDiagnostics(); track $index) {
+        @for (diagnostic of diagnostics(); track $index) {
           <li class="diagnostic" [class.warning]="diagnostic.severity === 'warning'">
-            <mat-icon class="diagnostic-icon">
-              {{ diagnostic.severity === 'warning' ? 'warning' : 'error' }}
-            </mat-icon>
-            <span class="diagnostic-where">
-              {{ diagnostic.source }}
-              @if (diagnostic.line) {
-                <span>:{{ diagnostic.line }}</span>
-              }
-            </span>
-            <span class="diagnostic-message">{{ diagnostic.message }}</span>
+            <!-- The whole row is the target: a diagnostic you cannot click is a
+                 line number you have to go and find by hand. -->
+            <button type="button" class="diagnostic-go" (click)="reveal(diagnostic)">
+              <mat-icon class="diagnostic-icon">
+                {{ diagnostic.severity === 'warning' ? 'warning' : 'error' }}
+              </mat-icon>
+              <span class="diagnostic-where">
+                {{ diagnostic.docName ?? diagnostic.source }}
+                @if (diagnostic.line) {
+                  <span>:{{ diagnostic.line }}</span>
+                }
+              </span>
+              <span class="diagnostic-message">{{ diagnostic.message }}</span>
+            </button>
           </li>
         }
       </ul>
@@ -202,37 +217,12 @@ type Tab = DiagnosticSource;
     }
 
     .tabs {
-      display: flex;
-      gap: 2px;
-    }
-
-    .tab {
       min-width: 0;
-      height: 28px;
-      padding-inline: 11px;
-      font: var(--mat-sys-label-medium);
-    }
-
-    .tab.active {
-      background: var(--mat-sys-secondary-container);
-      color: var(--mat-sys-on-secondary-container);
-    }
-
-    .tab-errors {
-      display: inline-grid;
-      place-items: center;
-      min-width: 18px;
-      height: 18px;
-      margin-left: 6px;
-      padding: 0 4px;
-      border-radius: 9px;
-      background: var(--mat-sys-error);
-      color: var(--mat-sys-on-error);
-      font: var(--mat-sys-label-small);
+      flex: 1 1 auto;
     }
 
     .spacer {
-      flex: 1;
+      flex: 0 0 auto;
     }
 
     .dirty {
@@ -241,8 +231,15 @@ type Tab = DiagnosticSource;
       white-space: nowrap;
     }
 
+    .config-toggle {
+      min-width: 0;
+      height: 28px;
+      padding-inline: 8px;
+    }
+
     .editor-body {
       position: relative;
+      display: flex;
       flex: 1;
       min-height: 0;
     }
@@ -255,19 +252,39 @@ type Tab = DiagnosticSource;
     }
 
     .editor {
-      position: absolute;
-      inset: 0;
+      flex: 1;
+      min-width: 0;
     }
 
-    .editor.hidden {
-      visibility: hidden;
-      pointer-events: none;
+    .config {
+      flex: 0 0 268px;
+      max-width: 50%;
+    }
+
+    /*
+     * On a narrow panel the settings sit *under* the editor rather than beside
+     * it: 268px of controls next to 200px of code is not an editor with a
+     * sidebar, it is two things that have both stopped working.
+     */
+    @container (max-width: 640px) {
+      .editor-body {
+        flex-direction: column;
+      }
+
+      .config {
+        flex: 0 0 auto;
+        max-width: none;
+        max-height: 45%;
+        border-left: 0;
+        border-top: 1px solid var(--mat-sys-outline-variant);
+      }
     }
 
     .empty {
       display: grid;
       place-items: center;
       height: 100%;
+      width: 100%;
       margin: 0;
       color: var(--mat-sys-on-surface-variant);
     }
@@ -283,13 +300,22 @@ type Tab = DiagnosticSource;
       background: var(--mat-sys-surface-container);
     }
 
-    .diagnostic {
+    .diagnostic-go {
       display: flex;
       align-items: baseline;
       gap: 8px;
+      width: 100%;
       padding: 3px 12px;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
       font: var(--mat-sys-body-small);
       font-family: 'JetBrains Mono', Consolas, monospace;
+    }
+
+    .diagnostic-go:hover {
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
     }
 
     .diagnostic-icon {
@@ -307,6 +333,7 @@ type Tab = DiagnosticSource;
     .diagnostic-where {
       flex: 0 0 auto;
       color: var(--mat-sys-on-surface-variant);
+      white-space: nowrap;
     }
 
     .diagnostic-message {
@@ -329,38 +356,84 @@ export class EditorPanel {
   readonly dragEnabled = input(false);
   readonly dragStart = output<PointerEvent>();
 
-  private readonly editors = viewChildren(CodeEditor);
+  private readonly editor = viewChild(CodeEditor);
 
-  protected readonly tabs: readonly { id: Tab; label: string }[] = [
-    { id: 'fragment', label: 'Fragment' },
-    { id: 'vertex', label: 'Vertex' },
-    { id: 'config', label: 'Config' },
-  ];
+  protected readonly configOpen = signal(false);
 
-  protected readonly tab = signal<Tab>('fragment');
+  protected readonly activeDoc = computed(() => this.store.activeDoc());
 
-  protected readonly visibleDiagnostics = computed(() =>
-    this.store.diagnostics().filter((diagnostic) => diagnostic.source === this.tab()),
+  /** The open document, in the shape the editor wants. */
+  protected readonly editorDoc = computed<EditorDoc | null>(() => {
+    const doc = this.activeDoc();
+    return doc ? { id: doc.id, language: doc.language, value: doc.source } : null;
+  });
+
+  /** Every document that still exists — the editor drops the models of the rest. */
+  protected readonly liveIds = computed(() => this.store.documents().map((doc) => doc.id));
+
+  /** The open document, when it is a pass: what the settings panel configures. */
+  protected readonly activePass = computed(() => {
+    const doc = this.activeDoc();
+    const project = this.store.project();
+    if (!doc || !project || doc.kind !== 'pass') return null;
+
+    const pass = findPass(project, doc.id);
+    // Common is not rendered, so it has no channels, no target and nothing to
+    // configure. Showing it an empty settings panel would only raise the question.
+    return pass && pass.kind !== 'common' ? pass : null;
+  });
+
+  protected readonly activeDiagnostics = computed(() =>
+    this.store.diagnosticsFor(this.activeDoc()?.id ?? ''),
   );
 
+  /**
+   * Every diagnostic in the project, not just the open document's.
+   *
+   * A multi-pass shader fails in a pass you are not looking at at least as often
+   * as in the one you are, and a panel that only showed the current tab's errors
+   * would leave you staring at a frozen picture and a clean editor.
+   */
+  protected readonly diagnostics = computed(() => this.store.allDiagnostics());
+
   relayout(): void {
-    for (const editor of this.editors()) editor.layout();
+    this.editor()?.layout();
   }
 
   focusEditor(): void {
-    const index = this.tabs.findIndex((option) => option.id === this.tab());
-    this.editors()[index]?.focus();
+    this.editor()?.focus();
+  }
+
+  protected selectDoc(id: string): void {
+    this.store.selectDoc(id);
+    queueMicrotask(() => this.relayout());
+  }
+
+  /**
+   * Open the file a diagnostic belongs to and put the cursor on its line.
+   *
+   * The reveal is *handed to* the editor rather than performed here, because the
+   * document it names is usually not mounted yet — mounting happens in an effect,
+   * and effects have not run. The editor holds the request until the model is in.
+   */
+  protected reveal(diagnostic: CompileDiagnostic): void {
+    const id = diagnostic.docId;
+    const known = id && this.store.documents().some((doc) => doc.id === id);
+
+    if (known) this.store.selectDoc(id);
+
+    const target = known ? id : this.activeDoc()?.id;
+    if (!target) return;
+
+    if (diagnostic.line > 0) this.editor()?.revealIn(target, diagnostic.line);
+    else this.focusEditor();
+
+    queueMicrotask(() => this.relayout());
   }
 
   /** Format the source in the open tab. The config tab is JSON, and has none. */
   protected async formatSource(): Promise<void> {
-    const index = this.tabs.findIndex((option) => option.id === this.tab());
-    await this.editors()[index]?.format();
-  }
-
-  protected selectTab(tab: Tab): void {
-    this.tab.set(tab);
-    queueMicrotask(() => this.relayout());
+    await this.editor()?.format();
   }
 
   protected onToolbarPointerDown(event: PointerEvent): void {
@@ -370,16 +443,5 @@ export class EditorPanel {
     if (target?.closest('button, a, input, [role="tab"]')) return;
 
     this.dragStart.emit(event);
-  }
-
-  protected diagnosticsFor(source: Tab): CompileDiagnostic[] {
-    return this.store.diagnostics().filter((diagnostic) => diagnostic.source === source);
-  }
-
-  protected errorCount(source: Tab): number {
-    return this.store
-      .diagnostics()
-      .filter((diagnostic) => diagnostic.source === source && diagnostic.severity === 'error')
-      .length;
   }
 }

@@ -2,10 +2,17 @@ import { isPlatformBrowser } from '@angular/common';
 import { DOCUMENT, Injectable, PLATFORM_ID, inject } from '@angular/core';
 
 import type { RenderSettings } from '@shader-studio/shared/model';
+import { sanitizeProject, type ShaderProject } from '@shader-studio/shared/project';
 import type { ShaderDraft } from './shader-store';
 
 const STORAGE_KEY = 'shader-studio.recovered-drafts';
-const STORAGE_VERSION = 1;
+/**
+ * Bumped: a draft is now a whole project rather than a fragment and a vertex.
+ * A v1 draft has no passes in it and cannot be read as one, and the honest thing
+ * to do with an unsaved edit we can no longer interpret is to drop it rather
+ * than to guess.
+ */
+const STORAGE_VERSION = 2;
 
 export interface RecoveredDraft extends ShaderDraft {
   shaderId: string;
@@ -41,8 +48,7 @@ export class DraftRecovery {
       shaderId,
       baselineUpdatedAt,
       draftUpdatedAt: new Date().toISOString(),
-      fragment: draft.fragment,
-      vertex: draft.vertex,
+      project: structuredClone(draft.project),
       controlsText: draft.controlsText,
       render: structuredClone(draft.render),
     };
@@ -108,11 +114,29 @@ export class DraftRecovery {
       draft.shaderId === shaderId &&
       typeof draft.baselineUpdatedAt === 'string' &&
       typeof draft.draftUpdatedAt === 'string' &&
-      typeof draft.fragment === 'string' &&
-      typeof draft.vertex === 'string' &&
       typeof draft.controlsText === 'string' &&
+      this.validProject(draft.project) &&
       this.validRender(draft.render)
     );
+  }
+
+  /**
+   * A recovered project is repaired rather than merely checked, because the
+   * alternative is throwing away someone's unsaved work over a field that
+   * `sanitizeProject` would have fixed in place. Only a draft with no readable
+   * project *at all* is refused.
+   */
+  private validProject(value: unknown): value is ShaderProject {
+    if (!value || typeof value !== 'object') return false;
+    const project = value as Partial<ShaderProject>;
+    if (!Array.isArray(project.passes) || typeof project.vertex !== 'string') return false;
+
+    const repaired = sanitizeProject(project, '', project.vertex);
+    // Repair in place, so `get()` hands back something the store can adopt.
+    (value as ShaderProject).passes = repaired.passes;
+    (value as ShaderProject).files = repaired.files;
+    (value as ShaderProject).version = repaired.version;
+    return true;
   }
 
   private validRender(value: unknown): value is RenderSettings {
