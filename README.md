@@ -451,16 +451,24 @@ out of, and are the reference for what the format can express.
 pnpm test
 ```
 
-102 tests, focused where a bug would actually cost you something:
+175 tests, focused where a bug would actually cost you something:
 
 - **`shared/validate.spec.ts`** — ids (every traversal and reserved-name case),
   the control schema, preset sanitization and clamping, and bundle round-trips.
-- **`server/storage.spec.ts`** — runs against a real temp directory, not a mocked
-  fs, because the whole point of that layer is what it does to the filesystem and
-  a mock would let a traversal bug through. Covers CRUD, path traversal, atomic
-  update, preset lifecycle, import modes, and seeding.
+- **`server/storage/shader-storage.spec.ts`** — runs against a real temp
+  directory, not a mocked fs, because the whole point of that layer is what it
+  does to the filesystem and a mock would let a traversal bug through. Covers
+  CRUD, path traversal, atomic update, preset lifecycle, import modes, and
+  seeding.
+- **`core/shader-store.spec.ts`** — the client-side store: selection, dirty
+  tracking, save/discard paths, and preset application.
+- **`ui/document-status.spec.ts`** — the saved/dirty/saving indicator, including
+  the debounce timing.
+- **`core/draft-recovery.spec.ts`** and **`core/panel-prefs.spec.ts`** — what
+  survives a reload: unsaved drafts, and panel sizes.
 - **`rendering/glsl-diagnostics.spec.ts`** — both driver log dialects, and the
   prelude offset that makes a line number point at the right line.
+- **`rendering/shadertoy-import.spec.ts`** — the Shadertoy source rewrite.
 
 ---
 

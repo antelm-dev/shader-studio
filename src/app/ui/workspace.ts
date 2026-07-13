@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import type { ImportMode } from '../../shared/model';
 import { DesktopPlatform } from '../core/desktop-platform';
 import { ShaderStore } from '../core/shader-store';
+import { buildFullGlsl } from '../rendering/glsl-export';
 import { convertShadertoy } from '../rendering/shadertoy-import';
 import { ConfirmDialog, type ConfirmDialogData } from './confirm-dialog';
 import { EditorSettingsDialog } from './editor-settings-dialog';
@@ -130,6 +131,29 @@ export class Workspace {
     if (confirmed) {
       if (id === this.store.selectedId()) await this.guardedTransition(() => this.store.remove(id));
       else await this.store.remove(id);
+    }
+  }
+
+  // --- Source ---------------------------------------------------------------
+
+  /**
+   * Copy the fragment as a standalone file: the source plus the declarations
+   * the engine would otherwise have supplied. What you paste into another
+   * engine, or into a bug report, is then the shader as it actually compiles.
+   */
+  async copyFullGlsl(): Promise<void> {
+    const draft = this.store.draft();
+    if (!draft) return;
+
+    const glsl = buildFullGlsl(draft.fragment, this.store.controls());
+
+    try {
+      await navigator.clipboard.writeText(glsl);
+      this.store.notice.set({ text: 'Copied the full GLSL to the clipboard', error: false });
+    } catch {
+      // Denied permission, or an insecure context — neither is worth a console
+      // trace, but the user is owed an explanation for the nothing that happened.
+      this.store.notice.set({ text: 'The clipboard is not available here', error: true });
     }
   }
 

@@ -94,6 +94,17 @@ type Tab = DiagnosticSource;
         <span>Revert</span>
       </button>
       <mat-divider />
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="!store.draft()"
+        matTooltip="The fragment source with every engine and control uniform declared"
+        (click)="workspace.copyFullGlsl()"
+      >
+        <mat-icon>content_copy</mat-icon>
+        <span>Copy full GLSL</span>
+      </button>
+      <mat-divider />
       <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
         <mat-icon>tune</mat-icon>
         <span>Appearance</span>

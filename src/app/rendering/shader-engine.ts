@@ -14,6 +14,7 @@ import {
 } from '../../shared/model';
 import type { CompileDiagnostic } from '../core/diagnostic';
 import { parseInfoLog, prefixLineCount } from './glsl-diagnostics';
+import { expandMacros } from './glsl-export';
 
 /** A channel resolved to something `THREE.TextureLoader` can actually load. */
 export interface ChannelSource {
@@ -694,9 +695,4 @@ export class ShaderEngine {
     this.placeholderTexture.dispose();
     this.renderer.dispose();
   }
-}
-
-/** Substitutions the engine makes in every shader before compiling it. */
-function expandMacros(source: string): string {
-  return source.replaceAll('__MAX_WAVES__', String(MAX_WAVES));
 }
