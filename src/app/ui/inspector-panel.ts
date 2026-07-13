@@ -8,7 +8,7 @@ import { INSPECTOR_TABS, type InspectorTab } from '../core/panel-prefs';
 import { Preferences } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
 import { GuiPanel } from '../gui/gui-panel';
-import { TranslatePipe } from '../i18n/i18n.module';
+import { TranslatePipe } from '../i18n/translate.pipe';
 import { PresetPanel } from './preset-panel';
 import { TexturePanel } from './texture-panel';
 import { Workspace } from './workspace';

@@ -19,7 +19,7 @@ import type { ThumbnailMeta } from '@shader-studio/shared/model';
 import { ShaderStore } from '../core/shader-store';
 import { ThumbnailAssets } from '../core/thumbnail-assets';
 import { I18n } from '../i18n/i18n';
-import { TranslatePipe } from '../i18n/i18n.module';
+import { TranslatePipe } from '../i18n/translate.pipe';
 import { Workspace } from './workspace';
 
 @Component({

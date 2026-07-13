@@ -6,7 +6,7 @@
   "compilerOptions": {
     // The storage tests drive the real filesystem, so the Node types have to be
     // in scope here as well as in the app build.
-    "types": ["vitest/globals", "node"]
+    "types": ["vitest/globals", "node", "@angular/localize"]
   },
   "include": ["src/**/*.d.ts", "src/**/*.spec.ts"]
 }

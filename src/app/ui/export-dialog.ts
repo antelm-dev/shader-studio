@@ -11,7 +11,7 @@ import { MatSelectModule } from '@angular/material/select';
 import type { CaptureSettings } from '@shader-studio/shared/model';
 import { Preferences } from '../core/preferences';
 import { I18n } from '../i18n/i18n';
-import { TranslatePipe } from '../i18n/i18n.module';
+import { TranslatePipe } from '../i18n/translate.pipe';
 import { ffmpegCommand, planCapture } from '../rendering/capture-plan';
 import { ShaderCapture } from '../rendering/shader-capture';
 

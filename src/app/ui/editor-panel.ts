@@ -24,7 +24,7 @@ import { DocumentStatus } from './document-status';
 import { EditorTabs } from './editor-tabs';
 import { EditorWindowControls } from './editor-window-controls';
 import { PassConfigPanel } from './pass-config-panel';
-import { TranslatePipe } from '../i18n/i18n.module';
+import { TranslatePipe } from '../i18n/translate.pipe';
 import { Workspace } from './workspace';
 
 @Component({

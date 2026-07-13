@@ -13,7 +13,7 @@ import {
 } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
 import { I18n } from '../i18n/i18n';
-import { TranslatePipe } from '../i18n/i18n.module';
+import { TranslatePipe } from '../i18n/translate.pipe';
 import { DocumentStatus } from './document-status';
 import { MenuCommands, type MenuCommand } from './menu-commands';
 import { Workspace } from './workspace';

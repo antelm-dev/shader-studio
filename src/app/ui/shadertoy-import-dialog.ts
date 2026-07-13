@@ -7,7 +7,7 @@ import { MatInputModule } from '@angular/material/input';
 
 import { LIMITS } from '@shader-studio/shared/validate';
 import { I18n } from '../i18n/i18n';
-import { TranslatePipe } from '../i18n/i18n.module';
+import { TranslatePipe } from '../i18n/translate.pipe';
 
 export interface ShadertoyImportDialogResult {
   name: string;

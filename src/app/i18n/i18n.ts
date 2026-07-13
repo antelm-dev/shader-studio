@@ -4,6 +4,7 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { Preferences } from '../core/preferences';
 import { I18nCatalog, type I18nCatalogMap } from './catalog';
 import { type AppLocale, type TranslationKey } from './keys';
+import { applyLocalizeCatalog } from './localize';
 
 export { SUPPORTED_LOCALES, type AppLocale } from './keys';
 export type TranslationParams = Readonly<Record<string, string | number>>;
@@ -28,7 +29,9 @@ export class I18n {
 
   constructor() {
     effect(() => {
-      this.document.documentElement.lang = this.locale();
+      const locale = this.locale();
+      this.document.documentElement.lang = locale;
+      this.syncLocalize();
     });
 
     effect(() => {
@@ -43,7 +46,15 @@ export class I18n {
   ensureLoaded(locale: AppLocale): Promise<void> {
     const loads = [this.loadOne(locale)];
     if (locale !== 'en') loads.push(this.loadOne('en'));
-    return Promise.all(loads).then(() => undefined);
+    return Promise.all(loads).then(() => {
+      this.syncLocalize();
+    });
+  }
+
+  private syncLocalize(): void {
+    const locale = this.locale();
+    const catalog = this.catalogs()[locale] ?? this.catalogs().en;
+    if (catalog) applyLocalizeCatalog(locale, catalog);
   }
 
   private loadOne(locale: AppLocale): Promise<void> {

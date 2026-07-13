@@ -24,7 +24,7 @@ import { PreviewWindow } from '../rendering/preview-window';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { ShaderCanvas } from '../rendering/shader-canvas';
 import { I18n } from '../i18n/i18n';
-import { TranslatePipe } from '../i18n/i18n.module';
+import { TranslatePipe } from '../i18n/translate.pipe';
 import type { TranslationKey } from '../i18n/keys';
 import { PreviewWindowControls } from './preview-window-controls';
 

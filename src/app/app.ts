@@ -53,7 +53,7 @@ import { ResizeHandle } from './ui/resize-handle';
 import { ShaderBrowser } from './ui/shader-browser';
 import { Workspace } from './ui/workspace';
 import { I18n, LANGUAGE_OPTIONS, type AppLocale } from './i18n/i18n';
-import { I18nModule } from './i18n/i18n.module';
+import { TranslatePipe } from './i18n/translate.pipe';
 
 @Component({
   selector: 'app-root',
@@ -62,7 +62,7 @@ import { I18nModule } from './i18n/i18n.module';
     AppTitlebar,
     EditorShell,
     InspectorPanel,
-    I18nModule,
+    TranslatePipe,
     MatButtonModule,
     MatDividerModule,
     MatIconModule,

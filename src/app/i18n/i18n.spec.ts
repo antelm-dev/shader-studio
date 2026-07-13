@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { ɵ$localize as $localize } from '@angular/localize';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { Preferences, type WorkspacePreferences } from '../core/preferences';
@@ -66,6 +67,22 @@ describe('I18n', () => {
     i18n.setLocale('fr');
     await i18n.ensureLoaded('fr');
     expect(i18n.t('notice.shaderNotFound', { name: 'Plasma' })).toBe(
+      'Le shader « Plasma » est introuvable',
+    );
+  });
+
+  it('syncs the active catalog into $localize', async () => {
+    const i18n = TestBed.inject(I18n);
+
+    expect($localize.locale).toBe('en');
+    expect($localize`:@@action.saveShader:Save shader`).toBe('Save shader');
+
+    i18n.setLocale('fr');
+    await i18n.ensureLoaded('fr');
+
+    expect($localize.locale).toBe('fr');
+    expect($localize`:@@action.saveShader:Save shader`).toBe('Enregistrer le shader');
+    expect($localize`:@@notice.shaderNotFound:Shader “${'Plasma'}:name:” was not found`).toBe(
       'Le shader « Plasma » est introuvable',
     );
   });
