@@ -7,6 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
 import { LIMITS } from '@shader-studio/shared/validate';
+import { TranslatePipe } from '../i18n/i18n.module';
 
 export type NewShaderDialogResult = { action: 'create'; name: string } | { action: 'shadertoy' };
 
@@ -20,12 +21,13 @@ export type NewShaderDialogResult = { action: 'create'; name: string } | { actio
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
+    TranslatePipe,
   ],
   template: `
-    <h2 mat-dialog-title>New shader</h2>
+    <h2 mat-dialog-title>{{ 'dialog.newShader' | translate }}</h2>
     <mat-dialog-content>
       <mat-form-field appearance="outline" class="field">
-        <mat-label>Name</mat-label>
+        <mat-label>{{ 'dialog.name' | translate }}</mat-label>
         <input
           matInput
           cdkFocusInitial
@@ -34,17 +36,17 @@ export type NewShaderDialogResult = { action: 'create'; name: string } | { actio
           (ngModelChange)="name.set($event)"
           (keyup.enter)="create()"
         />
-        <mat-hint>Starts from a small template you can edit straight away</mat-hint>
+        <mat-hint>{{ 'dialog.newShaderHint' | translate }}</mat-hint>
       </mat-form-field>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button matButton mat-dialog-close type="button">Cancel</button>
+      <button matButton mat-dialog-close type="button">{{ 'action.cancel' | translate }}</button>
       <button matButton type="button" (click)="importShadertoy()">
         <mat-icon>code</mat-icon>
-        Import from Shadertoy…
+        {{ 'action.importShadertoy' | translate }}
       </button>
       <button matButton="filled" type="button" [disabled]="!valid()" (click)="create()">
-        Create
+        {{ 'action.create' | translate }}
       </button>
     </mat-dialog-actions>
   `,

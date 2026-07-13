@@ -111,10 +111,14 @@ export class ShaderCanvas {
   });
 
   private readonly debouncedPasses = signal<readonly EnginePass[] | null>(null);
+  /** The `draftRevision` that produced `debouncedPasses` — what the compile effect reports its result against. */
+  private readonly debouncedRevision = signal(0);
   private readonly channelSources = signal<readonly (ChannelSource | null)[]>(EMPTY_CHANNELS);
 
   /** The last `recompileRequest` acted on, so a new one can be told from a redraw. */
   private lastRecompile = 0;
+  /** The last `immediateCompileRequest` acted on — flush the debounce timer instead of waiting it out. */
+  private lastImmediateCompile = 0;
 
   constructor() {
     afterNextRender(() => {
@@ -125,8 +129,17 @@ export class ShaderCanvas {
     // pass whose composed source is unchanged when the dust settles is skipped
     // by the engine anyway, so the cost of a burst of typing is one recompile of
     // the one pass being typed into.
+    //
+    // Keyed off `draftRevision` rather than `passes()` alone: a controls- or
+    // render-only edit bumps the revision without changing the composed
+    // fragment sources, and `compileNow()`/`waitForCompile()` still need a
+    // compile record to resolve against — the engine's own "unchanged source"
+    // fast path makes that cheap.
     effect((onCleanup) => {
+      const revision = this.store.draftRevision();
       const passes = this.passes();
+      const immediate = this.store.immediateCompileRequest();
+
       if (!passes) {
         this.debouncedPasses.set(null);
         return;
@@ -134,13 +147,27 @@ export class ShaderCanvas {
 
       this.store.compiling.set(new Set(passes.map((pass) => pass.id)));
 
-      const timer = setTimeout(() => this.debouncedPasses.set(passes), RECOMPILE_DEBOUNCE_MS);
+      // `compileNow()` wants the debounce flushed immediately rather than
+      // waited out — the same "force" idea as Ctrl+Enter, but for timing
+      // instead of the engine's unchanged-source skip.
+      if (immediate !== this.lastImmediateCompile) {
+        this.lastImmediateCompile = immediate;
+        this.debouncedPasses.set(passes);
+        this.debouncedRevision.set(revision);
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        this.debouncedPasses.set(passes);
+        this.debouncedRevision.set(revision);
+      }, RECOMPILE_DEBOUNCE_MS);
       onCleanup(() => clearTimeout(timer));
     });
 
     effect(() => {
       const engine = this.engine();
       const passes = this.debouncedPasses();
+      const revision = this.debouncedRevision();
       const controls = this.store.controls();
 
       // Ctrl+Enter. Tracked, so asking for a recompile of a source nobody touched
@@ -167,7 +194,7 @@ export class ShaderCanvas {
           force,
         );
 
-        this.store.setCompileDiagnostics([...this.compositionErrors(), ...diagnostics]);
+        this.store.recordCompileResult(revision, [...this.compositionErrors(), ...diagnostics]);
         this.store.compiling.set(new Set());
       });
     });

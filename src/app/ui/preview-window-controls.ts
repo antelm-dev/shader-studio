@@ -5,6 +5,7 @@ import { MatMenu, MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { PreviewWindow } from '../rendering/preview-window';
+import { TranslatePipe } from '../i18n/i18n.module';
 
 /**
  * The preview title bar's controls: the same buttons, the same metrics and the
@@ -23,14 +24,14 @@ import { PreviewWindow } from '../rendering/preview-window';
 @Component({
   selector: 'app-preview-window-controls',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule],
+  imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
   template: `
     <button
       matIconButton
       type="button"
       class="control"
-      matTooltip="Preview window"
-      aria-label="Preview window menu"
+      [matTooltip]="'preview.windowMenu' | translate"
+      [attr.aria-label]="'preview.windowMenuAria' | translate"
       [matMenuTriggerFor]="menu()"
     >
       <mat-icon>more_vert</mat-icon>
@@ -40,8 +41,8 @@ import { PreviewWindow } from '../rendering/preview-window';
       matIconButton
       type="button"
       class="control"
-      [matTooltip]="preview.minimized() ? 'Expand the preview' : 'Collapse the preview'"
-      [attr.aria-label]="preview.minimized() ? 'Expand the preview' : 'Collapse the preview'"
+      [matTooltip]="(preview.minimized() ? 'preview.expand' : 'preview.collapse') | translate"
+      [attr.aria-label]="(preview.minimized() ? 'preview.expand' : 'preview.collapse') | translate"
       [attr.aria-expanded]="!preview.minimized()"
       (click)="preview.toggleMinimized()"
     >
@@ -52,8 +53,8 @@ import { PreviewWindow } from '../rendering/preview-window';
       matIconButton
       type="button"
       class="control"
-      [matTooltip]="preview.maximized() ? 'Restore the preview' : 'Maximize the preview'"
-      [attr.aria-label]="preview.maximized() ? 'Restore the preview' : 'Maximize the preview'"
+      [matTooltip]="(preview.maximized() ? 'preview.restore' : 'preview.maximize') | translate"
+      [attr.aria-label]="(preview.maximized() ? 'preview.restore' : 'preview.maximize') | translate"
       [attr.aria-pressed]="preview.maximized()"
       (click)="preview.toggleMaximized()"
     >
@@ -64,8 +65,8 @@ import { PreviewWindow } from '../rendering/preview-window';
       matIconButton
       type="button"
       class="control"
-      matTooltip="Return the preview to the stage"
-      aria-label="Return the preview to the stage"
+      [matTooltip]="'preview.returnToStage' | translate"
+      [attr.aria-label]="'preview.returnToStage' | translate"
       (click)="preview.showOnStage()"
     >
       <mat-icon>wallpaper</mat-icon>

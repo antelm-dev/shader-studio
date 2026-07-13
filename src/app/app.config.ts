@@ -1,5 +1,7 @@
 import {
   ApplicationConfig,
+  inject,
+  provideAppInitializer,
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
 } from '@angular/core';
@@ -9,20 +11,23 @@ import { provideRouter } from '@angular/router';
 
 import { routes } from './app.routes';
 import { HttpShaderApi, ShaderApi } from './core/shader-api';
+import { HttpI18nCatalog, I18nCatalog } from './i18n/catalog';
+import { I18n } from './i18n/i18n';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideZonelessChangeDetection(),
     provideRouter(routes),
-    // HttpClient defaults to the fetch backend in v22, which is what lets it
-    // run during SSR, where there is no XHR.
     provideHttpClient(),
     HttpShaderApi,
     { provide: ShaderApi, useExisting: HttpShaderApi },
-    // Replays clicks that landed before the app finished booting.
+    HttpI18nCatalog,
+    { provide: I18nCatalog, useExisting: HttpI18nCatalog },
+    provideAppInitializer(() => {
+      const i18n = inject(I18n);
+      return i18n.ensureLoaded(i18n.locale());
+    }),
     provideClientHydration(withEventReplay()),
-    // No `provideAnimationsAsync()`: @angular/animations is deprecated as of
-    // v22 and Material 22 animates with native CSS instead.
   ],
 };

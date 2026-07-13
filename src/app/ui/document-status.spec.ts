@@ -1,25 +1,30 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CompileDiagnostic } from '../core/diagnostic';
+import { Preferences, type WorkspacePreferences } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
+import { I18nCatalog, type I18nCatalogMap } from '../i18n/catalog';
+import { I18n } from '../i18n/i18n';
 import { DocumentStatus } from './document-status';
 
-/**
- * The save predicate used to be written out by hand in three templates. These
- * tests are what stop it drifting back apart — and they pin down the one rule
- * that is easy to get backwards: a shader that does not *compile* can still be
- * saved, but a shader whose *config* does not parse cannot.
- */
-
-/** Only the four signals `DocumentStatus` actually reads. */
 class FakeStore implements Partial<ShaderStore> {
   readonly record = signal<unknown>({ id: 'waves' }) as ShaderStore['record'];
   readonly dirty = signal(false) as unknown as ShaderStore['dirty'];
   readonly saving = signal(false) as unknown as ShaderStore['saving'];
   readonly configValid = signal(true) as unknown as ShaderStore['configValid'];
   readonly diagnostics = signal<readonly CompileDiagnostic[]>([]);
+}
+
+class FileCatalog extends I18nCatalog {
+  override load(locale: 'en' | 'fr'): Promise<I18nCatalogMap> {
+    const raw = readFileSync(resolve(`i18n/${locale}.json`), 'utf8');
+    return Promise.resolve(JSON.parse(raw) as I18nCatalogMap);
+  }
 }
 
 const error = (source: CompileDiagnostic['source']): CompileDiagnostic =>
@@ -31,13 +36,30 @@ const warning = (): CompileDiagnostic =>
 describe('DocumentStatus', () => {
   let store: FakeStore;
   let status: DocumentStatus;
+  const language = signal({ language: 'en' as 'en' | 'fr' });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
     store = new FakeStore();
+    language.set({ language: 'en' });
     TestBed.configureTestingModule({
-      providers: [DocumentStatus, { provide: ShaderStore, useValue: store }],
+      providers: [
+        DocumentStatus,
+        I18n,
+        { provide: I18nCatalog, useClass: FileCatalog },
+        { provide: ShaderStore, useValue: store },
+        {
+          provide: Preferences,
+          useValue: {
+            value: language.asReadonly(),
+            patch: (patch: Partial<WorkspacePreferences>) => {
+              if (patch.language) language.set({ language: patch.language });
+            },
+          },
+        },
+      ],
     });
+    await TestBed.inject(I18n).ensureLoaded('en');
     status = TestBed.inject(DocumentStatus);
     TestBed.tick();
   });
@@ -105,12 +127,6 @@ describe('DocumentStatus', () => {
       expect(status.saveHint()).toBe('Saving…');
     });
 
-    /**
-     * The load-bearing pair. A broken config has no schema to build a record
-     * from, so it blocks the save and says so. A shader that merely fails to
-     * compile is the normal state of one you are working on — blocking that
-     * would throw the work away.
-     */
     it('is false, with a reason, when the config does not parse', () => {
       set({ dirty: true, configValid: false });
       expect(status.canSave()).toBe(false);

@@ -7,6 +7,7 @@ import { composePass } from '@shader-studio/shared/pass-source';
 import { imagePass } from '@shader-studio/shared/project';
 import { DesktopPlatform } from '../core/desktop-platform';
 import { ShaderStore, type EditorDocument } from '../core/shader-store';
+import { I18n } from '../i18n/i18n';
 import { buildFullGlsl } from '../rendering/glsl-export';
 import { convertShadertoy } from '../rendering/shadertoy-import';
 import { ConfirmDialog, type ConfirmDialogData } from './confirm-dialog';
@@ -32,6 +33,7 @@ export class Workspace {
   private readonly dialog = inject(MatDialog);
   private readonly store = inject(ShaderStore);
   private readonly desktop = inject(DesktopPlatform);
+  private readonly i18n = inject(I18n);
   private transitionInFlight: Promise<boolean> | null = null;
 
   guardedTransition(action: () => void | Promise<void>): Promise<boolean> {
@@ -126,30 +128,31 @@ export class Workspace {
 
   async renameShader(id: string, currentName: string): Promise<void> {
     const name = await this.prompt({
-      title: 'Rename shader',
-      label: 'Name',
+      title: this.i18n.t('dialog.renameShader'),
+      label: this.i18n.t('dialog.name'),
       value: currentName,
-      confirmText: 'Rename',
-      hint: 'The name changes; links and files keep the same id',
+      confirmText: this.i18n.t('dialog.renameConfirm'),
+      hint: this.i18n.t('dialog.renameHint'),
     });
     if (name && name !== currentName) await this.store.rename(id, name);
   }
 
   async duplicateShader(id: string, currentName: string): Promise<void> {
+    const suffix = this.i18n.locale() === 'fr' ? 'copie' : 'copy';
     const name = await this.prompt({
-      title: 'Duplicate shader',
-      label: 'Name of the copy',
-      value: `${currentName} copy`,
-      confirmText: 'Duplicate',
+      title: this.i18n.t('dialog.duplicateShader'),
+      label: this.i18n.t('dialog.duplicateName'),
+      value: `${currentName} ${suffix}`,
+      confirmText: this.i18n.t('dialog.duplicateConfirm'),
     });
     if (name) await this.guardedTransition(() => this.store.duplicate(id, name));
   }
 
   async deleteShader(id: string, name: string): Promise<void> {
     const confirmed = await this.confirm({
-      title: 'Delete shader',
-      message: `“${name}” and all of its presets will be permanently deleted.`,
-      confirmText: 'Delete',
+      title: this.i18n.t('dialog.deleteShader'),
+      message: this.i18n.t('dialog.deleteShaderMessage', { name }),
+      confirmText: this.i18n.t('action.delete'),
       destructive: true,
     });
     if (confirmed) {
@@ -164,25 +167,22 @@ export class Workspace {
     if (!this.store.draft()) return;
 
     const name = await this.prompt({
-      title: 'New file',
-      label: 'File name',
+      title: this.i18n.t('dialog.newFile'),
+      label: this.i18n.t('dialog.fileName'),
       value: 'untitled.glsl',
-      confirmText: 'Create',
-      hint: 'Include it from a pass with #include "the-name"',
+      confirmText: this.i18n.t('action.create'),
+      hint: this.i18n.t('dialog.newFileHint'),
     });
     if (name) this.store.addSourceFile(name);
   }
 
   async renameDocument(doc: EditorDocument): Promise<void> {
     const name = await this.prompt({
-      title: doc.kind === 'file' ? 'Rename file' : 'Rename pass',
-      label: 'Name',
+      title: this.i18n.t(doc.kind === 'file' ? 'dialog.renameFile' : 'dialog.renamePass'),
+      label: this.i18n.t('dialog.name'),
       value: doc.name,
-      confirmText: 'Rename',
-      hint:
-        doc.kind === 'file'
-          ? 'Every #include that names this file has to be updated by hand'
-          : 'The slot (Buffer A–D) does not change, so nothing that samples it breaks',
+      confirmText: this.i18n.t('dialog.renameConfirm'),
+      hint: this.i18n.t(doc.kind === 'file' ? 'dialog.renameFileHint' : 'dialog.renamePassHint'),
     });
     if (!name || name === doc.name) return;
 
@@ -203,9 +203,9 @@ export class Workspace {
 
     if (doc.kind === 'file') {
       const confirmed = await this.confirm({
-        title: 'Delete file',
-        message: `“${doc.name}” will be removed from the project. Any #include that names it will stop resolving.`,
-        confirmText: 'Delete',
+        title: this.i18n.t('dialog.deleteFile'),
+        message: this.i18n.t('dialog.deleteFileMessage', { name: doc.name }),
+        confirmText: this.i18n.t('action.delete'),
         destructive: true,
       });
       if (confirmed) this.store.removeSourceFile(doc.id);
@@ -220,16 +220,19 @@ export class Workspace {
       )
       .map((pass) => pass.name);
 
+    const join = this.i18n.locale() === 'fr' ? ' et ' : ' and ';
     const confirmed = await this.confirm({
-      title: 'Delete buffer pass',
+      title: this.i18n.t('dialog.deleteBuffer'),
       message:
-        `“${doc.name}” and its render targets will be removed.` +
-        (consumers.length > 0
-          ? ` ${consumers.join(' and ')} ${consumers.length === 1 ? 'samples' : 'sample'} it, and ${
-              consumers.length === 1 ? 'its channel' : 'their channels'
-            } will be cleared.`
-          : ''),
-      confirmText: 'Delete',
+        this.i18n.t('dialog.deleteBufferMessage', { name: doc.name }) +
+        (consumers.length === 0
+          ? ''
+          : consumers.length === 1
+            ? this.i18n.t('dialog.deleteBufferConsumersOne', { name: consumers[0] })
+            : this.i18n.t('dialog.deleteBufferConsumersMany', {
+                names: consumers.join(join),
+              })),
+      confirmText: this.i18n.t('action.delete'),
       destructive: true,
     });
     if (confirmed) this.store.removeBufferPass(doc.id);
@@ -254,11 +257,11 @@ export class Workspace {
 
     try {
       await navigator.clipboard.writeText(glsl);
-      this.store.notice.set({ text: 'Copied the full GLSL to the clipboard', error: false });
+      this.store.notice.set({ text: this.i18n.t('notice.copiedGlsl'), error: false });
     } catch {
       // Denied permission, or an insecure context — neither is worth a console
       // trace, but the user is owed an explanation for the nothing that happened.
-      this.store.notice.set({ text: 'The clipboard is not available here', error: true });
+      this.store.notice.set({ text: this.i18n.t('notice.clipboardUnavailable'), error: true });
     }
   }
 
@@ -266,13 +269,13 @@ export class Workspace {
 
   async savePreset(): Promise<void> {
     const result = await this.promptFor({
-      title: 'Save preset',
-      label: 'Preset name',
-      confirmText: 'Save',
-      hint: 'Captures the current parameter values. Reusing a name overwrites it.',
+      title: this.i18n.t('dialog.savePreset'),
+      label: this.i18n.t('dialog.presetName'),
+      confirmText: this.i18n.t('action.save'),
+      hint: this.i18n.t('dialog.savePresetHint'),
       option: {
-        label: 'Also capture the render settings',
-        hint: 'Applying the preset then restores bloom too, leaving the shader unsaved.',
+        label: this.i18n.t('dialog.presetCaptureRender'),
+        hint: this.i18n.t('dialog.presetCaptureRenderHint'),
       },
     });
     if (result) await this.store.savePreset(result.value, result.checked);
@@ -280,9 +283,9 @@ export class Workspace {
 
   async deletePreset(presetId: string, name: string): Promise<void> {
     const confirmed = await this.confirm({
-      title: 'Delete preset',
-      message: `Delete the preset “${name}”?`,
-      confirmText: 'Delete',
+      title: this.i18n.t('dialog.deletePreset'),
+      message: this.i18n.t('dialog.deletePresetMessage', { name }),
+      confirmText: this.i18n.t('action.delete'),
       destructive: true,
     });
     if (confirmed) await this.store.deletePreset(presetId);
@@ -306,7 +309,7 @@ export class Workspace {
       converted = convertShadertoy(input.source);
     } catch (error) {
       this.store.notice.set({
-        text: `Shadertoy import failed: ${(error as Error).message}`,
+        text: this.i18n.t('notice.shadertoyFailed', { error: (error as Error).message }),
         error: true,
       });
       return;
@@ -320,7 +323,7 @@ export class Workspace {
       if (!(await this.store.save())) return;
       const suffix = converted.warnings.length ? ` ${converted.warnings.join(' ')}` : '';
       this.store.notice.set({
-        text: `Imported “${input.name}” from Shadertoy.${suffix}`,
+        text: this.i18n.t('notice.shadertoyImported', { name: input.name, suffix }),
         error: false,
       });
     });
@@ -334,9 +337,12 @@ export class Workspace {
       } else {
         this.download(bundle, `${id}.shader.json`);
       }
-      this.store.notice.set({ text: `Exported “${name}”`, error: false });
+      this.store.notice.set({ text: this.i18n.t('notice.exported', { name }), error: false });
     } catch (error) {
-      this.store.notice.set({ text: `Export failed: ${String(error)}`, error: true });
+      this.store.notice.set({
+        text: this.i18n.t('notice.exportFailed', { error: String(error) }),
+        error: true,
+      });
     }
   }
 
@@ -351,9 +357,12 @@ export class Workspace {
       } else {
         this.download(bundle, 'shader-studio-collection.shader.json');
       }
-      this.store.notice.set({ text: 'Exported the whole collection', error: false });
+      this.store.notice.set({ text: this.i18n.t('notice.exportedAll'), error: false });
     } catch (error) {
-      this.store.notice.set({ text: `Export failed: ${String(error)}`, error: true });
+      this.store.notice.set({
+        text: this.i18n.t('notice.exportFailed', { error: String(error) }),
+        error: true,
+      });
     }
   }
 
@@ -369,7 +378,7 @@ export class Workspace {
       bundle = JSON.parse(await file.text());
     } catch {
       this.store.notice.set({
-        text: `“${file.name}” is not a valid JSON file`,
+        text: this.i18n.t('notice.invalidJson', { name: file.name }),
         error: true,
       });
       return;
@@ -377,11 +386,9 @@ export class Workspace {
 
     if (mode === 'overwrite') {
       const confirmed = await this.confirm({
-        title: 'Import and replace',
-        message:
-          'Shaders in this bundle that share an id with an existing shader will replace it, ' +
-          'including its presets. This cannot be undone.',
-        confirmText: 'Replace',
+        title: this.i18n.t('dialog.importReplace'),
+        message: this.i18n.t('dialog.importReplaceMessage'),
+        confirmText: this.i18n.t('action.replace'),
         destructive: true,
       });
       if (!confirmed) return;
@@ -396,27 +403,28 @@ export class Workspace {
       if (!picked) return;
       if (mode === 'overwrite') {
         const confirmed = await this.confirm({
-          title: 'Import and replace',
-          message:
-            'Shaders with matching ids will be replaced, including their presets. This cannot be undone.',
-          confirmText: 'Replace',
+          title: this.i18n.t('dialog.importReplace'),
+          message: this.i18n.t('dialog.importReplaceDesktop'),
+          confirmText: this.i18n.t('action.replace'),
           destructive: true,
         });
         if (!confirmed) return;
       }
       await this.guardedTransition(() => this.store.importBundle(picked.bundle, mode));
     } catch (error) {
-      this.store.notice.set({ text: `Import failed: ${String(error)}`, error: true });
+      this.store.notice.set({
+        text: this.i18n.t('notice.importFailed', { error: String(error) }),
+        error: true,
+      });
     }
   }
 
   async resolveFirstRunMigration(): Promise<void> {
     if (!this.desktop.available || !(await this.desktop.migrationPending())) return;
     const shouldImport = await this.confirm({
-      title: 'Import an existing library?',
-      message:
-        'Choose an existing Shader Studio data folder, or continue with the example library.',
-      confirmText: 'Choose folder',
+      title: this.i18n.t('dialog.migrateTitle'),
+      message: this.i18n.t('dialog.migrateMessage'),
+      confirmText: this.i18n.t('dialog.chooseFolder'),
     });
     if (!shouldImport) {
       await this.desktop.declineMigration();
@@ -429,7 +437,10 @@ export class Workspace {
         this.store.notice.set({ text: notice, error: false });
       }
     } catch (error) {
-      this.store.notice.set({ text: `Import failed: ${String(error)}`, error: true });
+      this.store.notice.set({
+        text: this.i18n.t('notice.importFailed', { error: String(error) }),
+        error: true,
+      });
     }
   }
 

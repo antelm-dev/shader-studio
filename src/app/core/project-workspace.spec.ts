@@ -144,6 +144,7 @@ class FakeApi implements Partial<ShaderApi> {
 
 class FakePreferences implements Partial<Preferences> {
   private readonly state = signal<WorkspacePreferences>({
+    language: 'en',
     lastShaderId: null,
     browserOpen: true,
     editorOpen: false,

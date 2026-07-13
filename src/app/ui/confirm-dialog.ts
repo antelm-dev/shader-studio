@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 
+import { TranslatePipe } from '../i18n/i18n.module';
+
 export interface ConfirmDialogData {
   title: string;
   message: string;
@@ -9,18 +11,17 @@ export interface ConfirmDialogData {
   destructive?: boolean;
 }
 
-/** Used for anything that cannot be undone: deleting a shader or a preset. */
 @Component({
   selector: 'app-confirm-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, MatDialogModule],
+  imports: [MatButtonModule, MatDialogModule, TranslatePipe],
   template: `
     <h2 mat-dialog-title>{{ data.title }}</h2>
     <mat-dialog-content>
       <p class="message">{{ data.message }}</p>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button matButton mat-dialog-close type="button">Cancel</button>
+      <button matButton mat-dialog-close type="button">{{ 'action.cancel' | translate }}</button>
       <button
         matButton="filled"
         cdkFocusInitial
@@ -28,7 +29,7 @@ export interface ConfirmDialogData {
         [class.destructive]="data.destructive"
         [mat-dialog-close]="true"
       >
-        {{ data.confirmText ?? 'Confirm' }}
+        {{ data.confirmText ?? ('action.confirm' | translate) }}
       </button>
     </mat-dialog-actions>
   `,

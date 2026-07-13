@@ -23,6 +23,7 @@ import {
   sanitizePreviewWindow,
   type PreviewWindowState,
 } from './preview-prefs';
+import type { AppLocale } from '../i18n/i18n';
 
 /**
  * UI state that should survive a reload: which shader was open, which panels
@@ -52,6 +53,7 @@ export function colorSchemeIcon(scheme: ColorScheme): string {
 }
 
 export interface WorkspacePreferences {
+  language: AppLocale;
   lastShaderId: string | null;
   browserOpen: boolean;
   editorOpen: boolean;
@@ -82,6 +84,7 @@ export interface WorkspacePreferences {
 }
 
 const DEFAULTS: WorkspacePreferences = {
+  language: 'en',
   lastShaderId: null,
   browserOpen: true,
   editorOpen: false,
@@ -103,6 +106,10 @@ function sanitizeColorScheme(value: unknown): ColorScheme {
   return COLOR_SCHEME_OPTIONS.some((option) => option.value === value)
     ? (value as ColorScheme)
     : DEFAULTS.colorScheme;
+}
+
+function sanitizeLanguage(value: unknown): AppLocale {
+  return value === 'fr' ? 'fr' : 'en';
 }
 
 @Injectable({ providedIn: 'root' })
@@ -165,6 +172,7 @@ export class Preferences {
 
       const parsed = JSON.parse(raw) as Partial<WorkspacePreferences>;
       return {
+        language: sanitizeLanguage(parsed.language),
         lastShaderId:
           typeof parsed.lastShaderId === 'string' ? parsed.lastShaderId : DEFAULTS.lastShaderId,
         browserOpen: parsed.browserOpen ?? DEFAULTS.browserOpen,

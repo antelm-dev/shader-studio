@@ -27,8 +27,8 @@
     <button
       matIconButton
       type="button"
-      matTooltip="Toggle the shader browser"
-      aria-label="Toggle the shader browser"
+      [matTooltip]="'toolbar.toggleBrowser' | translate"
+      [attr.aria-label]="'toolbar.toggleBrowser' | translate"
       [attr.aria-expanded]="drawerOpen()"
       (click)="toggleBrowser()"
     >
@@ -49,7 +49,7 @@
     <div class="document">
       <span
         class="doc-name"
-        [title]="shader.description + ' — right-click for actions'"
+        [title]="'toolbar.documentActions' | translate: { description: shader.description }"
         [matContextMenuTriggerFor]="shaderMenu"
       >
         {{ shader.name }}
@@ -98,8 +98,8 @@
     <button
       matIconButton
       type="button"
-      matTooltip="More actions"
-      aria-label="More actions"
+      [matTooltip]="'action.more' | translate"
+      [attr.aria-label]="'action.more' | translate"
       [matMenuTriggerFor]="moreMenu"
     >
       <mat-icon>more_vert</mat-icon>
@@ -108,7 +108,7 @@
     <!-- Four sections, because a flat list of nine commands is a list you read
          rather than a menu you scan. -->
     <mat-menu #moreMenu="matMenu">
-      <h3 class="menu-section">View</h3>
+      <h3 class="menu-section">{{ 'menu.view' | translate }}</h3>
       @for (item of viewCommands; track item.id) {
       <button
         mat-menu-item
@@ -133,13 +133,16 @@
         (click)="desktop.outputOpen() ? desktop.closeOutput() : desktop.openOutput()"
       >
         <mat-icon>{{ desktop.outputOpen() ? 'close_fullscreen' : 'open_in_new' }}</mat-icon>
-        <span>{{ desktop.outputOpen() ? 'Close output window' : 'Open output window' }}</span>
+        <span
+          >{{ (desktop.outputOpen() ? 'action.closeOutput' : 'action.openOutput') | translate
+          }}</span
+        >
       </button>
       }
 
       <mat-divider />
 
-      <h3 class="menu-section">Shader</h3>
+      <h3 class="menu-section">{{ 'menu.shader' | translate }}</h3>
       @for (item of shaderCommands; track item.id) {
       <button
         mat-menu-item
@@ -154,7 +157,7 @@
 
       <mat-divider />
 
-      <h3 class="menu-section">Import &amp; export</h3>
+      <h3 class="menu-section">{{ 'menu.importExport' | translate }}</h3>
       @for (item of importExportCommands; track item.id) {
       <button
         mat-menu-item
@@ -169,21 +172,25 @@
 
       <mat-divider />
 
-      <h3 class="menu-section">Settings</h3>
+      <h3 class="menu-section">{{ 'menu.settings' | translate }}</h3>
       <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
         <mat-icon>{{ themeIcon() }}</mat-icon>
-        <span>Theme</span>
+        <span>{{ 'menu.theme' | translate }}</span>
       </button>
       <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
         <mat-icon>settings</mat-icon>
-        <span>Editor appearance…</span>
+        <span>{{ 'menu.editorAppearance' | translate }}</span>
       </button>
       @if (desktop.available) {
       <button mat-menu-item type="button" (click)="workspace.openDesktopVersion()">
         <mat-icon>info</mat-icon>
-        <span>Version desktop…</span>
+        <span>{{ 'menu.desktopVersion' | translate }}</span>
       </button>
       }
+      <button mat-menu-item type="button" [matMenuTriggerFor]="languageMenu">
+        <mat-icon>language</mat-icon>
+        <span>{{ 'menu.language' | translate }}</span>
+      </button>
     </mat-menu>
 
     <mat-menu #themeMenu="matMenu">
@@ -195,8 +202,26 @@
         (click)="setColorScheme(option.value)"
       >
         <mat-icon>{{ option.icon }}</mat-icon>
-        <span>{{ option.label }}</span>
+        <span>{{ themeLabel(option.value) }}</span>
         @if (preferences.value().colorScheme === option.value) {
+        <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
+        }
+      </button>
+      }
+    </mat-menu>
+
+    <mat-menu #languageMenu="matMenu">
+      @for (option of languageOptions; track option.value) {
+      <button
+        mat-menu-item
+        type="button"
+        role="menuitemradio"
+        [attr.aria-checked]="i18n.locale() === option.value"
+        (click)="setLanguage(option.value)"
+      >
+        <mat-icon>translate</mat-icon>
+        <span>{{ option.labelKey | translate }}</span>
+        @if (i18n.locale() === option.value) {
         <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
         }
       </button>
@@ -215,15 +240,19 @@
       [disabledInteractive]="true"
       [disabled]="!status.canSave()"
       [matTooltip]="status.saveHint()"
-      [attr.aria-label]="'Save shader. ' + status.saveHint()"
+      [attr.aria-label]="'toolbar.saveLabel' | translate: { hint: status.saveHint() }"
       (click)="store.save()"
     >
       <mat-icon>save</mat-icon>
-      {{ store.saving() ? 'Saving…' : 'Save shader' }}
+      {{ (store.saving() ? 'action.saving' : 'action.saveShader') | translate }}
     </button>
 
     @if (store.loading() || store.saving()) {
-    <mat-progress-bar class="loading" mode="indeterminate" aria-label="Working" />
+    <mat-progress-bar
+      class="loading"
+      mode="indeterminate"
+      [attr.aria-label]="'workspace.working' | translate"
+    />
     }
   </mat-toolbar>
 
@@ -257,7 +286,7 @@
         <app-resize-handle
           class="browser-handle"
           grow="e"
-          label="Resize the shader browser. Use the left and right arrow keys."
+          [label]="'workspace.resizeBrowser' | translate"
           [value]="browserWidth()"
           [min]="panelLimits.browserWidth.min"
           [max]="panelLimits.browserWidth.max"
@@ -266,14 +295,18 @@
           (commit)="commitBrowserWidth($event)"
         />
         } @if (inspectorOpen()) {
-        <aside class="inspector" [style.width.px]="inspectorWidth()" aria-label="Inspector">
+        <aside
+          class="inspector"
+          [style.width.px]="inspectorWidth()"
+          [attr.aria-label]="'workspace.inspector' | translate"
+        >
           <app-inspector-panel />
         </aside>
 
         <app-resize-handle
           class="inspector-handle"
           grow="w"
-          label="Resize the inspector. Use the left and right arrow keys."
+          [label]="'workspace.resizeInspector' | translate"
           [style.right.px]="inspectorWidth() + 7"
           [value]="inspectorWidth()"
           [min]="panelLimits.inspectorWidth.min"
@@ -288,8 +321,8 @@
         <button
           type="button"
           class="inspector-rail"
-          matTooltip="Show the inspector (H)"
-          aria-label="Show the inspector"
+          [matTooltip]="'workspace.showInspectorShortcut' | translate"
+          [attr.aria-label]="'action.showInspector' | translate"
           (click)="commands.toggle('guiVisible')"
         >
           <mat-icon>tune</mat-icon>

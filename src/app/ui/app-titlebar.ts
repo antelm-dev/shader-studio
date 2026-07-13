@@ -12,6 +12,8 @@ import {
   type ColorScheme,
 } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
+import { I18n } from '../i18n/i18n';
+import { TranslatePipe } from '../i18n/i18n.module';
 import { DocumentStatus } from './document-status';
 import { MenuCommands, type MenuCommand } from './menu-commands';
 import { Workspace } from './workspace';
@@ -19,17 +21,23 @@ import { Workspace } from './workspace';
 @Component({
   selector: 'app-titlebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatDividerModule, MatIconModule, MatMenuModule, MatTooltipModule],
+  imports: [MatDividerModule, MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
   template: `
     <header class="titlebar" (dblclick)="onTitlebarDblClick($event)">
       <div class="leading no-drag">
-        <nav class="menus" aria-label="Application menu">
-          <button type="button" class="menu-trigger" [matMenuTriggerFor]="fileMenu">File</button>
-          <button type="button" class="menu-trigger" [matMenuTriggerFor]="viewMenu">View</button>
-          <button type="button" class="menu-trigger" [matMenuTriggerFor]="windowMenu">
-            Window
+        <nav class="menus" [attr.aria-label]="'menu.application' | translate">
+          <button type="button" class="menu-trigger" [matMenuTriggerFor]="fileMenu">
+            {{ 'menu.file' | translate }}
           </button>
-          <button type="button" class="menu-trigger" [matMenuTriggerFor]="helpMenu">Help</button>
+          <button type="button" class="menu-trigger" [matMenuTriggerFor]="viewMenu">
+            {{ 'menu.view' | translate }}
+          </button>
+          <button type="button" class="menu-trigger" [matMenuTriggerFor]="windowMenu">
+            {{ 'menu.window' | translate }}
+          </button>
+          <button type="button" class="menu-trigger" [matMenuTriggerFor]="helpMenu">
+            {{ 'menu.help' | translate }}
+          </button>
         </nav>
       </div>
 
@@ -45,8 +53,8 @@ import { Workspace } from './workspace';
         <button
           class="win-btn"
           type="button"
-          matTooltip="Minimize"
-          aria-label="Minimize"
+          [matTooltip]="'action.minimize' | translate"
+          [attr.aria-label]="'action.minimize' | translate"
           (click)="desktop.minimize()"
         >
           <mat-icon>remove</mat-icon>
@@ -54,8 +62,10 @@ import { Workspace } from './workspace';
         <button
           class="win-btn"
           type="button"
-          [matTooltip]="desktop.maximized() ? 'Restore' : 'Maximize'"
-          [attr.aria-label]="desktop.maximized() ? 'Restore' : 'Maximize'"
+          [matTooltip]="(desktop.maximized() ? 'action.restore' : 'action.maximize') | translate"
+          [attr.aria-label]="
+            (desktop.maximized() ? 'action.restore' : 'action.maximize') | translate
+          "
           (click)="desktop.toggleMaximize()"
         >
           <mat-icon>{{ desktop.maximized() ? 'filter_none' : 'crop_square' }}</mat-icon>
@@ -63,8 +73,8 @@ import { Workspace } from './workspace';
         <button
           class="win-btn close"
           type="button"
-          matTooltip="Close"
-          aria-label="Close"
+          [matTooltip]="'action.close' | translate"
+          [attr.aria-label]="'action.close' | translate"
           (click)="desktop.close()"
         >
           <mat-icon>close</mat-icon>
@@ -102,13 +112,13 @@ import { Workspace } from './workspace';
         (click)="store.save()"
       >
         <mat-icon>save</mat-icon>
-        <span>{{ store.saving() ? 'Saving…' : 'Save shader' }}</span>
+        <span>{{ (store.saving() ? 'action.saving' : 'action.saveShader') | translate }}</span>
         <span class="menu-hint">Ctrl+S</span>
       </button>
       <mat-divider />
       <button mat-menu-item type="button" (click)="desktop.close()">
         <mat-icon>logout</mat-icon>
-        <span>Quit</span>
+        <span>{{ 'action.quit' | translate }}</span>
       </button>
     </mat-menu>
 
@@ -125,11 +135,11 @@ import { Workspace } from './workspace';
       <mat-divider />
       <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
         <mat-icon>{{ themeIcon() }}</mat-icon>
-        <span>Theme</span>
+        <span>{{ 'menu.theme' | translate }}</span>
       </button>
       <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
         <mat-icon>settings</mat-icon>
-        <span>Editor appearance…</span>
+        <span>{{ 'menu.editorAppearance' | translate }}</span>
       </button>
       <mat-divider />
       @for (item of captureCommands; track item.id) {
@@ -152,7 +162,7 @@ import { Workspace } from './workspace';
           (click)="setColorScheme(option.value)"
         >
           <mat-icon>{{ option.icon }}</mat-icon>
-          <span>{{ option.label }}</span>
+          <span>{{ themeLabel(option.value) }}</span>
           @if (preferences.value().colorScheme === option.value) {
             <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
           }
@@ -170,14 +180,14 @@ import { Workspace } from './workspace';
       <mat-divider />
       <button mat-menu-item type="button" (click)="desktop.close()">
         <mat-icon>close</mat-icon>
-        <span>Close</span>
+        <span>{{ 'action.close' | translate }}</span>
       </button>
     </mat-menu>
 
     <mat-menu #helpMenu="matMenu">
       <button mat-menu-item type="button" (click)="workspace.openDesktopVersion()">
         <mat-icon>info</mat-icon>
-        <span>Version desktop…</span>
+        <span>{{ 'menu.desktopVersion' | translate }}</span>
       </button>
     </mat-menu>
   `,
@@ -306,6 +316,7 @@ export class AppTitlebar {
   protected readonly workspace = inject(Workspace);
   protected readonly preferences = inject(Preferences);
   protected readonly status = inject(DocumentStatus);
+  protected readonly i18n = inject(I18n);
   private readonly commands = inject(MenuCommands);
 
   protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
@@ -321,8 +332,8 @@ export class AppTitlebar {
   protected readonly newCommands: readonly MenuCommand[] = [this.commands.newShader];
 
   protected readonly importExportCommands: readonly MenuCommand[] = [
-    this.commands.import('rename', 'Import…'),
-    this.commands.import('overwrite', 'Import and replace…'),
+    this.commands.import('rename', 'action.import'),
+    this.commands.import('overwrite', 'action.importReplace'),
     this.commands.exportShader,
     this.commands.exportAll,
   ];
@@ -331,13 +342,19 @@ export class AppTitlebar {
     {
       id: 'toggle-browser',
       icon: () => 'view_sidebar',
-      label: () => (this.preferences.value().browserOpen ? 'Hide browser' : 'Show browser'),
+      label: () =>
+        this.i18n.t(
+          this.preferences.value().browserOpen ? 'action.hideBrowser' : 'action.showBrowser',
+        ),
       action: () => this.commands.toggle('browserOpen'),
     },
     {
       id: 'toggle-controls',
       icon: () => 'tune',
-      label: () => (this.preferences.value().guiVisible ? 'Hide controls' : 'Show controls'),
+      label: () =>
+        this.i18n.t(
+          this.preferences.value().guiVisible ? 'action.hideControls' : 'action.showControls',
+        ),
       shortcut: 'H',
       action: () => this.commands.toggle('guiVisible'),
     },
@@ -348,7 +365,7 @@ export class AppTitlebar {
     {
       id: 'screenshot',
       icon: () => 'photo_camera',
-      label: () => 'Screenshot',
+      label: () => this.i18n.t('action.screenshot'),
       shortcut: 'S',
       action: () => this.commands.captureImage(),
     },
@@ -356,7 +373,8 @@ export class AppTitlebar {
     {
       id: 'toggle-fullscreen',
       icon: () => (this.desktop.fullscreen() ? 'fullscreen_exit' : 'fullscreen'),
-      label: () => (this.desktop.fullscreen() ? 'Exit fullscreen' : 'Enter fullscreen'),
+      label: () =>
+        this.i18n.t(this.desktop.fullscreen() ? 'action.exitFullscreen' : 'action.enterFullscreen'),
       shortcut: 'F11',
       action: () => this.desktop.toggleFullscreen(),
     },
@@ -366,16 +384,20 @@ export class AppTitlebar {
     {
       id: 'minimize',
       icon: () => 'remove',
-      label: () => 'Minimize',
+      label: () => this.i18n.t('action.minimize'),
       action: () => this.desktop.minimize(),
     },
     {
       id: 'maximize',
       icon: () => (this.desktop.maximized() ? 'filter_none' : 'crop_square'),
-      label: () => (this.desktop.maximized() ? 'Restore' : 'Maximize'),
+      label: () => this.i18n.t(this.desktop.maximized() ? 'action.restore' : 'action.maximize'),
       action: () => this.desktop.toggleMaximize(),
     },
   ];
+
+  protected themeLabel(theme: ColorScheme): string {
+    return this.i18n.t(`theme.${theme}`);
+  }
 
   protected setColorScheme(colorScheme: ColorScheme): void {
     this.preferences.patch({ colorScheme });

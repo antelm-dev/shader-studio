@@ -7,8 +7,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
 import { LIMITS } from '@shader-studio/shared/validate';
+import { TranslatePipe } from '../i18n/i18n.module';
 
-/** An extra yes/no the prompt can carry alongside the name. */
 export interface PromptDialogOption {
   label: string;
   hint?: string;
@@ -26,11 +26,9 @@ export interface PromptDialogData {
 
 export interface PromptDialogResult {
   value: string;
-  /** The state of `data.option`, or `false` when the prompt had none. */
   checked: boolean;
 }
 
-/** One-line text prompt: naming a new shader, a duplicate, a rename, a preset. */
 @Component({
   selector: 'app-prompt-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -41,6 +39,7 @@ export interface PromptDialogResult {
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
+    TranslatePipe,
   ],
   template: `
     <h2 mat-dialog-title>{{ data.title }}</h2>
@@ -72,9 +71,9 @@ export interface PromptDialogResult {
     </mat-dialog-content>
 
     <mat-dialog-actions align="end">
-      <button matButton mat-dialog-close type="button">Cancel</button>
+      <button matButton mat-dialog-close type="button">{{ 'action.cancel' | translate }}</button>
       <button matButton="filled" type="button" [disabled]="!valid()" (click)="confirm()">
-        {{ data.confirmText ?? 'Save' }}
+        {{ data.confirmText ?? ('action.save' | translate) }}
       </button>
     </mat-dialog-actions>
   `,

@@ -8,6 +8,7 @@ import { INSPECTOR_TABS, type InspectorTab } from '../core/panel-prefs';
 import { Preferences } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
 import { GuiPanel } from '../gui/gui-panel';
+import { TranslatePipe } from '../i18n/i18n.module';
 import { PresetPanel } from './preset-panel';
 import { TexturePanel } from './texture-panel';
 import { Workspace } from './workspace';
@@ -40,6 +41,7 @@ import { Workspace } from './workspace';
     MatTooltipModule,
     PresetPanel,
     TexturePanel,
+    TranslatePipe,
   ],
   template: `
     <header class="inspector-header">
@@ -47,8 +49,8 @@ import { Workspace } from './workspace';
         matIconButton
         type="button"
         class="collapse"
-        matTooltip="Collapse the inspector (H)"
-        aria-label="Collapse the inspector"
+        [matTooltip]="'inspector.collapse' | translate"
+        [attr.aria-label]="'inspector.collapseAria' | translate"
         (click)="collapse()"
       >
         <mat-icon>chevron_right</mat-icon>
@@ -64,8 +66,8 @@ import { Workspace } from './workspace';
           <button
             matIconButton
             type="button"
-            matTooltip="Reset every parameter to its default"
-            aria-label="Reset parameters"
+            [matTooltip]="'inspector.resetTooltip' | translate"
+            [attr.aria-label]="'inspector.resetAria' | translate"
             [disabled]="store.controls().length === 0"
             (click)="store.resetParams()"
           >
@@ -78,8 +80,8 @@ import { Workspace } from './workspace';
           <button
             matIconButton
             type="button"
-            matTooltip="Save the current parameter values as a preset"
-            aria-label="Save parameter preset"
+            [matTooltip]="'inspector.savePresetTooltip' | translate"
+            [attr.aria-label]="'inspector.savePresetAria' | translate"
             [disabled]="!store.record()"
             (click)="workspace.savePreset()"
           >
@@ -97,7 +99,7 @@ import { Workspace } from './workspace';
     >
       <mat-tab>
         <ng-template mat-tab-label>
-          Controls
+          {{ 'inspector.controls' | translate }}
           @if (store.controls().length; as count) {
             <span class="badge">{{ count }}</span>
           }
@@ -107,7 +109,7 @@ import { Workspace } from './workspace';
 
       <mat-tab>
         <ng-template mat-tab-label>
-          Textures
+          {{ 'inspector.textures' | translate }}
           @if (boundChannels(); as bound) {
             <span class="badge">{{ bound }}/4</span>
           }
@@ -117,7 +119,7 @@ import { Workspace } from './workspace';
 
       <mat-tab>
         <ng-template mat-tab-label>
-          Presets
+          {{ 'inspector.presets' | translate }}
           @if (store.presets().length; as count) {
             <span class="badge">{{ count }}</span>
           }

@@ -18,6 +18,7 @@ import {
   validateImportMode,
 } from '@shader-studio/shared/validate';
 import { ShaderStorage, StorageError } from '../storage';
+import { I18N_LOCALES, loadI18nCatalog } from '../i18n-catalog';
 import {
   attachmentName,
   BODY_LIMIT,
@@ -31,10 +32,28 @@ import {
   THUMBNAIL_BODY_LIMIT,
 } from './helpers';
 
-export function createApiRouter(storage: ShaderStorage): Router {
+export function createApiRouter(storage: ShaderStorage, i18nDir?: string): Router {
   const api = express.Router();
 
   api.use(express.json({ limit: BODY_LIMIT }));
+
+  api.get(
+    '/i18n/:locale',
+    route(async (req, res) => {
+      const locale = param(req, 'locale');
+      if (!(I18N_LOCALES as readonly string[]).includes(locale)) {
+        throw new StorageError('invalid', `Unsupported locale "${locale}"`);
+      }
+      try {
+        res.json({ locale, catalog: await loadI18nCatalog(locale, i18nDir) });
+      } catch (error) {
+        throw new StorageError(
+          'io',
+          error instanceof Error ? error.message : 'Failed to load translations',
+        );
+      }
+    }),
+  );
 
   api.get(
     '/shaders',

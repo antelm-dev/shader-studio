@@ -24,6 +24,7 @@ import { DocumentStatus } from './document-status';
 import { EditorTabs } from './editor-tabs';
 import { EditorWindowControls } from './editor-window-controls';
 import { PassConfigPanel } from './pass-config-panel';
+import { TranslatePipe } from '../i18n/i18n.module';
 import { Workspace } from './workspace';
 
 @Component({
@@ -39,6 +40,7 @@ import { Workspace } from './workspace';
     MatMenuModule,
     MatTooltipModule,
     PassConfigPanel,
+    TranslatePipe,
   ],
   template: `
     <div
@@ -68,7 +70,7 @@ import { Workspace } from './workspace';
           class="config-toggle"
           [matButton]="configOpen() ? 'tonal' : 'text'"
           [attr.aria-pressed]="configOpen()"
-          matTooltip="Pass settings: channels, resolution, filtering"
+          [matTooltip]="'editor.passSettings' | translate"
           (click)="configOpen.set(!configOpen())"
         >
           <mat-icon>tune</mat-icon>
@@ -87,7 +89,7 @@ import { Workspace } from './workspace';
         (click)="store.save()"
       >
         <mat-icon>save</mat-icon>
-        <span>{{ store.saving() ? 'Saving…' : 'Save shader' }}</span>
+        <span>{{ (store.saving() ? 'action.saving' : 'action.saveShader') | translate }}</span>
         <span class="menu-hint">Ctrl+S</span>
       </button>
       <button
@@ -97,7 +99,7 @@ import { Workspace } from './workspace';
         (click)="store.revert()"
       >
         <mat-icon>undo</mat-icon>
-        <span>Revert</span>
+        <span>{{ 'action.revert' | translate }}</span>
       </button>
       <mat-divider />
       <button
@@ -107,7 +109,7 @@ import { Workspace } from './workspace';
         (click)="store.addBufferPass()"
       >
         <mat-icon>layers</mat-icon>
-        <span>New buffer pass</span>
+        <span>{{ 'editor.newBuffer' | translate }}</span>
       </button>
       <button
         mat-menu-item
@@ -116,7 +118,7 @@ import { Workspace } from './workspace';
         (click)="workspace.createFile()"
       >
         <mat-icon>description</mat-icon>
-        <span>New file…</span>
+        <span>{{ 'editor.newFile' | translate }}</span>
         <span class="menu-hint">Ctrl+N</span>
       </button>
       <mat-divider />
@@ -127,23 +129,23 @@ import { Workspace } from './workspace';
         (click)="formatSource()"
       >
         <mat-icon>format_align_left</mat-icon>
-        <span>Format GLSL</span>
+        <span>{{ 'editor.formatGlsl' | translate }}</span>
         <span class="menu-hint">Shift+Alt+F</span>
       </button>
       <button
         mat-menu-item
         type="button"
         [disabled]="!store.draft()"
-        matTooltip="The Image pass, composed, with every engine and control uniform declared"
+        [matTooltip]="'editor.copyFullGlsl' | translate"
         (click)="workspace.copyFullGlsl()"
       >
         <mat-icon>content_copy</mat-icon>
-        <span>Copy full GLSL</span>
+        <span>{{ 'editor.copyGlsl' | translate }}</span>
       </button>
       <mat-divider />
       <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
         <mat-icon>tune</mat-icon>
-        <span>Appearance</span>
+        <span>{{ 'action.appearance' | translate }}</span>
       </button>
     </mat-menu>
 
@@ -165,12 +167,16 @@ import { Workspace } from './workspace';
           }
         }
       } @else {
-        <p class="empty">Select a shader to edit it.</p>
+        <p class="empty">{{ 'editor.empty' | translate }}</p>
       }
     </div>
 
     @if (diagnostics().length > 0 && !collapsed()) {
-      <ul class="diagnostics" aria-label="Diagnostics" aria-live="polite">
+      <ul
+        class="diagnostics"
+        [attr.aria-label]="'editor.diagnostics' | translate"
+        aria-live="polite"
+      >
         @for (diagnostic of diagnostics(); track $index) {
           <li class="diagnostic" [class.warning]="diagnostic.severity === 'warning'">
             <!-- The whole row is the target: a diagnostic you cannot click is a

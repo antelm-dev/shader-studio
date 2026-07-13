@@ -5,18 +5,22 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 import { DesktopUpdater } from '../core/desktop-updater';
+import { I18n } from '../i18n/i18n';
+import { TranslatePipe } from '../i18n/i18n.module';
 
 @Component({
   selector: 'app-desktop-version-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, MatDialogModule, MatIconModule, MatProgressBarModule],
+  imports: [MatButtonModule, MatDialogModule, MatIconModule, MatProgressBarModule, TranslatePipe],
   template: `
-    <h2 mat-dialog-title>Version desktop</h2>
+    <h2 mat-dialog-title>{{ 'desktop.versionTitle' | translate }}</h2>
     <mat-dialog-content>
       <div class="identity">
         <div>
-          <strong>Shader Studio</strong
-          ><span>Version {{ updater.state().currentVersion || '—' }}</span>
+          <strong>Shader Studio</strong>
+          <span>{{
+            'desktop.versionLabel' | translate: { version: updater.state().currentVersion || '—' }
+          }}</span>
         </div>
       </div>
       <div class="status" aria-live="polite">
@@ -27,13 +31,13 @@ import { DesktopUpdater } from '../core/desktop-updater';
         <mat-progress-bar
           mode="determinate"
           [value]="updater.state().progress ?? 0"
-          [attr.aria-label]="'Téléchargement de la mise à jour : ' + progressLabel()"
+          [attr.aria-label]="'desktop.downloadProgress' | translate: { progress: progressLabel() }"
         />
         <span class="progress">{{ progressLabel() }}</span>
       }
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button matButton type="button" mat-dialog-close>Fermer</button>
+      <button matButton type="button" mat-dialog-close>{{ 'action.close' | translate }}</button>
       <button matButton="filled" type="button" [disabled]="actionDisabled()" (click)="runAction()">
         <mat-icon [class.spin]="isBusy()">{{ isBusy() ? 'sync' : actionIcon() }}</mat-icon>
         {{ actionLabel() }}
@@ -104,27 +108,28 @@ import { DesktopUpdater } from '../core/desktop-updater';
 })
 export class DesktopVersionDialog {
   protected readonly updater = inject(DesktopUpdater);
+  private readonly i18n = inject(I18n);
 
   protected readonly statusText = computed(() => {
     const state = this.updater.state();
     switch (state.status) {
       case 'unavailable':
-        return state.message ?? 'Mise à jour automatique indisponible.';
+        return state.message ?? this.i18n.t('desktop.unavailable');
       case 'idle':
       case 'checking':
-        return 'Recherche d’une mise à jour…';
+        return this.i18n.t('desktop.checking');
       case 'up-to-date':
-        return 'Vous utilisez la dernière version.';
+        return this.i18n.t('desktop.upToDate');
       case 'available':
-        return `La version ${state.availableVersion} est disponible.`;
+        return this.i18n.t('desktop.available', { version: state.availableVersion ?? '' });
       case 'downloading':
-        return `Téléchargement de la version ${state.availableVersion}…`;
+        return this.i18n.t('desktop.downloading', { version: state.availableVersion ?? '' });
       case 'downloaded':
-        return `La version ${state.availableVersion} est prête à être installée.`;
+        return this.i18n.t('desktop.downloaded', { version: state.availableVersion ?? '' });
       case 'error':
         return state.message
-          ? `Échec de la vérification : ${state.message}`
-          : 'Échec de la vérification.';
+          ? this.i18n.t('desktop.checkFailed', { error: state.message })
+          : this.i18n.t('desktop.checkFailedGeneric');
     }
   });
 
@@ -147,19 +152,19 @@ export class DesktopVersionDialog {
   protected readonly actionLabel = computed(() => {
     switch (this.updater.state().status) {
       case 'up-to-date':
-        return 'À jour';
+        return this.i18n.t('desktop.actionUpToDate');
       case 'available':
-        return 'Mettre à jour';
+        return this.i18n.t('desktop.actionUpdate');
       case 'downloaded':
-        return 'Redémarrer et mettre à jour';
+        return this.i18n.t('desktop.actionRestart');
       case 'error':
-        return 'Réessayer';
+        return this.i18n.t('desktop.actionRetry');
       case 'unavailable':
-        return 'Indisponible';
+        return this.i18n.t('desktop.actionUnavailable');
       case 'downloading':
-        return 'Téléchargement…';
+        return this.i18n.t('desktop.actionDownloading');
       default:
-        return 'Vérification…';
+        return this.i18n.t('desktop.actionChecking');
     }
   });
 

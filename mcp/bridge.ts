@@ -305,7 +305,9 @@ export async function callApp<T extends ControllerCommandType>(
 
   const validated = ControllerRequestSchema.safeParse(request);
   if (!validated.success) {
-    throw new Error(`Refusing to send an invalid "${command.type}" request: ${validated.error.message}`);
+    throw new Error(
+      `Refusing to send an invalid "${command.type}" request: ${validated.error.message}`,
+    );
   }
 
   const session = activeSession;

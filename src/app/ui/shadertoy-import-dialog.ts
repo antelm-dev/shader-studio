@@ -6,6 +6,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
 import { LIMITS } from '@shader-studio/shared/validate';
+import { I18n } from '../i18n/i18n';
+import { TranslatePipe } from '../i18n/i18n.module';
 
 export interface ShadertoyImportDialogResult {
   name: string;
@@ -15,13 +17,20 @@ export interface ShadertoyImportDialogResult {
 @Component({
   selector: 'app-shadertoy-import-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, MatButtonModule, MatDialogModule, MatFormFieldModule, MatInputModule],
+  imports: [
+    FormsModule,
+    MatButtonModule,
+    MatDialogModule,
+    MatFormFieldModule,
+    MatInputModule,
+    TranslatePipe,
+  ],
   template: `
-    <h2 mat-dialog-title>Import from Shadertoy</h2>
+    <h2 mat-dialog-title>{{ 'shadertoy.title' | translate }}</h2>
     <mat-dialog-content>
-      <p class="intro">Paste the GLSL code from a Shadertoy Image pass.</p>
+      <p class="intro">{{ 'shadertoy.intro' | translate }}</p>
       <mat-form-field appearance="outline">
-        <mat-label>Shader name</mat-label>
+        <mat-label>{{ 'shadertoy.name' | translate }}</mat-label>
         <input
           matInput
           cdkFocusInitial
@@ -31,7 +40,7 @@ export interface ShadertoyImportDialogResult {
         />
       </mat-form-field>
       <mat-form-field appearance="outline">
-        <mat-label>Shadertoy GLSL</mat-label>
+        <mat-label>{{ 'shadertoy.source' | translate }}</mat-label>
         <textarea
           matInput
           rows="16"
@@ -39,13 +48,13 @@ export interface ShadertoyImportDialogResult {
           [ngModel]="source()"
           (ngModelChange)="source.set($event)"
         ></textarea>
-        <mat-hint>Image shaders only; mainImage is converted automatically.</mat-hint>
+        <mat-hint>{{ 'shadertoy.hint' | translate }}</mat-hint>
       </mat-form-field>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button matButton mat-dialog-close type="button">Cancel</button>
+      <button matButton mat-dialog-close type="button">{{ 'action.cancel' | translate }}</button>
       <button matButton="filled" type="button" [disabled]="!valid()" (click)="confirm()">
-        Import
+        {{ 'shadertoy.import' | translate }}
       </button>
     </mat-dialog-actions>
   `,
@@ -69,8 +78,9 @@ export interface ShadertoyImportDialogResult {
 export class ShadertoyImportDialog {
   private readonly dialogRef =
     inject<MatDialogRef<ShadertoyImportDialog, ShadertoyImportDialogResult>>(MatDialogRef);
+  private readonly i18n = inject(I18n);
   readonly nameMaxLength = LIMITS.nameLength;
-  readonly name = signal('Imported Shadertoy');
+  readonly name = signal(this.i18n.t('shadertoy.defaultName'));
   readonly source = signal('');
 
   valid(): boolean {

@@ -64,6 +64,7 @@ import {
   LIMITS,
   sanitizeParams,
   validateControls,
+  validateParamValue,
 } from '@shader-studio/shared/validate';
 import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from './diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
@@ -130,6 +131,40 @@ export interface EditorDocument {
   slot?: BufferSlot | null;
   /** Passes only. A disabled buffer is still editable — it just does not render. */
   enabled?: boolean;
+}
+
+/** A finished compile, tied to the revision it was compiled from. */
+export interface CompileOutcome {
+  revision: number;
+  diagnostics: readonly CompileDiagnostic[];
+}
+
+interface CompileWaiter {
+  resolve: (outcome: CompileOutcome) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+/** One replacement of `[start, end)` in a document's source with `text`. Offsets are 0-based character positions. */
+export interface DraftTextEdit {
+  documentId: string;
+  start: number;
+  end: number;
+  text: string;
+}
+
+export type ApplyPatchResult =
+  | { ok: true; revision: number; diagnostics: readonly CompileDiagnostic[] }
+  | {
+      ok: false;
+      code: 'STALE_REVISION' | 'VALIDATION_ERROR' | 'NOT_FOUND';
+      message: string;
+      currentRevision?: number;
+    };
+
+export interface SetParamsOutcome {
+  applied: string[];
+  errors: Record<string, string>;
 }
 
 function controlsToText(controls: readonly ShaderControl[]): string {
@@ -257,6 +292,23 @@ export class ShaderStore {
   /** Last message worth showing the user (error or confirmation). */
   readonly notice = signal<{ text: string; error: boolean } | null>(null);
   readonly staleRecovery = signal<RecoveredDraft | null>(null);
+
+  /**
+   * Bumped once by every `patchDraft` call — the single choke point behind
+   * every project/controls/render mutation. This is what `apply_shader_patch`
+   * checks a `baseRevision` against, and what `waitForCompile` correlates a
+   * finished compile back to a specific edit.
+   */
+  readonly draftRevision = signal(0);
+
+  /** The revision `recordCompileResult` most recently landed. -1 until the first compile. */
+  readonly compiledRevision = signal(-1);
+
+  /** Bumped to ask `shader-canvas` to flush its debounce timer immediately instead of waiting ~400ms. */
+  readonly immediateCompileRequest = signal(0);
+
+  private lastCompileOutcome: CompileOutcome | null = null;
+  private readonly compileWaiters = new Map<number, CompileWaiter[]>();
 
   // --- Derived ------------------------------------------------------------
 
@@ -530,6 +582,7 @@ export class ShaderStore {
     this.activePresetId.set(null);
     this.diagnostics.set([]);
     this.activeDocId.set(imagePass(project).id);
+    this.resetCompileState();
 
     const recovered = this.isServer ? null : this.recovery.get(record.id);
     if (recovered?.baselineUpdatedAt === record.updatedAt) this.applyRecoveredDraft(recovered);
@@ -804,7 +857,18 @@ export class ShaderStore {
    */
   setControlsText(controlsText: string): void {
     this.patchDraft({ controlsText });
+    this.applyControlsSideEffects(controlsText);
+  }
 
+  /**
+   * The part of `setControlsText` that is not "write the text": re-project the
+   * live params onto the new schema, and (in)validate it into `diagnostics`.
+   * Split out so `applyPatch` can run it once after its own single, combined
+   * `patchDraft` call — folding it back into `setControlsText` would mean a
+   * multi-document patch that happens to touch `@config` bumps the revision
+   * twice for one edit.
+   */
+  private applyControlsSideEffects(controlsText: string): void {
     const parsed = this.parseControls(controlsText);
     this.diagnostics.update((all) => all.filter((entry) => entry.source !== 'config'));
 
@@ -831,7 +895,10 @@ export class ShaderStore {
   }
 
   private patchDraft(patch: Partial<ShaderDraft>): void {
-    this.draft.update((draft) => (draft ? { ...draft, ...patch } : draft));
+    const current = this.draft();
+    if (!current) return;
+    this.draft.set({ ...current, ...patch });
+    this.draftRevision.update((n) => n + 1);
   }
 
   /** Returns the parsed schema, or null if the text is not a valid schema. */
@@ -879,6 +946,225 @@ export class ShaderStore {
       ...all.filter((entry) => entry.source === 'config'),
       ...diagnostics,
     ]);
+  }
+
+  // --- Compile completion & revisions --------------------------------------
+
+  /**
+   * Called by `shader-canvas` once a compile for `revision` has actually
+   * landed on the GPU — real completion, not a fixed wait. Resolves every
+   * `waitForCompile` call whose revision is now satisfied: a waiter for an
+   * older revision is satisfied by a newer compile too, since revisions are
+   * cumulative and a later one already reflects everything an earlier one
+   * would have.
+   */
+  recordCompileResult(revision: number, diagnostics: readonly CompileDiagnostic[]): void {
+    this.setCompileDiagnostics(diagnostics);
+
+    const outcome: CompileOutcome = { revision, diagnostics: this.allDiagnostics() };
+    this.lastCompileOutcome = outcome;
+    this.compiledRevision.set(revision);
+
+    for (const [waitingRevision, waiters] of [...this.compileWaiters]) {
+      if (waitingRevision > revision) continue;
+      this.compileWaiters.delete(waitingRevision);
+      for (const waiter of waiters) {
+        clearTimeout(waiter.timer);
+        waiter.resolve(outcome);
+      }
+    }
+  }
+
+  /** Resolves once a compile at or after `revision` has landed, or rejects after `timeoutMs`. */
+  waitForCompile(revision: number, timeoutMs = 10_000): Promise<CompileOutcome> {
+    if (this.compiledRevision() >= revision && this.lastCompileOutcome) {
+      return Promise.resolve(this.lastCompileOutcome);
+    }
+
+    return new Promise<CompileOutcome>((resolve, reject) => {
+      const waiters = this.compileWaiters.get(revision) ?? [];
+      const waiter: CompileWaiter = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          const list = this.compileWaiters.get(revision);
+          if (list) {
+            const index = list.indexOf(waiter);
+            if (index >= 0) list.splice(index, 1);
+            if (list.length === 0) this.compileWaiters.delete(revision);
+          }
+          reject(new Error(`Timed out waiting for a compile of revision ${revision}`));
+        }, timeoutMs),
+      };
+      waiters.push(waiter);
+      this.compileWaiters.set(revision, waiters);
+    });
+  }
+
+  /**
+   * Forces a compile now instead of waiting for the ~400ms debounce, and
+   * resolves once it has actually happened. `force` recompiles every pass even
+   * if its composed source is unchanged — Ctrl+Enter's contract; a plain edit
+   * does not need it, since the engine's own diffing already detects the
+   * change and recompiles exactly the affected passes.
+   */
+  async compileNow(force = false): Promise<CompileOutcome> {
+    if (!this.project()) throw new Error('No shader is open.');
+
+    const revision = this.draftRevision();
+    if (force) this.recompile();
+    this.immediateCompileRequest.update((n) => n + 1);
+    return this.waitForCompile(revision);
+  }
+
+  private resetCompileState(): void {
+    this.draftRevision.set(0);
+    this.compiledRevision.set(-1);
+    this.lastCompileOutcome = null;
+
+    for (const waiters of this.compileWaiters.values()) {
+      for (const waiter of waiters) {
+        clearTimeout(waiter.timer);
+        waiter.reject(new Error('The shader changed before this compile finished.'));
+      }
+    }
+    this.compileWaiters.clear();
+  }
+
+  // --- Patches (MCP) --------------------------------------------------------
+
+  /**
+   * Apply a batch of text edits to one or more documents atomically: either
+   * every edit lands in a single draft mutation (one revision bump, one
+   * compile), or none of them do. Used by `apply_shader_patch` — never called
+   * from the UI, which edits one document at a time through `setDocSource`.
+   *
+   * Rejects a stale `baseRevision` before touching any state, which is what
+   * stops an agent from overwriting an edit — the user's or another agent's —
+   * made after it last read the document. Never saves.
+   */
+  async applyPatch(
+    baseRevision: number,
+    edits: readonly DraftTextEdit[],
+  ): Promise<ApplyPatchResult> {
+    const project = this.project();
+    const draft = this.draft();
+    if (!project || !draft) {
+      return { ok: false, code: 'NOT_FOUND', message: 'No shader is open.' };
+    }
+
+    const currentRevision = this.draftRevision();
+    if (baseRevision !== currentRevision) {
+      return {
+        ok: false,
+        code: 'STALE_REVISION',
+        message: `baseRevision ${baseRevision} is stale; the draft is at revision ${currentRevision}.`,
+        currentRevision,
+      };
+    }
+
+    if (edits.length === 0) {
+      return { ok: true, revision: currentRevision, diagnostics: this.allDiagnostics() };
+    }
+
+    const byDocument = new Map<string, DraftTextEdit[]>();
+    for (const edit of edits) {
+      if (edit.start < 0 || edit.end < edit.start) {
+        return {
+          ok: false,
+          code: 'VALIDATION_ERROR',
+          message: `Invalid range [${edit.start}, ${edit.end}) for document "${edit.documentId}".`,
+        };
+      }
+      const list = byDocument.get(edit.documentId) ?? [];
+      list.push(edit);
+      byDocument.set(edit.documentId, list);
+    }
+
+    const sources = new Map(this.documents().map((doc) => [doc.id, doc.source]));
+
+    let nextProject = project;
+    let nextControlsText = draft.controlsText;
+
+    for (const [documentId, documentEdits] of byDocument) {
+      const current = sources.get(documentId);
+      if (current === undefined) {
+        return { ok: false, code: 'NOT_FOUND', message: `Unknown document "${documentId}".` };
+      }
+
+      const sorted = [...documentEdits].sort((a, b) => a.start - b.start);
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i].start < sorted[i - 1].end) {
+          return {
+            ok: false,
+            code: 'VALIDATION_ERROR',
+            message: `Overlapping edits in document "${documentId}".`,
+          };
+        }
+      }
+      const last = sorted[sorted.length - 1];
+      if (last.end > current.length) {
+        return {
+          ok: false,
+          code: 'VALIDATION_ERROR',
+          message: `Edit range [${last.start}, ${last.end}) is out of bounds for document "${documentId}" (length ${current.length}).`,
+        };
+      }
+
+      let updated = current;
+      for (const edit of [...sorted].reverse()) {
+        updated = updated.slice(0, edit.start) + edit.text + updated.slice(edit.end);
+      }
+
+      if (documentId === CONFIG_DOC) {
+        nextControlsText = updated;
+      } else if (documentId === VERTEX_DOC) {
+        nextProject = setVertexSource(nextProject, updated);
+      } else if (findPass(nextProject, documentId)) {
+        nextProject = setPassSource(nextProject, documentId, updated);
+      } else {
+        // `sources` above already proved this id resolves to a real document;
+        // pass, vertex and config are handled above, so only a file remains.
+        nextProject = setFileSource(nextProject, documentId, updated);
+      }
+    }
+
+    this.patchDraft({ project: nextProject, controlsText: nextControlsText });
+    if (nextControlsText !== draft.controlsText) this.applyControlsSideEffects(nextControlsText);
+
+    const outcome = await this.compileNow();
+    return { ok: true, revision: outcome.revision, diagnostics: outcome.diagnostics };
+  }
+
+  /**
+   * Validate and apply a batch of live parameter values in one call. Each
+   * value is checked against the control that owns it via the same
+   * `validateParamValue` the config editor's presets use — an unknown key or a
+   * value of the wrong type is reported per-key rather than failing the whole
+   * request.
+   */
+  setParamsValidated(values: Record<string, unknown>): SetParamsOutcome {
+    const applied: string[] = [];
+    const errors: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(values)) {
+      const control = this.controls().find((entry) => entry.key === key);
+      if (!control) {
+        errors[key] = `Unknown control "${key}".`;
+        continue;
+      }
+
+      const result = validateParamValue(control, value);
+      if (!result.ok) {
+        errors[key] = result.errors.join('; ');
+        continue;
+      }
+
+      this.setParam(key, result.value);
+      applied.push(key);
+    }
+
+    return { applied, errors };
   }
 
   // --- Persistence --------------------------------------------------------
@@ -1032,6 +1318,7 @@ export class ShaderStore {
         this.savedProject.set(null);
         this.params.set({});
         this.preferences.patch({ lastShaderId: null });
+        this.resetCompileState();
 
         const next = this.shaders()[0];
         if (next) await this.select(next.id);

@@ -5,22 +5,24 @@ import { MatMenuModule } from '@angular/material/menu';
 
 import type { Preset } from '@shader-studio/shared/model';
 import { ShaderStore } from '../core/shader-store';
+import { I18n } from '../i18n/i18n';
+import { TranslatePipe } from '../i18n/i18n.module';
 import { Workspace } from './workspace';
 
 /** The Presets tab. Its heading and its save action belong to `InspectorPanel`. */
 @Component({
   selector: 'app-preset-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatChipsModule, MatIconModule, MatMenuModule],
+  imports: [MatChipsModule, MatIconModule, MatMenuModule, TranslatePipe],
   template: `
     @if (store.presets().length === 0) {
       <p class="empty">
-        No presets yet. Tune the parameters, then save them with the bookmark button above.
+        {{ 'inspector.presetsEmpty' | translate }}
       </p>
     } @else {
       <mat-chip-listbox
         class="presets"
-        aria-label="Presets"
+        [attr.aria-label]="'inspector.presets' | translate"
         [value]="store.activePresetId()"
         (change)="apply($event.value)"
       >
@@ -50,7 +52,7 @@ import { Workspace } from './workspace';
           (click)="workspace.deletePreset(preset.id, preset.name)"
         >
           <mat-icon>delete</mat-icon>
-          <span>Delete</span>
+          <span>{{ 'action.delete' | translate }}</span>
         </button>
       </ng-template>
     </mat-menu>
@@ -79,14 +81,13 @@ import { Workspace } from './workspace';
 export class PresetPanel {
   protected readonly store = inject(ShaderStore);
   protected readonly workspace = inject(Workspace);
+  private readonly i18n = inject(I18n);
 
   protected apply(presetId: string | null): void {
     if (presetId) this.store.applyPreset(presetId);
   }
 
   protected hint(preset: Preset): string {
-    return preset.render
-      ? 'Restores the parameter values and the render settings. Right-click to delete'
-      : 'Restores the parameter values. Right-click to delete';
+    return this.i18n.t(preset.render ? 'inspector.presetWithRender' : 'inspector.presetValuesOnly');
   }
 }

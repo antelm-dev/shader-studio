@@ -23,6 +23,9 @@ import { ShaderStore } from '../core/shader-store';
 import { PreviewWindow } from '../rendering/preview-window';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { ShaderCanvas } from '../rendering/shader-canvas';
+import { I18n } from '../i18n/i18n';
+import { TranslatePipe } from '../i18n/i18n.module';
+import type { TranslationKey } from '../i18n/keys';
 import { PreviewWindowControls } from './preview-window-controls';
 
 /**
@@ -69,7 +72,14 @@ const NUDGE_FAST = 64;
 @Component({
   selector: 'app-preview-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatDividerModule, MatIconModule, MatMenuModule, PreviewWindowControls, ShaderCanvas],
+  imports: [
+    MatDividerModule,
+    MatIconModule,
+    MatMenuModule,
+    PreviewWindowControls,
+    ShaderCanvas,
+    TranslatePipe,
+  ],
   template: `
     <!-- Every mode but the stage is a window, and a window says what it is and
          how to put it back. -->
@@ -81,7 +91,7 @@ const NUDGE_FAST = 64;
         (dblclick)="onTitleDoubleClick($event)"
       >
         <mat-icon class="title-icon" aria-hidden="true">blur_on</mat-icon>
-        <span class="title">Shader preview</span>
+        <span class="title">{{ 'preview.title' | translate }}</span>
         <app-preview-window-controls [menu]="previewMenu" />
       </div>
     }
@@ -97,7 +107,9 @@ const NUDGE_FAST = 64;
       @if (!stageOnly()) {
         <button mat-menu-item type="button" (click)="preview.toggleDetached()">
           <mat-icon>{{ onStage() ? 'open_in_new' : 'wallpaper' }}</mat-icon>
-          <span>{{ onStage() ? 'Detach preview' : 'Return to stage' }}</span>
+          <span>{{
+            (onStage() ? 'action.detachPreview' : 'action.returnToStage') | translate
+          }}</span>
         </button>
 
         @if (windowed()) {
@@ -108,7 +120,9 @@ const NUDGE_FAST = 64;
             (click)="preview.toggleMaximized()"
           >
             <mat-icon>{{ maximized() ? 'close_fullscreen' : 'open_in_full' }}</mat-icon>
-            <span>{{ maximized() ? 'Restore preview' : 'Maximize preview' }}</span>
+            <span>{{
+              (maximized() ? 'action.restorePreview' : 'action.maximizePreview') | translate
+            }}</span>
           </button>
           <button
             mat-menu-item
@@ -117,11 +131,13 @@ const NUDGE_FAST = 64;
             (click)="preview.toggleMinimized()"
           >
             <mat-icon>{{ minimized() ? 'expand_less' : 'minimize' }}</mat-icon>
-            <span>{{ minimized() ? 'Expand preview' : 'Collapse preview' }}</span>
+            <span>{{
+              (minimized() ? 'action.expandPreview' : 'action.collapsePreview') | translate
+            }}</span>
           </button>
           <button mat-menu-item type="button" (click)="preview.resetGeometry()">
             <mat-icon>aspect_ratio</mat-icon>
-            <span>Reset window</span>
+            <span>{{ 'action.resetWindow' | translate }}</span>
           </button>
         }
 
@@ -130,12 +146,14 @@ const NUDGE_FAST = 64;
 
       <button mat-menu-item type="button" (click)="savePng()">
         <mat-icon>photo_camera</mat-icon>
-        <span>Save PNG</span>
+        <span>{{ 'action.savePng' | translate }}</span>
         <span class="hint">S</span>
       </button>
       <button mat-menu-item type="button" (click)="togglePause()">
         <mat-icon>{{ preferences.value().paused ? 'play_arrow' : 'pause' }}</mat-icon>
-        <span>{{ preferences.value().paused ? 'Resume' : 'Pause' }}</span>
+        <span>{{
+          (preferences.value().paused ? 'action.resume' : 'action.pause') | translate
+        }}</span>
         <span class="hint">Space</span>
       </button>
       <button
@@ -145,33 +163,40 @@ const NUDGE_FAST = 64;
         (click)="store.resetParams()"
       >
         <mat-icon>restart_alt</mat-icon>
-        <span>Reset parameters</span>
+        <span>{{ 'action.resetParameters' | translate }}</span>
       </button>
 
       <mat-divider />
 
       <button mat-menu-item type="button" (click)="toggle('guiVisible')">
         <mat-icon>{{ preferences.value().guiVisible ? 'visibility_off' : 'tune' }}</mat-icon>
-        <span>{{ preferences.value().guiVisible ? 'Hide controls' : 'Show controls' }}</span>
+        <span>{{
+          (preferences.value().guiVisible ? 'action.hideControls' : 'action.showControls')
+            | translate
+        }}</span>
         <span class="hint">H</span>
       </button>
       <button mat-menu-item type="button" (click)="toggle('editorOpen')">
         <mat-icon>code</mat-icon>
-        <span>{{ preferences.value().editorOpen ? 'Hide editor' : 'Show editor' }}</span>
+        <span>{{
+          (preferences.value().editorOpen ? 'action.hideEditor' : 'action.showEditor') | translate
+        }}</span>
       </button>
 
       <mat-divider />
 
       <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
         <mat-icon>{{ themeIcon() }}</mat-icon>
-        <span>Theme</span>
+        <span>{{ 'menu.theme' | translate }}</span>
       </button>
 
       @if (desktop.available) {
         <mat-divider />
         <button mat-menu-item type="button" (click)="desktop.toggleFullscreen()">
           <mat-icon>{{ desktop.fullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
-          <span>{{ desktop.fullscreen() ? 'Exit fullscreen' : 'Enter fullscreen' }}</span>
+          <span>{{
+            (desktop.fullscreen() ? 'action.exitFullscreen' : 'action.enterFullscreen') | translate
+          }}</span>
           <span class="hint">F11</span>
         </button>
       }
@@ -186,7 +211,7 @@ const NUDGE_FAST = 64;
           (click)="setColorScheme(option.value)"
         >
           <mat-icon>{{ option.icon }}</mat-icon>
-          <span>{{ option.label }}</span>
+          <span>{{ themeLabel(option.value) }}</span>
           @if (preferences.value().colorScheme === option.value) {
             <mat-icon class="hint" aria-hidden="true">check</mat-icon>
           }
@@ -419,6 +444,7 @@ export class PreviewShell {
   protected readonly store = inject(ShaderStore);
   protected readonly preferences = inject(Preferences);
   protected readonly desktop = inject(DesktopPlatform);
+  protected readonly i18n = inject(I18n);
   private readonly handle = inject(RendererHandle);
 
   /**
@@ -524,7 +550,7 @@ export class PreviewShell {
     const name = this.store.record()?.id ?? 'shader';
     const saved = await this.handle.screenshot(name);
     if (!saved) {
-      this.store.notice.set({ text: 'Nothing to capture yet', error: true });
+      this.store.notice.set({ text: this.i18n.t('preview.nothingToCapture'), error: true });
     }
   }
 
@@ -708,17 +734,21 @@ export class PreviewShell {
     this.preview.setFloatingRect(this.resized(gesture, dx, dy));
   }
 
+  protected themeLabel(theme: ColorScheme): string {
+    return this.i18n.t(`theme.${theme}`);
+  }
+
   protected resizeLabel(edge: ResizeEdge): string {
-    const names: Record<ResizeEdge, string> = {
-      n: 'top edge',
-      s: 'bottom edge',
-      e: 'right edge',
-      w: 'left edge',
-      ne: 'top-right corner',
-      nw: 'top-left corner',
-      se: 'bottom-right corner',
-      sw: 'bottom-left corner',
+    const keys: Record<ResizeEdge, TranslationKey> = {
+      n: 'preview.edge.n',
+      s: 'preview.edge.s',
+      e: 'preview.edge.e',
+      w: 'preview.edge.w',
+      ne: 'preview.edge.ne',
+      nw: 'preview.edge.nw',
+      se: 'preview.edge.se',
+      sw: 'preview.edge.sw',
     };
-    return `Resize the preview window from its ${names[edge]}. Use the arrow keys.`;
+    return this.i18n.t('preview.resizeEdge', { edge: this.i18n.t(keys[edge]) });
   }
 }

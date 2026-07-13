@@ -26,14 +26,17 @@
     "pack:win": "node scripts/build.mjs pack --win",
     "dist:win": "node scripts/build.mjs dist --win",
     "serve:ssr": "node dist/shader-studio/server/server.mjs",
-    "test": "pnpm --filter @shader-studio/shared test && ng test",
+    "test": "pnpm --filter @shader-studio/shared test && pnpm test:mcp && ng test",
     "test:watch": "ng test --watch",
-    "typecheck": "pnpm gen:ipc && pnpm --filter @shader-studio/shared typecheck && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
+    "test:mcp": "vitest run -c mcp/vitest.config.ts",
+    "typecheck": "pnpm gen:ipc && pnpm --filter @shader-studio/shared typecheck && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit && pnpm typecheck:mcp",
+    "typecheck:mcp": "tsc -p mcp/tsconfig.json --noEmit",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "mcp:server": "tsx mcp/server.ts"
+    "mcp:server": "tsx mcp/server.ts",
+    "mcp:verify": "tsx mcp/verify-bridge.ts"
   },
   "dependencies": {
     "@angular/cdk": "22.0.4",

@@ -514,8 +514,6 @@ export type HandshakeRejected = z.infer<typeof HandshakeRejectedSchema>;
 
 export function isHandshakeMessage(value: unknown): value is { kind: 'hello' } {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as { kind?: unknown }).kind === 'hello'
+    typeof value === 'object' && value !== null && (value as { kind?: unknown }).kind === 'hello'
   );
 }

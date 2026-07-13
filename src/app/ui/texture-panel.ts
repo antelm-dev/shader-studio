@@ -6,25 +6,27 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import type { TextureFilterMode, TextureWrapMode } from '@shader-studio/shared/model';
 import { ShaderStore } from '../core/shader-store';
 import { TextureAssets } from '../core/texture-assets';
+import { TranslatePipe } from '../i18n/i18n.module';
+import type { TranslationKey } from '../i18n/keys';
 
 const CHANNEL_INDICES = [0, 1, 2, 3] as const;
 type ChannelIndex = (typeof CHANNEL_INDICES)[number];
 
-const WRAP_OPTIONS: readonly { value: TextureWrapMode; label: string }[] = [
-  { value: 'repeat', label: 'Repeat' },
-  { value: 'clamp', label: 'Clamp' },
-  { value: 'mirror', label: 'Mirror' },
+const WRAP_OPTIONS: readonly { value: TextureWrapMode; labelKey: TranslationKey }[] = [
+  { value: 'repeat', labelKey: 'texture.wrapRepeat' },
+  { value: 'clamp', labelKey: 'texture.wrapClamp' },
+  { value: 'mirror', labelKey: 'texture.wrapMirror' },
 ];
 
-const FILTER_OPTIONS: readonly { value: TextureFilterMode; label: string }[] = [
-  { value: 'linear', label: 'Linear' },
-  { value: 'nearest', label: 'Nearest' },
+const FILTER_OPTIONS: readonly { value: TextureFilterMode; labelKey: TranslationKey }[] = [
+  { value: 'linear', labelKey: 'texture.filterLinear' },
+  { value: 'nearest', labelKey: 'texture.filterNearest' },
 ];
 
 @Component({
   selector: 'app-texture-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatIconModule, MatProgressSpinnerModule, MatTooltipModule],
+  imports: [MatIconModule, MatProgressSpinnerModule, MatTooltipModule, TranslatePipe],
   template: `
     <div class="grid">
       @for (index of indices; track index) {
@@ -35,7 +37,7 @@ const FILTER_OPTIONS: readonly { value: TextureFilterMode; label: string }[] = [
             type="button"
             class="thumb"
             [disabled]="!store.record() || busy()[index]"
-            [matTooltip]="channel.ext !== null ? 'Replace image' : 'Assign an image'"
+            [matTooltip]="(channel.ext !== null ? 'texture.replace' : 'texture.assign') | translate"
             [attr.aria-label]="'iChannel' + index"
             (click)="fileInput.click()"
           >
@@ -53,8 +55,8 @@ const FILTER_OPTIONS: readonly { value: TextureFilterMode; label: string }[] = [
             <button
               type="button"
               class="clear"
-              matTooltip="Clear"
-              [attr.aria-label]="'Clear iChannel' + index"
+              [matTooltip]="'texture.clear' | translate"
+              [attr.aria-label]="'texture.clearChannel' | translate: { index }"
               [disabled]="busy()[index]"
               (click)="clear(index, $event)"
             >
@@ -64,22 +66,22 @@ const FILTER_OPTIONS: readonly { value: TextureFilterMode; label: string }[] = [
             <div class="settings">
               <select
                 class="mini-select"
-                aria-label="Wrap mode"
+                [attr.aria-label]="'texture.wrap' | translate"
                 [value]="channel.wrap"
                 (change)="setWrap(index, $event)"
               >
                 @for (option of wrapOptions; track option.value) {
-                  <option [value]="option.value">{{ option.label }}</option>
+                  <option [value]="option.value">{{ option.labelKey | translate }}</option>
                 }
               </select>
               <select
                 class="mini-select"
-                aria-label="Filter mode"
+                [attr.aria-label]="'texture.filter' | translate"
                 [value]="channel.filter"
                 (change)="setFilter(index, $event)"
               >
                 @for (option of filterOptions; track option.value) {
-                  <option [value]="option.value">{{ option.label }}</option>
+                  <option [value]="option.value">{{ option.labelKey | translate }}</option>
                 }
               </select>
             </div>

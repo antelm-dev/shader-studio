@@ -167,6 +167,7 @@ class FakeApi implements Partial<ShaderApi> {
 /** Preferences without the browser: a signal and a patch, nothing persisted. */
 class FakePreferences implements Partial<Preferences> {
   private readonly state = signal<WorkspacePreferences>({
+    language: 'en',
     lastShaderId: null,
     browserOpen: true,
     editorOpen: false,
@@ -733,5 +734,181 @@ describe('ShaderStore: collection', () => {
 
     expect(store.notice()).toEqual({ text: 'Invalid bundle: unsupported format', error: true });
     expect(store.selectedId()).toBe('waves');
+  });
+});
+
+/**
+ * The revision and compile-completion machinery the MCP tools depend on.
+ * `waitForCompile`/`compileNow` are tested by simulating what `shader-canvas`
+ * does after a real compile — calling `recordCompileResult` — since these are
+ * store-level unit tests with no WebGL context to actually compile against.
+ */
+describe('ShaderStore: revisions and compile completion', () => {
+  it('bumps the revision on every draft mutation', async () => {
+    const { store } = setup(makeRecord());
+    await store.initialize();
+    const initial = store.draftRevision();
+
+    store.setFragment('void main() { gl_FragColor = vec4(0.5); }');
+    expect(store.draftRevision()).toBe(initial + 1);
+
+    store.setRender({ bloom: { enabled: true, strength: 1, radius: 1, threshold: 1 } });
+    expect(store.draftRevision()).toBe(initial + 2);
+  });
+
+  it('resets the revision when a different shader is opened', async () => {
+    const { store } = setup(makeRecord(), makeRecord({ id: 'plasma', name: 'Plasma' }));
+    await store.initialize();
+    store.setFragment('void main() {}');
+    expect(store.draftRevision()).toBeGreaterThan(0);
+
+    await store.select('plasma');
+    expect(store.draftRevision()).toBe(0);
+  });
+
+  it('waitForCompile resolves once recordCompileResult reports that revision', async () => {
+    const { store } = setup(makeRecord());
+    await store.initialize();
+    const revision = store.draftRevision();
+
+    const waiting = store.waitForCompile(revision, 1000);
+    store.recordCompileResult(revision, []);
+
+    await expect(waiting).resolves.toMatchObject({ revision });
+  });
+
+  it('a waiter for an older revision is satisfied by a newer compile', async () => {
+    const { store } = setup(makeRecord());
+    await store.initialize();
+    const revision = store.draftRevision();
+
+    const waiting = store.waitForCompile(revision, 1000);
+    store.recordCompileResult(revision + 1, []);
+
+    await expect(waiting).resolves.toMatchObject({ revision: revision + 1 });
+  });
+
+  it('rejects a waiter that times out before any compile lands', async () => {
+    const { store } = setup(makeRecord());
+    await store.initialize();
+
+    await expect(store.waitForCompile(store.draftRevision() + 1, 20)).rejects.toThrow(/Timed out/);
+  });
+
+  it('compileNow resolves once the revision it asked for has actually compiled', async () => {
+    const { store } = setup(makeRecord());
+    await store.initialize();
+
+    const pending = store.compileNow();
+    store.recordCompileResult(store.draftRevision(), []);
+
+    await expect(pending).resolves.toMatchObject({ revision: store.draftRevision() });
+  });
+});
+
+describe('ShaderStore: applyPatch', () => {
+  function imageDocId(store: ShaderStore): string {
+    const doc = store.documents().find((entry) => entry.passKind === 'image');
+    if (!doc) throw new Error('The fixture has no Image pass.');
+    return doc.id;
+  }
+
+  it('rejects a stale base revision without changing any state', async () => {
+    const { store } = setup(makeRecord());
+    await store.initialize();
+    const docId = imageDocId(store);
+    const before = store.fragment();
+
+    const result = await store.applyPatch(store.draftRevision() - 1, [
+      { documentId: docId, start: 0, end: 0, text: '// x' },
+    ]);
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'STALE_REVISION',
+      currentRevision: store.draftRevision(),
+    });
+    expect(store.fragment()).toBe(before);
+  });
+
+  it('applies edits to multiple documents atomically, in a single revision bump', async () => {
+    const { store } = setup(makeRecord());
+    await store.initialize();
+    const docId = imageDocId(store);
+    const baseRevision = store.draftRevision();
+
+    const pending = store.applyPatch(baseRevision, [
+      { documentId: docId, start: 0, end: 0, text: '// image\n' },
+      { documentId: '@vertex', start: 0, end: 0, text: '// vertex\n' },
+    ]);
+    store.recordCompileResult(store.draftRevision(), []);
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    expect(store.draftRevision()).toBe(baseRevision + 1);
+    expect(store.fragment()).toContain('// image');
+    expect(store.vertex()).toContain('// vertex');
+  });
+
+  it('rejects the whole patch when one edit is invalid, applying none of it', async () => {
+    const { store } = setup(makeRecord());
+    await store.initialize();
+    const docId = imageDocId(store);
+    const before = store.fragment();
+    const baseRevision = store.draftRevision();
+
+    const result = await store.applyPatch(baseRevision, [
+      { documentId: docId, start: 0, end: 0, text: '// ok\n' },
+      { documentId: docId, start: 10_000, end: 10_001, text: 'x' },
+    ]);
+
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' });
+    expect(store.fragment()).toBe(before);
+    expect(store.draftRevision()).toBe(baseRevision);
+  });
+
+  it('rejects an edit to a document that does not exist', async () => {
+    const { store } = setup(makeRecord());
+    await store.initialize();
+
+    const result = await store.applyPatch(store.draftRevision(), [
+      { documentId: 'not-a-real-document', start: 0, end: 0, text: 'x' },
+    ]);
+
+    expect(result).toMatchObject({ ok: false, code: 'NOT_FOUND' });
+  });
+
+  it('never saves — the record is untouched after a patch', async () => {
+    const { store, api } = setup(makeRecord());
+    await store.initialize();
+    const docId = imageDocId(store);
+    const calls = api.calls.length;
+
+    const pending = store.applyPatch(store.draftRevision(), [
+      { documentId: docId, start: 0, end: 0, text: '// x\n' },
+    ]);
+    store.recordCompileResult(store.draftRevision(), []);
+    await pending;
+
+    expect(api.calls.length).toBe(calls);
+    expect(store.dirty()).toBe(true);
+  });
+});
+
+describe('ShaderStore: setParamsValidated', () => {
+  it('applies valid values and reports an error per invalid or unknown key', async () => {
+    const controls: ShaderControl[] = [
+      { key: 'speed', type: 'number', default: 1, min: 0, max: 10 },
+      { key: 'glow', type: 'boolean', default: false },
+    ];
+    const { store } = setup(makeRecord({ controls }));
+    await store.initialize();
+
+    const result = store.setParamsValidated({ speed: 5, glow: 'not-a-boolean', unknown: 1 });
+
+    expect(result.applied).toEqual(['speed']);
+    expect(result.errors['glow']).toBeDefined();
+    expect(result.errors['unknown']).toBeDefined();
+    expect(store.params()['speed']).toBe(5);
   });
 });

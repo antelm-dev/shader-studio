@@ -6,6 +6,8 @@ import { Preferences, type WorkspacePreferences } from '../core/preferences';
 import { ShaderStore } from '../core/shader-store';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { Workspace } from './workspace';
+import { I18n } from '../i18n/i18n';
+import type { TranslationKey } from '../i18n/keys';
 
 /**
  * One line of a menu: what it shows, whether it can be used, and what it does.
@@ -46,6 +48,7 @@ export class MenuCommands {
   private readonly preferences = inject(Preferences);
   private readonly desktop = inject(DesktopPlatform);
   private readonly renderer = inject(RendererHandle);
+  private readonly i18n = inject(I18n);
 
   private filePicker: ((mode: ImportMode) => void) | null = null;
 
@@ -106,14 +109,14 @@ export class MenuCommands {
   readonly newShader: MenuCommand = {
     id: 'new-shader',
     icon: () => 'add',
-    label: () => 'New shader…',
+    label: () => this.i18n.t('action.newShader'),
     action: () => void this.workspace.createShader(),
   };
 
   readonly renameShader: MenuCommand = {
     id: 'rename-shader',
     icon: () => 'edit',
-    label: () => 'Rename shader…',
+    label: () => this.i18n.t('action.renameShader'),
     disabled: this.noShader,
     action: () => this.renameCurrent(),
   };
@@ -121,7 +124,7 @@ export class MenuCommands {
   readonly duplicateShader: MenuCommand = {
     id: 'duplicate-shader',
     icon: () => 'content_copy',
-    label: () => 'Duplicate shader',
+    label: () => this.i18n.t('action.duplicateShader'),
     disabled: this.noShader,
     action: () => this.duplicateCurrent(),
   };
@@ -129,7 +132,7 @@ export class MenuCommands {
   readonly exportShader: MenuCommand = {
     id: 'export-shader',
     icon: () => 'download',
-    label: () => 'Export shader…',
+    label: () => this.i18n.t('action.exportShader'),
     disabled: this.noShader,
     action: () => this.exportCurrent(),
   };
@@ -137,7 +140,7 @@ export class MenuCommands {
   readonly exportSequence: MenuCommand = {
     id: 'export-sequence',
     icon: () => 'movie',
-    label: () => 'Export…',
+    label: () => this.i18n.t('action.export'),
     disabled: () => !this.renderer.engine(),
     action: () => this.captureSequence(),
   };
@@ -145,23 +148,24 @@ export class MenuCommands {
   readonly exportAll: MenuCommand = {
     id: 'export-all',
     icon: () => 'library_books',
-    label: () => 'Export all shaders…',
+    label: () => this.i18n.t('action.exportAll'),
     action: () => void this.workspace.exportAll(),
   };
 
   readonly toggleEditor: MenuCommand = {
     id: 'toggle-editor',
     icon: () => 'code',
-    label: () => (this.preferences.value().editorOpen ? 'Hide editor' : 'Show editor'),
+    label: () =>
+      this.i18n.t(this.preferences.value().editorOpen ? 'action.hideEditor' : 'action.showEditor'),
     action: () => this.toggle('editorOpen'),
   };
 
   /** The label is the menu's own: "Import shader…" reads oddly under a File menu. */
-  import(mode: ImportMode, label: string): MenuCommand {
+  import(mode: ImportMode, label: TranslationKey): MenuCommand {
     return {
       id: mode === 'overwrite' ? 'import-replace' : 'import-shader',
       icon: () => (mode === 'overwrite' ? 'upload_file' : 'upload'),
-      label: () => label,
+      label: () => this.i18n.t(label),
       action: () => this.importShader(mode),
     };
   }

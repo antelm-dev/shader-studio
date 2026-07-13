@@ -6,12 +6,15 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { EDITOR_DOCK_SIDES, type EditorDockSide } from '../core/editor-prefs';
 import { EditorWindow } from '../editor/editor-window';
+import { I18n } from '../i18n/i18n';
+import { TranslatePipe } from '../i18n/i18n.module';
+import type { TranslationKey } from '../i18n/keys';
 import { Workspace } from './workspace';
 
-const DOCK_LABELS: Record<EditorDockSide, string> = {
-  bottom: 'Dock to bottom',
-  left: 'Dock to left',
-  right: 'Dock to right',
+const DOCK_LABELS: Record<EditorDockSide, TranslationKey> = {
+  bottom: 'editor.dockBottom',
+  left: 'editor.dockLeft',
+  right: 'editor.dockRight',
 };
 
 const DOCK_ICONS: Record<EditorDockSide, string> = {
@@ -23,14 +26,14 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
 @Component({
   selector: 'app-editor-window-controls',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule],
+  imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
   template: `
     <button
       matIconButton
       type="button"
       class="control"
-      matTooltip="Editor window"
-      aria-label="Editor window menu"
+      [matTooltip]="'editor.windowMenu' | translate"
+      [attr.aria-label]="'editor.windowMenuAria' | translate"
       [matMenuTriggerFor]="windowMenu"
     >
       <mat-icon>more_vert</mat-icon>
@@ -39,12 +42,12 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
     <mat-menu #windowMenu="matMenu">
       <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
         <mat-icon>tune</mat-icon>
-        <span>Appearance</span>
+        <span>{{ 'action.appearance' | translate }}</span>
       </button>
       @if (!editorWindow.compact()) {
         <button mat-menu-item type="button" (click)="editorWindow.detach()">
           <mat-icon>open_in_new</mat-icon>
-          <span>Detach</span>
+          <span>{{ 'action.detach' | translate }}</span>
         </button>
       }
       @for (side of dockSides; track side) {
@@ -67,8 +70,10 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
       matIconButton
       type="button"
       class="control"
-      [matTooltip]="editorWindow.minimized() ? 'Expand the editor' : 'Collapse the editor'"
-      [attr.aria-label]="editorWindow.minimized() ? 'Expand the editor' : 'Collapse the editor'"
+      [matTooltip]="(editorWindow.minimized() ? 'editor.expand' : 'editor.collapse') | translate"
+      [attr.aria-label]="
+        (editorWindow.minimized() ? 'editor.expand' : 'editor.collapse') | translate
+      "
       [attr.aria-expanded]="!editorWindow.minimized()"
       (click)="editorWindow.toggleMinimized()"
     >
@@ -79,8 +84,10 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
       matIconButton
       type="button"
       class="control"
-      [matTooltip]="editorWindow.maximized() ? 'Restore the editor' : 'Maximize the editor'"
-      [attr.aria-label]="editorWindow.maximized() ? 'Restore the editor' : 'Maximize the editor'"
+      [matTooltip]="(editorWindow.maximized() ? 'editor.restore' : 'editor.maximize') | translate"
+      [attr.aria-label]="
+        (editorWindow.maximized() ? 'editor.restore' : 'editor.maximize') | translate
+      "
       [attr.aria-pressed]="editorWindow.maximized()"
       (click)="editorWindow.toggleMaximized()"
     >
@@ -91,8 +98,8 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
       matIconButton
       type="button"
       class="control"
-      matTooltip="Close the editor"
-      aria-label="Close the editor"
+      [matTooltip]="'editor.close' | translate"
+      [attr.aria-label]="'editor.close' | translate"
       (click)="editorWindow.close()"
     >
       <mat-icon>close</mat-icon>
@@ -121,6 +128,7 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
 export class EditorWindowControls {
   protected readonly editorWindow = inject(EditorWindow);
   protected readonly workspace = inject(Workspace);
+  private readonly i18n = inject(I18n);
   protected readonly dockSides = EDITOR_DOCK_SIDES;
 
   private readonly activeDockSide = computed(() => {
@@ -139,7 +147,7 @@ export class EditorWindowControls {
   }
 
   protected dockLabel(side: EditorDockSide): string {
-    return DOCK_LABELS[side];
+    return this.i18n.t(DOCK_LABELS[side]);
   }
 
   protected dockIcon(side: EditorDockSide): string {

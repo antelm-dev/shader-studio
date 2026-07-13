@@ -3,6 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import type { CaptureSettings } from '@shader-studio/shared/model';
 import { DesktopPlatform } from '../core/desktop-platform';
 import { ShaderStore } from '../core/shader-store';
+import { I18n } from '../i18n/i18n';
 import { outputIndices, planCapture, type CapturePlan } from './capture-plan';
 import { CaptureCancelled, captureFrames } from './frame-capture';
 import { RendererHandle } from './renderer-handle';
@@ -31,6 +32,7 @@ export class ShaderCapture {
   private readonly renderer = inject(RendererHandle);
   private readonly desktop = inject(DesktopPlatform);
   private readonly store = inject(ShaderStore);
+  private readonly i18n = inject(I18n);
 
   private readonly status = signal<CaptureStatus | null>(null);
   private controller: AbortController | null = null;
@@ -67,7 +69,9 @@ export class ShaderCapture {
       writer = await openVideo(this.desktop, stem, plan);
     } catch (error) {
       this.store.notice.set({
-        text: `The export failed: ${error instanceof Error ? error.message : String(error)}`,
+        text: this.i18n.t('export.failed', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
         error: true,
       });
       return false;
@@ -76,7 +80,7 @@ export class ShaderCapture {
 
     const controller = new AbortController();
     this.controller = controller;
-    this.status.set({ rendered: 0, total: plan.loopFrames, label: 'Encoding…' });
+    this.status.set({ rendered: 0, total: plan.loopFrames, label: this.i18n.t('export.encoding') });
 
     try {
       await captureFrames(
@@ -90,7 +94,11 @@ export class ShaderCapture {
         {
           signal: controller.signal,
           onProgress: (rendered, total) =>
-            this.status.set({ rendered, total, label: describe(plan, rendered, total) }),
+            this.status.set({
+              rendered,
+              total,
+              label: this.describe(plan, rendered, total),
+            }),
         },
       );
 
@@ -101,7 +109,9 @@ export class ShaderCapture {
       await writer.cancel().catch(() => undefined);
       if (!(error instanceof CaptureCancelled)) {
         this.store.notice.set({
-          text: `The export failed: ${error instanceof Error ? error.message : String(error)}`,
+          text: this.i18n.t('export.failed', {
+            error: error instanceof Error ? error.message : String(error),
+          }),
           error: true,
         });
       }
@@ -120,7 +130,11 @@ export class ShaderCapture {
 
     const controller = new AbortController();
     this.controller = controller;
-    this.status.set({ rendered: 0, total: plan.loopFrames, label: 'Rendering…' });
+    this.status.set({
+      rendered: 0,
+      total: plan.loopFrames,
+      label: this.i18n.t('export.rendering'),
+    });
 
     try {
       await captureFrames(
@@ -135,7 +149,11 @@ export class ShaderCapture {
         {
           signal: controller.signal,
           onProgress: (rendered, total) =>
-            this.status.set({ rendered, total, label: describe(plan, rendered, total) }),
+            this.status.set({
+              rendered,
+              total,
+              label: this.describe(plan, rendered, total),
+            }),
         },
       );
 
@@ -146,7 +164,9 @@ export class ShaderCapture {
       await writer.cancel().catch(() => undefined);
       if (!(error instanceof CaptureCancelled)) {
         this.store.notice.set({
-          text: `The export failed: ${error instanceof Error ? error.message : String(error)}`,
+          text: this.i18n.t('export.failed', {
+            error: error instanceof Error ? error.message : String(error),
+          }),
           error: true,
         });
       }
@@ -156,13 +176,18 @@ export class ShaderCapture {
       this.status.set(null);
     }
   }
-}
 
-function describe(plan: CapturePlan, rendered: number, total: number): string {
-  const drawn = rendered * plan.settings.subframes;
-  return plan.settings.subframes > 1
-    ? `Frame ${rendered} of ${total} — ${drawn} of ${plan.draws} draws`
-    : `Frame ${rendered} of ${total}`;
+  private describe(plan: CapturePlan, rendered: number, total: number): string {
+    const drawn = rendered * plan.settings.subframes;
+    return plan.settings.subframes > 1
+      ? this.i18n.t('export.frameProgressDraws', {
+          rendered,
+          total,
+          drawn,
+          draws: plan.draws,
+        })
+      : this.i18n.t('export.frameProgress', { rendered, total });
+  }
 }
 
 function toPng(canvas: HTMLCanvasElement): Promise<Blob> {

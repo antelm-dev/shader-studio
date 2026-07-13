@@ -10,6 +10,8 @@ import { MatSelectModule } from '@angular/material/select';
 
 import type { CaptureSettings } from '@shader-studio/shared/model';
 import { Preferences } from '../core/preferences';
+import { I18n } from '../i18n/i18n';
+import { TranslatePipe } from '../i18n/i18n.module';
 import { ffmpegCommand, planCapture } from '../rendering/capture-plan';
 import { ShaderCapture } from '../rendering/shader-capture';
 
@@ -21,24 +23,9 @@ const RESOLUTIONS = [
   { label: '3840 × 2160', width: 3840, height: 2160 },
 ] as const;
 
-const SUBFRAMES = [
-  { label: 'Off', value: 1 },
-  { label: '2 samples', value: 2 },
-  { label: '4 samples', value: 4 },
-  { label: '8 samples', value: 8 },
-  { label: '16 samples', value: 16 },
-] as const;
-
-const SUPERSAMPLE = [
-  { label: 'Off', value: 1 },
-  { label: '1.5×', value: 1.5 },
-  { label: '2×', value: 2 },
-] as const;
-
-const FORMATS = [
-  { label: 'WebM video', value: 'webm' as const },
-  { label: 'PNG sequence', value: 'png' as const },
-] as const;
+const SUBFRAME_VALUES = [1, 2, 4, 8, 16] as const;
+const SUPERSAMPLE_VALUES = [1, 1.5, 2] as const;
+const FORMAT_VALUES = ['webm', 'png'] as const;
 
 @Component({
   selector: 'app-export-dialog',
@@ -52,9 +39,10 @@ const FORMATS = [
     MatInputModule,
     MatProgressBarModule,
     MatSelectModule,
+    TranslatePipe,
   ],
   template: `
-    <h2 mat-dialog-title>Export</h2>
+    <h2 mat-dialog-title>{{ 'export.title' | translate }}</h2>
 
     <mat-dialog-content>
       @if (capture.running()) {
@@ -63,38 +51,35 @@ const FORMATS = [
         <div class="running">
           <p class="status">{{ capture.progress()?.label }}</p>
           <mat-progress-bar mode="determinate" [value]="percent()" />
-          <p class="hint">
-            The preview is frozen while the shader is filmed — it is drawing the
-            export, not the window.
-          </p>
+          <p class="hint">{{ 'export.runningHint' | translate }}</p>
         </div>
       } @else {
         <div class="grid">
           <mat-form-field appearance="outline">
-            <mat-label>Format</mat-label>
+            <mat-label>{{ 'export.format' | translate }}</mat-label>
             <mat-select
               [ngModel]="settings().format"
               (ngModelChange)="patch({ format: $event })"
             >
-              @for (option of formats; track option.value) {
+              @for (option of formats(); track option.value) {
                 <mat-option [value]="option.value">{{ option.label }}</mat-option>
               }
             </mat-select>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Resolution</mat-label>
+            <mat-label>{{ 'export.resolution' | translate }}</mat-label>
             <mat-select [ngModel]="sizeKey()" (ngModelChange)="setSize($event)">
               @for (option of resolutions; track option.label) {
                 <mat-option [value]="option.label">{{ option.label }}</mat-option>
               }
-              <mat-option value="custom">Custom…</mat-option>
+              <mat-option value="custom">{{ 'export.custom' | translate }}</mat-option>
             </mat-select>
           </mat-form-field>
 
           @if (sizeKey() === 'custom') {
             <mat-form-field appearance="outline">
-              <mat-label>Width</mat-label>
+              <mat-label>{{ 'export.width' | translate }}</mat-label>
               <input
                 matInput
                 type="number"
@@ -103,7 +88,7 @@ const FORMATS = [
               />
             </mat-form-field>
             <mat-form-field appearance="outline">
-              <mat-label>Height</mat-label>
+              <mat-label>{{ 'export.height' | translate }}</mat-label>
               <input
                 matInput
                 type="number"
@@ -114,7 +99,7 @@ const FORMATS = [
           }
 
           <mat-form-field appearance="outline">
-            <mat-label>Frames per second</mat-label>
+            <mat-label>{{ 'export.fps' | translate }}</mat-label>
             <input
               matInput
               type="number"
@@ -124,7 +109,7 @@ const FORMATS = [
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Duration</mat-label>
+            <mat-label>{{ 'export.duration' | translate }}</mat-label>
             <input
               matInput
               type="number"
@@ -133,11 +118,11 @@ const FORMATS = [
               (ngModelChange)="patch({ duration: +$event })"
             />
             <span matTextSuffix>s</span>
-            <mat-hint>One pass of the loop</mat-hint>
+            <mat-hint>{{ 'export.durationHint' | translate }}</mat-hint>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Start at</mat-label>
+            <mat-label>{{ 'export.startAt' | translate }}</mat-label>
             <input
               matInput
               type="number"
@@ -146,44 +131,44 @@ const FORMATS = [
               (ngModelChange)="patch({ startTime: +$event })"
             />
             <span matTextSuffix>s</span>
-            <mat-hint>Where the shader has settled</mat-hint>
+            <mat-hint>{{ 'export.startAtHint' | translate }}</mat-hint>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Loops</mat-label>
+            <mat-label>{{ 'export.loops' | translate }}</mat-label>
             <input
               matInput
               type="number"
               [ngModel]="settings().loops"
               (ngModelChange)="patch({ loops: +$event })"
             />
-            <mat-hint>Repeated, not re-rendered</mat-hint>
+            <mat-hint>{{ 'export.loopsHint' | translate }}</mat-hint>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Motion blur</mat-label>
+            <mat-label>{{ 'export.motionBlur' | translate }}</mat-label>
             <mat-select
               [ngModel]="settings().subframes"
               (ngModelChange)="patch({ subframes: +$event })"
             >
-              @for (option of subframes; track option.value) {
+              @for (option of subframes(); track option.value) {
                 <mat-option [value]="option.value">{{ option.label }}</mat-option>
               }
             </mat-select>
-            <mat-hint>Costs one draw per sample</mat-hint>
+            <mat-hint>{{ 'export.motionBlurHint' | translate }}</mat-hint>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Supersampling</mat-label>
+            <mat-label>{{ 'export.supersampling' | translate }}</mat-label>
             <mat-select
               [ngModel]="settings().supersample"
               (ngModelChange)="patch({ supersample: +$event })"
             >
-              @for (option of supersample; track option.value) {
+              @for (option of supersample(); track option.value) {
                 <mat-option [value]="option.value">{{ option.label }}</mat-option>
               }
             </mat-select>
-            <mat-hint>Renders larger, then downsamples</mat-hint>
+            <mat-hint>{{ 'export.supersamplingHint' | translate }}</mat-hint>
           </mat-form-field>
         </div>
 
@@ -202,12 +187,12 @@ const FORMATS = [
 
     <mat-dialog-actions align="end">
       @if (capture.running()) {
-        <button matButton type="button" (click)="capture.cancel()">Cancel</button>
+        <button matButton type="button" (click)="capture.cancel()">{{ 'action.cancel' | translate }}</button>
       } @else {
-        <button matButton mat-dialog-close type="button">Close</button>
+        <button matButton mat-dialog-close type="button">{{ 'action.close' | translate }}</button>
         <button matButton="filled" type="button" (click)="start()">
           <mat-icon>{{ settings().format === 'webm' ? 'movie' : 'download' }}</mat-icon>
-          Export
+          {{ 'export.title' | translate }}
         </button>
       }
     </mat-dialog-actions>
@@ -269,12 +254,34 @@ const FORMATS = [
 export class ExportDialog {
   private readonly dialogRef = inject<MatDialogRef<ExportDialog>>(MatDialogRef);
   private readonly preferences = inject(Preferences);
+  private readonly i18n = inject(I18n);
   protected readonly capture = inject(ShaderCapture);
 
   protected readonly resolutions = RESOLUTIONS;
-  protected readonly subframes = SUBFRAMES;
-  protected readonly supersample = SUPERSAMPLE;
-  protected readonly formats = FORMATS;
+
+  protected readonly formats = computed(() =>
+    FORMAT_VALUES.map((value) => ({
+      value,
+      label: this.i18n.t(value === 'webm' ? 'export.formatWebm' : 'export.formatPng'),
+    })),
+  );
+
+  protected readonly subframes = computed(() =>
+    SUBFRAME_VALUES.map((value) => ({
+      value,
+      label:
+        value === 1
+          ? this.i18n.t('export.subframesOff')
+          : this.i18n.t('export.subframesN', { count: value }),
+    })),
+  );
+
+  protected readonly supersample = computed(() =>
+    SUPERSAMPLE_VALUES.map((value) => ({
+      value,
+      label: value === 1 ? this.i18n.t('export.supersampleOff') : `${value}×`,
+    })),
+  );
 
   protected readonly settings = signal<CaptureSettings>(this.preferences.value().capture);
 

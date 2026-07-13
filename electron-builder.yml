@@ -12,6 +12,8 @@ asar: true
 extraResources:
   - from: examples
     to: examples
+  - from: i18n
+    to: i18n
 npmRebuild: false
 win:
   target:

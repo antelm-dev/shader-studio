@@ -9,6 +9,7 @@ import { createCustomScheme } from './core/electron';
 import { UpdateController } from './core/updater';
 import { env } from './env';
 import { createFilesIpc } from './ipc/files.ipc';
+import { createI18nIpc } from './ipc/i18n.ipc';
 import { createMigrationIpc } from './ipc/migration.ipc';
 import { createShaderIpc } from './ipc/shader.ipc';
 import { createUpdateIpc } from './ipc/update.ipc';
@@ -122,6 +123,7 @@ prepare({
     const examplesDir = env.production
       ? join(process.resourcesPath, 'examples')
       : resolve('examples');
+    const i18nDir = env.production ? join(process.resourcesPath, 'i18n') : resolve('i18n');
     const storage = new ShaderStorage({ dataDir: join(userData, 'library'), examplesDir });
     await storage.init();
 
@@ -132,6 +134,7 @@ prepare({
     await ipc.loadAll({
       shader: createShaderIpc(storage),
       files: createFilesIpc(),
+      i18n: createI18nIpc(i18nDir),
       migration: createMigrationIpc(storage, migrationPath),
       window: createWindowIpc(closeController),
       update: createUpdateIpc(updates),

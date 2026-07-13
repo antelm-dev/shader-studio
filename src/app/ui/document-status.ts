@@ -1,6 +1,8 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 
 import { ShaderStore } from '../core/shader-store';
+import { I18n } from '../i18n/i18n';
+import type { TranslationKey } from '../i18n/keys';
 
 /**
  * What the open document is doing, and whether it can be saved.
@@ -25,16 +27,16 @@ import { ShaderStore } from '../core/shader-store';
 
 export type DocumentState = 'none' | 'saving' | 'unsaved' | 'saved';
 
-const LABELS: Record<DocumentState, string> = {
-  none: '',
-  saving: 'Saving…',
-  unsaved: 'Unsaved changes',
-  saved: 'Saved',
+const LABEL_KEYS: Record<Exclude<DocumentState, 'none'>, TranslationKey> = {
+  saving: 'status.saving',
+  unsaved: 'status.unsaved',
+  saved: 'status.saved',
 };
 
 @Injectable({ providedIn: 'root' })
 export class DocumentStatus {
   private readonly store = inject(ShaderStore);
+  private readonly i18n = inject(I18n);
   private readonly savedRecently = signal(false);
   private savedTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -68,7 +70,10 @@ export class DocumentStatus {
     return this.savedRecently() ? 'saved' : 'none';
   });
 
-  readonly label = computed(() => LABELS[this.state()]);
+  readonly label = computed(() => {
+    const state = this.state();
+    return state === 'none' ? '' : this.i18n.t(LABEL_KEYS[state]);
+  });
 
   /** Compile *and* config errors — everything the editor would flag red. */
   readonly errorCount = computed(
@@ -81,20 +86,18 @@ export class DocumentStatus {
 
   /** Why Save is disabled — or, when it is not, what it will do. */
   readonly saveHint = computed(() => {
-    if (!this.store.record()) return 'Open a shader before saving';
-    if (this.store.saving()) return 'Saving…';
-    if (!this.store.configValid()) {
-      return 'The Config tab has errors. Fix them before saving.';
-    }
-    if (!this.store.dirty()) return 'No unsaved changes';
-    return 'Save the shader source and config (Ctrl+S)';
+    if (!this.store.record()) return this.i18n.t('status.openBeforeSave');
+    if (this.store.saving()) return this.i18n.t('status.saving');
+    if (!this.store.configValid()) return this.i18n.t('status.configErrors');
+    if (!this.store.dirty()) return this.i18n.t('status.noChanges');
+    return this.i18n.t('status.saveHint');
   });
 
   readonly errorHint = computed(() => {
     const count = this.errorCount();
-    return `${count} ${count === 1 ? 'error' : 'errors'} — open the editor to see ${
-      count === 1 ? 'it' : 'them'
-    }`;
+    return count === 1
+      ? this.i18n.t('status.errorOne')
+      : this.i18n.t('status.errorMany', { count });
   });
 
   private hideSavedConfirmation(): void {

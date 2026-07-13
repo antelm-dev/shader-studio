@@ -52,6 +52,8 @@ import { PreviewStage } from './ui/preview-stage';
 import { ResizeHandle } from './ui/resize-handle';
 import { ShaderBrowser } from './ui/shader-browser';
 import { Workspace } from './ui/workspace';
+import { I18n, LANGUAGE_OPTIONS, type AppLocale } from './i18n/i18n';
+import { I18nModule } from './i18n/i18n.module';
 
 @Component({
   selector: 'app-root',
@@ -60,6 +62,7 @@ import { Workspace } from './ui/workspace';
     AppTitlebar,
     EditorShell,
     InspectorPanel,
+    I18nModule,
     MatButtonModule,
     MatDividerModule,
     MatIconModule,
@@ -85,6 +88,7 @@ export class App {
   protected readonly status = inject(DocumentStatus);
   protected readonly commands = inject(MenuCommands);
   protected readonly editorWindow = inject(EditorWindow);
+  protected readonly i18n = inject(I18n);
   protected readonly outputMode =
     typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/output';
 
@@ -117,6 +121,7 @@ export class App {
   );
 
   protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
+  protected readonly languageOptions = LANGUAGE_OPTIONS;
   protected readonly themeIcon = computed(() =>
     colorSchemeIcon(this.preferences.value().colorScheme),
   );
@@ -132,7 +137,10 @@ export class App {
     {
       id: 'toggle-inspector',
       icon: () => 'tune',
-      label: () => (this.preferences.value().guiVisible ? 'Hide inspector' : 'Show inspector'),
+      label: () =>
+        this.i18n.t(
+          this.preferences.value().guiVisible ? 'action.hideInspector' : 'action.showInspector',
+        ),
       shortcut: 'H',
       action: () => this.commands.toggle('guiVisible'),
     },
@@ -140,7 +148,7 @@ export class App {
     {
       id: 'capture-image',
       icon: () => 'photo_camera',
-      label: () => 'Capture image',
+      label: () => this.i18n.t('action.captureImage'),
       disabled: () => !this.store.record(),
       shortcut: 'S',
       action: () => this.commands.captureImage(),
@@ -155,12 +163,12 @@ export class App {
   ];
 
   protected readonly importExportCommands: readonly MenuCommand[] = [
-    this.commands.import('rename', 'Import shader…'),
-    this.commands.import('overwrite', 'Import and replace…'),
+    this.commands.import('rename', 'action.importShader'),
+    this.commands.import('overwrite', 'action.importReplace'),
     {
       id: 'import-shadertoy',
       icon: () => 'public',
-      label: () => 'Import from Shadertoy…',
+      label: () => this.i18n.t('action.importShadertoy'),
       action: () => void this.workspace.importShadertoy(),
     },
     this.commands.exportShader,
@@ -175,7 +183,7 @@ export class App {
     {
       id: 'delete-shader',
       icon: () => 'delete',
-      label: () => 'Delete shader…',
+      label: () => this.i18n.t('action.deleteShader'),
       action: () => this.commands.deleteCurrent(),
     },
   ];
@@ -279,7 +287,7 @@ export class App {
       const notice = this.store.notice();
       if (!notice) return;
 
-      this.snackBar.open(notice.text, 'Dismiss', {
+      this.snackBar.open(notice.text, this.i18n.t('action.dismiss'), {
         duration: notice.error ? 8000 : 3000,
         politeness: notice.error ? 'assertive' : 'polite',
       });
@@ -303,7 +311,10 @@ export class App {
       return;
     }
     if (!this.store.shaders().some((shader) => shader.id === requested)) {
-      this.store.notice.set({ text: `Shader “${requested}” was not found`, error: true });
+      this.store.notice.set({
+        text: this.i18n.t('notice.shaderNotFound', { name: requested }),
+        error: true,
+      });
       await this.normalizeRoute(requested);
       return;
     }
@@ -346,6 +357,14 @@ export class App {
 
   protected setColorScheme(colorScheme: ColorScheme): void {
     this.preferences.patch({ colorScheme });
+  }
+
+  protected setLanguage(language: AppLocale): void {
+    this.i18n.setLocale(language);
+  }
+
+  protected themeLabel(theme: ColorScheme): string {
+    return this.i18n.t(`theme.${theme}`);
   }
 
   protected toggleBrowser(): void {
@@ -522,13 +541,9 @@ export class App {
     } catch {
       return;
     }
-    this.snackBar.open(
-      'Tip: right-click the preview, shaders, presets or editor bar for actions',
-      'Got it',
-      {
-        duration: 6000,
-        politeness: 'polite',
-      },
-    );
+    this.snackBar.open(this.i18n.t('notice.contextMenuTip'), this.i18n.t('action.gotIt'), {
+      duration: 6000,
+      politeness: 'polite',
+    });
   }
 }

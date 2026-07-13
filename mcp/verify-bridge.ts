@@ -15,6 +15,13 @@ import { resetBridgeTokenForTests } from './token.js';
 const PORT = Number(process.env['SHADER_STUDIO_MCP_PORT'] ?? 4311);
 const TOKEN = 'verify-bridge-token';
 
+function messageText(data: WebSocket.RawData): string {
+  if (typeof data === 'string') return data;
+  if (Buffer.isBuffer(data)) return data.toString('utf8');
+  if (Array.isArray(data)) return Buffer.concat(data).toString('utf8');
+  return Buffer.from(data).toString('utf8');
+}
+
 async function main(): Promise<void> {
   resetBridgeTokenForTests(TOKEN);
   const wss = await startBridge(PORT);
@@ -34,7 +41,7 @@ async function main(): Promise<void> {
       app.send(JSON.stringify(handshake));
     });
     app.once('message', (raw) => {
-      const ack = HandshakeAckSchema.safeParse(JSON.parse(String(raw)));
+      const ack = HandshakeAckSchema.safeParse(JSON.parse(messageText(raw)));
       if (ack.success) resolve();
       else reject(new Error('Handshake was rejected'));
     });
@@ -42,7 +49,7 @@ async function main(): Promise<void> {
   });
 
   app.on('message', (raw) => {
-    const request = JSON.parse(String(raw)) as ControllerRequest;
+    const request = JSON.parse(messageText(raw)) as ControllerRequest;
 
     switch (request.type) {
       case 'getState':

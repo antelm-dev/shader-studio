@@ -18,6 +18,8 @@ import { MatInputModule } from '@angular/material/input';
 import type { ThumbnailMeta } from '@shader-studio/shared/model';
 import { ShaderStore } from '../core/shader-store';
 import { ThumbnailAssets } from '../core/thumbnail-assets';
+import { I18n } from '../i18n/i18n';
+import { TranslatePipe } from '../i18n/i18n.module';
 import { Workspace } from './workspace';
 
 @Component({
@@ -32,15 +34,16 @@ import { Workspace } from './workspace';
     MatListModule,
     MatMenuModule,
     MatTooltipModule,
+    TranslatePipe,
   ],
   template: `
     <header class="browser-header">
-      <h2 class="browser-title">Shaders</h2>
+      <h2 class="browser-title">{{ 'browser.title' | translate }}</h2>
       <button
         matIconButton
         type="button"
-        matTooltip="New shader"
-        aria-label="Create a new shader"
+        [matTooltip]="'browser.new' | translate"
+        [attr.aria-label]="'browser.create' | translate"
         (click)="workspace.createShader()"
       >
         <mat-icon>add</mat-icon>
@@ -49,7 +52,7 @@ import { Workspace } from './workspace';
 
     <mat-form-field appearance="fill" subscriptSizing="dynamic" class="search">
       <mat-icon matPrefix>search</mat-icon>
-      <mat-label>Filter</mat-label>
+      <mat-label>{{ 'browser.filter' | translate }}</mat-label>
       <input
         matInput
         type="search"
@@ -61,12 +64,12 @@ import { Workspace } from './workspace';
 
     @if (filtered().length === 0) {
       <p class="empty">
-        {{ store.shaders().length === 0 ? 'No shaders yet.' : 'No shader matches that filter.' }}
+        {{ (store.shaders().length === 0 ? 'browser.empty' : 'browser.noMatch') | translate }}
       </p>
     } @else {
       <mat-selection-list
         class="shader-list"
-        aria-label="Shaders"
+        [attr.aria-label]="'browser.title' | translate"
         [multiple]="false"
         [hideSingleSelectionIndicator]="true"
         (selectionChange)="select($event.options[0].value)"
@@ -77,7 +80,7 @@ import { Workspace } from './workspace';
             [class.selected]="shader.id === store.selectedId()"
             [value]="shader.id"
             [selected]="shader.id === store.selectedId()"
-            title="Right-click for actions"
+            [title]="'browser.contextTip' | translate"
             [matContextMenuTriggerFor]="rowMenu"
             [matContextMenuTriggerData]="{ shader }"
           >
@@ -90,10 +93,7 @@ import { Workspace } from './workspace';
               </span>
             }
             <span matListItemTitle class="row-title">{{ shader.name }}</span>
-            <span matListItemLine class="row-meta">
-              {{ shader.controlCount }} control{{ shader.controlCount === 1 ? '' : 's' }} ·
-              {{ shader.presetCount }} preset{{ shader.presetCount === 1 ? '' : 's' }}
-            </span>
+            <span matListItemLine class="row-meta">{{ meta(shader) }}</span>
           </mat-list-option>
         }
       </mat-selection-list>
@@ -107,7 +107,7 @@ import { Workspace } from './workspace';
           (click)="workspace.renameShader(shader.id, shader.name)"
         >
           <mat-icon>edit</mat-icon>
-          <span>Rename</span>
+          <span>{{ 'action.rename' | translate }}</span>
         </button>
         <button
           mat-menu-item
@@ -115,7 +115,7 @@ import { Workspace } from './workspace';
           (click)="workspace.duplicateShader(shader.id, shader.name)"
         >
           <mat-icon>content_copy</mat-icon>
-          <span>Duplicate</span>
+          <span>{{ 'action.duplicate' | translate }}</span>
         </button>
         <button
           mat-menu-item
@@ -123,7 +123,7 @@ import { Workspace } from './workspace';
           (click)="workspace.exportShader(shader.id, shader.name)"
         >
           <mat-icon>download</mat-icon>
-          <span>Export</span>
+          <span>{{ 'action.export' | translate }}</span>
         </button>
         <button
           mat-menu-item
@@ -131,7 +131,7 @@ import { Workspace } from './workspace';
           (click)="workspace.deleteShader(shader.id, shader.name)"
         >
           <mat-icon>delete</mat-icon>
-          <span>Delete</span>
+          <span>{{ 'action.delete' | translate }}</span>
         </button>
       </ng-template>
     </mat-menu>
@@ -227,6 +227,7 @@ import { Workspace } from './workspace';
   `,
 })
 export class ShaderBrowser {
+  protected readonly i18n = inject(I18n);
   protected readonly store = inject(ShaderStore);
   protected readonly workspace = inject(Workspace);
   private readonly thumbnails = inject(ThumbnailAssets);
@@ -284,6 +285,18 @@ export class ShaderBrowser {
         shader.description.toLowerCase().includes(query),
     );
   });
+
+  protected meta(shader: { controlCount: number; presetCount: number }): string {
+    const controls =
+      shader.controlCount === 1
+        ? this.i18n.t('browser.controlOne')
+        : this.i18n.t('browser.controlMany', { count: shader.controlCount });
+    const presets =
+      shader.presetCount === 1
+        ? this.i18n.t('browser.presetOne')
+        : this.i18n.t('browser.presetMany', { count: shader.presetCount });
+    return this.i18n.t('browser.meta', { controls, presets });
+  }
 
   protected select(id: string): void {
     void this.workspace.selectShader(id);

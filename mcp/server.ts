@@ -1,3 +1,5 @@
+import { pathToFileURL } from 'node:url';
+
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
@@ -18,6 +20,7 @@ import {
   mcpError,
   type McpError,
 } from '@shader-studio/shared/mcp-protocol';
+import type { ShaderStudioController } from '@shader-studio/shared/controller';
 
 import { installBridgeShutdown, McpBridgeError, startBridge } from './bridge.js';
 import { BridgeController } from './controller.js';
@@ -78,12 +81,13 @@ const readOnly: ToolAnnotations = {
   openWorldHint: false,
 };
 
-async function main(): Promise<void> {
-  const wss = await startBridge(PORT);
-  installBridgeShutdown(wss);
-
-  const controller = new BridgeController();
-
+/**
+ * Registers every tool and resource against `controller` and hands back the
+ * server, unconnected. Split from `main()` so tests can wire it to an
+ * `InMemoryTransport` and a fake `ShaderStudioController` instead of a real
+ * bridge and stdio.
+ */
+export function buildServer(controller: ShaderStudioController): McpServer {
   const server = new McpServer(
     { name: 'shader-studio', version: '1.0.0' },
     {
@@ -92,8 +96,8 @@ async function main(): Promise<void> {
         'Lance `pnpm dev`, ouvre http://localhost:4200, colle le token du bridge ' +
         '(`localStorage.setItem("shaderStudioMcpToken", "…")`) puis édite les shaders live, ' +
         'règle les uniforms et capture le canvas. Un seul onglet à la fois. ' +
-        "Préfère `get_project`/`get_document`/`apply_shader_patch` aux outils historiques " +
-        '`set_fragment`/`set_vertex`, qui ne connaissent qu\'un seul fragment shader.',
+        'Préfère `get_project`/`get_document`/`apply_shader_patch` aux outils historiques ' +
+        "`set_fragment`/`set_vertex`, qui ne connaissent qu'un seul fragment shader.",
     },
   );
 
@@ -151,7 +155,10 @@ async function main(): Promise<void> {
     async () =>
       handle(
         () => controller.getState(),
-        (state) => ({ content: [text(state.selectedId ?? 'Aucun shader sélectionné.')], structuredContent: state }),
+        (state) => ({
+          content: [text(state.selectedId ?? 'Aucun shader sélectionné.')],
+          structuredContent: state,
+        }),
       ),
   );
 
@@ -251,7 +258,10 @@ async function main(): Promise<void> {
     async ({ key, value }) =>
       handle(
         () => controller.setParam(key, value),
-        (params) => ({ content: [text(`${key} = ${String(value)}`)], structuredContent: { params } }),
+        (params) => ({
+          content: [text(`${key} = ${String(value)}`)],
+          structuredContent: { params },
+        }),
       ),
   );
 
@@ -270,7 +280,10 @@ async function main(): Promise<void> {
     async () =>
       handle(
         () => controller.resetParams(),
-        (params) => ({ content: [text('Paramètres réinitialisés.')], structuredContent: { params } }),
+        (params) => ({
+          content: [text('Paramètres réinitialisés.')],
+          structuredContent: { params },
+        }),
       ),
   );
 
@@ -284,7 +297,10 @@ async function main(): Promise<void> {
     async () =>
       handle(
         () => controller.listPresets(),
-        (presets) => ({ content: [text(`${presets.length} preset(s).`)], structuredContent: { presets } }),
+        (presets) => ({
+          content: [text(`${presets.length} preset(s).`)],
+          structuredContent: { presets },
+        }),
       ),
   );
 
@@ -304,7 +320,10 @@ async function main(): Promise<void> {
     async ({ presetId }) =>
       handle(
         () => controller.applyPreset(presetId),
-        (state) => ({ content: [text(`Preset "${presetId}" appliqué.`)], structuredContent: state }),
+        (state) => ({
+          content: [text(`Preset "${presetId}" appliqué.`)],
+          structuredContent: state,
+        }),
       ),
   );
 
@@ -330,7 +349,10 @@ async function main(): Promise<void> {
     async ({ name, withRender }) =>
       handle(
         () => controller.savePreset(name, withRender),
-        (presets) => ({ content: [text(`Preset "${name}" sauvegardé.`)], structuredContent: { presets } }),
+        (presets) => ({
+          content: [text(`Preset "${name}" sauvegardé.`)],
+          structuredContent: { presets },
+        }),
       ),
   );
 
@@ -350,7 +372,10 @@ async function main(): Promise<void> {
     async ({ presetId }) =>
       handle(
         () => controller.deletePreset(presetId),
-        (presets) => ({ content: [text(`Preset "${presetId}" supprimé.`)], structuredContent: { presets } }),
+        (presets) => ({
+          content: [text(`Preset "${presetId}" supprimé.`)],
+          structuredContent: { presets },
+        }),
       ),
   );
 
@@ -412,7 +437,7 @@ async function main(): Promise<void> {
   server.registerTool(
     'screenshot',
     {
-      description: 'Capture le rendu WebGL actuel en PNG (l\'image telle qu\'elle est affichée).',
+      description: "Capture le rendu WebGL actuel en PNG (l'image telle qu'elle est affichée).",
       outputSchema: McpScreenshotSchema.shape,
       annotations: readOnly,
     },
@@ -458,7 +483,11 @@ async function main(): Promise<void> {
               `"${project.name}" — revision ${project.revision}, ${project.documents.length} document(s)` +
                 `${project.dirty ? ', unsaved changes' : ''}${project.hasErrors ? ', has errors' : ''}.`,
             ),
-            resourceLink(projectUri(project.shaderId), `${project.name} project`, 'application/json'),
+            resourceLink(
+              projectUri(project.shaderId),
+              `${project.name} project`,
+              'application/json',
+            ),
             resourceLink(previewUri(project.shaderId), `${project.name} preview`, 'image/png'),
           ],
           structuredContent: project,
@@ -469,9 +498,13 @@ async function main(): Promise<void> {
   server.registerTool(
     'get_document',
     {
-      description: "Source complète, nom, type, revision et diagnostics d'un document (pass, fichier, @vertex ou @config).",
+      description:
+        "Source complète, nom, type, revision et diagnostics d'un document (pass, fichier, @vertex ou @config).",
       inputSchema: {
-        shaderId: z.string().optional().describe('Optionnel : doit correspondre au shader sélectionné'),
+        shaderId: z
+          .string()
+          .optional()
+          .describe('Optionnel : doit correspondre au shader sélectionné'),
         documentId: z.string().describe('Id du document (pass, fichier, "@vertex" ou "@config")'),
       },
       outputSchema: DocumentSnapshotSchema.shape,
@@ -500,7 +533,7 @@ async function main(): Promise<void> {
       description:
         'Applique un lot de remplacements de texte à un ou plusieurs documents, atomiquement. ' +
         '`baseRevision` doit être la revision vue au dernier `get_project`/`get_document` — ' +
-        'sinon la requête est rejetée (STALE_REVISION) plutôt que d\'écraser une édition plus récente. ' +
+        "sinon la requête est rejetée (STALE_REVISION) plutôt que d'écraser une édition plus récente. " +
         'Compile le résultat et retourne la nouvelle revision et les diagnostics. Ne sauvegarde jamais.',
       inputSchema: {
         shaderId: z.string().describe('Identifiant du shader'),
@@ -548,10 +581,13 @@ async function main(): Promise<void> {
         'Règle plusieurs uniforms live en une seule requête. Chaque valeur est validée contre le ' +
         'schéma de contrôles ; les clés invalides sont rapportées sans bloquer les autres.',
       inputSchema: {
-        shaderId: z.string().optional().describe('Optionnel : doit correspondre au shader sélectionné'),
-        params: z.record(z.string(), COMMAND_SCHEMAS.setParam.payload.shape.value).describe(
-          'Clé de contrôle -> valeur',
-        ),
+        shaderId: z
+          .string()
+          .optional()
+          .describe('Optionnel : doit correspondre au shader sélectionné'),
+        params: z
+          .record(z.string(), COMMAND_SCHEMAS.setParam.payload.shape.value)
+          .describe('Clé de contrôle -> valeur'),
       },
       outputSchema: SetParamsResultSchema.shape,
       annotations: {
@@ -583,7 +619,10 @@ async function main(): Promise<void> {
         'Force une compilation immédiate (comme Ctrl+Entrée) et attend le résultat réel du compilateur ' +
         '— pas un délai fixe. Retourne la revision compilée et ses diagnostics.',
       inputSchema: {
-        shaderId: z.string().optional().describe('Optionnel : doit correspondre au shader sélectionné'),
+        shaderId: z
+          .string()
+          .optional()
+          .describe('Optionnel : doit correspondre au shader sélectionné'),
       },
       outputSchema: CompileResultSchema.shape,
       annotations: {
@@ -615,8 +654,15 @@ async function main(): Promise<void> {
         'Rend une frame PNG déterministe hors-écran (temps, taille et paramètres optionnels) sans ' +
         'modifier la session live en cours — le clock et les params live sont restaurés après capture.',
       inputSchema: {
-        shaderId: z.string().optional().describe('Optionnel : doit correspondre au shader sélectionné'),
-        time: z.number().min(0).optional().describe('iTime de la frame. 0 par défaut (déterministe).'),
+        shaderId: z
+          .string()
+          .optional()
+          .describe('Optionnel : doit correspondre au shader sélectionné'),
+        time: z
+          .number()
+          .min(0)
+          .optional()
+          .describe('iTime de la frame. 0 par défaut (déterministe).'),
         width: z.number().int().min(1).max(4096).optional().describe('Largeur en pixels'),
         height: z.number().int().min(1).max(4096).optional().describe('Hauteur en pixels'),
         params: z
@@ -660,7 +706,9 @@ async function main(): Promise<void> {
     async (uri) => {
       const shaders = await controller.listShaders();
       return {
-        contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(shaders, null, 2) }],
+        contents: [
+          { uri: uri.href, mimeType: 'application/json', text: JSON.stringify(shaders, null, 2) },
+        ],
       };
     },
   );
@@ -672,7 +720,9 @@ async function main(): Promise<void> {
     async (uri, variables) => {
       const project = await controller.getProject(String(variables['shaderId']));
       return {
-        contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(project, null, 2) }],
+        contents: [
+          { uri: uri.href, mimeType: 'application/json', text: JSON.stringify(project, null, 2) },
+        ],
       };
     },
   );
@@ -690,7 +740,11 @@ async function main(): Promise<void> {
       );
       return {
         contents: [
-          { uri: uri.href, mimeType: doc.kind === 'config' ? 'application/json' : 'text/plain', text: doc.source },
+          {
+            uri: uri.href,
+            mimeType: doc.kind === 'config' ? 'application/json' : 'text/plain',
+            text: doc.source,
+          },
         ],
       };
     },
@@ -729,14 +783,28 @@ async function main(): Promise<void> {
     },
   );
 
+  return server;
+}
+
+async function main(): Promise<void> {
+  const wss = await startBridge(PORT);
+  installBridgeShutdown(wss);
+
+  const server = buildServer(new BridgeController());
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
 
-main().catch((error: unknown) => {
-  console.error('[shader-studio-mcp] failed to start', error);
-  process.exit(1);
-});
+// Only run the server when this file is the entrypoint — not when a test
+// imports `buildServer` to wire it to an in-memory transport instead.
+const isEntrypoint = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isEntrypoint) {
+  main().catch((error: unknown) => {
+    console.error('[shader-studio-mcp] failed to start', error);
+    process.exit(1);
+  });
+}
 
 // Re-exported so tests can validate the same error shape the tools return.
 export { McpErrorSchema, McpDiagnosticSchema };
