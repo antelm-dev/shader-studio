@@ -5,6 +5,7 @@ import {
   DEFAULT_EDITOR_WINDOW,
   clampToViewport,
   sanitizeWindowState,
+  type EditorDockSide,
   type EditorMode,
   type EditorWindowState,
   type Rect,
@@ -71,6 +72,14 @@ export class EditorWindow {
   readonly maximized = computed(() => this.mode() === 'maximized');
   readonly minimized = computed(() => this.mode() === 'minimized');
 
+  readonly dockSide = computed(() => {
+    // Side docking needs horizontal room the same way a floating window does.
+    // On a narrow screen the panel falls back to the bottom strip; the stored
+    // side is left alone so widening the window restores it.
+    if (this.compact()) return 'bottom';
+    return this.state().dockSide;
+  });
+
   readonly dockedHeight = computed(() => {
     const { height } = this.viewport();
     const stored = this.state().dockedHeight;
@@ -80,6 +89,13 @@ export class EditorWindow {
     // the whole window has stopped being a panel, and the shader it is meant to
     // be previewing is the reason any of this exists.
     return Math.min(stored, Math.round(height * 0.75));
+  });
+
+  readonly dockedWidth = computed(() => {
+    const { width } = this.viewport();
+    const stored = this.state().dockedWidth;
+    if (width <= 0) return stored;
+    return Math.min(stored, Math.round(width * 0.75));
   });
 
   /**
@@ -123,8 +139,8 @@ export class EditorWindow {
 
   // --- Modes --------------------------------------------------------------
 
-  dock(): void {
-    this.patch({ mode: 'docked', restoreMode: 'docked' });
+  dock(side: EditorDockSide = this.state().dockSide): void {
+    this.patch({ mode: 'docked', restoreMode: 'docked', dockSide: side });
   }
 
   detach(): void {
@@ -172,6 +188,10 @@ export class EditorWindow {
     this.patch({ dockedHeight: height });
   }
 
+  setDockedWidth(width: number): void {
+    this.patch({ dockedWidth: width });
+  }
+
   setFloatingRect(rect: Rect): void {
     this.patch({ floating: clampToViewport(rect, this.viewport()) });
   }
@@ -180,6 +200,7 @@ export class EditorWindow {
   resetGeometry(): void {
     this.patch({
       dockedHeight: DEFAULT_EDITOR_WINDOW.dockedHeight,
+      dockedWidth: DEFAULT_EDITOR_WINDOW.dockedWidth,
       floating: clampToViewport(DEFAULT_EDITOR_WINDOW.floating, this.viewport()),
     });
   }

@@ -16,6 +16,7 @@ import {
   DEFAULT_TEXTURE_CHANNEL,
   type Bundle,
   type ImportMode,
+  type ParamValue,
   type Preset,
   type RenderSettings,
   type ShaderControl,
@@ -423,27 +424,36 @@ export function defaultParams(controls: readonly ShaderControl[]): ShaderParams 
   return params;
 }
 
-function coerce(control: ShaderControl, value: unknown): ParamOrNull {
+/**
+ * Validate one value against the control that owns it.
+ *
+ * Strict about type — a boolean control given a string, a select given a value
+ * outside its options — but a number out of range is clamped rather than
+ * rejected: a preset saved before the slider's range was narrowed is still
+ * worth keeping, just pulled back into bounds. Returns a message a caller can
+ * show, unlike `sanitizeParams` below, which needs to degrade silently.
+ */
+export function validateParamValue(control: ShaderControl, value: unknown): Result<ParamValue> {
+  const key = control.key;
   switch (control.type) {
-    case 'number':
-      if (!isFiniteNumber(value)) return null;
-      // Clamp rather than reject: a preset saved before the slider's range was
-      // narrowed is still worth keeping, just pulled back into bounds.
-      return Math.min(Math.max(value, control.min), control.max);
+    case 'number': {
+      if (!isFiniteNumber(value)) return fail(`"${key}" must be a finite number`);
+      return ok(Math.min(Math.max(value, control.min), control.max));
+    }
     case 'boolean':
-      return typeof value === 'boolean' ? value : null;
+      return typeof value === 'boolean' ? ok(value) : fail(`"${key}" must be a boolean`);
     case 'color':
       return typeof value === 'string' && HEX_COLOR_PATTERN.test(value)
-        ? value.toLowerCase()
-        : null;
+        ? ok(value.toLowerCase())
+        : fail(`"${key}" must be a #rrggbb color`);
     case 'select':
-      return isFiniteNumber(value) && Object.values(control.options).includes(value) ? value : null;
+      return isFiniteNumber(value) && Object.values(control.options).includes(value)
+        ? ok(value)
+        : fail(`"${key}" must be one of the option values`);
     default:
-      return null;
+      return fail(`"${key}" has an unsupported control type`);
   }
 }
-
-type ParamOrNull = number | boolean | string | null;
 
 /**
  * Project arbitrary values onto a control schema: defaults for anything missing
@@ -456,10 +466,8 @@ export function sanitizeParams(controls: readonly ShaderControl[], input: unknow
 
   for (const control of controls) {
     if (!(control.key in input)) continue;
-    const coerced = coerce(control, input[control.key]);
-    if (coerced !== null) {
-      params[control.key] = coerced;
-    }
+    const result = validateParamValue(control, input[control.key]);
+    if (result.ok) params[control.key] = result.value;
   }
   return params;
 }

@@ -4,8 +4,21 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
+import { EDITOR_DOCK_SIDES, type EditorDockSide } from '../core/editor-prefs';
 import { EditorWindow } from '../editor/editor-window';
 import { Workspace } from './workspace';
+
+const DOCK_LABELS: Record<EditorDockSide, string> = {
+  bottom: 'Dock to bottom',
+  left: 'Dock to left',
+  right: 'Dock to right',
+};
+
+const DOCK_ICONS: Record<EditorDockSide, string> = {
+  bottom: 'dock_to_bottom',
+  left: 'dock_to_left',
+  right: 'dock_to_right',
+};
 
 @Component({
   selector: 'app-editor-window-controls',
@@ -29,13 +42,23 @@ import { Workspace } from './workspace';
         <span>Appearance</span>
       </button>
       @if (!editorWindow.compact()) {
+        <button mat-menu-item type="button" (click)="editorWindow.detach()">
+          <mat-icon>open_in_new</mat-icon>
+          <span>Detach</span>
+        </button>
+      }
+      @for (side of dockSides; track side) {
         <button
           mat-menu-item
           type="button"
-          (click)="detached() ? editorWindow.dock() : editorWindow.detach()"
+          [attr.aria-checked]="dockedOn(side)"
+          (click)="editorWindow.dock(side)"
         >
-          <mat-icon>{{ detached() ? 'dock_to_bottom' : 'open_in_new' }}</mat-icon>
-          <span>{{ detached() ? 'Dock to bottom' : 'Detach' }}</span>
+          <mat-icon>{{ dockIcon(side) }}</mat-icon>
+          <span>{{ dockLabel(side) }}</span>
+          @if (dockedOn(side)) {
+            <mat-icon class="check" aria-hidden="true">check</mat-icon>
+          }
         </button>
       }
     </mat-menu>
@@ -89,16 +112,37 @@ import { Workspace } from './workspace';
       --mat-icon-button-state-layer-size: 28px;
       --mat-icon-button-icon-size: 16px;
     }
+
+    .check {
+      margin-left: auto;
+    }
   `,
 })
 export class EditorWindowControls {
   protected readonly editorWindow = inject(EditorWindow);
   protected readonly workspace = inject(Workspace);
+  protected readonly dockSides = EDITOR_DOCK_SIDES;
 
-  protected readonly detached = computed(
-    () =>
-      this.editorWindow.floating() ||
-      ((this.editorWindow.maximized() || this.editorWindow.minimized()) &&
-        this.editorWindow.restoreMode() === 'floating'),
-  );
+  private readonly activeDockSide = computed(() => {
+    if (this.editorWindow.docked()) return this.editorWindow.dockSide();
+    if (
+      (this.editorWindow.maximized() || this.editorWindow.minimized()) &&
+      this.editorWindow.restoreMode() === 'docked'
+    ) {
+      return this.editorWindow.dockSide();
+    }
+    return null;
+  });
+
+  protected dockedOn(side: EditorDockSide): boolean {
+    return this.activeDockSide() === side;
+  }
+
+  protected dockLabel(side: EditorDockSide): string {
+    return DOCK_LABELS[side];
+  }
+
+  protected dockIcon(side: EditorDockSide): string {
+    return DOCK_ICONS[side];
+  }
 }

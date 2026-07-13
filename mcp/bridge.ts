@@ -2,13 +2,24 @@ import { randomUUID } from 'node:crypto';
 
 import { WebSocket, WebSocketServer } from 'ws';
 
-import type {
-  AppResponse,
-  ControllerCommand,
-  ControllerCommandType,
-  ControllerRequest,
-  ControllerResultMap,
+import {
+  AppResponseEnvelopeSchema,
+  COMMAND_SCHEMAS,
+  ControllerRequestSchema,
+  HandshakeSchema,
+  MCP_BRIDGE_PROTOCOL_VERSION,
+  MCP_LIMITS,
+  mcpError,
+  type ControllerCommand,
+  type ControllerCommandType,
+  type ControllerResultMap,
+  type Handshake,
+  type HandshakeAck,
+  type HandshakeRejected,
+  type McpError,
 } from '@shader-studio/shared/mcp-protocol';
+
+import { resolveBridgeToken } from './token.js';
 
 export const NO_APP =
   'Aucun onglet Shader Studio connecté — lance `pnpm dev` et garde une page ouverte';
@@ -19,17 +30,32 @@ export const SCREENSHOT_TIMEOUT_MS = 15_000;
 const BIND_RETRIES = 20;
 const BIND_RETRY_MS = 250;
 
-let appSocket: WebSocket | null = null;
+/** Raised when the app replies with `{ok: false}`. Carries the structured error so callers can branch on `.code`. */
+export class McpBridgeError extends Error {
+  constructor(public readonly mcpError: McpError) {
+    super(mcpError.message);
+    this.name = 'McpBridgeError';
+  }
+}
+
+interface Session {
+  id: string;
+  socket: WebSocket;
+}
+
+interface PendingRequest {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+  type: ControllerCommandType;
+  /** Only a response from the session that a request was sent to may resolve it. */
+  sessionId: string;
+}
+
+let activeSession: Session | null = null;
 let activeBridge: WebSocketServer | null = null;
 
-const pending = new Map<
-  string,
-  {
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-    timer: ReturnType<typeof setTimeout>;
-  }
->();
+const pending = new Map<string, PendingRequest>();
 
 function messageText(data: WebSocket.RawData): string {
   if (typeof data === 'string') return data;
@@ -47,7 +73,17 @@ function isAddrInUse(error: unknown): boolean {
   );
 }
 
-function rejectPending(reason: string): void {
+/** Rejects every pending request belonging to one session. Used on disconnect and on shutdown. */
+function rejectPendingFor(sessionId: string, reason: string): void {
+  for (const [id, entry] of pending) {
+    if (entry.sessionId !== sessionId) continue;
+    clearTimeout(entry.timer);
+    entry.reject(new Error(reason));
+    pending.delete(id);
+  }
+}
+
+function rejectAllPending(reason: string): void {
   for (const entry of pending.values()) {
     clearTimeout(entry.timer);
     entry.reject(new Error(reason));
@@ -55,7 +91,21 @@ function rejectPending(reason: string): void {
   pending.clear();
 }
 
-function handleAppMessage(raw: string): void {
+function send(socket: WebSocket, message: unknown): void {
+  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+}
+
+/**
+ * Handles one message from the *active* session, once its handshake has been
+ * accepted. Everything here is a response to a request `callApp` made.
+ *
+ * Every step is a chance to reject rather than trust: an envelope that does
+ * not parse, an id nobody is waiting on (stale, or from a session that is no
+ * longer active), and a `result` that does not match the schema for the
+ * command that request actually was, are all handled explicitly instead of
+ * being cast and hoped for.
+ */
+function handleAppMessage(raw: string, sessionId: string): void {
   let message: unknown;
   try {
     message = JSON.parse(raw);
@@ -63,39 +113,124 @@ function handleAppMessage(raw: string): void {
     return;
   }
 
-  if (typeof message !== 'object' || message === null || !('id' in message) || !('ok' in message)) {
-    return;
-  }
+  const envelope = AppResponseEnvelopeSchema.safeParse(message);
+  if (!envelope.success) return;
 
-  const response = message as AppResponse;
+  const response = envelope.data;
   const entry = pending.get(response.id);
-  if (!entry) return;
+  if (!entry || entry.sessionId !== sessionId) return;
 
   clearTimeout(entry.timer);
   pending.delete(response.id);
 
-  if (response.ok) entry.resolve(response.result);
-  else entry.reject(new Error(response.error));
+  if (!response.ok) {
+    entry.reject(new McpBridgeError(response.error));
+    return;
+  }
+
+  const resultSchema = COMMAND_SCHEMAS[entry.type].result;
+  const result = resultSchema.safeParse(response.result);
+  if (!result.success) {
+    entry.reject(
+      new McpBridgeError(
+        mcpError('INTERNAL', `The app's response to "${entry.type}" did not match its schema`),
+      ),
+    );
+    return;
+  }
+
+  entry.resolve(result.data);
+}
+
+function rejectHandshake(socket: WebSocket, reason: string): void {
+  const message: HandshakeRejected = { kind: 'hello-rejected', reason };
+  send(socket, message);
+  socket.close();
+}
+
+/**
+ * The first message on every connection must be a valid, correctly-tokened
+ * handshake. Anything else — malformed JSON, a schema mismatch, a wrong or
+ * missing token, a second connection while one is already active — is an
+ * explicit rejection, never a silent takeover of `activeSession`.
+ */
+function handleHandshake(socket: WebSocket, raw: string): void {
+  let message: unknown;
+  try {
+    message = JSON.parse(raw);
+  } catch {
+    rejectHandshake(socket, 'The handshake was not valid JSON.');
+    return;
+  }
+
+  const parsed = HandshakeSchema.safeParse(message);
+  if (!parsed.success) {
+    rejectHandshake(socket, 'The handshake did not match the expected shape.');
+    return;
+  }
+
+  const handshake: Handshake = parsed.data;
+
+  if (handshake.protocolVersion !== MCP_BRIDGE_PROTOCOL_VERSION) {
+    rejectHandshake(
+      socket,
+      `Unsupported protocol version ${handshake.protocolVersion}; the bridge speaks ${MCP_BRIDGE_PROTOCOL_VERSION}.`,
+    );
+    return;
+  }
+
+  if (handshake.token !== resolveBridgeToken()) {
+    rejectHandshake(socket, 'Invalid or missing token.');
+    return;
+  }
+
+  if (activeSession?.socket.readyState === WebSocket.OPEN) {
+    rejectHandshake(socket, 'Another session is already connected.');
+    return;
+  }
+
+  activeSession = { id: handshake.sessionId, socket };
+
+  const ack: HandshakeAck = {
+    kind: 'hello-ack',
+    sessionId: handshake.sessionId,
+    protocolVersion: MCP_BRIDGE_PROTOCOL_VERSION,
+  };
+  send(socket, ack);
+
+  socket.on('message', (data) => handleAppMessage(messageText(data), handshake.sessionId));
+  socket.on('close', () => {
+    if (activeSession?.socket === socket) {
+      rejectPendingFor(handshake.sessionId, 'The app session disconnected.');
+      activeSession = null;
+    }
+  });
 }
 
 function wireBridge(wss: WebSocketServer, port: number): void {
   wss.on('connection', (socket) => {
-    appSocket = socket;
-
-    socket.on('message', (data) => handleAppMessage(messageText(data)));
-    socket.on('close', () => {
-      if (appSocket === socket) appSocket = null;
-    });
+    // Only the first message may be a handshake; once accepted, `handleHandshake`
+    // replaces this listener with `handleAppMessage` for the rest of the socket's life.
+    socket.once('message', (data) => handleHandshake(socket, messageText(data)));
   });
 
   wss.on('listening', () => {
     console.error(`[shader-studio-mcp] WebSocket bridge listening on ws://127.0.0.1:${port}`);
+    console.error(`[shader-studio-mcp] Bridge token: ${resolveBridgeToken()}`);
+    console.error(
+      '[shader-studio-mcp] In the browser console, run: localStorage.setItem("shaderStudioMcpToken", "' +
+        `${resolveBridgeToken()}")\`, then reload.`,
+    );
   });
 }
 
 function listenOnce(port: number): Promise<WebSocketServer> {
   return new Promise((resolve, reject) => {
-    const wss = new WebSocketServer({ host: '127.0.0.1', port });
+    const wss = new WebSocketServer({
+      host: '127.0.0.1',
+      port,
+      maxPayload: MCP_LIMITS.maxMessageBytes,
+    });
 
     const onError = (error: Error) => {
       wss.close();
@@ -135,8 +270,8 @@ export async function startBridge(port: number): Promise<WebSocketServer> {
 
 export function installBridgeShutdown(wss: WebSocketServer): void {
   const shutdown = () => {
-    rejectPending('Bridge shutting down');
-    appSocket = null;
+    rejectAllPending('Bridge shutting down');
+    activeSession = null;
     activeBridge = null;
     wss.close();
     process.exit(0);
@@ -148,8 +283,8 @@ export function installBridgeShutdown(wss: WebSocketServer): void {
 }
 
 export async function closeBridge(wss: WebSocketServer): Promise<void> {
-  rejectPending('Bridge closed');
-  appSocket = null;
+  rejectAllPending('Bridge closed');
+  activeSession = null;
   if (activeBridge === wss) activeBridge = null;
 
   await new Promise<void>((resolve, reject) => {
@@ -161,12 +296,19 @@ export async function callApp<T extends ControllerCommandType>(
   command: Extract<ControllerCommand, { type: T }>,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<ControllerResultMap[T]> {
-  if (!appSocket || appSocket.readyState !== WebSocket.OPEN) {
+  if (!activeSession || activeSession.socket.readyState !== WebSocket.OPEN) {
     throw new Error(NO_APP);
   }
 
   const id = randomUUID();
-  const request = { id, ...command } as ControllerRequest;
+  const request = { id, ...command };
+
+  const validated = ControllerRequestSchema.safeParse(request);
+  if (!validated.success) {
+    throw new Error(`Refusing to send an invalid "${command.type}" request: ${validated.error.message}`);
+  }
+
+  const session = activeSession;
 
   return new Promise<ControllerResultMap[T]>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -178,14 +320,16 @@ export async function callApp<T extends ControllerCommandType>(
       resolve: resolve as (value: unknown) => void,
       reject,
       timer,
+      type: command.type,
+      sessionId: session.id,
     });
 
-    appSocket!.send(JSON.stringify(request));
+    session.socket.send(JSON.stringify(validated.data));
   });
 }
 
 export function resetBridgeForTests(): void {
-  appSocket = null;
+  activeSession = null;
   activeBridge = null;
-  rejectPending('Bridge reset');
+  rejectAllPending('Bridge reset');
 }

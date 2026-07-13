@@ -12,6 +12,7 @@ import {
   validateControls,
   validateId,
   validateName,
+  validateParamValue,
   validatePreset,
   validateSource,
 } from './validate';
@@ -234,6 +235,35 @@ describe('defaultParams / sanitizeParams', () => {
   it('fills in a missing key with its default', () => {
     expect(sanitizeParams(controls, {})).toEqual(defaultParams(controls));
     expect(sanitizeParams(controls, null)).toEqual(defaultParams(controls));
+  });
+});
+
+describe('validateParamValue', () => {
+  const [speed, mirror, tint, mode] = controls;
+
+  it('accepts a value within range for each control type', () => {
+    expect(validateParamValue(speed, 1.5)).toEqual({ ok: true, value: 1.5 });
+    expect(validateParamValue(mirror, true)).toEqual({ ok: true, value: true });
+    expect(validateParamValue(tint, '#00FF00')).toEqual({ ok: true, value: '#00ff00' });
+    expect(validateParamValue(mode, 0)).toEqual({ ok: true, value: 0 });
+  });
+
+  it('clamps an out-of-range number instead of rejecting it', () => {
+    expect(validateParamValue(speed, 99)).toEqual({ ok: true, value: 2 });
+    expect(validateParamValue(speed, -99)).toEqual({ ok: true, value: 0 });
+  });
+
+  it('rejects a value of the wrong type, with a message naming the key', () => {
+    expect(validateParamValue(speed, 'fast')).toEqual({
+      ok: false,
+      errors: ['"speed" must be a finite number'],
+    });
+    expect(validateParamValue(mirror, 'yes').ok).toBe(false);
+    expect(validateParamValue(tint, 'red').ok).toBe(false);
+  });
+
+  it('rejects a select value outside its options', () => {
+    expect(validateParamValue(mode, 5).ok).toBe(false);
   });
 });
 

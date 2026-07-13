@@ -17,6 +17,7 @@ import {
 } from '@shader-studio/shared/model';
 import { Preferences, type WorkspacePreferences } from './preferences';
 import { DEFAULT_EDITOR_APPEARANCE, DEFAULT_EDITOR_WINDOW } from './editor-prefs';
+import { DEFAULT_PREVIEW_WINDOW } from './preview-prefs';
 import { DEFAULT_PANEL_WIDTHS } from './panel-prefs';
 import { ApiError, type UpdateShaderPatch } from './shader-api';
 import { ShaderApi } from './shader-api';
@@ -179,6 +180,7 @@ class FakePreferences implements Partial<Preferences> {
     colorScheme: 'dark',
     editorAppearance: DEFAULT_EDITOR_APPEARANCE,
     editorWindow: DEFAULT_EDITOR_WINDOW,
+    previewWindow: DEFAULT_PREVIEW_WINDOW,
     capture: DEFAULT_CAPTURE,
   });
 

@@ -11,19 +11,9 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { MatDividerModule } from '@angular/material/divider';
-import { MatIconModule } from '@angular/material/icon';
-import { MatMenuModule } from '@angular/material/menu';
 
 import { composePass } from '@shader-studio/shared/pass-source';
-import {
-  COLOR_SCHEME_OPTIONS,
-  Preferences,
-  colorSchemeIcon,
-  type ColorScheme,
-  type WorkspacePreferences,
-} from '../core/preferences';
-import { DesktopPlatform } from '../core/desktop-platform';
+import { Preferences } from '../core/preferences';
 import type { CompileDiagnostic } from '../core/diagnostic';
 import { ShaderStore } from '../core/shader-store';
 import { TextureAssets } from '../core/texture-assets';
@@ -40,187 +30,19 @@ export const RECOMPILE_DEBOUNCE_MS = 400;
 @Component({
   selector: 'app-shader-canvas',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatDividerModule, MatIconModule, MatMenuModule],
-  host: {
-    '[class.detached]': 'detached()',
-    '[class.full-size]': '!detached()',
-    '[style.left.px]': 'detached() ? position().x : null',
-    '[style.top.px]': 'detached() ? position().y : null',
-  },
-  template: `
-    @if (detached()) {
-      <div class="window-bar" (pointerdown)="startMove($event)" (dblclick)="showFullSize()">
-        <mat-icon aria-hidden="true">blur_on</mat-icon>
-        <span>Shader preview</span>
-        <button
-          type="button"
-          class="window-action"
-          aria-label="Display shader full size"
-          title="Display full size"
-          (pointerdown)="$event.stopPropagation()"
-          (click)="showFullSize()"
-        >
-          <mat-icon>open_in_full</mat-icon>
-        </button>
-      </div>
-    }
-    <canvas
-      #canvas
-      class="shader-canvas"
-      aria-hidden="true"
-      [matContextMenuTriggerFor]="viewMenu"
-    ></canvas>
-
-    <mat-menu #viewMenu="matMenu">
-      <button mat-menu-item type="button" (click)="toggleWindowMode()">
-        <mat-icon>{{ detached() ? 'open_in_full' : 'open_in_new' }}</mat-icon>
-        <span>{{ detached() ? 'Display full size' : 'Detach preview' }}</span>
-      </button>
-      @if (detached()) {
-        <button mat-menu-item type="button" (click)="resetWindow()">
-          <mat-icon>aspect_ratio</mat-icon>
-          <span>Reset window</span>
-        </button>
-      }
-      <mat-divider />
-      <button mat-menu-item type="button" (click)="savePng()">
-        <mat-icon>photo_camera</mat-icon>
-        <span>Save PNG</span>
-        <span class="hint">S</span>
-      </button>
-      <button mat-menu-item type="button" (click)="togglePause()">
-        <mat-icon>{{ preferences.value().paused ? 'play_arrow' : 'pause' }}</mat-icon>
-        <span>{{ preferences.value().paused ? 'Resume' : 'Pause' }}</span>
-        <span class="hint">Space</span>
-      </button>
-      <button
-        mat-menu-item
-        type="button"
-        [disabled]="!store.record()"
-        (click)="store.resetParams()"
-      >
-        <mat-icon>restart_alt</mat-icon>
-        <span>Reset parameters</span>
-      </button>
-
-      <mat-divider />
-
-      <button mat-menu-item type="button" (click)="toggle('guiVisible')">
-        <mat-icon>{{ preferences.value().guiVisible ? 'visibility_off' : 'tune' }}</mat-icon>
-        <span>{{ preferences.value().guiVisible ? 'Hide controls' : 'Show controls' }}</span>
-        <span class="hint">H</span>
-      </button>
-      <button mat-menu-item type="button" (click)="toggle('editorOpen')">
-        <mat-icon>code</mat-icon>
-        <span>{{ preferences.value().editorOpen ? 'Hide editor' : 'Show editor' }}</span>
-      </button>
-
-      <mat-divider />
-
-      <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
-        <mat-icon>{{ themeIcon() }}</mat-icon>
-        <span>Theme</span>
-      </button>
-
-      @if (desktop.available) {
-        <mat-divider />
-        <button mat-menu-item type="button" (click)="desktop.toggleFullscreen()">
-          <mat-icon>{{ desktop.fullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
-          <span>{{ desktop.fullscreen() ? 'Exit fullscreen' : 'Enter fullscreen' }}</span>
-          <span class="hint">F11</span>
-        </button>
-      }
-    </mat-menu>
-
-    <mat-menu #themeMenu="matMenu">
-      @for (option of colorSchemeOptions; track option.value) {
-        <button
-          mat-menu-item
-          type="button"
-          [attr.aria-checked]="preferences.value().colorScheme === option.value"
-          (click)="setColorScheme(option.value)"
-        >
-          <mat-icon>{{ option.icon }}</mat-icon>
-          <span>{{ option.label }}</span>
-          @if (preferences.value().colorScheme === option.value) {
-            <mat-icon class="hint" aria-hidden="true">check</mat-icon>
-          }
-        </button>
-      }
-    </mat-menu>
-  `,
+  template: ` <canvas #canvas class="shader-canvas" aria-hidden="true"></canvas> `,
   styles: `
+    /*
+     * The canvas fills whatever it is given and knows nothing about what that
+     * is. Where the preview sits — the stage, a floating window, maximized,
+     * collapsed to a bar — is PreviewShell's business, and the whole point of
+     * the split: this component is mounted once, and no window transition can
+     * cost it its WebGL context, its compiled programs or the shader's clock.
+     */
     :host {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
       display: block;
+      position: relative;
       background: #0a0c10;
-    }
-
-    :host(.detached) {
-      inset: auto;
-      z-index: 4;
-      width: min(720px, calc(100vw - 48px));
-      height: min(480px, calc(100vh - 48px));
-      min-width: 320px;
-      min-height: 240px;
-      max-width: calc(100vw - 16px);
-      max-height: calc(100vh - 16px);
-      overflow: hidden;
-      resize: both;
-      border: 1px solid var(--mat-sys-outline-variant);
-      border-radius: var(--mat-sys-corner-medium, 8px);
-      box-shadow: var(--mat-sys-level5);
-    }
-
-    .window-bar {
-      box-sizing: border-box;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      height: 30px;
-      padding: 0 2px 0 8px;
-      background: color-mix(in srgb, var(--mat-sys-surface-container-high) 92%, transparent);
-      color: var(--mat-sys-on-surface);
-      font: var(--mat-sys-label-large);
-      cursor: move;
-      user-select: none;
-      touch-action: none;
-    }
-
-    .window-bar > mat-icon {
-      color: var(--mat-sys-primary);
-      width: 16px;
-      height: 16px;
-      font-size: 16px;
-    }
-
-    .window-bar span {
-      flex: 1;
-    }
-
-    .window-action {
-      display: grid;
-      place-items: center;
-      width: 26px;
-      height: 26px;
-      padding: 0;
-      border: 0;
-      border-radius: 4px;
-      background: transparent;
-      color: inherit;
-      cursor: pointer;
-    }
-
-    .window-action:hover {
-      background: color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
-    }
-
-    .window-action mat-icon {
-      width: 16px;
-      height: 16px;
-      font-size: 16px;
     }
 
     .shader-canvas {
@@ -229,21 +51,11 @@ export const RECOMPILE_DEBOUNCE_MS = 400;
       height: 100%;
       touch-action: none;
     }
-
-    :host(.detached) .shader-canvas {
-      height: calc(100% - 30px);
-    }
-
-    .hint {
-      margin-left: auto;
-      padding-left: 24px;
-    }
   `,
 })
 export class ShaderCanvas {
-  protected readonly store = inject(ShaderStore);
-  protected readonly preferences = inject(Preferences);
-  protected readonly desktop = inject(DesktopPlatform);
+  private readonly store = inject(ShaderStore);
+  private readonly preferences = inject(Preferences);
   private readonly handle = inject(RendererHandle);
   private readonly contexts = inject(GlContextRegistry);
   private readonly destroyRef = inject(DestroyRef);
@@ -251,14 +63,6 @@ export class ShaderCanvas {
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   private readonly engine = signal<ShaderEngine | null>(null);
-  protected readonly detached = signal(false);
-  protected readonly position = signal({ x: 48, y: 96 });
-  private move: { pointerId: number; dx: number; dy: number } | null = null;
-
-  protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
-  protected readonly themeIcon = computed(() =>
-    colorSchemeIcon(this.preferences.value().colorScheme),
-  );
 
   /**
    * The project, composed into the passes the engine wants.
@@ -419,89 +223,6 @@ export class ShaderCanvas {
       engine.setResolutionScale(resolutionScale);
       engine.setAutoRipples(autoRipples);
     });
-  }
-
-  protected toggleWindowMode(): void {
-    if (this.detached()) this.showFullSize();
-    else this.detach();
-  }
-
-  protected detach(): void {
-    this.detached.set(true);
-  }
-
-  protected showFullSize(): void {
-    this.detached.set(false);
-    this.clearWindowSize();
-  }
-
-  protected resetWindow(): void {
-    this.position.set({ x: 48, y: 96 });
-    this.clearWindowSize();
-  }
-
-  private clearWindowSize(): void {
-    const host = this.canvasRef().nativeElement.parentElement as HTMLElement | null;
-    if (host) {
-      host.style.width = '';
-      host.style.height = '';
-    }
-  }
-
-  protected startMove(event: PointerEvent): void {
-    if (event.button !== 0) return;
-    const host = (event.currentTarget as HTMLElement).parentElement as HTMLElement;
-    const rect = host.getBoundingClientRect();
-    this.move = {
-      pointerId: event.pointerId,
-      dx: event.clientX - rect.left,
-      dy: event.clientY - rect.top,
-    };
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-    const move = (next: PointerEvent) => {
-      if (!this.move || next.pointerId !== this.move.pointerId) return;
-      const x = Math.max(
-        8,
-        Math.min(next.clientX - this.move.dx, window.innerWidth - host.offsetWidth - 8),
-      );
-      const y = Math.max(
-        8,
-        Math.min(next.clientY - this.move.dy, window.innerHeight - host.offsetHeight - 8),
-      );
-      this.position.set({ x, y });
-    };
-    const end = (next: PointerEvent) => {
-      if (!this.move || next.pointerId !== this.move.pointerId) return;
-      this.move = null;
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', end);
-      window.removeEventListener('pointercancel', end);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', end);
-  }
-
-  protected toggle(key: 'editorOpen' | 'guiVisible'): void {
-    this.preferences.patch({
-      [key]: !this.preferences.value()[key],
-    } as Partial<WorkspacePreferences>);
-  }
-
-  protected togglePause(): void {
-    this.preferences.patch({ paused: !this.preferences.value().paused });
-  }
-
-  protected setColorScheme(colorScheme: ColorScheme): void {
-    this.preferences.patch({ colorScheme });
-  }
-
-  protected async savePng(): Promise<void> {
-    const name = this.store.record()?.id ?? 'shader';
-    const saved = await this.handle.screenshot(name);
-    if (!saved) {
-      this.store.notice.set({ text: 'Nothing to capture yet', error: true });
-    }
   }
 
   private async boot(): Promise<void> {

@@ -44,9 +44,10 @@ interface Gesture {
   /** Pointer position when the gesture began, in client coordinates. */
   originX: number;
   originY: number;
-  /** The rect (or docked height) as it was when the gesture began. */
+  /** The rect (or docked size) as it was when the gesture began. */
   rect: Rect;
   height: number;
+  width: number;
   edge: ResizeEdge | null;
 }
 
@@ -59,19 +60,19 @@ const NUDGE_FAST = 64;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [EditorPanel],
   template: `
-    <!-- The docked panel's top edge. A separator, so a keyboard can resize it. -->
+    <!-- The docked panel's free edge. A separator, so a keyboard can resize it. -->
     @if (mode() === 'docked') {
       <div
-        class="handle handle-n"
+        class="handle handle-{{ dockResizeEdge() }}"
         role="separator"
         tabindex="0"
-        aria-orientation="horizontal"
-        aria-label="Resize the editor panel. Use the up and down arrow keys."
-        [attr.aria-valuenow]="editorWindow.dockedHeight()"
-        [attr.aria-valuemin]="limits.dockedHeight.min"
-        [attr.aria-valuemax]="limits.dockedHeight.max"
-        (pointerdown)="startResize($event, 'n')"
-        (keydown)="onHandleKeydown($event, 'n')"
+        [attr.aria-orientation]="dockSide() === 'bottom' ? 'horizontal' : 'vertical'"
+        [attr.aria-label]="dockResizeLabel()"
+        [attr.aria-valuenow]="dockSize()"
+        [attr.aria-valuemin]="dockSizeLimits().min"
+        [attr.aria-valuemax]="dockSizeLimits().max"
+        (pointerdown)="startResize($event, dockResizeEdge())"
+        (keydown)="onHandleKeydown($event, dockResizeEdge())"
       ></div>
     }
 
@@ -128,12 +129,35 @@ const NUDGE_FAST = 64;
       }
     }
 
-    /* --- Docked: a row of the workspace grid, above nothing. ------------- */
+    /* --- Docked: a cell of the workspace grid. --------------------------- */
 
     :host(.docked),
     :host(.minimized) {
       grid-area: editor;
+    }
+
+    :host(.docked.dock-bottom),
+    :host(.minimized.dock-bottom) {
       border-width: 1px 0 0;
+    }
+
+    :host(.docked.dock-left),
+    :host(.minimized.dock-left) {
+      border-width: 0 1px 0 0;
+      align-self: stretch;
+      min-width: 0;
+    }
+
+    :host(.docked.dock-right),
+    :host(.minimized.dock-right) {
+      border-width: 0 0 0 1px;
+      align-self: stretch;
+      min-width: 0;
+    }
+
+    :host(.minimized.dock-left),
+    :host(.minimized.dock-right) {
+      align-self: start;
     }
 
     /* --- Maximized: the whole workspace. --------------------------------- */
@@ -242,11 +266,21 @@ const NUDGE_FAST = 64;
       cursor: nesw-resize;
     }
 
-    /* The docked handle sits on the panel's own top border and has to be
-       grabbable from just above it. */
+    /* The docked handle sits on the panel's free edge and has to be
+       grabbable from just outside it. */
     :host(.docked) .handle-n {
       height: 7px;
       top: -4px;
+    }
+
+    :host(.docked) .handle-e {
+      width: 7px;
+      right: -4px;
+    }
+
+    :host(.docked) .handle-w {
+      width: 7px;
+      left: -4px;
     }
   `,
   host: {
@@ -254,12 +288,15 @@ const NUDGE_FAST = 64;
     '[class.floating]': 'mode() === "floating"',
     '[class.maximized]': 'mode() === "maximized"',
     '[class.minimized]': 'mode() === "minimized"',
+    '[class.dock-bottom]': 'dockSide() === "bottom"',
+    '[class.dock-left]': 'dockSide() === "left"',
+    '[class.dock-right]': 'dockSide() === "right"',
     '[class.dragging]': 'gesture() !== null',
     '[class.animating]': 'gesture() === null',
     '[style.height.px]': 'hostHeight()',
+    '[style.width.px]': 'hostWidth()',
     '[style.left.px]': 'hostRect()?.x',
     '[style.top.px]': 'hostRect()?.y',
-    '[style.width.px]': 'hostRect()?.width',
     role: 'region',
     'aria-label': 'Source editor',
   },
@@ -277,6 +314,24 @@ export class EditorShell {
   protected readonly edges: readonly ResizeEdge[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 
   protected readonly mode = this.editorWindow.mode;
+  protected readonly dockSide = this.editorWindow.dockSide;
+
+  protected readonly dockResizeEdge = computed<ResizeEdge>(() => {
+    const side = this.dockSide();
+    if (side === 'left') return 'e';
+    if (side === 'right') return 'w';
+    return 'n';
+  });
+
+  protected readonly dockSize = computed(() =>
+    this.dockSide() === 'bottom'
+      ? this.editorWindow.dockedHeight()
+      : this.editorWindow.dockedWidth(),
+  );
+
+  protected readonly dockSizeLimits = computed(() =>
+    this.dockSide() === 'bottom' ? this.limits.dockedHeight : this.limits.dockedWidth,
+  );
 
   /**
    * The gesture in flight, if any.
@@ -289,8 +344,9 @@ export class EditorShell {
   protected readonly gesture = signal<Gesture | null>(null);
   private readonly live = signal<Rect | null>(null);
   private readonly liveHeight = signal<number | null>(null);
+  private readonly liveWidth = signal<number | null>(null);
 
-  /** Position and width — floating only; the other modes are laid out by CSS. */
+  /** Position — floating only; the other modes are laid out by CSS. */
   protected readonly hostRect = computed<Rect | null>(() => {
     if (this.mode() !== 'floating') return null;
     return this.live() ?? this.editorWindow.floatingRect();
@@ -299,9 +355,20 @@ export class EditorShell {
   protected readonly hostHeight = computed<number | null>(() => {
     const mode = this.mode();
     if (mode === 'floating') return (this.live() ?? this.editorWindow.floatingRect()).height;
-    if (mode === 'docked') return this.liveHeight() ?? this.editorWindow.dockedHeight();
-    // Maximized fills its container and minimized shrinks to its toolbar; both
-    // are better left to CSS than pinned to a number that could go stale.
+    if (mode === 'docked' && this.dockSide() === 'bottom') {
+      return this.liveHeight() ?? this.editorWindow.dockedHeight();
+    }
+    // Side-docked panels stretch with the grid row; maximized fills its
+    // container; minimized shrinks to its toolbar.
+    return null;
+  });
+
+  protected readonly hostWidth = computed<number | null>(() => {
+    const mode = this.mode();
+    if (mode === 'floating') return (this.live() ?? this.editorWindow.floatingRect()).width;
+    if ((mode === 'docked' || mode === 'minimized') && this.dockSide() !== 'bottom') {
+      return this.liveWidth() ?? this.editorWindow.dockedWidth();
+    }
     return null;
   });
 
@@ -318,7 +385,9 @@ export class EditorShell {
     // transition would otherwise keep the old layout until you typed in it.
     effect(() => {
       this.mode();
+      this.dockSide();
       this.hostHeight();
+      this.hostWidth();
       this.hostRect();
       untracked(() => this.scheduleRelayout());
     });
@@ -388,6 +457,7 @@ export class EditorShell {
       originY: event.clientY,
       rect: this.editorWindow.floatingRect(),
       height: this.editorWindow.dockedHeight(),
+      width: this.editorWindow.dockedWidth(),
       edge,
     });
 
@@ -413,10 +483,17 @@ export class EditorShell {
     const dx = event.clientX - gesture.originX;
     const dy = event.clientY - gesture.originY;
 
-    // Docked: the only thing you can pull is the top edge, and pulling it *down*
-    // makes the panel shorter, not taller.
+    // Docked: pull the free edge. Bottom grows upward; left grows rightward;
+    // right grows leftward.
     if (this.mode() === 'docked') {
-      this.liveHeight.set(this.clampHeight(gesture.height - dy));
+      const side = this.dockSide();
+      if (side === 'bottom') {
+        this.liveHeight.set(this.clampHeight(gesture.height - dy));
+      } else if (side === 'left') {
+        this.liveWidth.set(this.clampWidth(gesture.width + dx));
+      } else {
+        this.liveWidth.set(this.clampWidth(gesture.width - dx));
+      }
       return;
     }
 
@@ -480,6 +557,12 @@ export class EditorShell {
     return Math.round(Math.min(Math.max(height, EDITOR_LIMITS.dockedHeight.min), max));
   }
 
+  private clampWidth(width: number): number {
+    const workspace = this.workspaceSize().width;
+    const max = workspace > 0 ? workspace * 0.75 : EDITOR_LIMITS.dockedWidth.max;
+    return Math.round(Math.min(Math.max(width, EDITOR_LIMITS.dockedWidth.min), max));
+  }
+
   private workspaceSize(): { width: number; height: number } {
     const workspace = this.host.nativeElement.parentElement;
     if (!workspace) return { width: 0, height: 0 };
@@ -491,13 +574,16 @@ export class EditorShell {
   private commit(): void {
     const rect = this.live();
     const height = this.liveHeight();
+    const width = this.liveWidth();
 
     if (rect) this.editorWindow.setFloatingRect(rect);
     if (height !== null) this.editorWindow.setDockedHeight(height);
+    if (width !== null) this.editorWindow.setDockedWidth(width);
 
     this.gesture.set(null);
     this.live.set(null);
     this.liveHeight.set(null);
+    this.liveWidth.set(null);
     this.scheduleRelayout();
   }
 
@@ -526,7 +612,14 @@ export class EditorShell {
     const [dx, dy] = move;
 
     if (this.mode() === 'docked') {
-      this.editorWindow.setDockedHeight(this.clampHeight(this.editorWindow.dockedHeight() - dy));
+      const side = this.dockSide();
+      if (side === 'bottom') {
+        this.editorWindow.setDockedHeight(this.clampHeight(this.editorWindow.dockedHeight() - dy));
+      } else if (side === 'left') {
+        this.editorWindow.setDockedWidth(this.clampWidth(this.editorWindow.dockedWidth() + dx));
+      } else {
+        this.editorWindow.setDockedWidth(this.clampWidth(this.editorWindow.dockedWidth() - dx));
+      }
       this.scheduleRelayout();
       return;
     }
@@ -537,10 +630,17 @@ export class EditorShell {
       originY: 0,
       rect: this.editorWindow.floatingRect(),
       height: this.editorWindow.dockedHeight(),
+      width: this.editorWindow.dockedWidth(),
       edge,
     };
     this.editorWindow.setFloatingRect(this.resized(gesture, dx, dy));
     this.scheduleRelayout();
+  }
+
+  protected dockResizeLabel(): string {
+    const side = this.dockSide();
+    const keys = side === 'bottom' ? 'up and down arrow keys' : 'left and right arrow keys';
+    return `Resize the editor panel. Use the ${keys}.`;
   }
 
   protected resizeLabel(edge: ResizeEdge): string {

@@ -18,6 +18,11 @@ import {
   sanitizeInspectorTab,
   type InspectorTab,
 } from './panel-prefs';
+import {
+  DEFAULT_PREVIEW_WINDOW,
+  sanitizePreviewWindow,
+  type PreviewWindowState,
+} from './preview-prefs';
 
 /**
  * UI state that should survive a reload: which shader was open, which panels
@@ -66,6 +71,8 @@ export interface WorkspacePreferences {
   editorAppearance: EditorAppearance;
   /** Where the editor sits: docked, floating, maximized or collapsed. */
   editorWindow: EditorWindowState;
+  /** Where the preview sits: the stage, or a window over it. */
+  previewWindow: PreviewWindowState;
   /**
    * What the last export was set to. A capture is a form with eight fields, and
    * nobody fills it in twice — an export is almost always a re-export at a
@@ -88,6 +95,7 @@ const DEFAULTS: WorkspacePreferences = {
   colorScheme: 'dark',
   editorAppearance: DEFAULT_EDITOR_APPEARANCE,
   editorWindow: DEFAULT_EDITOR_WINDOW,
+  previewWindow: DEFAULT_PREVIEW_WINDOW,
   capture: DEFAULT_CAPTURE,
 };
 
@@ -191,6 +199,7 @@ export class Preferences {
         // default rather than to whatever was in storage.
         editorAppearance: sanitizeAppearance(parsed.editorAppearance),
         editorWindow: sanitizeWindowState(parsed.editorWindow),
+        previewWindow: sanitizePreviewWindow(parsed.previewWindow),
         // Every field of a capture ends up as a render target size, a frame
         // count or a divisor. `normalizeCapture` is the same clamp the planner
         // applies, so storage can hold nothing the planner would refuse.

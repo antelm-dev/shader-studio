@@ -13,7 +13,24 @@
  *    string where a number belongs, a font family carrying a `}` into a CSS
  *    declaration, a floating window remembered at coordinates that no longer
  *    exist — each falls back to a default rather than reaching Monaco.
+ *
+ * The rectangle, and the rules for pulling an untrusted number into a range,
+ * are in `geometry` — the preview window sanitizes its own state the same way,
+ * and that much is genuinely common. Nothing else is.
  */
+
+import {
+  clamp,
+  containRect,
+  finite,
+  flag,
+  numberIn,
+  oneOf,
+  type Rect,
+  type Size,
+} from './geometry';
+
+export type { Rect, Size } from './geometry';
 
 // ---------------------------------------------------------------------------
 // Window
@@ -22,7 +39,7 @@
 /**
  * Where the editor is.
  *
- *  - `docked`     an IDE-style panel across the bottom of the workspace.
+ *  - `docked`     an IDE-style panel along one edge of the workspace.
  *  - `floating`   a draggable window over the shader.
  *  - `maximized`  filling the workspace.
  *  - `minimized`  collapsed to its toolbar, so the shader is unobstructed.
@@ -30,29 +47,29 @@
 export type EditorMode = 'docked' | 'floating' | 'maximized' | 'minimized';
 
 /**
+ * Which edge a docked editor sits on. Bottom is the classic IDE strip; left and
+ * right put the panel beside the preview instead of under it.
+ */
+export type EditorDockSide = 'bottom' | 'left' | 'right';
+
+export const EDITOR_DOCK_SIDES: readonly EditorDockSide[] = ['bottom', 'left', 'right'];
+
+/**
  * The modes the editor can be restored *to*. Maximizing and minimizing are
  * departures you come back from; docked and floating are places you live.
  */
 export type EditorRestoreMode = 'docked' | 'floating';
 
-export interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export interface Size {
-  width: number;
-  height: number;
-}
-
 export interface EditorWindowState {
   mode: EditorMode;
   /** Where `restore()` goes. Preserved across maximize and minimize. */
   restoreMode: EditorRestoreMode;
-  /** Height of the docked panel, in pixels. */
+  /** Which edge the docked panel occupies. */
+  dockSide: EditorDockSide;
+  /** Height of the bottom-docked panel, in pixels. */
   dockedHeight: number;
+  /** Width of a left- or right-docked panel, in pixels. */
+  dockedWidth: number;
   /** The floating window's rect, relative to the workspace, in pixels. */
   floating: Rect;
 }
@@ -117,6 +134,7 @@ export const EDITOR_LIMITS = {
   fontWeight: { min: 300, max: 700 },
   tabSize: { min: 1, max: 8 },
   dockedHeight: { min: 180, max: 4000 },
+  dockedWidth: { min: 280, max: 4000 },
   floatingWidth: { min: 360, max: 6000 },
   floatingHeight: { min: 200, max: 6000 },
 } as const;
@@ -154,7 +172,9 @@ export const DEFAULT_EDITOR_APPEARANCE: EditorAppearance = {
 export const DEFAULT_EDITOR_WINDOW: EditorWindowState = {
   mode: 'docked',
   restoreMode: 'docked',
+  dockSide: 'bottom',
   dockedHeight: 340,
+  dockedWidth: 480,
   // Offset from the corner rather than centred: the parameter rail lives on the
   // right, and a floating editor that opens on top of it hides the very knobs
   // you would be turning while you edit.
@@ -164,28 +184,6 @@ export const DEFAULT_EDITOR_WINDOW: EditorWindowState = {
 // ---------------------------------------------------------------------------
 // Sanitizing
 // ---------------------------------------------------------------------------
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-/** A finite number, or `null` for anything else — including `NaN` and strings. */
-function finite(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function number(value: unknown, fallback: number, min: number, max: number): number {
-  const parsed = finite(value);
-  return parsed === null ? fallback : clamp(parsed, min, max);
-}
-
-function boolean(value: unknown, fallback: boolean): boolean {
-  return typeof value === 'boolean' ? value : fallback;
-}
-
-function oneOf<T extends string>(value: unknown, options: readonly T[], fallback: T): T {
-  return options.includes(value as T) ? (value as T) : fallback;
-}
 
 /**
  * Font weights are a hundreds scale; a value of 437 is not a weight, it is a
@@ -221,13 +219,13 @@ export function sanitizeAppearance(value: unknown): EditorAppearance {
   return {
     fontFamily: isValidFontFamily(input['fontFamily']) ? input['fontFamily'] : defaults.fontFamily,
     fontSize: Math.round(
-      number(input['fontSize'], defaults.fontSize, limits.fontSize.min, limits.fontSize.max),
+      numberIn(input['fontSize'], defaults.fontSize, limits.fontSize.min, limits.fontSize.max),
     ),
     // Rounded to the slider's own step, so a value read back from storage lands
     // exactly on a tick instead of a hair beside it.
     lineHeight:
       Math.round(
-        number(
+        numberIn(
           input['lineHeight'],
           defaults.lineHeight,
           limits.lineHeight.min,
@@ -235,16 +233,16 @@ export function sanitizeAppearance(value: unknown): EditorAppearance {
         ) * 20,
       ) / 20,
     fontWeight: fontWeight(input['fontWeight']),
-    ligatures: boolean(input['ligatures'], defaults.ligatures),
+    ligatures: flag(input['ligatures'], defaults.ligatures),
     tabSize: Math.round(
-      number(input['tabSize'], defaults.tabSize, limits.tabSize.min, limits.tabSize.max),
+      numberIn(input['tabSize'], defaults.tabSize, limits.tabSize.min, limits.tabSize.max),
     ),
     wordWrap: oneOf(input['wordWrap'], ['off', 'on', 'bounded'] as const, defaults.wordWrap),
-    minimap: boolean(input['minimap'], defaults.minimap),
-    lineNumbers: boolean(input['lineNumbers'], defaults.lineNumbers),
-    bracketPairs: boolean(input['bracketPairs'], defaults.bracketPairs),
-    renderWhitespace: boolean(input['renderWhitespace'], defaults.renderWhitespace),
-    stickyScroll: boolean(input['stickyScroll'], defaults.stickyScroll),
+    minimap: flag(input['minimap'], defaults.minimap),
+    lineNumbers: flag(input['lineNumbers'], defaults.lineNumbers),
+    bracketPairs: flag(input['bracketPairs'], defaults.bracketPairs),
+    renderWhitespace: flag(input['renderWhitespace'], defaults.renderWhitespace),
+    stickyScroll: flag(input['stickyScroll'], defaults.stickyScroll),
     cursorBlinking: oneOf(
       input['cursorBlinking'],
       ['blink', 'smooth', 'solid'] as const,
@@ -273,12 +271,21 @@ export function sanitizeWindowState(value: unknown): EditorWindowState {
       defaults.mode,
     ),
     restoreMode: oneOf(input['restoreMode'], ['docked', 'floating'] as const, defaults.restoreMode),
+    dockSide: oneOf(input['dockSide'], EDITOR_DOCK_SIDES, defaults.dockSide),
     dockedHeight: Math.round(
-      number(
+      numberIn(
         input['dockedHeight'],
         defaults.dockedHeight,
         limits.dockedHeight.min,
         limits.dockedHeight.max,
+      ),
+    ),
+    dockedWidth: Math.round(
+      numberIn(
+        input['dockedWidth'],
+        defaults.dockedWidth,
+        limits.dockedWidth.min,
+        limits.dockedWidth.max,
       ),
     ),
     floating: {
@@ -286,7 +293,7 @@ export function sanitizeWindowState(value: unknown): EditorWindowState {
       // which storage knows nothing about. `clampToViewport` does that, every
       // time the workspace is measured.
       x: Math.round(
-        number(
+        numberIn(
           floating['x'],
           defaults.floating.x,
           -limits.floatingWidth.max,
@@ -294,7 +301,7 @@ export function sanitizeWindowState(value: unknown): EditorWindowState {
         ),
       ),
       y: Math.round(
-        number(
+        numberIn(
           floating['y'],
           defaults.floating.y,
           -limits.floatingHeight.max,
@@ -302,7 +309,7 @@ export function sanitizeWindowState(value: unknown): EditorWindowState {
         ),
       ),
       width: Math.round(
-        number(
+        numberIn(
           floating['width'],
           defaults.floating.width,
           limits.floatingWidth.min,
@@ -310,7 +317,7 @@ export function sanitizeWindowState(value: unknown): EditorWindowState {
         ),
       ),
       height: Math.round(
-        number(
+        numberIn(
           floating['height'],
           defaults.floating.height,
           limits.floatingHeight.min,
@@ -321,38 +328,19 @@ export function sanitizeWindowState(value: unknown): EditorWindowState {
   };
 }
 
+/** The smallest a floating editor is allowed to be pulled. */
+export const EDITOR_MIN_FLOATING: Size = {
+  width: EDITOR_LIMITS.floatingWidth.min,
+  height: EDITOR_LIMITS.floatingHeight.min,
+};
+
 /**
  * Bring a floating rect back inside the workspace.
  *
  * Called on every resize of the workspace and on every read of the persisted
  * position, which is what recovers a window left at coordinates that made sense
- * on yesterday's monitor. The window is shrunk to fit before it is moved, so
- * the result is always *fully* visible rather than merely reachable — a title
- * bar peeking in from the edge is not a recovered window.
- *
- * A zero-sized viewport means nothing has been measured yet (the server, or the
- * first frame). Passing the rect through untouched leaves the persisted value
- * to be clamped a moment later, once there is something to clamp it against.
+ * on yesterday's monitor.
  */
 export function clampToViewport(rect: Rect, viewport: Size): Rect {
-  if (viewport.width <= 0 || viewport.height <= 0) return rect;
-
-  const limits = EDITOR_LIMITS;
-  const width = clamp(
-    rect.width,
-    Math.min(limits.floatingWidth.min, viewport.width),
-    viewport.width,
-  );
-  const height = clamp(
-    rect.height,
-    Math.min(limits.floatingHeight.min, viewport.height),
-    viewport.height,
-  );
-
-  return {
-    width: Math.round(width),
-    height: Math.round(height),
-    x: Math.round(clamp(rect.x, 0, Math.max(0, viewport.width - width))),
-    y: Math.round(clamp(rect.y, 0, Math.max(0, viewport.height - height))),
-  };
+  return containRect(rect, viewport, EDITOR_MIN_FLOATING);
 }

@@ -41,12 +41,14 @@ import { DesktopPlatform } from './core/desktop-platform';
 import { McpBridge } from './core/mcp-bridge';
 import { ShaderStore } from './core/shader-store';
 import { OutputSync } from './core/output-sync';
-import { ShaderCanvas } from './rendering/shader-canvas';
+import { EditorWindow } from './editor/editor-window';
 import { EditorShell } from './ui/editor-shell';
 import { AppTitlebar } from './ui/app-titlebar';
 import { DocumentStatus } from './ui/document-status';
 import { InspectorPanel } from './ui/inspector-panel';
 import { MenuCommands, type MenuCommand } from './ui/menu-commands';
+import { PreviewShell } from './ui/preview-shell';
+import { PreviewStage } from './ui/preview-stage';
 import { ResizeHandle } from './ui/resize-handle';
 import { ShaderBrowser } from './ui/shader-browser';
 import { Workspace } from './ui/workspace';
@@ -66,10 +68,11 @@ import { Workspace } from './ui/workspace';
     MatSidenavModule,
     MatToolbarModule,
     MatTooltipModule,
+    PreviewShell,
+    PreviewStage,
     ResizeHandle,
     RouterOutlet,
     ShaderBrowser,
-    ShaderCanvas,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
@@ -81,6 +84,7 @@ export class App {
   protected readonly desktop = inject(DesktopPlatform);
   protected readonly status = inject(DocumentStatus);
   protected readonly commands = inject(MenuCommands);
+  protected readonly editorWindow = inject(EditorWindow);
   protected readonly outputMode =
     typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/output';
 

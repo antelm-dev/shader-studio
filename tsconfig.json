@@ -22,7 +22,8 @@
       "@shader-studio/shared/project": ["./packages/shared/src/project.ts"],
       "@shader-studio/shared/pass-source": ["./packages/shared/src/pass-source.ts"],
       "@shader-studio/shared/validate": ["./packages/shared/src/validate.ts"],
-      "@shader-studio/shared/mcp-protocol": ["./packages/shared/src/mcp-protocol.ts"]
+      "@shader-studio/shared/mcp-protocol": ["./packages/shared/src/mcp-protocol.ts"],
+      "@shader-studio/shared/controller": ["./packages/shared/src/controller.ts"]
     }
   },
   "angularCompilerOptions": {

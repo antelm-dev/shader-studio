@@ -1,17 +1,42 @@
-import { callApp, closeBridge, resetBridgeForTests, startBridge } from './bridge.js';
-import type { ControllerRequest } from '@shader-studio/shared/mcp-protocol';
+import { randomUUID } from 'node:crypto';
+
 import { WebSocket } from 'ws';
 
+import {
+  HandshakeAckSchema,
+  MCP_BRIDGE_PROTOCOL_VERSION,
+  type ControllerRequest,
+  type Handshake,
+} from '@shader-studio/shared/mcp-protocol';
+
+import { callApp, closeBridge, resetBridgeForTests, startBridge } from './bridge.js';
+import { resetBridgeTokenForTests } from './token.js';
+
 const PORT = Number(process.env['SHADER_STUDIO_MCP_PORT'] ?? 4311);
+const TOKEN = 'verify-bridge-token';
 
 async function main(): Promise<void> {
+  resetBridgeTokenForTests(TOKEN);
   const wss = await startBridge(PORT);
 
   const app = new WebSocket(`ws://127.0.0.1:${PORT}`);
   await new Promise<void>((resolve, reject) => {
     app.once('open', () => {
-      app.send(JSON.stringify({ hello: 'app' }));
-      resolve();
+      const handshake: Handshake = {
+        kind: 'hello',
+        role: 'app',
+        protocolVersion: MCP_BRIDGE_PROTOCOL_VERSION,
+        appVersion: '1.0.0',
+        sessionId: randomUUID(),
+        token: TOKEN,
+        capabilities: [],
+      };
+      app.send(JSON.stringify(handshake));
+    });
+    app.once('message', (raw) => {
+      const ack = HandshakeAckSchema.safeParse(JSON.parse(String(raw)));
+      if (ack.success) resolve();
+      else reject(new Error('Handshake was rejected'));
     });
     app.once('error', reject);
   });
@@ -25,7 +50,19 @@ async function main(): Promise<void> {
           JSON.stringify({
             id: request.id,
             ok: true,
-            result: { selectedId: 'demo', dirty: false, hasErrors: false },
+            result: {
+              selectedId: 'demo',
+              shaders: [],
+              record: null,
+              draft: null,
+              controls: [],
+              params: {},
+              presets: [],
+              activePresetId: null,
+              dirty: false,
+              hasErrors: false,
+              diagnostics: [],
+            },
           }),
         );
         break;
@@ -51,17 +88,23 @@ async function main(): Promise<void> {
         );
         break;
       default:
-        app.send(JSON.stringify({ id: request.id, ok: false, error: `Unhandled ${request.type}` }));
+        app.send(
+          JSON.stringify({
+            id: request.id,
+            ok: false,
+            error: { code: 'INTERNAL', message: `Unhandled ${request.type}` },
+          }),
+        );
     }
   });
 
   const state = await callApp({ type: 'getState' });
-  if ((state as { selectedId: string }).selectedId !== 'demo') {
+  if (state.selectedId !== 'demo') {
     throw new Error('getState round-trip failed');
   }
 
   const params = await callApp({ type: 'setParam', key: 'speed', value: 2.5 });
-  if ((params as { speed: number }).speed !== 2.5) {
+  if (params['speed'] !== 2.5) {
     throw new Error('setParam round-trip failed');
   }
 
@@ -81,6 +124,7 @@ async function main(): Promise<void> {
   console.log('mcp bridge verification passed');
   app.close();
   resetBridgeForTests();
+  resetBridgeTokenForTests();
   await closeBridge(wss);
 }
 

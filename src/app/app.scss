@@ -212,8 +212,16 @@ app-titlebar {
   backdrop-filter: blur(18px);
 }
 
-.content {
+.workspace {
   position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.content {
+  position: absolute;
+  inset: 0;
   display: grid;
   grid-template-columns: 1fr auto;
   grid-template-rows: 1fr auto;
@@ -222,6 +230,18 @@ app-titlebar {
     'editor editor';
   min-height: 0;
   overflow: hidden;
+
+  &.dock-editor-left {
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: 1fr;
+    grid-template-areas: 'editor stage inspector';
+  }
+
+  &.dock-editor-right {
+    grid-template-columns: 1fr auto auto;
+    grid-template-rows: 1fr;
+    grid-template-areas: 'stage inspector editor';
+  }
 }
 
 .stage {
@@ -298,10 +318,21 @@ app-titlebar {
 @media (max-width: 900px) {
   .content {
     grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto auto;
     grid-template-areas:
       'stage'
       'inspector'
       'editor';
+
+    &.dock-editor-left,
+    &.dock-editor-right {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr auto auto;
+      grid-template-areas:
+        'stage'
+        'inspector'
+        'editor';
+    }
   }
 
   // Stacked rather than side by side, so a width is no longer a thing you can

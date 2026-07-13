@@ -7,7 +7,6 @@ import type {
   McpScreenshot,
   McpStateSnapshot,
 } from '@shader-studio/shared/mcp-protocol';
-import { isHelloMessage } from '@shader-studio/shared/mcp-protocol';
 import type { CompileDiagnostic } from './diagnostic';
 import { RECOMPILE_DEBOUNCE_MS } from '../rendering/shader-canvas';
 import { RendererHandle } from '../rendering/renderer-handle';
@@ -15,14 +14,11 @@ import { ShaderStore } from './shader-store';
 
 const DEFAULT_PORT = 4310;
 const RECONNECT_DELAY_MS = 2000;
+const MCP_BRIDGE_PROTOCOL_VERSION = 2;
 /** Long enough for `shader-canvas`'s recompile debounce to have landed. */
 const RECOMPILE_SETTLE_MS = RECOMPILE_DEBOUNCE_MS + 150;
 
-function assertNever(value: never): never {
-  throw new Error(`mcp-bridge: unhandled command "${(value as ControllerRequest).type}"`);
-}
-
-function toMcpDiagnostics(diagnostics: readonly CompileDiagnostic[]): readonly McpDiagnostic[] {
+function toMcpDiagnostics(diagnostics: readonly CompileDiagnostic[]): McpDiagnostic[] {
   return diagnostics.map(({ severity, line, message, source }) => ({
     severity,
     line,
@@ -45,6 +41,27 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function messageKind(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || !('kind' in value)) return null;
+  return typeof value.kind === 'string' ? value.kind : null;
+}
+
+function rejectionReason(value: unknown): string {
+  if (typeof value !== 'object' || value === null || !('reason' in value)) return 'unknown reason';
+  return typeof value.reason === 'string' ? value.reason : 'unknown reason';
+}
+
+function isControllerRequest(value: unknown): value is ControllerRequest {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    'type' in value &&
+    typeof value.type === 'string'
+  );
 }
 
 /**
@@ -74,7 +91,19 @@ export class McpBridge {
     const socket = new WebSocket(`ws://${location.hostname}:${port}`);
     this.socket = socket;
 
-    socket.addEventListener('open', () => socket.send(JSON.stringify({ hello: 'app' })));
+    socket.addEventListener('open', () => {
+      socket.send(
+        JSON.stringify({
+          kind: 'hello',
+          role: 'app',
+          protocolVersion: MCP_BRIDGE_PROTOCOL_VERSION,
+          appVersion: '1.0.0',
+          sessionId: crypto.randomUUID(),
+          token: localStorage.getItem('shaderStudioMcpToken') ?? '',
+          capabilities: [],
+        }),
+      );
+    });
     socket.addEventListener('message', (event: MessageEvent<string>) => {
       void this.handle(event.data);
     });
@@ -95,9 +124,15 @@ export class McpBridge {
     } catch {
       return;
     }
-    if (isHelloMessage(message)) return;
+    const kind = messageKind(message);
+    if (kind === 'hello-ack') return;
+    if (kind === 'hello-rejected') {
+      console.warn(`[mcp-bridge] connection rejected: ${rejectionReason(message)}`);
+      return;
+    }
 
-    const request = message as ControllerRequest;
+    if (!isControllerRequest(message)) return;
+    const request = message;
     try {
       const result = await this.execute(request);
       this.reply({ id: request.id, ok: true, result } as AppResponse);
@@ -105,7 +140,10 @@ export class McpBridge {
       this.reply({
         id: request.id,
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: {
+          code: 'INTERNAL',
+          message: error instanceof Error ? error.message : String(error),
+        },
       });
     }
   }
@@ -162,7 +200,7 @@ export class McpBridge {
       case 'getDiagnostics':
         return toMcpDiagnostics(this.store.diagnostics());
       default:
-        return assertNever(request);
+        throw new Error(`mcp-bridge: command "${request.type}" is not implemented`);
     }
   }
 
@@ -170,8 +208,8 @@ export class McpBridge {
     const draft = this.store.draft();
     return {
       selectedId: this.store.selectedId(),
-      shaders: this.store.shaders(),
-      record: this.store.record(),
+      shaders: [...this.store.shaders()],
+      record: structuredClone(this.store.record()) as McpStateSnapshot['record'],
       draft: draft
         ? {
             fragment: this.store.fragment(),
@@ -180,9 +218,9 @@ export class McpBridge {
             render: draft.render,
           }
         : null,
-      controls: this.store.controls(),
+      controls: [...this.store.controls()],
       params: this.store.params(),
-      presets: this.store.presets(),
+      presets: [...this.store.presets()],
       activePresetId: this.store.activePresetId(),
       dirty: this.store.dirty(),
       hasErrors: this.store.hasErrors(),
@@ -190,7 +228,7 @@ export class McpBridge {
     };
   }
 
-  private async diagnosticsAfterSettle(): Promise<readonly McpDiagnostic[]> {
+  private async diagnosticsAfterSettle(): Promise<McpDiagnostic[]> {
     await wait(RECOMPILE_SETTLE_MS);
     return toMcpDiagnostics(this.store.diagnostics());
   }
