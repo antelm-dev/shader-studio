@@ -1,9 +1,9 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+import { root, script } from '../_lib/paths.mjs';
+
 const ipcDir = resolve(root, 'main/ipc');
 const outFile = resolve(root, 'main/generated/ipc-bridge.ts');
 
@@ -21,7 +21,7 @@ const moduleNames = readdirSync(ipcDir)
 
 if (moduleNames.length === 0) fail('No IPC modules found under main/ipc');
 
-const generated = spawnSync(process.execPath, [resolve(root, 'scripts/gen-ipc.mjs')], {
+const generated = spawnSync(process.execPath, [script('gen/ipc.mjs')], {
   cwd: root,
   encoding: 'utf8',
 });

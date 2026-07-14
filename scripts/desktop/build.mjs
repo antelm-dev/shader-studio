@@ -3,8 +3,8 @@ import { spawn } from 'node:child_process';
 import { Arch, Platform, build as buildInstaller } from 'electron-builder';
 
 const commands = {
-  clean: ['node', 'scripts/clean.mjs'],
-  ipc: ['node', 'scripts/gen-ipc.mjs'],
+  clean: ['node', 'scripts/desktop/clean.mjs'],
+  ipc: ['node', 'scripts/gen/ipc.mjs'],
   types: ['pnpm', 'exec', 'tsc', '-p', 'tsconfig.app.json', '--noEmit'],
   testsTypes: ['pnpm', 'exec', 'tsc', '-p', 'tsconfig.spec.json', '--noEmit'],
   mainTypes: ['pnpm', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.main.json'],
@@ -108,7 +108,7 @@ function parseArch(value) {
 function usage(error) {
   console.error(`\n${error}\n`);
   console.error(
-    'Usage: node scripts/build.mjs [build|pack|dist] [--win|--mac|--linux] [--arch=x64|arm64|ia32|armv7l]',
+    'Usage: node scripts/desktop/build.mjs [build|pack|dist] [--win|--mac|--linux] [--arch=x64|arm64|ia32|armv7l]',
   );
   process.exit(1);
 }

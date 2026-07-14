@@ -1,10 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
-import { FONT_OVERLAY, SYSTEM_FONT_ENTRY } from './font-overlay.mjs';
+import { root } from '../_lib/paths.mjs';
+import { FONT_OVERLAY, SYSTEM_FONT_ENTRY } from '../gen/font-overlay.mjs';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const source = readFileSync(resolve(root, 'src/app/editor/font-catalogue.ts'), 'utf8');
 
 const entryPattern =
@@ -70,7 +69,7 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `fonts ok — ${catalogue.length} entries match scripts/font-overlay.mjs (offline drift check)`,
+  `fonts ok — ${catalogue.length} entries match scripts/gen/font-overlay.mjs (offline drift check)`,
 );
 
 function unquote(raw) {

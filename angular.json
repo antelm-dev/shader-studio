@@ -102,6 +102,14 @@
           },
           "configurations": {
             "production": {
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": true
+              },
               "outputHashing": "all",
               "budgets": [
                 { "type": "initial", "maximumWarning": "2.0MB", "maximumError": "2.2MB" },

@@ -1,19 +1,19 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { chromium } from 'playwright';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+import { root, script } from './_lib/paths.mjs';
+
 const require = createRequire(resolve(root, 'package.json'));
 const ngCli = require.resolve('@angular/cli/bin/ng.js');
 const PORT = Number(process.env.SMOKE_PORT ?? 4321);
 const BASE = `http://127.0.0.1:${PORT}`;
 const READY = /Local:\s+http:\/\/(?:localhost|127\.0\.0\.1):/;
 
-const ipc = spawnSync(process.execPath, [resolve(root, 'scripts/gen-ipc.mjs')], {
+const ipc = spawnSync(process.execPath, [script('gen/ipc.mjs')], {
   cwd: root,
   encoding: 'utf8',
 });

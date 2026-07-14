@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+import { root } from '../_lib/paths.mjs';
+
 const keysSource = readFileSync(resolve(root, 'src/app/i18n/keys.ts'), 'utf8');
 const locales = ['en', 'fr'];
 
