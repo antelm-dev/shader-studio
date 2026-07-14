@@ -15,8 +15,8 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
@@ -26,7 +26,7 @@ import { MatSidenavContainer, MatSidenavModule } from '@angular/material/sidenav
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { filter, map } from 'rxjs';
+import { map } from 'rxjs';
 
 import type { ImportMode } from '@shader-studio/shared/model';
 import { DEFAULT_PANEL_WIDTHS, PANEL_LIMITS } from '@shader-studio/shared/panel-prefs';
@@ -47,9 +47,11 @@ import { DocumentStatus } from './ui/editor/document-status';
 import { GlobalShortcuts } from './ui/layout/global-shortcuts';
 import { InspectorPanel } from './ui/inspector/inspector-panel';
 import { MenuCommands, type MenuCommand } from './ui/menu-commands';
+import { isOutputWindow } from './output-mode';
 import { PreviewShell } from './ui/preview/preview-shell';
 import { PreviewStage } from './ui/preview/preview-stage';
 import { ResizeHandle } from './ui/layout/resize-handle';
+import { RoutingCoordinator } from './workspace/routing-coordinator';
 import { ShaderBrowser } from './ui/browser/shader-browser';
 import { WorkspaceActions } from './ui/workspace-actions';
 import { I18n, LANGUAGE_OPTIONS, type AppLocale } from './i18n/i18n';
@@ -90,15 +92,13 @@ export class App {
   protected readonly commands = inject(MenuCommands);
   protected readonly editorWindow = inject(EditorWindow);
   protected readonly i18n = inject(I18n);
-  protected readonly outputMode =
-    typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/output';
+  protected readonly outputMode = isOutputWindow();
 
   private readonly snackBar = inject(MatSnackBar);
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
-  private readonly router = inject(Router);
+  private readonly routing = inject(RoutingCoordinator);
   private readonly outputSync = inject(OutputSync);
   private readonly mcpBridge = inject(McpBridge);
-  private routingReady = false;
 
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
   private readonly importMode = signal<ImportMode>('rename');
@@ -245,10 +245,9 @@ export class App {
     // same work is deferred until after hydration, so the first client render
     // matches the markup the server produced (see ShaderStore's snapshot).
     if (this.isServer && !this.outputMode) {
-      void this.store.initialize(this.routeShaderId());
+      void this.store.initialize(this.routing.routeShaderId());
     }
 
-    if (!this.outputMode) afterNextRender(() => void this.initializeRouting());
     afterNextRender(() => {
       this.desktop.onCloseRequested(() => void this.handleDesktopClose());
     });
@@ -261,22 +260,6 @@ export class App {
     if (!this.outputMode && isDevMode()) {
       afterNextRender(() => this.mcpBridge.start());
     }
-
-    this.router.events
-      .pipe(
-        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
-        takeUntilDestroyed(),
-      )
-      .subscribe(() => {
-        if (this.routingReady) void this.applyRoute();
-      });
-
-    effect(() => {
-      const id = this.store.selectedId();
-      if (!this.routingReady) return;
-      const canonical = id ? `/shaders/${encodeURIComponent(id)}` : '/';
-      if (this.router.url !== canonical) void this.router.navigateByUrl(canonical);
-    });
 
     // Picking a shader on a handset should get the drawer out of the way — it
     // is covering the very thing you just chose to look at.
@@ -297,56 +280,6 @@ export class App {
       });
       this.store.notice.set(null);
     });
-  }
-
-  private async initializeRouting(): Promise<void> {
-    const requested = this.routeShaderId();
-    await this.store.initializeClient(requested);
-    this.routingReady = true;
-    await this.normalizeRoute(requested);
-    await this.workspace.resolveStaleRecovery();
-    await this.workspace.resolveFirstRunMigration();
-  }
-
-  private async applyRoute(): Promise<void> {
-    const requested = this.routeShaderId();
-    if (!requested) {
-      await this.normalizeRoute(null);
-      return;
-    }
-    if (!this.store.shaders().some((shader) => shader.id === requested)) {
-      this.store.notice.set({
-        text: this.i18n.t('notice.shaderNotFound', { name: requested }),
-        error: true,
-      });
-      await this.normalizeRoute(requested);
-      return;
-    }
-    const changed = await this.workspace.selectShader(requested);
-    if (!changed) await this.router.navigateByUrl(this.canonicalUrl(), { replaceUrl: true });
-    else await this.workspace.resolveStaleRecovery();
-  }
-
-  private async normalizeRoute(requested: string | null): Promise<void> {
-    const canonical = this.canonicalUrl();
-    if (this.router.url !== canonical || requested !== this.store.selectedId()) {
-      await this.router.navigateByUrl(canonical, { replaceUrl: true });
-    }
-  }
-
-  private canonicalUrl(): string {
-    const id = this.store.selectedId();
-    return id ? `/shaders/${encodeURIComponent(id)}` : '/';
-  }
-
-  private routeShaderId(): string | null {
-    const match = /^\/shaders\/([^/?#]+)\/?(?:[?#].*)?$/.exec(this.router.url);
-    if (!match) return null;
-    try {
-      return decodeURIComponent(match[1]);
-    } catch {
-      return null;
-    }
   }
 
   protected commitBrowserWidth(width: number): void {
