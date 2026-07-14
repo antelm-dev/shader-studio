@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { FormField, form, maxLength, requiredError, validate } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -33,7 +33,7 @@ export interface PromptDialogResult {
   selector: 'app-prompt-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    FormsModule,
+    FormField,
     MatButtonModule,
     MatCheckboxModule,
     MatDialogModule,
@@ -47,14 +47,7 @@ export interface PromptDialogResult {
     <mat-dialog-content>
       <mat-form-field appearance="outline" class="field">
         <mat-label>{{ data.label }}</mat-label>
-        <input
-          matInput
-          cdkFocusInitial
-          [maxlength]="maxLength"
-          [ngModel]="value()"
-          (ngModelChange)="value.set($event)"
-          (keyup.enter)="confirm()"
-        />
+        <input matInput cdkFocusInitial [formField]="form.value" (keyup.enter)="confirm()" />
         @if (data.hint) {
           <mat-hint>{{ data.hint }}</mat-hint>
         }
@@ -72,7 +65,7 @@ export interface PromptDialogResult {
 
     <mat-dialog-actions align="end">
       <button matButton mat-dialog-close type="button">{{ 'action.cancel' | translate }}</button>
-      <button matButton="filled" type="button" [disabled]="!valid()" (click)="confirm()">
+      <button matButton="filled" type="button" [disabled]="form().invalid()" (click)="confirm()">
         {{ data.confirmText ?? ('action.save' | translate) }}
       </button>
     </mat-dialog-actions>
@@ -98,17 +91,16 @@ export class PromptDialog {
   private readonly dialogRef = inject<MatDialogRef<PromptDialog, PromptDialogResult>>(MatDialogRef);
   readonly data = inject<PromptDialogData>(MAT_DIALOG_DATA);
 
-  readonly maxLength = LIMITS.nameLength;
-  readonly value = signal(this.data.value ?? '');
   readonly checked = signal(this.data.option?.checked ?? false);
 
-  valid(): boolean {
-    return this.value().trim().length > 0;
-  }
+  protected readonly model = signal({ value: this.data.value ?? '' });
+  protected readonly form = form(this.model, (path) => {
+    maxLength(path.value, LIMITS.nameLength);
+    validate(path.value, ({ value }) => (value().trim().length > 0 ? undefined : requiredError()));
+  });
 
   confirm(): void {
-    if (this.valid()) {
-      this.dialogRef.close({ value: this.value().trim(), checked: this.checked() });
-    }
+    if (this.form().invalid()) return;
+    this.dialogRef.close({ value: this.model().value.trim(), checked: this.checked() });
   }
 }
