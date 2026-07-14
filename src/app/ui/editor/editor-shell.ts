@@ -15,7 +15,15 @@ import {
 } from '@angular/core';
 
 import { EDITOR_LIMITS } from '@shader-studio/shared/editor-prefs';
-import type { Rect } from '@shader-studio/shared/geometry';
+import {
+  containRect,
+  RESIZE_EDGES,
+  RESIZE_NUDGE,
+  RESIZE_NUDGE_FAST,
+  resizeRect,
+  type Rect,
+  type ResizeEdge,
+} from '@shader-studio/shared/geometry';
 import { EditorWindow } from '../../editor/editor-window';
 import { EditorPanel } from './editor-panel';
 
@@ -37,9 +45,6 @@ import { EditorPanel } from './editor-panel';
  * selecting code instead of moving it.
  */
 
-/** Which edges a resize gesture is pulling. */
-type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
-
 interface Gesture {
   pointerId: number;
   /** Pointer position when the gesture began, in client coordinates. */
@@ -51,10 +56,6 @@ interface Gesture {
   width: number;
   edge: ResizeEdge | null;
 }
-
-/** How far the arrow keys move or resize the window, and how far with Shift. */
-const NUDGE = 16;
-const NUDGE_FAST = 64;
 
 @Component({
   selector: 'app-editor-shell',
@@ -312,7 +313,7 @@ export class EditorShell {
 
   private readonly panel = viewChild.required(EditorPanel);
 
-  protected readonly edges: readonly ResizeEdge[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+  protected readonly edges = RESIZE_EDGES;
 
   protected readonly mode = this.editorWindow.mode;
   protected readonly dockSide = this.editorWindow.dockSide;
@@ -516,40 +517,20 @@ export class EditorShell {
     const { rect, edge } = gesture;
     if (!edge) return rect;
 
-    const minWidth = EDITOR_LIMITS.floatingWidth.min;
-    const minHeight = EDITOR_LIMITS.floatingHeight.min;
-
-    let { x, y, width, height } = rect;
-
-    if (edge.includes('e')) width = rect.width + dx;
-    if (edge.includes('s')) height = rect.height + dy;
-
-    if (edge.includes('w')) {
-      width = Math.max(minWidth, rect.width - dx);
-      x = rect.x + (rect.width - width);
-    }
-    if (edge.includes('n')) {
-      height = Math.max(minHeight, rect.height - dy);
-      y = rect.y + (rect.height - height);
-    }
-
-    return this.contain({ x, y, width, height });
+    const min = {
+      width: EDITOR_LIMITS.floatingWidth.min,
+      height: EDITOR_LIMITS.floatingHeight.min,
+    };
+    return this.contain(resizeRect(rect, edge, dx, dy, min));
   }
 
   /** Keep a rect inside the workspace, as measured. */
   private contain(rect: Rect): Rect {
-    const { width, height } = this.workspaceSize();
-    if (width <= 0 || height <= 0) return rect;
-
-    const w = Math.min(Math.max(rect.width, EDITOR_LIMITS.floatingWidth.min), width);
-    const h = Math.min(Math.max(rect.height, EDITOR_LIMITS.floatingHeight.min), height);
-
-    return {
-      width: Math.round(w),
-      height: Math.round(h),
-      x: Math.round(Math.min(Math.max(rect.x, 0), Math.max(0, width - w))),
-      y: Math.round(Math.min(Math.max(rect.y, 0), Math.max(0, height - h))),
+    const min = {
+      width: EDITOR_LIMITS.floatingWidth.min,
+      height: EDITOR_LIMITS.floatingHeight.min,
     };
+    return containRect(rect, this.workspaceSize(), min);
   }
 
   private clampHeight(height: number): number {
@@ -597,7 +578,7 @@ export class EditorShell {
    * have. The handles are focusable separators, and the arrow keys pull them.
    */
   protected onHandleKeydown(event: KeyboardEvent, edge: ResizeEdge): void {
-    const step = event.shiftKey ? NUDGE_FAST : NUDGE;
+    const step = event.shiftKey ? RESIZE_NUDGE_FAST : RESIZE_NUDGE;
 
     const delta: Record<string, [number, number]> = {
       ArrowLeft: [-step, 0],

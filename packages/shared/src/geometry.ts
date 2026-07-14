@@ -87,3 +87,40 @@ export function containPoint(point: Point, viewport: Size, size: Size): Point {
     y: Math.round(clamp(point.y, 0, Math.max(0, viewport.height - size.height))),
   };
 }
+
+/** Which edges a resize gesture is pulling. */
+export type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+
+/** All eight, in the order the editor and preview windows both draw their grips. */
+export const RESIZE_EDGES: readonly ResizeEdge[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+
+/** How far the arrow keys move or resize a window, and how far with Shift. */
+export const RESIZE_NUDGE = 16;
+export const RESIZE_NUDGE_FAST = 64;
+
+/**
+ * Resize a rect from whichever edges a gesture holds, by the pointer movement
+ * (`dx`, `dy`) since the gesture began.
+ *
+ * The north and west edges move the origin as well as the size, and both are
+ * clamped to `min` so that pulling an edge *past* its opposite one stops at
+ * the minimum size rather than turning the rect inside out. The result is not
+ * itself contained to a viewport — pass it through `containRect` for that.
+ */
+export function resizeRect(rect: Rect, edge: ResizeEdge, dx: number, dy: number, min: Size): Rect {
+  let { x, y, width, height } = rect;
+
+  if (edge.includes('e')) width = rect.width + dx;
+  if (edge.includes('s')) height = rect.height + dy;
+
+  if (edge.includes('w')) {
+    width = Math.max(min.width, rect.width - dx);
+    x = rect.x + (rect.width - width);
+  }
+  if (edge.includes('n')) {
+    height = Math.max(min.height, rect.height - dy);
+    y = rect.y + (rect.height - height);
+  }
+
+  return { x, y, width, height };
+}

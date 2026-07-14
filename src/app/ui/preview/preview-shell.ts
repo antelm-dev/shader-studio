@@ -4,8 +4,18 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 
 import { DesktopPlatform } from '../../desktop/desktop-platform';
-import type { Point, Rect, Size } from '@shader-studio/shared/geometry';
-import { containPoint, containRect } from '@shader-studio/shared/geometry';
+import {
+  containPoint,
+  containRect,
+  RESIZE_EDGES,
+  RESIZE_NUDGE,
+  RESIZE_NUDGE_FAST,
+  resizeRect,
+  type Point,
+  type Rect,
+  type ResizeEdge,
+  type Size,
+} from '@shader-studio/shared/geometry';
 import {
   COLOR_SCHEME_OPTIONS,
   Preferences,
@@ -50,9 +60,6 @@ import { PreviewWindowControls } from './preview-window-controls';
  * between them.
  */
 
-/** Which edges a resize gesture is pulling. */
-type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
-
 interface Gesture {
   pointerId: number;
   /** Pointer position when the gesture began, in client coordinates. */
@@ -64,10 +71,6 @@ interface Gesture {
   /** The edges being pulled, or `null` for a move. */
   edge: ResizeEdge | null;
 }
-
-/** How far the arrow keys resize the window, and how far with Shift. */
-const NUDGE = 16;
-const NUDGE_FAST = 64;
 
 @Component({
   selector: 'app-preview-shell',
@@ -458,7 +461,7 @@ export class PreviewShell {
    */
   readonly stageOnly = input(false);
 
-  protected readonly edges: readonly ResizeEdge[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+  protected readonly edges = RESIZE_EDGES;
 
   protected readonly mode = computed<PreviewMode>(() =>
     this.stageOnly() ? 'stage' : this.preview.mode(),
@@ -658,21 +661,7 @@ export class PreviewShell {
     const { rect, edge } = gesture;
     if (!edge) return rect;
 
-    let { x, y, width, height } = rect;
-
-    if (edge.includes('e')) width = rect.width + dx;
-    if (edge.includes('s')) height = rect.height + dy;
-
-    if (edge.includes('w')) {
-      width = Math.max(PREVIEW_MIN_FLOATING.width, rect.width - dx);
-      x = rect.x + (rect.width - width);
-    }
-    if (edge.includes('n')) {
-      height = Math.max(PREVIEW_MIN_FLOATING.height, rect.height - dy);
-      y = rect.y + (rect.height - height);
-    }
-
-    return this.contain({ x, y, width, height });
+    return this.contain(resizeRect(rect, edge, dx, dy, PREVIEW_MIN_FLOATING));
   }
 
   /** Keep a rect inside the workspace, so its title bar is always reachable. */
@@ -707,7 +696,7 @@ export class PreviewShell {
    * handles are focusable separators, and the arrow keys pull them.
    */
   protected onHandleKeydown(event: KeyboardEvent, edge: ResizeEdge): void {
-    const step = event.shiftKey ? NUDGE_FAST : NUDGE;
+    const step = event.shiftKey ? RESIZE_NUDGE_FAST : RESIZE_NUDGE;
 
     const delta: Record<string, [number, number]> = {
       ArrowLeft: [-step, 0],
