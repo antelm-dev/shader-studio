@@ -63,10 +63,10 @@ import {
   LIMITS,
   sanitizeParams,
   validateControls,
-  validateParamValue,
 } from '@shader-studio/shared/validate';
 import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
+import { McpPatchService } from './mcp-patch.service';
 import { ProjectPersistence } from './project-persistence';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { ApiError, ShaderApi } from '../api/shader-api';
@@ -218,6 +218,7 @@ export class ShaderStore {
   private readonly textures = inject(TextureAssets);
   private readonly thumbnails = inject(ThumbnailAssets);
   private readonly renderer = inject(RendererHandle);
+  private readonly mcpPatch = inject(McpPatchService);
 
   /** True once the client has taken over the server's snapshot. */
   private hydrated = false;
@@ -1107,70 +1108,14 @@ export class ShaderStore {
       return { ok: true, revision: currentRevision, diagnostics: this.allDiagnostics() };
     }
 
-    const byDocument = new Map<string, DraftTextEdit[]>();
-    for (const edit of edits) {
-      if (edit.start < 0 || edit.end < edit.start) {
-        return {
-          ok: false,
-          code: 'VALIDATION_ERROR',
-          message: `Invalid range [${edit.start}, ${edit.end}) for document "${edit.documentId}".`,
-        };
-      }
-      const list = byDocument.get(edit.documentId) ?? [];
-      list.push(edit);
-      byDocument.set(edit.documentId, list);
-    }
+    const plan = this.mcpPatch.planPatch(
+      { project, controlsText: draft.controlsText, documents: this.documents() },
+      edits,
+    );
+    if (!plan.ok) return plan;
 
-    const sources = new Map(this.documents().map((doc) => [doc.id, doc.source]));
-
-    let nextProject = project;
-    let nextControlsText = draft.controlsText;
-
-    for (const [documentId, documentEdits] of byDocument) {
-      const current = sources.get(documentId);
-      if (current === undefined) {
-        return { ok: false, code: 'NOT_FOUND', message: `Unknown document "${documentId}".` };
-      }
-
-      const sorted = [...documentEdits].sort((a, b) => a.start - b.start);
-      for (let i = 1; i < sorted.length; i++) {
-        if (sorted[i].start < sorted[i - 1].end) {
-          return {
-            ok: false,
-            code: 'VALIDATION_ERROR',
-            message: `Overlapping edits in document "${documentId}".`,
-          };
-        }
-      }
-      const last = sorted[sorted.length - 1];
-      if (last.end > current.length) {
-        return {
-          ok: false,
-          code: 'VALIDATION_ERROR',
-          message: `Edit range [${last.start}, ${last.end}) is out of bounds for document "${documentId}" (length ${current.length}).`,
-        };
-      }
-
-      let updated = current;
-      for (const edit of [...sorted].reverse()) {
-        updated = updated.slice(0, edit.start) + edit.text + updated.slice(edit.end);
-      }
-
-      if (documentId === CONFIG_DOC) {
-        nextControlsText = updated;
-      } else if (documentId === VERTEX_DOC) {
-        nextProject = setVertexSource(nextProject, updated);
-      } else if (findPass(nextProject, documentId)) {
-        nextProject = setPassSource(nextProject, documentId, updated);
-      } else {
-        // `sources` above already proved this id resolves to a real document;
-        // pass, vertex and config are handled above, so only a file remains.
-        nextProject = setFileSource(nextProject, documentId, updated);
-      }
-    }
-
-    this.patchDraft({ project: nextProject, controlsText: nextControlsText });
-    if (nextControlsText !== draft.controlsText) this.applyControlsSideEffects(nextControlsText);
+    this.patchDraft({ project: plan.project, controlsText: plan.controlsText });
+    if (plan.controlsText !== draft.controlsText) this.applyControlsSideEffects(plan.controlsText);
 
     const outcome = await this.compileNow();
     return { ok: true, revision: outcome.revision, diagnostics: outcome.diagnostics };
@@ -1184,27 +1129,9 @@ export class ShaderStore {
    * request.
    */
   setParamsValidated(values: Record<string, unknown>): SetParamsOutcome {
-    const applied: string[] = [];
-    const errors: Record<string, string> = {};
-
-    for (const [key, value] of Object.entries(values)) {
-      const control = this.controls().find((entry) => entry.key === key);
-      if (!control) {
-        errors[key] = `Unknown control "${key}".`;
-        continue;
-      }
-
-      const result = validateParamValue(control, value);
-      if (!result.ok) {
-        errors[key] = result.errors.join('; ');
-        continue;
-      }
-
-      this.setParam(key, result.value);
-      applied.push(key);
-    }
-
-    return { applied, errors };
+    const plan = this.mcpPatch.planParams(this.controls(), values);
+    for (const { key, value } of plan.applied) this.setParam(key, value);
+    return { applied: plan.applied.map((entry) => entry.key), errors: plan.errors };
   }
 
   // --- Persistence --------------------------------------------------------
