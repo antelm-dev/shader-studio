@@ -15,6 +15,7 @@ import {
   type ShaderRecord,
   type ShaderSummary,
 } from '@shader-studio/shared/model';
+import { imagePass, migrateLegacyProject } from '@shader-studio/shared/project';
 import { Preferences, type WorkspacePreferences } from './preferences';
 import {
   DEFAULT_EDITOR_APPEARANCE,
@@ -38,6 +39,9 @@ const CONTROLS: ShaderControl[] = [
   { key: 'glow', type: 'boolean', default: false },
 ];
 
+const FRAGMENT = 'void main() { gl_FragColor = vec4(1.0); }';
+const VERTEX = 'void main() { gl_Position = vec4(position, 1.0); }';
+
 function makeRecord(overrides: Partial<ShaderRecord> = {}): ShaderRecord {
   return {
     id: 'waves',
@@ -49,9 +53,10 @@ function makeRecord(overrides: Partial<ShaderRecord> = {}): ShaderRecord {
     render: structuredClone(DEFAULT_RENDER),
     channels: structuredClone(DEFAULT_CHANNELS),
     thumbnail: null,
-    fragment: 'void main() { gl_FragColor = vec4(1.0); }',
-    vertex: 'void main() { gl_Position = vec4(position, 1.0); }',
+    fragment: FRAGMENT,
+    vertex: VERTEX,
     presets: [],
+    project: migrateLegacyProject(FRAGMENT, VERTEX),
     ...overrides,
   };
 }
@@ -108,13 +113,20 @@ class FakeApi implements Partial<ShaderApi> {
       const current = this.records.get(id);
       if (!current) throw new ApiError(`No such shader ${id}`, [], 404);
 
+      // Mirrors the real server: once a `project` is given, it is the source
+      // of truth and `fragment`/`vertex` are derived from it.
+      const project = patch.project ?? current.project;
       const updated: ShaderRecord = {
         ...current,
         ...(patch.name === undefined ? {} : { name: patch.name }),
-        ...(patch.fragment === undefined ? {} : { fragment: patch.fragment }),
-        ...(patch.vertex === undefined ? {} : { vertex: patch.vertex }),
         ...(patch.controls === undefined ? {} : { controls: patch.controls as ShaderControl[] }),
         ...(patch.render === undefined ? {} : { render: patch.render as ShaderRecord['render'] }),
+        project,
+        fragment:
+          patch.project !== undefined
+            ? imagePass(project).source
+            : (patch.fragment ?? current.fragment),
+        vertex: patch.project !== undefined ? project.vertex : (patch.vertex ?? current.vertex),
         updatedAt: '2024-02-02T00:00:00.000Z',
       };
       this.records.set(id, updated);
@@ -670,6 +682,25 @@ describe('ShaderStore: collection', () => {
 
     expect(store.selectedId()).toBe('waves-2');
     expect(store.shaders().map((shader) => shader.id)).toContain('waves-2');
+  });
+
+  it('carries the project — buffers, files and wiring — into the copy', async () => {
+    const { store } = setup(makeRecord());
+    await store.initialize();
+
+    store.addBufferPass();
+    store.addSourceFile('lib.glsl');
+    await store.save();
+    expect(store.buffers()).toHaveLength(1);
+
+    await store.duplicate('waves');
+
+    // The project is now part of the record the server hands back, so a
+    // duplicate carries it the same way it carries presets — nothing special
+    // to ask for, and nothing left behind in the original's local storage.
+    expect(store.selectedId()).toBe('waves-2');
+    expect(store.buffers()).toHaveLength(1);
+    expect(store.project()?.files.map((file) => file.name)).toContain('lib.glsl');
   });
 
   it('renames in place without disturbing the draft', async () => {

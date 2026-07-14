@@ -10,72 +10,96 @@
       "default": "./src/index.ts"
     },
     "./model": {
-      "types": "./src/model.ts",
-      "default": "./src/model.ts"
+      "types": "./src/model/index.ts",
+      "default": "./src/model/index.ts"
     },
     "./project": {
-      "types": "./src/project.ts",
-      "default": "./src/project.ts"
+      "types": "./src/project/index.ts",
+      "default": "./src/project/index.ts"
     },
     "./pass-source": {
-      "types": "./src/pass-source.ts",
-      "default": "./src/pass-source.ts"
+      "types": "./src/project/pass-source.ts",
+      "default": "./src/project/pass-source.ts"
     },
     "./validate": {
-      "types": "./src/validate.ts",
-      "default": "./src/validate.ts"
+      "types": "./src/validate/index.ts",
+      "default": "./src/validate/index.ts"
+    },
+    "./mcp": {
+      "types": "./src/mcp/index.ts",
+      "default": "./src/mcp/index.ts"
     },
     "./mcp-protocol": {
-      "types": "./src/mcp-protocol.ts",
-      "default": "./src/mcp-protocol.ts"
+      "types": "./src/mcp/protocol.ts",
+      "default": "./src/mcp/protocol.ts"
     },
     "./controller": {
-      "types": "./src/controller.ts",
-      "default": "./src/controller.ts"
+      "types": "./src/mcp/port.ts",
+      "default": "./src/mcp/port.ts"
     },
     "./diagnostic": {
-      "types": "./src/diagnostic.ts",
-      "default": "./src/diagnostic.ts"
+      "types": "./src/diagnostics/types.ts",
+      "default": "./src/diagnostics/types.ts"
+    },
+    "./diagnostics": {
+      "types": "./src/diagnostics/types.ts",
+      "default": "./src/diagnostics/types.ts"
     },
     "./glsl-diagnostics": {
-      "types": "./src/glsl-diagnostics.ts",
-      "default": "./src/glsl-diagnostics.ts"
+      "types": "./src/glsl/diagnostics.ts",
+      "default": "./src/glsl/diagnostics.ts"
     },
     "./glsl-export": {
-      "types": "./src/glsl-export.ts",
-      "default": "./src/glsl-export.ts"
-    },
-    "./capture-plan": {
-      "types": "./src/capture-plan.ts",
-      "default": "./src/capture-plan.ts"
-    },
-    "./shadertoy-import": {
-      "types": "./src/shadertoy-import.ts",
-      "default": "./src/shadertoy-import.ts"
+      "types": "./src/glsl/export.ts",
+      "default": "./src/glsl/export.ts"
     },
     "./glsl-format": {
-      "types": "./src/glsl-format.ts",
-      "default": "./src/glsl-format.ts"
+      "types": "./src/glsl/format.ts",
+      "default": "./src/glsl/format.ts"
     },
     "./glsl-lexicon": {
-      "types": "./src/glsl-lexicon.ts",
-      "default": "./src/glsl-lexicon.ts"
+      "types": "./src/glsl/lexicon.ts",
+      "default": "./src/glsl/lexicon.ts"
+    },
+    "./shadertoy-import": {
+      "types": "./src/glsl/shadertoy.ts",
+      "default": "./src/glsl/shadertoy.ts"
+    },
+    "./capture-plan": {
+      "types": "./src/capture/index.ts",
+      "default": "./src/capture/index.ts"
+    },
+    "./capture": {
+      "types": "./src/capture/index.ts",
+      "default": "./src/capture/index.ts"
     },
     "./geometry": {
       "types": "./src/geometry.ts",
       "default": "./src/geometry.ts"
     },
     "./editor-prefs": {
-      "types": "./src/editor-prefs.ts",
-      "default": "./src/editor-prefs.ts"
+      "types": "./src/prefs/editor.ts",
+      "default": "./src/prefs/editor.ts"
     },
     "./preview-prefs": {
-      "types": "./src/preview-prefs.ts",
-      "default": "./src/preview-prefs.ts"
+      "types": "./src/prefs/preview.ts",
+      "default": "./src/prefs/preview.ts"
     },
     "./panel-prefs": {
-      "types": "./src/panel-prefs.ts",
-      "default": "./src/panel-prefs.ts"
+      "types": "./src/prefs/panel.ts",
+      "default": "./src/prefs/panel.ts"
+    },
+    "./prefs/editor": {
+      "types": "./src/prefs/editor.ts",
+      "default": "./src/prefs/editor.ts"
+    },
+    "./prefs/preview": {
+      "types": "./src/prefs/preview.ts",
+      "default": "./src/prefs/preview.ts"
+    },
+    "./prefs/panel": {
+      "types": "./src/prefs/panel.ts",
+      "default": "./src/prefs/panel.ts"
     },
     "./templates": {
       "types": "./src/templates.ts",

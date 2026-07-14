@@ -8,8 +8,9 @@
  *     shaders/
  *       <id>/
  *         meta.json            name, description, controls, render settings
- *         fragment.glsl        the fragment shader source
- *         vertex.glsl          the vertex shader source
+ *         project.json         the multi-pass project: buffers, Common, files, wiring
+ *         fragment.glsl        the Image pass's source — a mirror of project.json
+ *         vertex.glsl          the project's vertex shader — also a mirror
  *         presets.json         { "presets": [ ... ] }
  *         thumbnail.<ext>      the preview the client captured on the last save
  *
@@ -51,6 +52,14 @@ import {
   type ThumbnailPayload,
 } from '@shader-studio/shared/model';
 import {
+  imagePass,
+  migrateLegacyProject,
+  sanitizeProject,
+  setPassSource,
+  setVertexSource,
+  type ShaderProject,
+} from '@shader-studio/shared/project';
+import {
   LIMITS,
   sanitizeParams,
   slugify,
@@ -78,6 +87,7 @@ import type { StorageOptions } from './types';
 const META_FILE = 'meta.json';
 const FRAGMENT_FILE = 'fragment.glsl';
 const VERTEX_FILE = 'vertex.glsl';
+const PROJECT_FILE = 'project.json';
 const PRESETS_FILE = 'presets.json';
 const TEXTURES_DIR = 'textures';
 const THUMBNAIL_BASENAME = 'thumbnail';
@@ -213,6 +223,20 @@ export class ShaderStorage {
     }
   }
 
+  /**
+   * Same as `readJson`, but a missing file or invalid JSON is `undefined`
+   * rather than a thrown error. Used for `project.json`: a shader that
+   * predates projects has none, and a corrupt one must degrade to
+   * `sanitizeProject`'s fallback rather than take the whole shader down.
+   */
+  private async readOptionalJson(file: string): Promise<unknown> {
+    try {
+      return JSON.parse(await fs.readFile(file, 'utf8'));
+    } catch {
+      return undefined;
+    }
+  }
+
   private async exists(target: string): Promise<boolean> {
     try {
       await fs.access(target, constants.F_OK);
@@ -263,11 +287,13 @@ export class ShaderStorage {
     let metaRaw: unknown;
     let fragment: string;
     let vertex: string;
+    let projectRaw: unknown;
     try {
-      [metaRaw, fragment, vertex] = await Promise.all([
+      [metaRaw, fragment, vertex, projectRaw] = await Promise.all([
         this.readJson(path.join(dir, META_FILE)),
         fs.readFile(path.join(dir, FRAGMENT_FILE), 'utf8'),
         fs.readFile(path.join(dir, VERTEX_FILE), 'utf8'),
+        this.readOptionalJson(path.join(dir, PROJECT_FILE)),
       ]);
     } catch (error) {
       if (error instanceof StorageError) throw error;
@@ -276,8 +302,12 @@ export class ShaderStorage {
 
     const meta = this.parseMeta(id, metaRaw);
     const presets = await this.readPresets(dir, meta.controls);
+    // A shader that predates `project.json` (or one whose copy is corrupt)
+    // transparently becomes a single-pass project built from its mirrors —
+    // no separate migration step to run on read.
+    const project = sanitizeProject(projectRaw, fragment, vertex);
 
-    return { ...meta, fragment, vertex, presets };
+    return { ...meta, fragment, vertex, presets, project };
   }
 
   private parseMeta(id: string, raw: unknown): ShaderMeta {
@@ -362,15 +392,30 @@ export class ShaderStorage {
     );
   }
 
+  private async writeProject(dir: string, project: ShaderProject): Promise<void> {
+    await this.writeFileAtomic(
+      path.join(dir, PROJECT_FILE),
+      `${JSON.stringify(project, null, 2)}\n`,
+    );
+  }
+
   /**
    * Writes everything but the texture files for channels whose `data` is
    * `null` (metadata-only payload, e.g. a same-process duplicate) — those are
    * expected to be copied onto disk separately, by the caller.
+   *
+   * `payload.project` is the source of truth: `fragment.glsl`/`vertex.glsl`
+   * are derived from it (the Image pass's source, and the project's vertex)
+   * rather than trusted from `payload.fragment`/`.vertex` directly, so the
+   * mirrors can never legitimately disagree with the project they mirror.
    */
   private async writeAll(payload: ShaderPayload): Promise<ShaderRecord> {
     const dir = this.shaderDir(payload.id);
     await fs.mkdir(dir, { recursive: true });
     await fs.mkdir(this.texturesDir(dir), { recursive: true });
+
+    const fragment = imagePass(payload.project).source;
+    const vertex = payload.project.vertex;
 
     const now = new Date().toISOString();
     const channels = payload.channels.map((channel) => ({
@@ -410,8 +455,9 @@ export class ShaderStorage {
 
     await Promise.all([
       this.writeMeta(dir, meta),
-      this.writeFileAtomic(path.join(dir, FRAGMENT_FILE), payload.fragment),
-      this.writeFileAtomic(path.join(dir, VERTEX_FILE), payload.vertex),
+      this.writeFileAtomic(path.join(dir, FRAGMENT_FILE), fragment),
+      this.writeFileAtomic(path.join(dir, VERTEX_FILE), vertex),
+      this.writeProject(dir, payload.project),
       this.writePresets(dir, payload.presets),
       ...textureWrites,
       payload.thumbnail
@@ -424,9 +470,10 @@ export class ShaderStorage {
 
     return {
       ...meta,
-      fragment: payload.fragment,
-      vertex: payload.vertex,
+      fragment,
+      vertex,
       presets: payload.presets,
+      project: payload.project,
     };
   }
 
@@ -437,6 +484,7 @@ export class ShaderStorage {
     render?: unknown;
     fragment?: unknown;
     vertex?: unknown;
+    project?: unknown;
   }): Promise<ShaderRecord> {
     const name = expect(validateName(input.name), 'Invalid shader name');
     const description = expect(validateDescription(input.description), 'Invalid description');
@@ -453,6 +501,12 @@ export class ShaderStorage {
       validateControls(input.controls ?? TEMPLATE_CONTROLS),
       'Invalid control schema',
     );
+    // The common case is a template creation with no project at all, which is
+    // exactly what `migrateLegacyProject` builds from a plain fragment/vertex.
+    const project =
+      input.project === undefined
+        ? migrateLegacyProject(fragment, vertex)
+        : sanitizeProject(input.project, fragment, vertex);
 
     const id = uniqueId(slugify(name), await this.listIds());
 
@@ -465,6 +519,7 @@ export class ShaderStorage {
         render: input.render === undefined ? { ...DEFAULT_RENDER } : validateRender(input.render),
         fragment,
         vertex,
+        project,
         presets: [],
         channels: DEFAULT_CHANNELS.map((channel) => ({
           ...channel,
@@ -486,6 +541,10 @@ export class ShaderStorage {
       render?: unknown;
       fragment?: unknown;
       vertex?: unknown;
+      /** The whole project. When given, it is the source of truth for the
+       * fragment/vertex mirrors below — `patch.fragment`/`.vertex` are only
+       * consulted (as a fallback fed into `sanitizeProject`) when this is absent. */
+      project?: unknown;
       /** Settings only (wrap/filter/flipY) — never carries image bytes. */
       channels?: unknown;
     },
@@ -506,13 +565,13 @@ export class ShaderStorage {
         patch.controls === undefined
           ? current.controls
           : expect(validateControls(patch.controls), 'Invalid control schema');
-      const fragment =
+      const suppliedFragment =
         patch.fragment === undefined
-          ? current.fragment
+          ? undefined
           : expect(validateSource(patch.fragment, 'fragment'), 'Invalid fragment shader');
-      const vertex =
+      const suppliedVertex =
         patch.vertex === undefined
-          ? current.vertex
+          ? undefined
           : expect(validateSource(patch.vertex, 'vertex'), 'Invalid vertex shader');
       const render: RenderSettings =
         patch.render === undefined ? current.render : validateRender(patch.render);
@@ -523,6 +582,29 @@ export class ShaderStorage {
               current.channels,
               validateChannelSettingsPatch(patch.channels),
             );
+
+      // The project is the source of truth once it is present. A caller that
+      // only knows the old `fragment`/`vertex` shape (a script, an MCP tool, a
+      // pre-migration client) instead gets those reconciled onto the *current*
+      // project — the same merge `ShaderStore.projectFor` used to do client-side.
+      let project = current.project;
+      let projectTouched = false;
+      if (patch.project !== undefined) {
+        project = sanitizeProject(
+          patch.project,
+          suppliedFragment ?? current.fragment,
+          suppliedVertex ?? current.vertex,
+        );
+        projectTouched = true;
+      } else if (suppliedFragment !== undefined || suppliedVertex !== undefined) {
+        const image = imagePass(current.project);
+        if (suppliedFragment !== undefined) project = setPassSource(project, image.id, suppliedFragment);
+        if (suppliedVertex !== undefined) project = setVertexSource(project, suppliedVertex);
+        projectTouched = true;
+      }
+
+      const fragment = projectTouched ? imagePass(project).source : current.fragment;
+      const vertex = projectTouched ? project.vertex : current.vertex;
 
       const presets =
         patch.controls === undefined
@@ -550,10 +632,11 @@ export class ShaderStorage {
         vertex === current.vertex
           ? Promise.resolve()
           : this.writeFileAtomic(path.join(dir, VERTEX_FILE), vertex),
+        projectTouched ? this.writeProject(dir, project) : Promise.resolve(),
         patch.controls === undefined ? Promise.resolve() : this.writePresets(dir, presets),
       ]);
 
-      return { ...meta, fragment, vertex, presets };
+      return { ...meta, fragment, vertex, presets, project };
     });
   }
 
@@ -662,6 +745,7 @@ export class ShaderStorage {
         fragment: current.fragment,
         vertex: current.vertex,
         presets: current.presets,
+        project: current.project,
       };
     });
   }
@@ -688,6 +772,7 @@ export class ShaderStorage {
         fragment: current.fragment,
         vertex: current.vertex,
         presets: current.presets,
+        project: current.project,
       };
     });
   }
@@ -749,6 +834,7 @@ export class ShaderStorage {
         fragment: current.fragment,
         vertex: current.vertex,
         presets: current.presets,
+        project: current.project,
       };
     });
   }

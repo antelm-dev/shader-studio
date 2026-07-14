@@ -34,7 +34,6 @@ import {
   findPass,
   freeSlot,
   imagePass,
-  migrateLegacyProject,
   moveFile,
   movePass,
   removeFile,
@@ -569,7 +568,7 @@ export class ShaderStore {
 
   /** Take a server record as the new truth and reset the draft and params onto it. */
   private adopt(record: ShaderRecord): void {
-    const project = this.projectFor(record);
+    const { project, migrate } = this.projectFor(record);
 
     this.record.set(record);
     this.savedProject.set(structuredClone(project));
@@ -587,33 +586,74 @@ export class ShaderStore {
     const recovered = this.isServer ? null : this.recovery.get(record.id);
     if (recovered?.baselineUpdatedAt === record.updatedAt) this.applyRecoveredDraft(recovered);
     else this.staleRecovery.set(recovered);
+
+    // A pre-upgrade `localStorage` project sitting on top of this record: push
+    // it to the server now that the server can hold it, then clear it. Fired
+    // after the synchronous state above so the UI never waits on it.
+    if (migrate) void this.migrateStoredProject(record.id, project);
   }
 
   /**
-   * The project behind a record: the one in storage, or one built from the record.
+   * The project behind a record.
    *
-   * This is the whole of the legacy story, and the reason there is no migration
-   * step to run and nothing to go wrong on first load. A shader with nothing in
-   * storage is not out of date — it is a project with one pass, and
-   * `migrateLegacyProject` says so in one line, binding the four texture slots
-   * exactly as the old single-pass engine did.
-   *
-   * When storage *does* have something but the record has moved on underneath it
-   * — an import, an edit in another tab, a desktop sync — the record wins for the
-   * two things the record actually owns (the Image source and the vertex shader)
-   * and the passes and files are kept. The alternative, throwing the buffers away
-   * because the fragment changed, would lose far more than it protects.
+   * The server now always returns one — `record.project`, real or synthesized
+   * via `migrateLegacyProject` for a shader that predates projects — so the
+   * plain case is simply reading it off the record. The one wrinkle is a
+   * browser that still has a *pre-upgrade* `localStorage` entry for this
+   * shader (`ProjectPersistence`, back when the project lived only there):
+   * that entry is reconciled onto the record the same way it always was — the
+   * record wins for the Image source and vertex shader when its `updatedAt`
+   * has moved on since the entry was last saved, and the passes/files are kept
+   * either way — and `migrate` tells `adopt` to push the result to the server
+   * and clear the local copy, which is what makes this a one-time migration
+   * rather than an ongoing second source of truth.
    */
-  private projectFor(record: ShaderRecord): ShaderProject {
-    if (this.isServer) return migrateLegacyProject(record.fragment, record.vertex);
+  private projectFor(record: ShaderRecord): { project: ShaderProject; migrate: boolean } {
+    if (this.isServer) return { project: record.project, migrate: false };
 
     const stored = this.projects.load(record.id, record.fragment, record.vertex);
-    if (!stored) return migrateLegacyProject(record.fragment, record.vertex);
+    if (!stored) return { project: record.project, migrate: false };
 
-    if (stored.baselineUpdatedAt === record.updatedAt) return stored.project;
+    if (stored.baselineUpdatedAt === record.updatedAt) {
+      return { project: stored.project, migrate: true };
+    }
 
     const image = imagePass(stored.project);
-    return setVertexSource(setPassSource(stored.project, image.id, record.fragment), record.vertex);
+    const project = setVertexSource(
+      setPassSource(stored.project, image.id, record.fragment),
+      record.vertex,
+    );
+    return { project, migrate: true };
+  }
+
+  /** Ids currently being pushed to the server, so a second `adopt` before the
+   * first push resolves cannot fire a duplicate write. */
+  private readonly migratingProjects = new Set<string>();
+
+  /**
+   * Push a pre-upgrade `localStorage` project to the server, once, and only
+   * clear the local copy once the server has confirmed it holds it — losing
+   * nothing if the write fails partway (offline, a full disk): the next time
+   * this shader loads, `projectFor` finds the same entry and tries again.
+   *
+   * Best-effort and silent on failure: this is background reconciliation, not
+   * a user action, and the shader keeps working from the local copy either way.
+   */
+  private async migrateStoredProject(shaderId: string, project: ShaderProject): Promise<void> {
+    if (this.migratingProjects.has(shaderId)) return;
+    this.migratingProjects.add(shaderId);
+    try {
+      const updated = await this.api.update(shaderId, { project });
+      if (this.selectedId() === shaderId) {
+        this.record.set(updated);
+        this.savedProject.set(structuredClone(project));
+      }
+      this.projects.remove(shaderId);
+    } catch (error) {
+      console.warn(`[store] could not migrate the local project for "${shaderId}"`, error);
+    } finally {
+      this.migratingProjects.delete(shaderId);
+    }
   }
 
   resolveRecovery(restore: boolean): void {
@@ -1182,20 +1222,17 @@ export class ShaderStore {
 
     this.saving.set(true);
     try {
-      // The record gets the two things it can hold: the Image pass's source and
-      // the vertex shader. Everything else about the project — the buffers, the
-      // Common pass, the files, the wiring — goes to local storage, because the
-      // record has nowhere to put it and inventing somewhere would break every
-      // existing shader, export and desktop install at once.
+      // The whole project goes to the server — buffers, Common, files, wiring
+      // included. `fragment`/`vertex` are not sent alongside it: the server
+      // derives its own mirrors from the project's Image pass source and
+      // vertex shader, so sending both would just be two copies of the truth.
       const saved = await this.api.update(record.id, {
-        fragment: imagePass(draft.project).source,
-        vertex: draft.project.vertex,
+        project: draft.project,
         controls,
         render: draft.render,
       });
 
       const project = structuredClone(draft.project);
-      this.projects.save(saved.id, saved.updatedAt, project);
 
       // Keep the live params and the open preset across a save: the user was
       // editing the source, not resetting the knobs.

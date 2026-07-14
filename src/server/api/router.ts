@@ -73,6 +73,7 @@ export function createApiRouter(storage: ShaderStorage, i18nDir?: string): Route
         render: body['render'],
         fragment: body['fragment'],
         vertex: body['vertex'],
+        ...('project' in body ? { project: body['project'] } : {}),
       });
       res.status(201).json({ shader: created });
     }),
@@ -96,6 +97,7 @@ export function createApiRouter(storage: ShaderStorage, i18nDir?: string): Route
         ...('render' in body ? { render: body['render'] } : {}),
         ...('fragment' in body ? { fragment: body['fragment'] } : {}),
         ...('vertex' in body ? { vertex: body['vertex'] } : {}),
+        ...('project' in body ? { project: body['project'] } : {}),
         ...('channels' in body ? { channels: body['channels'] } : {}),
       });
       res.json({ shader: updated });

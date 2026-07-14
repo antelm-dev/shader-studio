@@ -216,6 +216,8 @@ Four concerns, kept apart on purpose. Nothing below the line knows about Angular
 packages/
   shared/          model + validation — imported by server, client, main, and MCP
     model.ts         the shader document: controls, presets, bundles
+    project.ts       the multi-pass project: passes, buffers, files, channel
+                     wiring, plus `migrateLegacyProject`/`sanitizeProject`
     validate.ts      every rule, in one place. The API is the authority; the
                      client reuses it to pre-validate the config editor.
   electron-ipc-module/   typed Electron IPC + preload bridge generation
@@ -230,9 +232,12 @@ src/
 
   app/
     core/          state and transport
-      shader-store.ts  the single source of truth (signals)
-      shader-api.ts    HTTP client
-      preferences.ts   localStorage-backed workspace prefs
+      shader-store.ts       the single source of truth (signals)
+      shader-api.ts         HTTP client
+      project-persistence.ts  reads/clears a pre-upgrade browser copy of a
+                             shader's project — the server now holds it
+      draft-recovery.ts     unsaved-edit recovery, still localStorage-backed
+      preferences.ts        localStorage-backed workspace prefs
     rendering/     three.js. Knows nothing about HTTP or the DOM beyond a canvas
       shader-engine.ts     compile, uniforms, ripples, bloom, screenshots
       glsl-diagnostics.ts  driver info-logs -> editor markers
@@ -293,16 +298,28 @@ data/
   shaders/
     poured-paint/
       meta.json              name, description, control schema, render settings
-      fragment.glsl          the fragment shader
-      vertex.glsl            the vertex shader
+      project.json           the multi-pass project: passes, buffers, files,
+                              channel wiring — the source of truth for a shader
+      fragment.glsl          the Image pass's source — a mirror of project.json
+      vertex.glsl            the project's vertex shader — also a mirror
       presets.json           { "presets": [ ... ] }
 ```
+
+A shader is a *project* — an Image pass, an optional Common pass of shared code,
+up to four buffers, and any number of plain source files a pass can `#include`.
+`project.json` is that whole document; `fragment.glsl`/`vertex.glsl` are kept in
+sync with it (the Image pass's source, and the project's vertex shader) so that
+anything reading the old two-file shape still works. A shader that predates
+`project.json` — or one whose copy of it is unreadable — reads as a single-pass
+project built from its `fragment.glsl`/`vertex.glsl`, wired up exactly as the old
+single-pass engine bound its four `iChannel`s.
 
 `examples/shaders/` uses exactly this layout, and is copied into `data/` the first
 time you run an empty store. `data/` is gitignored; `examples/` is not.
 
 Writes are atomic (temp file + rename), and mutations of a given shader are
-serialized, so a half-written `meta.json` is never observable.
+serialized, so a half-written `meta.json` is never observable — `project.json`
+included.
 
 **Ids** are lowercase letters, digits and inner hyphens — no dots, no separators.
 That rules out `..`, hidden files, and Windows' reserved device names. Renaming a
@@ -437,14 +454,14 @@ saving, and leaves the working GUI alone.
 ## Import and export
 
 One documented format, used for both a single shader and a whole collection.
-Everything needed to reproduce a shader elsewhere is in it: source, schema, render
-settings and presets.
+Everything needed to reproduce a shader elsewhere is in it: the whole project
+(passes, buffers, files, channel wiring), schema, render settings and presets.
 
 `GET /api/shaders/:id/export` →
 
 ```json
 {
-  "format": "shader-studio/v1",
+  "format": "shader-studio/v2",
   "kind": "shader",
   "exportedAt": "2026-07-12T12:00:00.000Z",
   "shader": {
@@ -456,6 +473,12 @@ settings and presets.
     "render": { "bloom": {/* ... */} },
     "fragment": "precision highp float; ...",
     "vertex": "varying vec2 vUv; ...",
+    "project": {
+      "version": 1,
+      "vertex": "varying vec2 vUv; ...",
+      "passes": [/* Image, an optional Common, up to four buffers */],
+      "files": [/* plain #include-able source files */]
+    },
     "presets": [
       {
         "id": "circuit",
@@ -468,8 +491,17 @@ settings and presets.
 }
 ```
 
+`fragment`/`vertex` stay in the payload as mirrors of `project` (the Image pass's
+source and the project's vertex shader), for anything that still reads the old
+two-string shape.
+
 `GET /api/export` returns the same thing with `"kind": "collection"` and a
 `"shaders": [ ... ]` array of those payloads. Import accepts either kind.
+
+**`shader-studio/v1` bundles still import.** They predate `project` entirely; on
+import, a project is synthesized from `fragment`/`vertex` the same way a shader
+that predates `project.json` on disk does — one Image pass, an empty Common pass,
+and the four `iChannel`s bound exactly as the old single-pass engine bound them.
 
 **Import modes.** `rename` (the default) never destroys anything: a shader whose id
 already exists is given a fresh, suffixed one. `overwrite` replaces the shader
@@ -526,17 +558,29 @@ out of, and are the reference for what the format can express.
 pnpm test
 ```
 
-201 tests, focused where a bug would actually cost you something:
+478 tests, focused where a bug would actually cost you something:
 
 - **`packages/shared/validate.spec.ts`** — ids (every traversal and reserved-name case),
-  the control schema, preset sanitization and clamping, and bundle round-trips.
+  the control schema, preset sanitization and clamping, and bundle round-trips —
+  including a `shader-studio/v1` bundle (no `project` field) synthesizing one via
+  `migrateLegacyProject`, and a malformed `project` being sanitized rather than
+  failing the import.
 - **`server/storage/shader-storage.spec.ts`** — runs against a real temp
   directory, not a mocked fs, because the whole point of that layer is what it
   does to the filesystem and a mock would let a traversal bug through. Covers
   CRUD, path traversal, atomic update, preset lifecycle, import modes, and
-  seeding.
+  seeding, plus a `project` describe block: `project.json` round-trips through a
+  fresh read and a fresh `ShaderStorage`, a shader with none reads as a
+  legacy-migrated project, duplicate and export/import carry buffers/Common/
+  files/wiring, and a legacy `fragment`/`vertex`-only patch reconciles onto the
+  current project instead of replacing it.
 - **`core/shader-store.spec.ts`** — the client-side store: selection, dirty
   tracking, save/discard paths, and preset application.
+- **`core/project-workspace.spec.ts`** — a shader record becoming a project
+  (legacy and otherwise), unsaved-changes detection, and the pre-upgrade
+  `localStorage` → server migration: a matching baseline pushes and clears, a
+  stale one reconciles (record wins for the Image pass, buffers survive) before
+  pushing, and a failed push leaves the local copy for the next load to retry.
 - **`ui/document-status.spec.ts`** — the saved/dirty/saving indicator, including
   the debounce timing.
 - **`core/draft-recovery.spec.ts`** and **`core/panel-prefs.spec.ts`** — what

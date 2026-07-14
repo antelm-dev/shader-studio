@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { ShaderPayload } from '@shader-studio/shared/model';
+import { LEGACY_BUNDLE_FORMAT, type ShaderPayload } from '@shader-studio/shared/model';
+import { addBuffer, addFile, bufferPasses, imagePass, setChannelBinding } from '@shader-studio/shared/project';
 import { buildCollectionBundle, parseBundle } from '@shader-studio/shared/validate';
 import { ShaderStorage, StorageError, DEFAULT_VERTEX, TEMPLATE_FRAGMENT } from './index';
 
@@ -190,6 +191,82 @@ describe('duplicate', () => {
     const id = await seed('Original');
     const copy = await storage.duplicate(id);
     expect(copy.name).toBe('Original copy');
+  });
+
+  it('carries the project — buffers, files and channel wiring — into the copy', async () => {
+    const id = await seed('Original');
+    const withBuffer = addBuffer((await storage.read(id)).project);
+    const withFile = addFile(withBuffer, 'lib.glsl');
+    await storage.update(id, { project: withFile });
+
+    const copy = await storage.duplicate(id, 'Copy');
+
+    expect(bufferPasses(copy.project)).toHaveLength(1);
+    expect(bufferPasses(copy.project)[0].id).toBe(bufferPasses(withFile)[0].id);
+    expect(copy.project.files.map((file) => file.name)).toEqual(['lib.glsl']);
+  });
+});
+
+describe('project', () => {
+  it('writes project.json, and a fresh read (or a fresh ShaderStorage) sees the identical buffers, Common, files and wiring', async () => {
+    const id = await seed('Multi Pass');
+    const base = (await storage.read(id)).project;
+    const withBuffer = addBuffer(base);
+    const buffer = bufferPasses(withBuffer)[0];
+    const withFile = addFile(withBuffer, 'lib.glsl');
+    const wired = setChannelBinding(withFile, imagePass(withFile).id, 0, {
+      kind: 'buffer',
+      passId: buffer.id,
+      feedback: true,
+    });
+
+    await storage.update(id, { project: wired });
+
+    await expect(
+      readFile(path.join(root, 'data', 'shaders', id, 'project.json'), 'utf8'),
+    ).resolves.toContain('"kind": "buffer"');
+
+    expect((await storage.read(id)).project).toEqual(wired);
+
+    const fresh = new ShaderStorage({
+      dataDir: path.join(root, 'data'),
+      examplesDir: path.join(root, 'examples'),
+      seed: false,
+    });
+    expect((await fresh.read(id)).project).toEqual(wired);
+  });
+
+  it('a shader with no project.json reads as a single-pass, legacy-migrated project', async () => {
+    const id = await seed('Legacy');
+    await rm(path.join(root, 'data', 'shaders', id, 'project.json'), { force: true });
+
+    const record = await storage.read(id);
+    expect(record.project.passes).toHaveLength(2);
+    expect(imagePass(record.project).source).toBe(record.fragment);
+    expect(imagePass(record.project).channels).toEqual([
+      { kind: 'texture', slot: 0 },
+      { kind: 'texture', slot: 1 },
+      { kind: 'texture', slot: 2 },
+      { kind: 'texture', slot: 3 },
+    ]);
+  });
+
+  it('a corrupt project.json degrades to the legacy-migrated project rather than 404ing the shader', async () => {
+    const id = await seed('Corrupt');
+    await writeFile(path.join(root, 'data', 'shaders', id, 'project.json'), '{ not json');
+
+    const record = await storage.read(id);
+    expect(imagePass(record.project).source).toBe(record.fragment);
+  });
+
+  it('a legacy `fragment`/`vertex` patch reconciles onto the current project instead of replacing it', async () => {
+    const id = await seed('Legacy Patch');
+    await storage.update(id, { project: addBuffer((await storage.read(id)).project) });
+
+    const updated = await storage.update(id, { fragment: FRAGMENT });
+
+    expect(imagePass(updated.project).source).toBe(FRAGMENT);
+    expect(bufferPasses(updated.project)).toHaveLength(1);
   });
 });
 
@@ -450,6 +527,59 @@ describe('import / export', () => {
 
     expect(result.imported.map((entry) => entry.id)).toEqual(['clash-2', 'clash-3']);
     expect(await storage.listIds()).toEqual(['clash', 'clash-2', 'clash-3']);
+  });
+
+  it("round-trips a project's buffers, Common, files and channel wiring through export -> import", async () => {
+    const id = await seed('Round Trip Project');
+    const withBuffer = addBuffer((await storage.read(id)).project);
+    const buffer = bufferPasses(withBuffer)[0];
+    const withFile = addFile(withBuffer, 'lib.glsl');
+    const wired = setChannelBinding(withFile, imagePass(withFile).id, 1, {
+      kind: 'buffer',
+      passId: buffer.id,
+      feedback: true,
+    });
+    await storage.update(id, { project: wired });
+
+    const payloads = await exportedPayloads();
+
+    const fresh = new ShaderStorage({
+      dataDir: path.join(root, 'data3'),
+      examplesDir: path.join(root, 'examples'),
+    });
+    await fresh.init();
+    await fresh.importPayloads(payloads, 'rename');
+
+    expect((await fresh.read(id)).project).toEqual(wired);
+  });
+
+  it('imports a shader-studio/v1 bundle with no `project` field, synthesizing one via migrateLegacyProject', async () => {
+    const id = await seed('Legacy Bundle');
+    await storage.update(id, { fragment: FRAGMENT });
+
+    const [full] = await exportedPayloads();
+    const v1Payload: Partial<ShaderPayload> = { ...full };
+    delete v1Payload.project;
+
+    const bundle = {
+      format: LEGACY_BUNDLE_FORMAT,
+      kind: 'shader',
+      exportedAt: new Date().toISOString(),
+      shader: v1Payload,
+    };
+    const parsed = parseBundle(bundle);
+    if (!parsed.ok) throw new Error(parsed.errors.join('; '));
+
+    const fresh = new ShaderStorage({
+      dataDir: path.join(root, 'data4'),
+      examplesDir: path.join(root, 'examples'),
+    });
+    await fresh.init();
+    await fresh.importPayloads(parsed.value, 'rename');
+
+    const imported = await fresh.read(id);
+    expect(imported.fragment).toBe(FRAGMENT);
+    expect(imagePass(imported.project).source).toBe(FRAGMENT);
   });
 });
 

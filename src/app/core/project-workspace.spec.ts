@@ -7,6 +7,7 @@ import {
   DEFAULT_CAPTURE,
   DEFAULT_CHANNELS,
   DEFAULT_RENDER,
+  addBuffer,
   bufferPasses,
   commonPass,
   imagePass,
@@ -58,6 +59,7 @@ function makeRecord(overrides: Partial<ShaderRecord> = {}): ShaderRecord {
     fragment: FRAGMENT,
     vertex: VERTEX,
     presets: [],
+    project: migrateLegacyProject(FRAGMENT, VERTEX),
     ...overrides,
   };
 }
@@ -110,6 +112,9 @@ function documentWith(storage: Storage): Document {
 class FakeApi implements Partial<ShaderApi> {
   records = new Map<string, ShaderRecord>();
   private saves = 0;
+  /** The next call to `update` rejects with this instead of succeeding. */
+  failNextUpdate: Error | null = null;
+  readonly updateCalls: { id: string; patch: UpdateShaderPatch }[] = [];
 
   constructor(...records: ShaderRecord[]) {
     for (const record of records) this.records.set(record.id, record);
@@ -124,13 +129,28 @@ class FakeApi implements Partial<ShaderApi> {
   }
 
   update(id: string, patch: UpdateShaderPatch): Promise<ShaderRecord> {
+    this.updateCalls.push({ id, patch });
+    if (this.failNextUpdate) {
+      const error = this.failNextUpdate;
+      this.failNextUpdate = null;
+      return Promise.reject(error);
+    }
+
     const current = this.records.get(id)!;
+    // Mirrors the real server: once a `project` is given, it is the source of
+    // truth and `fragment`/`vertex` are derived from it rather than trusted
+    // separately.
+    const project = patch.project ?? current.project;
     const updated: ShaderRecord = {
       ...current,
-      ...(patch.fragment === undefined ? {} : { fragment: patch.fragment }),
-      ...(patch.vertex === undefined ? {} : { vertex: patch.vertex }),
       ...(patch.controls === undefined ? {} : { controls: patch.controls as ShaderControl[] }),
       ...(patch.render === undefined ? {} : { render: patch.render as ShaderRecord['render'] }),
+      project,
+      fragment:
+        patch.project !== undefined
+          ? imagePass(project).source
+          : (patch.fragment ?? current.fragment),
+      vertex: patch.project !== undefined ? project.vertex : (patch.vertex ?? current.vertex),
       // A new `updatedAt` on every save: this is the value the stored project's
       // baseline is pinned to, and reusing one would hide any bug in that.
       updatedAt: `2024-02-0${++this.saves}T00:00:00.000Z`,
@@ -320,9 +340,10 @@ describe('across a reload', () => {
   it('restores the buffers, the files and the wiring of a saved project', async () => {
     const storage = new MemoryStorage();
     const record = makeRecord();
+    let saved: ShaderRecord;
 
     {
-      const { store } = setup(storage, record);
+      const { store, api } = setup(storage, record);
       await store.initialize();
 
       store.addBufferPass();
@@ -336,15 +357,13 @@ describe('across a reload', () => {
       store.addSourceFile('lib.glsl');
 
       expect(await store.save()).toBe(true);
+      saved = api.records.get('waves')!;
     }
 
-    // A brand new store over the same storage, and a server holding the record
-    // the save left behind. That is a reload.
-    const { store } = setup(storage, {
-      ...record,
-      fragment: FRAGMENT,
-      updatedAt: '2024-02-01T00:00:00.000Z',
-    });
+    // A brand new store, reading the record the save left behind. The project
+    // is now part of that record — the server holds it — so a reload needs
+    // nothing from local storage to come back whole.
+    const { store } = setup(storage, saved);
     await store.initialize();
 
     const buffers = store.buffers();
@@ -363,45 +382,115 @@ describe('across a reload', () => {
     expect(store.dirty()).toBe(false);
   });
 
-  it('forgets a project whose shader was deleted', async () => {
+  it('clears a pre-upgrade local copy when its shader is deleted, even if it was never opened', async () => {
     const storage = new MemoryStorage();
+    storage.setItem(
+      'shader-studio.projects',
+      JSON.stringify({
+        version: 1,
+        projects: {
+          other: {
+            shaderId: 'other',
+            baselineUpdatedAt: 'then',
+            project: migrateLegacyProject(FRAGMENT, VERTEX),
+          },
+        },
+      }),
+    );
 
     const { store } = setup(storage, makeRecord(), makeRecord({ id: 'other', name: 'Other' }));
     await store.initialize();
+    expect(storage.getItem('shader-studio.projects')).toContain('other');
 
-    store.addBufferPass();
-    await store.save();
-    expect(storage.getItem('shader-studio.projects')).toContain('waves');
+    await store.remove('other');
 
-    await store.remove('waves');
-
-    expect(storage.getItem('shader-studio.projects')).not.toContain('waves');
+    expect(storage.getItem('shader-studio.projects')).not.toContain('other');
   });
+});
 
-  it('lets the record win for the Image pass when the shader changed underneath it', async () => {
-    // An import, a desktop sync, another tab. The stored project's Image source
-    // is stale; the buffers around it are not, and throwing them away because the
-    // fragment moved would lose far more than it protects.
+// ---------------------------------------------------------------------------
+// Migrating a pre-upgrade local project to the server
+// ---------------------------------------------------------------------------
+
+describe('pre-upgrade local project migration', () => {
+  function seedLocalProject(
+    storage: MemoryStorage,
+    baselineUpdatedAt: string,
+    project = migrateLegacyProject(FRAGMENT, VERTEX),
+  ) {
+    storage.setItem(
+      'shader-studio.projects',
+      JSON.stringify({
+        version: 1,
+        projects: { waves: { shaderId: 'waves', baselineUpdatedAt, project } },
+      }),
+    );
+  }
+
+  /** Lets the fire-and-forget migration promise chain settle before asserting. */
+  async function flush(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  it('pushes a local project whose baseline matches the record, then clears the local copy', async () => {
     const storage = new MemoryStorage();
     const record = makeRecord();
+    const withBuffer = addBuffer(record.project);
+    seedLocalProject(storage, record.updatedAt, withBuffer);
 
-    {
-      const { store } = setup(storage, record);
-      await store.initialize();
-      store.addBufferPass();
-      store.setDocSource(store.buffers()[0].id, 'PRECIOUS');
-      await store.save();
-    }
+    const { store, api } = setup(storage, record);
+    await store.initialize();
+    await flush();
 
-    const { store } = setup(storage, {
-      ...record,
+    expect(api.updateCalls).toHaveLength(1);
+    expect(api.updateCalls[0].patch.project).toEqual(withBuffer);
+    expect(storage.getItem('shader-studio.projects')).not.toContain('waves');
+    // The store already adopted the reconciled project synchronously; the
+    // migration push must not have disturbed what the user is looking at.
+    expect(store.buffers()).toHaveLength(1);
+    expect(store.dirty()).toBe(false);
+  });
+
+  it('reconciles a stale local project onto the record — record wins for the Image pass, buffers survive — then migrates the result', async () => {
+    // An import, a desktop sync, another tab: the record moved on since the
+    // local copy was last written. Throwing the buffers away because the
+    // fragment changed would lose far more than it protects.
+    const storage = new MemoryStorage();
+    const record = makeRecord({
       fragment: 'REPLACED BY AN IMPORT',
       updatedAt: '2099-01-01T00:00:00.000Z',
     });
+    const stale = addBuffer(migrateLegacyProject(FRAGMENT, VERTEX));
+    seedLocalProject(storage, 'a stale baseline', stale);
+
+    const { store, api } = setup(storage, record);
     await store.initialize();
 
     expect(store.fragment()).toBe('REPLACED BY AN IMPORT');
-    expect(store.buffers()[0].source).toBe('PRECIOUS');
+    expect(store.buffers()).toHaveLength(1);
+
+    await flush();
+
+    expect(api.updateCalls).toHaveLength(1);
+    expect(imagePass(api.updateCalls[0].patch.project!).source).toBe('REPLACED BY AN IMPORT');
+    expect(storage.getItem('shader-studio.projects')).not.toContain('waves');
+  });
+
+  it('keeps the local copy when the migration push fails, so a later load can retry', async () => {
+    const storage = new MemoryStorage();
+    const record = makeRecord();
+    seedLocalProject(storage, record.updatedAt);
+
+    const { store, api } = setup(storage, record);
+    api.failNextUpdate = new Error('offline');
+    await store.initialize();
+    await flush();
+
+    expect(api.updateCalls).toHaveLength(1);
+    // Failed, so the local copy is still there for next time.
+    expect(storage.getItem('shader-studio.projects')).toContain('waves');
+    // The shader itself is still perfectly usable in the meantime.
+    expect(store.record()).not.toBeNull();
   });
 });
 
@@ -596,6 +685,22 @@ describe('ProjectPersistence', () => {
 
   it('warns once, and does not throw, when storage is full', () => {
     const storage = new MemoryStorage();
+    // `save` is gone — the server holds the project now — so `remove` (what
+    // `ShaderStore.migrateStoredProject` calls once a shader's project has
+    // reached the server) is the only write path left to exercise.
+    storage.setItem(
+      'shader-studio.projects',
+      JSON.stringify({
+        version: 1,
+        projects: {
+          waves: {
+            shaderId: 'waves',
+            baselineUpdatedAt: 'then',
+            project: migrateLegacyProject(FRAGMENT, VERTEX),
+          },
+        },
+      }),
+    );
     vi.spyOn(storage, 'setItem').mockImplementation(() => {
       throw new Error('quota');
     });
@@ -604,12 +709,11 @@ describe('ProjectPersistence', () => {
     const warning = vi.fn();
     store.onWarning = warning;
 
-    const project = migrateLegacyProject(FRAGMENT, VERTEX);
-
     // A full quota must never break the app — but the user is owed the one
-    // warning, because what they silently lose is their buffers on next reload.
-    expect(() => store.save('waves', 'now', project)).not.toThrow();
-    store.save('waves', 'now', project);
+    // warning, because what they silently lose is ever clearing this shader's
+    // local copy once it has been migrated to the server.
+    expect(() => store.remove('waves')).not.toThrow();
+    store.remove('waves');
 
     expect(warning).toHaveBeenCalledTimes(1);
   });
