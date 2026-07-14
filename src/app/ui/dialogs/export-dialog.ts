@@ -135,7 +135,9 @@ const FORMAT_VALUES = ['webm', 'png'] as const;
              frame count rounded. The one thing worth reading before committing
              to several minutes of rendering. -->
         <p class="summary">
-          <mat-icon aria-hidden="true">{{ settings().format === 'webm' ? 'movie' : 'photo_library' }}</mat-icon>
+          <mat-icon aria-hidden="true">{{
+            settings().format === 'webm' ? 'movie' : 'photo_library'
+          }}</mat-icon>
           <span>{{ summary() }}</span>
         </p>
         @if (settings().format === 'png') {
@@ -146,7 +148,9 @@ const FORMAT_VALUES = ['webm', 'png'] as const;
 
     <mat-dialog-actions align="end">
       @if (capture.running()) {
-        <button matButton type="button" (click)="capture.cancel()">{{ 'action.cancel' | translate }}</button>
+        <button matButton type="button" (click)="capture.cancel()">
+          {{ 'action.cancel' | translate }}
+        </button>
       } @else {
         <button matButton mat-dialog-close type="button">{{ 'action.close' | translate }}</button>
         <button matButton="filled" type="button" (click)="start()">
