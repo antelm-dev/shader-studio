@@ -16,13 +16,7 @@ import {
   type ResizeEdge,
   type Size,
 } from '@shader-studio/shared/geometry';
-import {
-  COLOR_SCHEME_OPTIONS,
-  Preferences,
-  colorSchemeIcon,
-  type ColorScheme,
-  type WorkspacePreferences,
-} from '../../prefs/preferences';
+import { COLOR_SCHEME_OPTIONS, Preferences, colorSchemeIcon } from '../../prefs/preferences';
 import {
   PREVIEW_MINIMIZED_SIZE,
   PREVIEW_MINIMIZED_WIDTH,
@@ -31,11 +25,11 @@ import {
 } from '@shader-studio/shared/preview-prefs';
 import { ShaderStore } from '../../workspace/shader-store';
 import { PreviewWindow } from '../../rendering/preview-window';
-import { RendererHandle } from '../../rendering/renderer-handle';
 import { ShaderCanvas } from '../../rendering/shader-canvas';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import type { TranslationKey } from '../../i18n/keys';
+import { PreviewMenuCommands } from './preview-menu-commands';
 import { PreviewWindowControls } from './preview-window-controls';
 
 /**
@@ -147,12 +141,12 @@ interface Gesture {
         <mat-divider />
       }
 
-      <button mat-menu-item type="button" (click)="savePng()">
+      <button mat-menu-item type="button" (click)="commands.savePng()">
         <mat-icon>photo_camera</mat-icon>
         <span>{{ 'action.savePng' | translate }}</span>
         <span class="hint">S</span>
       </button>
-      <button mat-menu-item type="button" (click)="togglePause()">
+      <button mat-menu-item type="button" (click)="commands.togglePause()">
         <mat-icon>{{ preferences.value().paused ? 'play_arrow' : 'pause' }}</mat-icon>
         <span>{{
           (preferences.value().paused ? 'action.resume' : 'action.pause') | translate
@@ -171,7 +165,7 @@ interface Gesture {
 
       <mat-divider />
 
-      <button mat-menu-item type="button" (click)="toggle('guiVisible')">
+      <button mat-menu-item type="button" (click)="commands.toggle('guiVisible')">
         <mat-icon>{{ preferences.value().guiVisible ? 'visibility_off' : 'tune' }}</mat-icon>
         <span>{{
           (preferences.value().guiVisible ? 'action.hideControls' : 'action.showControls')
@@ -179,7 +173,7 @@ interface Gesture {
         }}</span>
         <span class="hint">H</span>
       </button>
-      <button mat-menu-item type="button" (click)="toggle('editorOpen')">
+      <button mat-menu-item type="button" (click)="commands.toggle('editorOpen')">
         <mat-icon>code</mat-icon>
         <span>{{
           (preferences.value().editorOpen ? 'action.hideEditor' : 'action.showEditor') | translate
@@ -211,10 +205,10 @@ interface Gesture {
           mat-menu-item
           type="button"
           [attr.aria-checked]="preferences.value().colorScheme === option.value"
-          (click)="setColorScheme(option.value)"
+          (click)="commands.setColorScheme(option.value)"
         >
           <mat-icon>{{ option.icon }}</mat-icon>
-          <span>{{ themeLabel(option.value) }}</span>
+          <span>{{ commands.themeLabel(option.value) }}</span>
           @if (preferences.value().colorScheme === option.value) {
             <mat-icon class="hint" aria-hidden="true">check</mat-icon>
           }
@@ -448,7 +442,7 @@ export class PreviewShell {
   protected readonly preferences = inject(Preferences);
   protected readonly desktop = inject(DesktopPlatform);
   protected readonly i18n = inject(I18n);
-  private readonly handle = inject(RendererHandle);
+  protected readonly commands = inject(PreviewMenuCommands);
 
   /**
    * The output window renders the same shader with none of the chrome, and it
@@ -532,30 +526,6 @@ export class PreviewShell {
   protected readonly frameHeight = computed<number | null>(() =>
     this.minimized() ? null : (this.frame()?.height ?? null),
   );
-
-  // --- Commands -----------------------------------------------------------
-
-  protected toggle(key: 'editorOpen' | 'guiVisible'): void {
-    this.preferences.patch({
-      [key]: !this.preferences.value()[key],
-    } as Partial<WorkspacePreferences>);
-  }
-
-  protected togglePause(): void {
-    this.preferences.patch({ paused: !this.preferences.value().paused });
-  }
-
-  protected setColorScheme(colorScheme: ColorScheme): void {
-    this.preferences.patch({ colorScheme });
-  }
-
-  protected async savePng(): Promise<void> {
-    const name = this.store.record()?.id ?? 'shader';
-    const saved = await this.handle.screenshot(name);
-    if (!saved) {
-      this.store.notice.set({ text: this.i18n.t('preview.nothingToCapture'), error: true });
-    }
-  }
 
   // --- Dragging -----------------------------------------------------------
 
@@ -721,10 +691,6 @@ export class PreviewShell {
     };
 
     this.preview.setFloatingRect(this.resized(gesture, dx, dy));
-  }
-
-  protected themeLabel(theme: ColorScheme): string {
-    return this.i18n.t(`theme.${theme}`);
   }
 
   protected resizeLabel(edge: ResizeEdge): string {
