@@ -1,7 +1,7 @@
 import { isPlatformBrowser } from '@angular/common';
 import { Directive, ElementRef, PLATFORM_ID, DestroyRef, inject, input } from '@angular/core';
 
-import { FontLoader } from '../editor/google-fonts';
+import { FontLoader } from '../../editor/google-fonts';
 
 /**
  * Fetch a font when its row scrolls into view, and not one moment sooner.

@@ -13,10 +13,10 @@ import {
 } from '@angular/core';
 
 import { composePass } from '@shader-studio/shared/pass-source';
-import { Preferences } from '../core/preferences';
+import { Preferences } from '../prefs/preferences';
 import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
-import { ShaderStore } from '../core/shader-store';
-import { TextureAssets } from '../core/texture-assets';
+import { ShaderStore } from '../workspace/shader-store';
+import { TextureAssets } from '../assets/texture-assets';
 import type { GlContext } from './gl-context';
 import { GlContextRegistry } from './gl-context-registry';
 import { RendererHandle } from './renderer-handle';

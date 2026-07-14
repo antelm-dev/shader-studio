@@ -16,7 +16,7 @@ import {
   type TextureUpload,
   type ThumbnailUpload,
   type UpdateShaderPatch,
-} from './shader-api';
+} from '../api/shader-api';
 
 function messageOf(error: unknown): string {
   if (error instanceof Error)

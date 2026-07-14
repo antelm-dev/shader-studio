@@ -4,8 +4,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenu, MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { PreviewWindow } from '../rendering/preview-window';
-import { TranslatePipe } from '../i18n/translate.pipe';
+import { PreviewWindow } from '../../rendering/preview-window';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 
 /**
  * The preview title bar's controls: the same buttons, the same metrics and the

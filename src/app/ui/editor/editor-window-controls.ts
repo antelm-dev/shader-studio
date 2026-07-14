@@ -5,11 +5,11 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { EDITOR_DOCK_SIDES, type EditorDockSide } from '@shader-studio/shared/editor-prefs';
-import { EditorWindow } from '../editor/editor-window';
-import { I18n } from '../i18n/i18n';
-import { TranslatePipe } from '../i18n/translate.pipe';
-import type { TranslationKey } from '../i18n/keys';
-import { Workspace } from './workspace';
+import { EditorWindow } from '../../editor/editor-window';
+import { I18n } from '../../i18n/i18n';
+import { TranslatePipe } from '../../i18n/translate.pipe';
+import type { TranslationKey } from '../../i18n/keys';
+import { WorkspaceActions } from '../workspace-actions';
 
 const DOCK_LABELS: Record<EditorDockSide, TranslationKey> = {
   bottom: 'editor.dockBottom',
@@ -127,7 +127,7 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
 })
 export class EditorWindowControls {
   protected readonly editorWindow = inject(EditorWindow);
-  protected readonly workspace = inject(Workspace);
+  protected readonly workspace = inject(WorkspaceActions);
   private readonly i18n = inject(I18n);
   protected readonly dockSides = EDITOR_DOCK_SIDES;
 

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule } from '@angular/material/dialog';
 
-import { TranslatePipe } from '../i18n/translate.pipe';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 
 export type UnsavedChoice = 'save' | 'discard' | 'cancel';
 

@@ -5,20 +5,27 @@ import { firstValueFrom } from 'rxjs';
 import type { ImportMode } from '@shader-studio/shared/model';
 import { composePass } from '@shader-studio/shared/pass-source';
 import { imagePass } from '@shader-studio/shared/project';
-import { DesktopPlatform } from '../core/desktop-platform';
-import { ShaderStore, type EditorDocument } from '../core/shader-store';
+import { DesktopPlatform } from '../desktop/desktop-platform';
+import { ShaderStore, type EditorDocument } from '../workspace/shader-store';
 import { I18n } from '../i18n/i18n';
 import { buildFullGlsl } from '@shader-studio/shared/glsl-export';
 import { convertShadertoy } from '@shader-studio/shared/shadertoy-import';
-import { ConfirmDialog, type ConfirmDialogData } from './confirm-dialog';
-import { DesktopVersionDialog } from './desktop-version-dialog';
-import { EditorSettingsDialog } from './editor-settings-dialog';
-import { ExportDialog } from './export-dialog';
-import { NewShaderDialog, type NewShaderDialogResult } from './new-shader-dialog';
-import { PromptDialog, type PromptDialogData, type PromptDialogResult } from './prompt-dialog';
-import { RecoveryDialog } from './recovery-dialog';
-import { ShadertoyImportDialog, type ShadertoyImportDialogResult } from './shadertoy-import-dialog';
-import { UnsavedChangesDialog, type UnsavedChoice } from './unsaved-changes-dialog';
+import { ConfirmDialog, type ConfirmDialogData } from './dialogs/confirm-dialog';
+import { DesktopVersionDialog } from './dialogs/desktop-version-dialog';
+import { EditorSettingsDialog } from './editor/editor-settings-dialog';
+import { ExportDialog } from './dialogs/export-dialog';
+import { NewShaderDialog, type NewShaderDialogResult } from './dialogs/new-shader-dialog';
+import {
+  PromptDialog,
+  type PromptDialogData,
+  type PromptDialogResult,
+} from './dialogs/prompt-dialog';
+import { RecoveryDialog } from './dialogs/recovery-dialog';
+import {
+  ShadertoyImportDialog,
+  type ShadertoyImportDialogResult,
+} from './dialogs/shadertoy-import-dialog';
+import { UnsavedChangesDialog, type UnsavedChoice } from './dialogs/unsaved-changes-dialog';
 
 /**
  * The user-facing verbs of the app: the flows that need a dialog or a file
@@ -29,7 +36,7 @@ import { UnsavedChangesDialog, type UnsavedChoice } from './unsaved-changes-dial
  * without duplicating it or reaching into each other.
  */
 @Injectable({ providedIn: 'root' })
-export class Workspace {
+export class WorkspaceActions {
   private readonly dialog = inject(MatDialog);
   private readonly store = inject(ShaderStore);
   private readonly desktop = inject(DesktopPlatform);

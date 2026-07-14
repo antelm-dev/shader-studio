@@ -1,8 +1,8 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 
-import { ShaderStore } from '../core/shader-store';
-import { I18n } from '../i18n/i18n';
-import type { TranslationKey } from '../i18n/keys';
+import { ShaderStore } from '../../workspace/shader-store';
+import { I18n } from '../../i18n/i18n';
+import type { TranslationKey } from '../../i18n/keys';
 
 /**
  * What the open document is doing, and whether it can be saved.

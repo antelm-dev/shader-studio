@@ -16,11 +16,11 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
 import type { ThumbnailMeta } from '@shader-studio/shared/model';
-import { ShaderStore } from '../core/shader-store';
-import { ThumbnailAssets } from '../core/thumbnail-assets';
-import { I18n } from '../i18n/i18n';
-import { TranslatePipe } from '../i18n/translate.pipe';
-import { Workspace } from './workspace';
+import { ShaderStore } from '../../workspace/shader-store';
+import { ThumbnailAssets } from '../../assets/thumbnail-assets';
+import { I18n } from '../../i18n/i18n';
+import { TranslatePipe } from '../../i18n/translate.pipe';
+import { WorkspaceActions } from '../workspace-actions';
 
 @Component({
   selector: 'app-shader-browser',
@@ -229,7 +229,7 @@ import { Workspace } from './workspace';
 export class ShaderBrowser {
   protected readonly i18n = inject(I18n);
   protected readonly store = inject(ShaderStore);
-  protected readonly workspace = inject(Workspace);
+  protected readonly workspace = inject(WorkspaceActions);
   private readonly thumbnails = inject(ThumbnailAssets);
 
   protected readonly query = signal('');

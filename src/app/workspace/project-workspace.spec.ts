@@ -25,9 +25,9 @@ import {
 } from '@shader-studio/shared/editor-prefs';
 import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
 import { DEFAULT_PANEL_WIDTHS } from '@shader-studio/shared/panel-prefs';
-import { Preferences, type WorkspacePreferences } from './preferences';
+import { Preferences, type WorkspacePreferences } from '../prefs/preferences';
 import { ProjectPersistence } from './project-persistence';
-import { ShaderApi, type UpdateShaderPatch } from './shader-api';
+import { ShaderApi, type UpdateShaderPatch } from '../api/shader-api';
 import { ShaderStore } from './shader-store';
 
 /**

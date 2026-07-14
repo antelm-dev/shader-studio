@@ -9,7 +9,7 @@ import {
   provideAppInitializer,
 } from '@angular/core';
 
-import { Preferences } from '../core/preferences';
+import { Preferences } from '../prefs/preferences';
 import { I18nCatalog } from './catalog';
 import { I18n } from './i18n';
 

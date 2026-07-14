@@ -1,7 +1,7 @@
 import { Injectable, effect, inject, untracked } from '@angular/core';
 
 import type { ShaderParams, ShaderRecord } from '@shader-studio/shared/model';
-import { Preferences } from './preferences';
+import { Preferences } from '../prefs/preferences';
 import { ShaderStore, type ShaderDraft } from './shader-store';
 
 interface OutputSnapshot {

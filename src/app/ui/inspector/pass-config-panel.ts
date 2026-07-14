@@ -18,7 +18,7 @@ import {
   type TextureWrapMode,
 } from '@shader-studio/shared';
 
-import { ShaderStore } from '../core/shader-store';
+import { ShaderStore } from '../../workspace/shader-store';
 
 /**
  * How a channel is described in the one dropdown that sets it.

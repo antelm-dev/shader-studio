@@ -16,15 +16,15 @@ import {
   type ShaderSummary,
 } from '@shader-studio/shared/model';
 import { imagePass, migrateLegacyProject } from '@shader-studio/shared/project';
-import { Preferences, type WorkspacePreferences } from './preferences';
+import { Preferences, type WorkspacePreferences } from '../prefs/preferences';
 import {
   DEFAULT_EDITOR_APPEARANCE,
   DEFAULT_EDITOR_WINDOW,
 } from '@shader-studio/shared/editor-prefs';
 import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
 import { DEFAULT_PANEL_WIDTHS } from '@shader-studio/shared/panel-prefs';
-import { ApiError, type UpdateShaderPatch } from './shader-api';
-import { ShaderApi } from './shader-api';
+import { ApiError, type UpdateShaderPatch } from '../api/shader-api';
+import { ShaderApi } from '../api/shader-api';
 import { ShaderStore } from './shader-store';
 
 /**

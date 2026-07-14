@@ -1,6 +1,6 @@
 /**
  * Wire protocol between the MCP server (`mcp/server.ts`) and the browser tab
- * it drives (`app/core/mcp-bridge.ts`).
+ * it drives (`app/mcp/mcp-bridge.ts`).
  *
  * The MCP server is the WebSocket server; the browser is the client. It opens
  * with a `Handshake` identifying the session (and proving it holds the bridge

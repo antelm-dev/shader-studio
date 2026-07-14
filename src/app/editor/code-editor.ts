@@ -15,14 +15,14 @@ import {
 } from '@angular/core';
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api.js';
 
-import type { ResolvedColorScheme } from '../core/preferences';
+import type { ResolvedColorScheme } from '../prefs/preferences';
 import {
   DEFAULT_EDITOR_APPEARANCE,
   fontFamilyStack,
   type EditorAppearance,
 } from '@shader-studio/shared/editor-prefs';
 import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
-import { ReducedMotion } from '../core/reduced-motion';
+import { ReducedMotion } from '../prefs/reduced-motion';
 import { FontLoader, findFont, nearestWeight } from './google-fonts';
 import { monacoThemeId, resolveThemeId } from './editor-themes';
 import { GLSL_LANGUAGE_ID, JSON_LANGUAGE_ID, loadMonaco, type MonacoApi } from './monaco-loader';

@@ -4,19 +4,19 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { DesktopPlatform } from '../core/desktop-platform';
+import { DesktopPlatform } from '../../desktop/desktop-platform';
 import {
   COLOR_SCHEME_OPTIONS,
   Preferences,
   colorSchemeIcon,
   type ColorScheme,
-} from '../core/preferences';
-import { ShaderStore } from '../core/shader-store';
-import { I18n } from '../i18n/i18n';
-import { TranslatePipe } from '../i18n/translate.pipe';
-import { DocumentStatus } from './document-status';
-import { MenuCommands, type MenuCommand } from './menu-commands';
-import { Workspace } from './workspace';
+} from '../../prefs/preferences';
+import { ShaderStore } from '../../workspace/shader-store';
+import { I18n } from '../../i18n/i18n';
+import { TranslatePipe } from '../../i18n/translate.pipe';
+import { DocumentStatus } from '../editor/document-status';
+import { MenuCommands, type MenuCommand } from '../menu-commands';
+import { WorkspaceActions } from '../workspace-actions';
 
 @Component({
   selector: 'app-titlebar',
@@ -313,7 +313,7 @@ import { Workspace } from './workspace';
 export class AppTitlebar {
   protected readonly desktop = inject(DesktopPlatform);
   protected readonly store = inject(ShaderStore);
-  protected readonly workspace = inject(Workspace);
+  protected readonly workspace = inject(WorkspaceActions);
   protected readonly preferences = inject(Preferences);
   protected readonly status = inject(DocumentStatus);
   protected readonly i18n = inject(I18n);

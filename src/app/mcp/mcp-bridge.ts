@@ -14,7 +14,7 @@ import { DEFAULT_RENDER, type ShaderControl, type ShaderParams } from '@shader-s
 import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { renderFrame } from '../rendering/frame-render';
-import { ShaderStore } from './shader-store';
+import { ShaderStore } from '../workspace/shader-store';
 
 const DEFAULT_PORT = 4310;
 const RECONNECT_DELAY_MS = 2000;

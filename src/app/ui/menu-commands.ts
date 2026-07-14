@@ -1,11 +1,11 @@
 import { Injectable, inject } from '@angular/core';
 
 import type { ImportMode } from '@shader-studio/shared/model';
-import { DesktopPlatform } from '../core/desktop-platform';
-import { Preferences, type WorkspacePreferences } from '../core/preferences';
-import { ShaderStore } from '../core/shader-store';
+import { DesktopPlatform } from '../desktop/desktop-platform';
+import { Preferences, type WorkspacePreferences } from '../prefs/preferences';
+import { ShaderStore } from '../workspace/shader-store';
 import { RendererHandle } from '../rendering/renderer-handle';
-import { Workspace } from './workspace';
+import { WorkspaceActions } from './workspace-actions';
 import { I18n } from '../i18n/i18n';
 import type { TranslationKey } from '../i18n/keys';
 
@@ -44,7 +44,7 @@ export type TogglablePanel = keyof Pick<
 @Injectable({ providedIn: 'root' })
 export class MenuCommands {
   private readonly store = inject(ShaderStore);
-  private readonly workspace = inject(Workspace);
+  private readonly workspace = inject(WorkspaceActions);
   private readonly preferences = inject(Preferences);
   private readonly desktop = inject(DesktopPlatform);
   private readonly renderer = inject(RendererHandle);

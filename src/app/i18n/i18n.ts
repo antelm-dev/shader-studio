@@ -1,7 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 
-import { Preferences } from '../core/preferences';
+import { Preferences } from '../prefs/preferences';
 import { I18nCatalog, type I18nCatalogMap } from './catalog';
 import { type AppLocale, type TranslationKey } from './keys';
 import { applyLocalizeCatalog } from './localize';

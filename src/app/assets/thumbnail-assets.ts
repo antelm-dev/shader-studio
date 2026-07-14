@@ -2,8 +2,8 @@ import { Injectable, inject } from '@angular/core';
 
 import type { ThumbnailMeta } from '@shader-studio/shared/model';
 import { mimeFromExt } from '@shader-studio/shared/validate';
-import { API_BASE_URL } from './api-base-url';
-import { DesktopPlatform } from './desktop-platform';
+import { API_BASE_URL } from '../api/api-base-url';
+import { DesktopPlatform } from '../desktop/desktop-platform';
 
 /**
  * Turns a shader's `ThumbnailMeta` into a URL the library can put in an `<img>`.

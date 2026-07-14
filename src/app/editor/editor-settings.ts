@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
-import { Preferences } from '../core/preferences';
+import { Preferences } from '../prefs/preferences';
 import {
   DEFAULT_EDITOR_APPEARANCE,
   sanitizeAppearance,

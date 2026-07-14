@@ -16,7 +16,7 @@ import {
 
 import { EDITOR_LIMITS } from '@shader-studio/shared/editor-prefs';
 import type { Rect } from '@shader-studio/shared/geometry';
-import { EditorWindow } from '../editor/editor-window';
+import { EditorWindow } from '../../editor/editor-window';
 import { EditorPanel } from './editor-panel';
 
 /**

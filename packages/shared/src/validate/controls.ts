@@ -1,11 +1,13 @@
-import { DEFAULT_BLOOM, type ParamValue, type Preset, type RenderSettings, type ShaderControl, type ShaderParams } from '../model';
-import { LIMITS } from './limits';
 import {
-  isFiniteNumber,
-  isRecord,
-  validateName,
-  validateOptionalText,
-} from './primitives';
+  DEFAULT_BLOOM,
+  type ParamValue,
+  type Preset,
+  type RenderSettings,
+  type ShaderControl,
+  type ShaderParams,
+} from '../model';
+import { LIMITS } from './limits';
+import { isFiniteNumber, isRecord, validateName, validateOptionalText } from './primitives';
 import { fail, ok, type Result } from './result';
 
 const KEY_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/;

@@ -36,22 +36,22 @@ import {
   Preferences,
   colorSchemeIcon,
   type ColorScheme,
-} from './core/preferences';
-import { DesktopPlatform } from './core/desktop-platform';
-import { McpBridge } from './core/mcp-bridge';
-import { ShaderStore } from './core/shader-store';
-import { OutputSync } from './core/output-sync';
+} from './prefs/preferences';
+import { DesktopPlatform } from './desktop/desktop-platform';
+import { McpBridge } from './mcp/mcp-bridge';
+import { ShaderStore } from './workspace/shader-store';
+import { OutputSync } from './workspace/output-sync';
 import { EditorWindow } from './editor/editor-window';
-import { EditorShell } from './ui/editor-shell';
-import { AppTitlebar } from './ui/app-titlebar';
-import { DocumentStatus } from './ui/document-status';
-import { InspectorPanel } from './ui/inspector-panel';
+import { EditorShell } from './ui/editor/editor-shell';
+import { AppTitlebar } from './ui/layout/app-titlebar';
+import { DocumentStatus } from './ui/editor/document-status';
+import { InspectorPanel } from './ui/inspector/inspector-panel';
 import { MenuCommands, type MenuCommand } from './ui/menu-commands';
-import { PreviewShell } from './ui/preview-shell';
-import { PreviewStage } from './ui/preview-stage';
-import { ResizeHandle } from './ui/resize-handle';
-import { ShaderBrowser } from './ui/shader-browser';
-import { Workspace } from './ui/workspace';
+import { PreviewShell } from './ui/preview/preview-shell';
+import { PreviewStage } from './ui/preview/preview-stage';
+import { ResizeHandle } from './ui/layout/resize-handle';
+import { ShaderBrowser } from './ui/browser/shader-browser';
+import { WorkspaceActions } from './ui/workspace-actions';
 import { I18n, LANGUAGE_OPTIONS, type AppLocale } from './i18n/i18n';
 import { TranslatePipe } from './i18n/translate.pipe';
 
@@ -83,7 +83,7 @@ import { TranslatePipe } from './i18n/translate.pipe';
 export class App {
   protected readonly store = inject(ShaderStore);
   protected readonly preferences = inject(Preferences);
-  protected readonly workspace = inject(Workspace);
+  protected readonly workspace = inject(WorkspaceActions);
   protected readonly desktop = inject(DesktopPlatform);
   protected readonly status = inject(DocumentStatus);
   protected readonly commands = inject(MenuCommands);

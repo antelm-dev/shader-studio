@@ -1,4 +1,10 @@
-import { BUFFER_SLOTS, type BufferSlot, type RenderPass, type ShaderFile, type ShaderProject } from './types';
+import {
+  BUFFER_SLOTS,
+  type BufferSlot,
+  type RenderPass,
+  type ShaderFile,
+  type ShaderProject,
+} from './types';
 
 export function imagePass(project: ShaderProject): RenderPass {
   const pass = project.passes.find((entry) => entry.kind === 'image');

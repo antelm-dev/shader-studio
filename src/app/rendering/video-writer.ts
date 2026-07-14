@@ -1,4 +1,4 @@
-import type { DesktopPlatform } from '../core/desktop-platform';
+import type { DesktopPlatform } from '../desktop/desktop-platform';
 import type { CapturePlan } from '@shader-studio/shared/capture-plan';
 
 /**

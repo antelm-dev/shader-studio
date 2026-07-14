@@ -69,10 +69,10 @@ import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/s
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { ProjectPersistence } from './project-persistence';
 import { RendererHandle } from '../rendering/renderer-handle';
-import { ApiError, ShaderApi } from './shader-api';
-import { Preferences } from './preferences';
-import { TextureAssets } from './texture-assets';
-import { ThumbnailAssets } from './thumbnail-assets';
+import { ApiError, ShaderApi } from '../api/shader-api';
+import { Preferences } from '../prefs/preferences';
+import { TextureAssets } from '../assets/texture-assets';
+import { ThumbnailAssets } from '../assets/thumbnail-assets';
 
 /**
  * The single source of truth for the workspace.

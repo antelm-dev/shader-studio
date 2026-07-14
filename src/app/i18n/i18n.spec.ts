@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { ɵ$localize as $localize } from '@angular/localize';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Preferences, type WorkspacePreferences } from '../core/preferences';
+import { Preferences, type WorkspacePreferences } from '../prefs/preferences';
 import { I18nCatalog, type I18nCatalogMap } from './catalog';
 import { I18n } from './i18n';
 

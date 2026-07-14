@@ -6,10 +6,10 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
-import { Preferences, type WorkspacePreferences } from '../core/preferences';
-import { ShaderStore } from '../core/shader-store';
-import { I18nCatalog, type I18nCatalogMap } from '../i18n/catalog';
-import { I18n } from '../i18n/i18n';
+import { Preferences, type WorkspacePreferences } from '../../prefs/preferences';
+import { ShaderStore } from '../../workspace/shader-store';
+import { I18nCatalog, type I18nCatalogMap } from '../../i18n/catalog';
+import { I18n } from '../../i18n/i18n';
 import { DocumentStatus } from './document-status';
 
 class FakeStore implements Partial<ShaderStore> {

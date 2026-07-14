@@ -7,7 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 
 import { LIMITS } from '@shader-studio/shared/validate';
-import { TranslatePipe } from '../i18n/translate.pipe';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 
 export type NewShaderDialogResult = { action: 'create'; name: string } | { action: 'shadertoy' };
 

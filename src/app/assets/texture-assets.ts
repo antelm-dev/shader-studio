@@ -6,8 +6,8 @@ import type {
   TextureWrapMode,
 } from '@shader-studio/shared/model';
 import { mimeFromExt } from '@shader-studio/shared/validate';
-import { API_BASE_URL } from './api-base-url';
-import { DesktopPlatform } from './desktop-platform';
+import { API_BASE_URL } from '../api/api-base-url';
+import { DesktopPlatform } from '../desktop/desktop-platform';
 
 /** A channel resolved to something the renderer/preview can actually load from. */
 export interface ResolvedChannel {

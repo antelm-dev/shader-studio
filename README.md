@@ -305,7 +305,7 @@ data/
       presets.json           { "presets": [ ... ] }
 ```
 
-A shader is a *project* — an Image pass, an optional Common pass of shared code,
+A shader is a _project_ — an Image pass, an optional Common pass of shared code,
 up to four buffers, and any number of plain source files a pass can `#include`.
 `project.json` is that whole document; `fragment.glsl`/`vertex.glsl` are kept in
 sync with it (the Image pass's source, and the project's vertex shader) so that

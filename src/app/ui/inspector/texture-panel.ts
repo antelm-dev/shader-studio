@@ -4,10 +4,10 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import type { TextureFilterMode, TextureWrapMode } from '@shader-studio/shared/model';
-import { ShaderStore } from '../core/shader-store';
-import { TextureAssets } from '../core/texture-assets';
-import { TranslatePipe } from '../i18n/translate.pipe';
-import type { TranslationKey } from '../i18n/keys';
+import { ShaderStore } from '../../workspace/shader-store';
+import { TextureAssets } from '../../assets/texture-assets';
+import { TranslatePipe } from '../../i18n/translate.pipe';
+import type { TranslationKey } from '../../i18n/keys';
 
 const CHANNEL_INDICES = [0, 1, 2, 3] as const;
 type ChannelIndex = (typeof CHANNEL_INDICES)[number];

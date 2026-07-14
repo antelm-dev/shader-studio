@@ -4,9 +4,9 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
-import { DesktopUpdater } from '../core/desktop-updater';
-import { I18n } from '../i18n/i18n';
-import { TranslatePipe } from '../i18n/translate.pipe';
+import { DesktopUpdater } from '../../desktop/desktop-updater';
+import { I18n } from '../../i18n/i18n';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 
 @Component({
   selector: 'app-desktop-version-dialog',

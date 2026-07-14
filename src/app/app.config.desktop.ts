@@ -6,8 +6,8 @@ import {
 import { provideRouter } from '@angular/router';
 
 import { routes } from './app.routes';
-import { DesktopShaderApi } from './core/desktop-api';
-import { ShaderApi } from './core/shader-api';
+import { DesktopShaderApi } from './desktop/desktop-shader-api';
+import { ShaderApi } from './api/shader-api';
 import { DesktopI18nCatalog } from './i18n/catalog';
 import { provideI18n } from './i18n/provide-i18n';
 

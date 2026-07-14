@@ -7,7 +7,7 @@ import {
   parseBundle,
   validateImportMode,
 } from '@shader-studio/shared/validate';
-import type { UpdateShaderPatch } from '../../src/app/core/shader-api';
+import type { UpdateShaderPatch } from '../../src/app/api/shader-api';
 import { ShaderStorage, StorageError } from '../../src/server/storage';
 
 function stringArg(value: unknown, name: string): string {

@@ -1,5 +1,5 @@
 import { THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '@shader-studio/shared/model';
-import type { ThumbnailUpload } from '../core/shader-api';
+import type { ThumbnailUpload } from '../api/shader-api';
 
 /**
  * Encoding a preview out of the frame that is already on screen.

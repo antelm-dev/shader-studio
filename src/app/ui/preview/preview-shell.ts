@@ -3,7 +3,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 
-import { DesktopPlatform } from '../core/desktop-platform';
+import { DesktopPlatform } from '../../desktop/desktop-platform';
 import type { Point, Rect, Size } from '@shader-studio/shared/geometry';
 import { containPoint, containRect } from '@shader-studio/shared/geometry';
 import {
@@ -12,20 +12,20 @@ import {
   colorSchemeIcon,
   type ColorScheme,
   type WorkspacePreferences,
-} from '../core/preferences';
+} from '../../prefs/preferences';
 import {
   PREVIEW_MINIMIZED_SIZE,
   PREVIEW_MINIMIZED_WIDTH,
   PREVIEW_MIN_FLOATING,
   type PreviewMode,
 } from '@shader-studio/shared/preview-prefs';
-import { ShaderStore } from '../core/shader-store';
-import { PreviewWindow } from '../rendering/preview-window';
-import { RendererHandle } from '../rendering/renderer-handle';
-import { ShaderCanvas } from '../rendering/shader-canvas';
-import { I18n } from '../i18n/i18n';
-import { TranslatePipe } from '../i18n/translate.pipe';
-import type { TranslationKey } from '../i18n/keys';
+import { ShaderStore } from '../../workspace/shader-store';
+import { PreviewWindow } from '../../rendering/preview-window';
+import { RendererHandle } from '../../rendering/renderer-handle';
+import { ShaderCanvas } from '../../rendering/shader-canvas';
+import { I18n } from '../../i18n/i18n';
+import { TranslatePipe } from '../../i18n/translate.pipe';
+import type { TranslationKey } from '../../i18n/keys';
 import { PreviewWindowControls } from './preview-window-controls';
 
 /**

@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type { CaptureSettings } from '@shader-studio/shared/model';
-import { DesktopPlatform } from '../core/desktop-platform';
-import { ShaderStore } from '../core/shader-store';
+import { DesktopPlatform } from '../desktop/desktop-platform';
+import { ShaderStore } from '../workspace/shader-store';
 import { I18n } from '../i18n/i18n';
 import { outputIndices, planCapture, type CapturePlan } from '@shader-studio/shared/capture-plan';
 import { CaptureCancelled, captureFrames } from './frame-capture';

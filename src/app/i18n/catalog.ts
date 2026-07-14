@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
-import { API_BASE_URL } from '../core/api-base-url';
+import { API_BASE_URL } from '../api/api-base-url';
 import type { AppLocale } from './keys';
 
 export type I18nCatalogMap = Readonly<Record<string, string>>;

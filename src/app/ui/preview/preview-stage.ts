@@ -8,7 +8,7 @@ import {
   inject,
 } from '@angular/core';
 
-import { PreviewWindow } from '../rendering/preview-window';
+import { PreviewWindow } from '../../rendering/preview-window';
 
 /**
  * Marks the region a windowed preview lives in, and keeps its measurements up to

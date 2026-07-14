@@ -5,13 +5,13 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { INSPECTOR_TABS, type InspectorTab } from '@shader-studio/shared/panel-prefs';
-import { Preferences } from '../core/preferences';
-import { ShaderStore } from '../core/shader-store';
-import { GuiPanel } from '../gui/gui-panel';
-import { TranslatePipe } from '../i18n/translate.pipe';
+import { Preferences } from '../../prefs/preferences';
+import { ShaderStore } from '../../workspace/shader-store';
+import { GuiPanel } from './gui-panel';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 import { PresetPanel } from './preset-panel';
 import { TexturePanel } from './texture-panel';
-import { Workspace } from './workspace';
+import { WorkspaceActions } from '../workspace-actions';
 
 /**
  * The inspector: parameters, textures and presets, one at a time.
@@ -201,7 +201,7 @@ import { Workspace } from './workspace';
 })
 export class InspectorPanel {
   protected readonly store = inject(ShaderStore);
-  protected readonly workspace = inject(Workspace);
+  protected readonly workspace = inject(WorkspaceActions);
 
   private readonly preferences = inject(Preferences);
 

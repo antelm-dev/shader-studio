@@ -4,10 +4,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 
 import type { Preset } from '@shader-studio/shared/model';
-import { ShaderStore } from '../core/shader-store';
-import { I18n } from '../i18n/i18n';
-import { TranslatePipe } from '../i18n/translate.pipe';
-import { Workspace } from './workspace';
+import { ShaderStore } from '../../workspace/shader-store';
+import { I18n } from '../../i18n/i18n';
+import { TranslatePipe } from '../../i18n/translate.pipe';
+import { WorkspaceActions } from '../workspace-actions';
 
 /** The Presets tab. Its heading and its save action belong to `InspectorPanel`. */
 @Component({
@@ -80,7 +80,7 @@ import { Workspace } from './workspace';
 })
 export class PresetPanel {
   protected readonly store = inject(ShaderStore);
-  protected readonly workspace = inject(Workspace);
+  protected readonly workspace = inject(WorkspaceActions);
   private readonly i18n = inject(I18n);
 
   protected apply(presetId: string | null): void {

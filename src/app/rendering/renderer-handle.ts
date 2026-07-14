@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { DesktopPlatform } from '../core/desktop-platform';
+import { DesktopPlatform } from '../desktop/desktop-platform';
 
-import type { ThumbnailUpload } from '../core/shader-api';
+import type { ThumbnailUpload } from '../api/shader-api';
 import type { ShaderEngine } from './shader-engine';
 import { encodeThumbnail } from './thumbnail';
 

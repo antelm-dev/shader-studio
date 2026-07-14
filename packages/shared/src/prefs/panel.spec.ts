@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  DEFAULT_PANEL_WIDTHS,
-  PANEL_LIMITS,
-  clampPanelWidth,
-  sanitizeInspectorTab,
-} from './panel';
+import { DEFAULT_PANEL_WIDTHS, PANEL_LIMITS, clampPanelWidth, sanitizeInspectorTab } from './panel';
 
 /**
  * `localStorage` is user-writable and outlives any given build of this app, so

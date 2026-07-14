@@ -8,7 +8,7 @@ import { provideClientHydration, withEventReplay } from '@angular/platform-brows
 import { provideRouter } from '@angular/router';
 
 import { routes } from './app.routes';
-import { HttpShaderApi, ShaderApi } from './core/shader-api';
+import { HttpShaderApi, ShaderApi } from './api/shader-api';
 import { HttpI18nCatalog } from './i18n/catalog';
 import { provideI18n } from './i18n/provide-i18n';
 

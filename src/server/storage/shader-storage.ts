@@ -598,7 +598,8 @@ export class ShaderStorage {
         projectTouched = true;
       } else if (suppliedFragment !== undefined || suppliedVertex !== undefined) {
         const image = imagePass(current.project);
-        if (suppliedFragment !== undefined) project = setPassSource(project, image.id, suppliedFragment);
+        if (suppliedFragment !== undefined)
+          project = setPassSource(project, image.id, suppliedFragment);
         if (suppliedVertex !== undefined) project = setVertexSource(project, suppliedVertex);
         projectTouched = true;
       }

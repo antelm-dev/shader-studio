@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { ShaderStore, type EditorDocument } from '../core/shader-store';
+import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
 
 /** What a tab is doing, which is what its dot is coloured for. */
 export type TabState = 'idle' | 'compiling' | 'error' | 'ok';

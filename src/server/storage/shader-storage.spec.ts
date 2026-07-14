@@ -4,7 +4,13 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LEGACY_BUNDLE_FORMAT, type ShaderPayload } from '@shader-studio/shared/model';
-import { addBuffer, addFile, bufferPasses, imagePass, setChannelBinding } from '@shader-studio/shared/project';
+import {
+  addBuffer,
+  addFile,
+  bufferPasses,
+  imagePass,
+  setChannelBinding,
+} from '@shader-studio/shared/project';
 import { buildCollectionBundle, parseBundle } from '@shader-studio/shared/validate';
 import { ShaderStorage, StorageError, DEFAULT_VERTEX, TEMPLATE_FRAGMENT } from './index';
 

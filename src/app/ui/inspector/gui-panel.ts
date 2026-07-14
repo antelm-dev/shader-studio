@@ -13,9 +13,9 @@ import {
 import type GUI from 'lil-gui';
 import type { Controller } from 'lil-gui';
 
-import { Preferences } from '../core/preferences';
-import { ShaderStore } from '../core/shader-store';
-import { RendererHandle } from '../rendering/renderer-handle';
+import { Preferences } from '../../prefs/preferences';
+import { ShaderStore } from '../../workspace/shader-store';
+import { RendererHandle } from '../../rendering/renderer-handle';
 import type { ShaderControl } from '@shader-studio/shared/model';
 
 /**

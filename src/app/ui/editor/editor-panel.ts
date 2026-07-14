@@ -15,17 +15,17 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { findPass } from '@shader-studio/shared/project';
-import { CodeEditor, type EditorDoc } from '../editor/code-editor';
-import { EditorSettings } from '../editor/editor-settings';
-import { Preferences } from '../core/preferences';
+import { CodeEditor, type EditorDoc } from '../../editor/code-editor';
+import { EditorSettings } from '../../editor/editor-settings';
+import { Preferences } from '../../prefs/preferences';
 import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
-import { ShaderStore } from '../core/shader-store';
+import { ShaderStore } from '../../workspace/shader-store';
 import { DocumentStatus } from './document-status';
 import { EditorTabs } from './editor-tabs';
 import { EditorWindowControls } from './editor-window-controls';
-import { PassConfigPanel } from './pass-config-panel';
-import { TranslatePipe } from '../i18n/translate.pipe';
-import { Workspace } from './workspace';
+import { PassConfigPanel } from '../inspector/pass-config-panel';
+import { TranslatePipe } from '../../i18n/translate.pipe';
+import { WorkspaceActions } from '../workspace-actions';
 
 @Component({
   selector: 'app-editor-panel',
@@ -355,7 +355,7 @@ export class EditorPanel {
   protected readonly store = inject(ShaderStore);
   protected readonly preferences = inject(Preferences);
   protected readonly settings = inject(EditorSettings);
-  protected readonly workspace = inject(Workspace);
+  protected readonly workspace = inject(WorkspaceActions);
   protected readonly status = inject(DocumentStatus);
 
   readonly collapsed = input(false);

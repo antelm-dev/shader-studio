@@ -14,16 +14,16 @@ import { MatSliderModule } from '@angular/material/slider';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { CodeEditor, type EditorDoc } from '../editor/code-editor';
-import { EditorSettings } from '../editor/editor-settings';
-import { EDITOR_THEMES } from '../editor/editor-themes';
-import { FONT_CATALOGUE, FontLoader, SYSTEM_FONT, findFont } from '../editor/google-fonts';
+import { CodeEditor, type EditorDoc } from '../../editor/code-editor';
+import { EditorSettings } from '../../editor/editor-settings';
+import { EDITOR_THEMES } from '../../editor/editor-themes';
+import { FONT_CATALOGUE, FontLoader, SYSTEM_FONT, findFont } from '../../editor/google-fonts';
 import {
   EDITOR_LIMITS,
   fontFamilyStack,
   type WordWrapMode,
 } from '@shader-studio/shared/editor-prefs';
-import { Preferences } from '../core/preferences';
+import { Preferences } from '../../prefs/preferences';
 import { FontPreview } from './font-preview';
 
 /**
