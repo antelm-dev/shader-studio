@@ -1,16 +1,12 @@
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
-import { isPlatformServer } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  PLATFORM_ID,
-  afterNextRender,
   afterRenderEffect,
   computed,
   effect,
   inject,
-  isDevMode,
   signal,
   untracked,
   viewChild,
@@ -37,9 +33,7 @@ import {
   type ColorScheme,
 } from './prefs/preferences';
 import { DesktopPlatform } from './desktop/desktop-platform';
-import { McpBridge } from './mcp/mcp-bridge';
 import { ShaderStore } from './workspace/shader-store';
-import { OutputSync } from './workspace/output-sync';
 import { EditorWindow } from './editor/editor-window';
 import { EditorShell } from './ui/editor/editor-shell';
 import { AppTitlebar } from './ui/layout/app-titlebar';
@@ -51,8 +45,8 @@ import { isOutputWindow } from './output-mode';
 import { PreviewShell } from './ui/preview/preview-shell';
 import { PreviewStage } from './ui/preview/preview-stage';
 import { ResizeHandle } from './ui/layout/resize-handle';
-import { RoutingCoordinator } from './workspace/routing-coordinator';
 import { ShaderBrowser } from './ui/browser/shader-browser';
+import { StartupCoordinator } from './workspace/startup-coordinator';
 import { WorkspaceActions } from './ui/workspace-actions';
 import { I18n, LANGUAGE_OPTIONS, type AppLocale } from './i18n/i18n';
 import { TranslatePipe } from './i18n/translate.pipe';
@@ -95,10 +89,6 @@ export class App {
   protected readonly outputMode = isOutputWindow();
 
   private readonly snackBar = inject(MatSnackBar);
-  private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
-  private readonly routing = inject(RoutingCoordinator);
-  private readonly outputSync = inject(OutputSync);
-  private readonly mcpBridge = inject(McpBridge);
 
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
   private readonly importMode = signal<ImportMode>('rename');
@@ -213,8 +203,9 @@ export class App {
   private readonly sidenavContainer = viewChild.required(MatSidenavContainer);
 
   constructor() {
-    if (this.outputMode) this.outputSync.startOutput();
-    else this.outputSync.startController();
+    // Constructing this kicks off the whole boot sequence — see its own
+    // constructor. Nothing here needs to call anything on it.
+    inject(StartupCoordinator);
 
     // The hidden input the browser imports go through is in this template.
     if (!this.outputMode) this.commands.useFilePicker((mode) => this.pickFile(mode));
@@ -240,26 +231,6 @@ export class App {
       this.drawerOpen();
       this.sidenavContainer().updateContentMargins();
     });
-
-    // On the server, render the collection into the HTML. In the browser the
-    // same work is deferred until after hydration, so the first client render
-    // matches the markup the server produced (see ShaderStore's snapshot).
-    if (this.isServer && !this.outputMode) {
-      void this.store.initialize(this.routing.routeShaderId());
-    }
-
-    afterNextRender(() => {
-      this.desktop.onCloseRequested(() => void this.handleDesktopClose());
-    });
-    if (!this.outputMode) afterNextRender(() => this.hintContextMenus());
-
-    // Dev-only bridge for `mcp/server.ts`: lets an agent drive this tab's
-    // store live. Never runs in a production build, and skipped on the
-    // secondary output window, which mirrors the main tab rather than
-    // hosting the editing session itself.
-    if (!this.outputMode && isDevMode()) {
-      afterNextRender(() => this.mcpBridge.start());
-    }
 
     // Picking a shader on a handset should get the drawer out of the way — it
     // is covering the very thing you just chose to look at.
@@ -337,25 +308,5 @@ export class App {
   /** Opening the editor is what an error badge is *for*. */
   protected showEditor(): void {
     this.preferences.patch({ editorOpen: true });
-  }
-
-  private async handleDesktopClose(): Promise<void> {
-    const approved = await this.workspace.guardedTransition(() => undefined);
-    this.desktop.approveClose(approved);
-  }
-
-  private hintContextMenus(): void {
-    if (this.isServer) return;
-    const key = 'shader-studio.hinted-context-menus';
-    try {
-      if (localStorage.getItem(key)) return;
-      localStorage.setItem(key, '1');
-    } catch {
-      return;
-    }
-    this.snackBar.open(this.i18n.t('notice.contextMenuTip'), this.i18n.t('action.gotIt'), {
-      duration: 6000,
-      politeness: 'polite',
-    });
   }
 }
