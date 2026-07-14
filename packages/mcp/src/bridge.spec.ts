@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   MCP_BRIDGE_PROTOCOL_VERSION,
+  MCP_LIMITS,
   type Handshake,
   type McpStateSnapshot,
 } from '@shader-studio/shared/mcp-protocol';
@@ -128,6 +129,17 @@ describe('mcp bridge', () => {
     socket.close();
   });
 
+  it('rejects a handshake speaking an unsupported protocol version, with an actionable message', async () => {
+    const socket = await open(port);
+    socket.send(JSON.stringify(handshake({ protocolVersion: 999, appVersion: '9.9.9' })));
+
+    const message = (await onceMessage(socket)) as { kind: string; reason: string };
+    expect(message.kind).toBe('hello-rejected');
+    expect(message.reason).toContain('9.9.9');
+    expect(message.reason).toContain('999');
+    expect(message.reason).toContain(String(MCP_BRIDGE_PROTOCOL_VERSION));
+  });
+
   it('rejects a second connection instead of silently replacing the active session', async () => {
     const first = await connectedApp(port);
 
@@ -230,5 +242,21 @@ describe('mcp bridge', () => {
     });
 
     socket.close();
+  });
+
+  it('closes the connection instead of accepting a message over the payload limit', async () => {
+    const socket = await open(port);
+
+    const closeEvent = new Promise<{ code: number }>((resolve) => {
+      socket.once('close', (code) => resolve({ code }));
+    });
+
+    // One byte over `ws`'s configured `maxPayload` (MCP_LIMITS.maxMessageBytes).
+    const oversized = 'a'.repeat(MCP_LIMITS.maxMessageBytes + 1);
+    socket.send(oversized);
+
+    const { code } = await closeEvent;
+    // `ws` closes with 1009 ("message too big") when maxPayload is exceeded.
+    expect(code).toBe(1009);
   });
 });

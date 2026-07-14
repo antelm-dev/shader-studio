@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "moduleResolution": "Bundler",
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "scripts/**/*.ts",
+    "test/**/*.ts",
+    "../shared/src/mcp/**/*.ts",
+    "../shared/src/validate/**/*.ts",
+    "../shared/src/model/**/*.ts"
+  ]
+}

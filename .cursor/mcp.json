@@ -6,8 +6,8 @@
     },
     "shader-studio": {
       "command": "npx",
-      "args": ["-y", "tsx", "mcp/server.ts"],
-      "env": { "SHADER_STUDIO_MCP_PORT": "4311" }
+      "args": ["-y", "tsx", "packages/mcp/src/server.ts"],
+      "env": { "SHADER_STUDIO_MCP_PORT": "4310" }
     }
   }
 }

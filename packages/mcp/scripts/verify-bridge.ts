@@ -9,8 +9,8 @@ import {
   type Handshake,
 } from '@shader-studio/shared/mcp-protocol';
 
-import { callApp, closeBridge, resetBridgeForTests, startBridge } from './bridge.js';
-import { resetBridgeTokenForTests } from './token.js';
+import { callApp, closeBridge, resetBridgeForTests, startBridge } from '../src/bridge.js';
+import { resetBridgeTokenForTests } from '../src/token.js';
 
 const PORT = Number(process.env['SHADER_STUDIO_MCP_PORT'] ?? 4311);
 const TOKEN = 'verify-bridge-token';

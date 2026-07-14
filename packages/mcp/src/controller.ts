@@ -5,7 +5,7 @@ import type { TextEdit } from '@shader-studio/shared/mcp-protocol';
 import { callApp, SCREENSHOT_TIMEOUT_MS } from './bridge.js';
 
 /**
- * The `ShaderStudioController` implementation `mcp/server.ts` actually uses: a
+ * The `ShaderStudioController` implementation `server.ts` actually uses: a
  * thin, typed façade over `callApp`. Every method here is one WebSocket round
  * trip — the interface is what lets tool handlers be written against domain
  * operations instead of `{ type, ...payload }` objects.

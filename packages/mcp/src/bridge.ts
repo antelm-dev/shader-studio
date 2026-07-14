@@ -19,7 +19,9 @@ import {
   type McpError,
 } from '@shader-studio/shared/mcp-protocol';
 
-import { resolveBridgeToken } from './token.js';
+import { createLogger, type Logger } from './logger.js';
+import { resolveBridgeToken, tokensMatch } from './token.js';
+import { SERVER_VERSION } from './version.js';
 
 export const NO_APP =
   'Aucun onglet Shader Studio connecté — lance `pnpm dev` et garde une page ouverte';
@@ -148,13 +150,21 @@ function rejectHandshake(socket: WebSocket, reason: string): void {
   socket.close();
 }
 
+function protocolMismatchReason(handshake: Handshake): string {
+  return (
+    `Protocol mismatch: the app is v${handshake.appVersion} speaking protocol ` +
+    `${handshake.protocolVersion}; shader-studio-mcp is v${SERVER_VERSION} and supports ` +
+    `protocol ${MCP_BRIDGE_PROTOCOL_VERSION}. Update whichever side is behind.`
+  );
+}
+
 /**
  * The first message on every connection must be a valid, correctly-tokened
  * handshake. Anything else — malformed JSON, a schema mismatch, a wrong or
  * missing token, a second connection while one is already active — is an
  * explicit rejection, never a silent takeover of `activeSession`.
  */
-function handleHandshake(socket: WebSocket, raw: string): void {
+function handleHandshake(socket: WebSocket, raw: string, logger: Logger): void {
   let message: unknown;
   try {
     message = JSON.parse(raw);
@@ -172,14 +182,11 @@ function handleHandshake(socket: WebSocket, raw: string): void {
   const handshake: Handshake = parsed.data;
 
   if (handshake.protocolVersion !== MCP_BRIDGE_PROTOCOL_VERSION) {
-    rejectHandshake(
-      socket,
-      `Unsupported protocol version ${handshake.protocolVersion}; the bridge speaks ${MCP_BRIDGE_PROTOCOL_VERSION}.`,
-    );
+    rejectHandshake(socket, protocolMismatchReason(handshake));
     return;
   }
 
-  if (handshake.token !== resolveBridgeToken()) {
+  if (!tokensMatch(handshake.token, resolveBridgeToken().value)) {
     rejectHandshake(socket, 'Invalid or missing token.');
     return;
   }
@@ -190,6 +197,7 @@ function handleHandshake(socket: WebSocket, raw: string): void {
   }
 
   activeSession = { id: handshake.sessionId, socket };
+  logger.info(`App session "${handshake.sessionId}" connected (app v${handshake.appVersion}).`);
 
   const ack: HandshakeAck = {
     kind: 'hello-ack',
@@ -203,31 +211,51 @@ function handleHandshake(socket: WebSocket, raw: string): void {
     if (activeSession?.socket === socket) {
       rejectPendingFor(handshake.sessionId, 'The app session disconnected.');
       activeSession = null;
+      logger.info(`App session "${handshake.sessionId}" disconnected.`);
     }
   });
 }
 
-function wireBridge(wss: WebSocketServer, port: number): void {
+function wireBridge(wss: WebSocketServer, logger: Logger): void {
   wss.on('connection', (socket) => {
+    // A malformed frame (e.g. one over `maxPayload`) surfaces as an 'error'
+    // event on this specific socket. Without a listener here, Node treats an
+    // unheard 'error' event as fatal and crashes the process — an oversized
+    // or corrupt message from one connection must never take the bridge down.
+    socket.on('error', (error) => {
+      logger.debug(`Connection error: ${error instanceof Error ? error.message : String(error)}`);
+    });
     // Only the first message may be a handshake; once accepted, `handleHandshake`
     // replaces this listener with `handleAppMessage` for the rest of the socket's life.
-    socket.once('message', (data) => handleHandshake(socket, messageText(data)));
-  });
-
-  wss.on('listening', () => {
-    console.error(`[shader-studio-mcp] WebSocket bridge listening on ws://127.0.0.1:${port}`);
-    console.error(`[shader-studio-mcp] Bridge token: ${resolveBridgeToken()}`);
-    console.error(
-      '[shader-studio-mcp] In the browser console, run: localStorage.setItem("shaderStudioMcpToken", "' +
-        `${resolveBridgeToken()}")\`, then reload.`,
-    );
+    socket.once('message', (data) => handleHandshake(socket, messageText(data), logger));
   });
 }
 
-function listenOnce(port: number): Promise<WebSocketServer> {
+/**
+ * Called once `listenOnce` has already resolved — i.e. once binding is known
+ * to have succeeded. (A `wss.on('listening', ...)` handler here would be too
+ * late: `listenOnce` already consumed that one-shot event via `.once()` to
+ * resolve its promise, so a second listener attached afterward would never fire.)
+ */
+function logListening(port: number, host: string, logger: Logger): void {
+  logger.info(`WebSocket bridge listening on ws://${host}:${port}`);
+
+  const token = resolveBridgeToken();
+  if (token.source === 'generated') {
+    logger.info(`Bridge token (auto-generated): ${token.value}`);
+    logger.info(
+      'Pair the app with this token — in the browser console, run: ' +
+        `localStorage.setItem("shaderStudioMcpToken", "${token.value}"), then reload.`,
+    );
+  } else {
+    logger.info('Using the configured SHADER_STUDIO_MCP_TOKEN.');
+  }
+}
+
+function listenOnce(port: number, host: string): Promise<WebSocketServer> {
   return new Promise((resolve, reject) => {
     const wss = new WebSocketServer({
-      host: '127.0.0.1',
+      host,
       port,
       maxPayload: MCP_LIMITS.maxMessageBytes,
     });
@@ -250,13 +278,19 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function startBridge(port: number): Promise<WebSocketServer> {
+export async function startBridge(
+  port: number,
+  host = '127.0.0.1',
+  logger: Logger = createLogger('silent'),
+): Promise<WebSocketServer> {
   if (activeBridge) return activeBridge;
 
   for (let attempt = 0; attempt <= BIND_RETRIES; attempt++) {
     try {
-      const wss = await listenOnce(port);
-      wireBridge(wss, port);
+      const wss = await listenOnce(port, host);
+      const boundPort = port === 0 ? (wss.address() as { port: number }).port : port;
+      wireBridge(wss, logger);
+      logListening(boundPort, host, logger);
       activeBridge = wss;
       return wss;
     } catch (error) {
@@ -265,11 +299,12 @@ export async function startBridge(port: number): Promise<WebSocketServer> {
     }
   }
 
-  throw new Error(`Could not bind ws://127.0.0.1:${port}`);
+  throw new Error(`Could not bind ws://${host}:${port}`);
 }
 
-export function installBridgeShutdown(wss: WebSocketServer): void {
-  const shutdown = () => {
+export function installBridgeShutdown(wss: WebSocketServer, logger: Logger = createLogger('silent')): void {
+  const shutdown = (reason: string) => {
+    logger.info(`Shutting down (${reason}).`);
     rejectAllPending('Bridge shutting down');
     activeSession = null;
     activeBridge = null;
@@ -277,9 +312,9 @@ export function installBridgeShutdown(wss: WebSocketServer): void {
     process.exit(0);
   };
 
-  process.stdin.on('end', shutdown);
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.stdin.on('end', () => shutdown('stdin closed'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 export async function closeBridge(wss: WebSocketServer): Promise<void> {

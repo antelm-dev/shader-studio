@@ -5,12 +5,12 @@ import {
   PLATFORM_ID,
   afterNextRender,
   inject,
-  isDevMode,
 } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { DesktopPlatform } from '../desktop/desktop-platform';
 import { I18n } from '../i18n/i18n';
+import { MCP_BRIDGE_CONFIG } from '../mcp/mcp-bridge-config';
 import { isOutputWindow } from '../output-mode';
 import { WorkspaceActions } from '../ui/workspace-actions';
 import { OutputSync } from './output-sync';
@@ -33,6 +33,7 @@ export class StartupCoordinator {
   private readonly injector = inject(EnvironmentInjector);
   private readonly snackBar = inject(MatSnackBar);
   private readonly i18n = inject(I18n);
+  private readonly mcpBridgeConfig = inject(MCP_BRIDGE_CONFIG);
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
 
   constructor() {
@@ -53,11 +54,15 @@ export class StartupCoordinator {
     });
     if (!outputMode) afterNextRender(() => this.hintContextMenus());
 
-    // Dev-only bridge for `mcp/server.ts`: lets an agent drive this tab's
-    // store live. Never runs in a production build, and skipped on the
-    // secondary output window, which mirrors the main tab rather than
-    // hosting the editing session itself.
-    if (!outputMode && isDevMode()) {
+    // Bridge for `shader-studio-mcp`: lets a paired MCP client drive this
+    // tab's store live. Gated by `MCP_BRIDGE_CONFIG` (enabled in dev by
+    // default; production/Electron must opt in explicitly via
+    // `provideMcpBridge()` — see `mcp-bridge-config.ts`), skipped on the
+    // secondary output window (which mirrors the main tab rather than
+    // hosting the editing session itself), and never attempted on the
+    // server — `afterNextRender` already guarantees browser-only execution,
+    // the `isServer` check here is defense in depth.
+    if (!outputMode && !this.isServer && this.mcpBridgeConfig.enabled) {
       afterNextRender(() => {
         void import('../mcp/mcp-bridge').then(({ McpBridge }) =>
           this.injector.get(McpBridge).start(),

@@ -23,9 +23,9 @@ import {
 import type { ShaderStudioController } from '@shader-studio/shared/controller';
 
 import { installBridgeShutdown, McpBridgeError, startBridge } from './bridge.js';
+import { ConfigError, loadConfig } from './config.js';
 import { BridgeController } from './controller.js';
-
-const PORT = Number(process.env['SHADER_STUDIO_MCP_PORT'] ?? 4310);
+import { createLogger } from './logger.js';
 
 function toMcpError(error: unknown): McpError {
   if (error instanceof McpBridgeError) return error.mcpError;
@@ -92,8 +92,8 @@ export function buildServer(controller: ShaderStudioController): McpServer {
     { name: 'shader-studio', version: '1.0.0' },
     {
       instructions:
-        'Contrôle une session Shader Studio ouverte dans le navigateur (dev only). ' +
-        'Lance `pnpm dev`, ouvre http://localhost:4200, colle le token du bridge ' +
+        'Contrôle une session Shader Studio ouverte dans le navigateur. ' +
+        'Lance `pnpm dev` (ou ouvre l’app packagée), colle le token du bridge ' +
         '(`localStorage.setItem("shaderStudioMcpToken", "…")`) puis édite les shaders live, ' +
         'règle les uniforms et capture le canvas. Un seul onglet à la fois. ' +
         'Préfère `get_project`/`get_document`/`apply_shader_patch` aux outils historiques ' +
@@ -787,8 +787,13 @@ export function buildServer(controller: ShaderStudioController): McpServer {
 }
 
 async function main(): Promise<void> {
-  const wss = await startBridge(PORT);
-  installBridgeShutdown(wss);
+  const config = loadConfig();
+  const logger = createLogger(config.logLevel);
+
+  for (const warning of config.warnings) logger.warn(warning);
+
+  const wss = await startBridge(config.port, config.host, logger);
+  installBridgeShutdown(wss, logger);
 
   const server = buildServer(new BridgeController());
 
@@ -801,7 +806,11 @@ async function main(): Promise<void> {
 const isEntrypoint = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isEntrypoint) {
   main().catch((error: unknown) => {
-    console.error('[shader-studio-mcp] failed to start', error);
+    const message =
+      error instanceof ConfigError
+        ? `Invalid configuration: ${error.message}`
+        : `Failed to start: ${error instanceof Error ? error.message : String(error)}`;
+    process.stderr.write(`[shader-studio-mcp] ${message}\n`);
     process.exit(1);
   });
 }

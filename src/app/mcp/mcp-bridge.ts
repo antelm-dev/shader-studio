@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 
 import {
   ControllerRequestSchema,
+  MCP_BRIDGE_PROTOCOL_VERSION,
   mcpError,
   type AppResponse,
   type ControllerRequest,
@@ -15,10 +16,9 @@ import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { renderFrame } from '../rendering/frame-render';
 import { ShaderStore } from '../workspace/shader-store';
+import { MCP_BRIDGE_CONFIG } from './mcp-bridge-config';
 
-const DEFAULT_PORT = 4310;
 const RECONNECT_DELAY_MS = 2000;
-const MCP_BRIDGE_PROTOCOL_VERSION = 2;
 
 function toMcpDiagnostics(diagnostics: readonly CompileDiagnostic[]): McpDiagnostic[] {
   return diagnostics.map(({ severity, line, message, source, docId, docName }) => ({
@@ -77,17 +77,20 @@ class McpAppError extends Error {
 }
 
 /**
- * Lets the `mcp/server.ts` process drive this tab's `ShaderStore` live —
- * edit the draft, tweak params, apply presets, grab a screenshot — so an
- * agent can "see" and reshape whatever is currently on screen.
+ * Lets `shader-studio-mcp` drive this tab's `ShaderStore` live — edit the
+ * draft, tweak params, apply presets, grab a screenshot — so an agent can
+ * "see" and reshape whatever is currently on screen.
  *
- * Dev tooling only. `App` gates `start()` behind `isDevMode()`; nothing here
- * runs in a production build or during SSR (both never call it).
+ * Only starts when `MCP_BRIDGE_CONFIG.enabled` is true. By default that's
+ * `isDevMode()`; a production or Electron build opts in explicitly via
+ * `provideMcpBridge()`. `StartupCoordinator` is the only caller of `start()`,
+ * and never calls it during SSR or on the secondary output window.
  */
 @Injectable({ providedIn: 'root' })
 export class McpBridge {
   private readonly store = inject(ShaderStore);
   private readonly renderer = inject(RendererHandle);
+  private readonly config = inject(MCP_BRIDGE_CONFIG);
 
   private socket: WebSocket | null = null;
   private started = false;
@@ -100,14 +103,15 @@ export class McpBridge {
   private queue: Promise<unknown> = Promise.resolve();
 
   /** Idempotent: safe to call more than once, only the first call connects. */
-  start(port = DEFAULT_PORT): void {
-    if (this.started) return;
+  start(): void {
+    if (this.started || !this.config.enabled) return;
     this.started = true;
-    this.connect(port);
+    this.connect();
   }
 
-  private connect(port: number): void {
-    const socket = new WebSocket(`ws://${location.hostname}:${port}`);
+  private connect(): void {
+    const { host, port, secure } = this.config;
+    const socket = new WebSocket(`${secure ? 'wss' : 'ws'}://${host}:${port}`);
     this.socket = socket;
 
     socket.addEventListener('open', () => {
@@ -118,7 +122,7 @@ export class McpBridge {
           protocolVersion: MCP_BRIDGE_PROTOCOL_VERSION,
           appVersion: '1.0.0',
           sessionId: crypto.randomUUID(),
-          token: localStorage.getItem('shaderStudioMcpToken') ?? '',
+          token: this.config.token ?? localStorage.getItem('shaderStudioMcpToken') ?? '',
           capabilities: [],
         }),
       );
@@ -128,7 +132,7 @@ export class McpBridge {
     });
     socket.addEventListener('close', () => {
       this.socket = null;
-      setTimeout(() => this.connect(port), RECONNECT_DELAY_MS);
+      setTimeout(() => this.connect(), RECONNECT_DELAY_MS);
     });
     // A refused connection also fires `close` right after — nothing extra to
     // do here beyond swallowing it, since the MCP server is optional tooling
