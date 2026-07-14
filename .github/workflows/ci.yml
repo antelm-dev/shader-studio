@@ -64,6 +64,10 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      # `window.electron` is typed via main/preload → main/generated/ipc-bridge.ts
+      # (gitignored). Without this, ng serve hits noImplicitAny on bridge callbacks.
+      - name: Generate IPC bridge
+        run: pnpm gen:ipc
       - name: Install Chromium
         run: pnpm exec playwright install chromium --with-deps
       - name: Smoke
