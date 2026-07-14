@@ -10,22 +10,11 @@ import { ShaderStore, type EditorDocument } from '../workspace/shader-store';
 import { I18n } from '../i18n/i18n';
 import { buildFullGlsl } from '@shader-studio/shared/glsl-export';
 import { convertShadertoy } from '@shader-studio/shared/shadertoy-import';
-import { ConfirmDialog, type ConfirmDialogData } from './dialogs/confirm-dialog';
-import { DesktopVersionDialog } from './dialogs/desktop-version-dialog';
-import { EditorSettingsDialog } from './editor/editor-settings-dialog';
-import { ExportDialog } from './dialogs/export-dialog';
-import { NewShaderDialog, type NewShaderDialogResult } from './dialogs/new-shader-dialog';
-import {
-  PromptDialog,
-  type PromptDialogData,
-  type PromptDialogResult,
-} from './dialogs/prompt-dialog';
-import { RecoveryDialog } from './dialogs/recovery-dialog';
-import {
-  ShadertoyImportDialog,
-  type ShadertoyImportDialogResult,
-} from './dialogs/shadertoy-import-dialog';
-import { UnsavedChangesDialog, type UnsavedChoice } from './dialogs/unsaved-changes-dialog';
+import type { ConfirmDialogData } from './dialogs/confirm-dialog';
+import type { NewShaderDialogResult } from './dialogs/new-shader-dialog';
+import type { PromptDialogData, PromptDialogResult } from './dialogs/prompt-dialog';
+import type { ShadertoyImportDialogResult } from './dialogs/shadertoy-import-dialog';
+import type { UnsavedChoice } from './dialogs/unsaved-changes-dialog';
 
 /**
  * The user-facing verbs of the app: the flows that need a dialog or a file
@@ -53,11 +42,15 @@ export class WorkspaceActions {
 
   private async runGuarded(action: () => void | Promise<void>): Promise<boolean> {
     if (this.store.dirty()) {
+      const { UnsavedChangesDialog } = await import('./dialogs/unsaved-changes-dialog');
       const choice = await firstValueFrom(
         this.dialog
-          .open<UnsavedChangesDialog, never, UnsavedChoice>(UnsavedChangesDialog, {
-            disableClose: true,
-          })
+          .open<InstanceType<typeof UnsavedChangesDialog>, never, UnsavedChoice>(
+            UnsavedChangesDialog,
+            {
+              disableClose: true,
+            },
+          )
           .afterClosed(),
       );
       if (choice === 'cancel' || !choice) return false;
@@ -75,33 +68,43 @@ export class WorkspaceActions {
 
   async resolveStaleRecovery(): Promise<void> {
     if (!this.store.staleRecovery()) return;
+    const { RecoveryDialog } = await import('./dialogs/recovery-dialog');
     const restore = await firstValueFrom(
       this.dialog
-        .open<RecoveryDialog, never, boolean>(RecoveryDialog, { disableClose: true })
+        .open<InstanceType<typeof RecoveryDialog>, never, boolean>(RecoveryDialog, {
+          disableClose: true,
+        })
         .afterClosed(),
     );
     this.store.resolveRecovery(restore === true);
   }
 
-  openEditorSettings(): void {
+  async openEditorSettings(): Promise<void> {
+    const { EditorSettingsDialog } = await import('./editor/editor-settings-dialog');
     this.dialog.open(EditorSettingsDialog, { width: '720px', maxWidth: '92vw' });
   }
 
   /** `disableClose`: a stray Escape mid-capture would leave the render running behind a closed dialog. */
-  openExport(): void {
+  async openExport(): Promise<void> {
+    const { ExportDialog } = await import('./dialogs/export-dialog');
     this.dialog.open(ExportDialog, { maxWidth: '92vw', disableClose: true });
   }
 
-  openDesktopVersion(): void {
+  async openDesktopVersion(): Promise<void> {
     if (this.desktop.available) {
+      const { DesktopVersionDialog } = await import('./dialogs/desktop-version-dialog');
       this.dialog.open(DesktopVersionDialog, { width: '480px', maxWidth: '92vw' });
     }
   }
 
-  private promptFor(data: PromptDialogData): Promise<PromptDialogResult | undefined> {
+  private async promptFor(data: PromptDialogData): Promise<PromptDialogResult | undefined> {
+    const { PromptDialog } = await import('./dialogs/prompt-dialog');
     return firstValueFrom(
       this.dialog
-        .open<PromptDialog, PromptDialogData, PromptDialogResult>(PromptDialog, { data })
+        .open<InstanceType<typeof PromptDialog>, PromptDialogData, PromptDialogResult>(
+          PromptDialog,
+          { data },
+        )
         .afterClosed(),
     );
   }
@@ -111,18 +114,25 @@ export class WorkspaceActions {
     return (await this.promptFor(data))?.value;
   }
 
-  private confirm(data: ConfirmDialogData): Promise<boolean> {
-    return firstValueFrom(this.dialog.open(ConfirmDialog, { data }).afterClosed()).then(
-      (result) => result === true,
+  private async confirm(data: ConfirmDialogData): Promise<boolean> {
+    const { ConfirmDialog } = await import('./dialogs/confirm-dialog');
+    const result = await firstValueFrom(
+      this.dialog
+        .open<InstanceType<typeof ConfirmDialog>, ConfirmDialogData, boolean>(ConfirmDialog, {
+          data,
+        })
+        .afterClosed(),
     );
+    return result === true;
   }
 
   // --- Shaders ------------------------------------------------------------
 
   async createShader(): Promise<void> {
+    const { NewShaderDialog } = await import('./dialogs/new-shader-dialog');
     const result = await firstValueFrom(
       this.dialog
-        .open<NewShaderDialog, never, NewShaderDialogResult>(NewShaderDialog)
+        .open<InstanceType<typeof NewShaderDialog>, never, NewShaderDialogResult>(NewShaderDialog)
         .afterClosed(),
     );
     if (!result) return;
@@ -301,12 +311,13 @@ export class WorkspaceActions {
   // --- Import / export ----------------------------------------------------
 
   async importShadertoy(): Promise<void> {
+    const { ShadertoyImportDialog } = await import('./dialogs/shadertoy-import-dialog');
     const input = await firstValueFrom(
       this.dialog
-        .open<ShadertoyImportDialog, never, ShadertoyImportDialogResult>(ShadertoyImportDialog, {
-          width: '800px',
-          maxWidth: '94vw',
-        })
+        .open<InstanceType<typeof ShadertoyImportDialog>, never, ShadertoyImportDialogResult>(
+          ShadertoyImportDialog,
+          { width: '800px', maxWidth: '94vw' },
+        )
         .afterClosed(),
     );
     if (!input) return;

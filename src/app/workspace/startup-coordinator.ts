@@ -1,10 +1,16 @@
 import { isPlatformServer } from '@angular/common';
-import { Injectable, PLATFORM_ID, afterNextRender, inject, isDevMode } from '@angular/core';
+import {
+  EnvironmentInjector,
+  Injectable,
+  PLATFORM_ID,
+  afterNextRender,
+  inject,
+  isDevMode,
+} from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { DesktopPlatform } from '../desktop/desktop-platform';
 import { I18n } from '../i18n/i18n';
-import { McpBridge } from '../mcp/mcp-bridge';
 import { isOutputWindow } from '../output-mode';
 import { WorkspaceActions } from '../ui/workspace-actions';
 import { OutputSync } from './output-sync';
@@ -24,7 +30,7 @@ export class StartupCoordinator {
   private readonly desktop = inject(DesktopPlatform);
   private readonly workspace = inject(WorkspaceActions);
   private readonly outputSync = inject(OutputSync);
-  private readonly mcpBridge = inject(McpBridge);
+  private readonly injector = inject(EnvironmentInjector);
   private readonly snackBar = inject(MatSnackBar);
   private readonly i18n = inject(I18n);
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
@@ -52,7 +58,11 @@ export class StartupCoordinator {
     // secondary output window, which mirrors the main tab rather than
     // hosting the editing session itself.
     if (!outputMode && isDevMode()) {
-      afterNextRender(() => this.mcpBridge.start());
+      afterNextRender(() => {
+        void import('../mcp/mcp-bridge').then(({ McpBridge }) =>
+          this.injector.get(McpBridge).start(),
+        );
+      });
     }
   }
 
