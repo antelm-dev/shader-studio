@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
+import { Component, inject, input } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenu, MatMenuModule } from '@angular/material/menu';
@@ -23,7 +23,6 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
  */
 @Component({
   selector: 'app-preview-window-controls',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
   template: `
     <button

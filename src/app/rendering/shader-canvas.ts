@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
@@ -29,7 +28,6 @@ export const RECOMPILE_DEBOUNCE_MS = 400;
 
 @Component({
   selector: 'app-shader-canvas',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: ` <canvas #canvas class="shader-canvas" aria-hidden="true"></canvas> `,
   styles: `
     /*

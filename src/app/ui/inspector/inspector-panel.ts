@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -32,7 +32,6 @@ import { WorkspaceActions } from '../workspace-actions';
  */
 @Component({
   selector: 'app-inspector-panel',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     GuiPanel,
     MatButtonModule,

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -12,7 +12,6 @@ import { WorkspaceActions } from '../workspace-actions';
 /** The Presets tab. Its heading and its save action belong to `InspectorPanel`. */
 @Component({
   selector: 'app-preset-panel',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatChipsModule, MatIconModule, MatMenuModule, TranslatePipe],
   template: `
     @if (store.presets().length === 0) {

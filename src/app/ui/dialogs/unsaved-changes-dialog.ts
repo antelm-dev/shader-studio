@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { Component } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule } from '@angular/material/dialog';
 
@@ -8,7 +8,6 @@ export type UnsavedChoice = 'save' | 'discard' | 'cancel';
 
 @Component({
   selector: 'app-unsaved-changes-dialog',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, MatDialogModule, TranslatePipe],
   template: `
     <h2 mat-dialog-title>{{ 'dialog.unsavedTitle' | translate }}</h2>

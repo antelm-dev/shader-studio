@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
@@ -66,7 +65,6 @@ export interface EditorDoc {
  */
 @Component({
   selector: 'app-code-editor',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div #host class="editor-host"></div>
     @if (!ready()) {

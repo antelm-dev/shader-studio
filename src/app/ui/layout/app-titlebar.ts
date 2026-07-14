@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -20,7 +20,6 @@ import { WorkspaceActions } from '../workspace-actions';
 
 @Component({
   selector: 'app-titlebar',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatDividerModule, MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
   template: `
     <header class="titlebar" (dblclick)="onTitlebarDblClick($event)">

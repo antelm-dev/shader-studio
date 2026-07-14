@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
@@ -10,7 +10,6 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
 
 @Component({
   selector: 'app-desktop-version-dialog',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, MatDialogModule, MatIconModule, MatProgressBarModule, TranslatePipe],
   template: `
     <h2 mat-dialog-title>{{ 'desktop.versionTitle' | translate }}</h2>

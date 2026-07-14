@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { Component } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule } from '@angular/material/dialog';
 
@@ -6,7 +6,6 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
 
 @Component({
   selector: 'app-recovery-dialog',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, MatDialogModule, TranslatePipe],
   template: `
     <h2 mat-dialog-title>{{ 'dialog.recoveryTitle' | translate }}</h2>

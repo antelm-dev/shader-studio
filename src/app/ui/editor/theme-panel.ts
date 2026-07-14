@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
@@ -14,7 +14,6 @@ import { Preferences } from '../../prefs/preferences';
  */
 @Component({
   selector: 'app-theme-panel',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatIconModule, MatTooltipModule],
   template: `
     <section class="pane" aria-label="Colour scheme">

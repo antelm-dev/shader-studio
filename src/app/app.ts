@@ -1,6 +1,5 @@
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   afterRenderEffect,
@@ -53,7 +52,6 @@ import { TranslatePipe } from './i18n/translate.pipe';
 
 @Component({
   selector: 'app-root',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   hostDirectives: [GlobalShortcuts],
   imports: [
     AppTitlebar,

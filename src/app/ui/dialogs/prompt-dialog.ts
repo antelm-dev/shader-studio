@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { FormField, form, maxLength, requiredError, validate } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -31,7 +31,6 @@ export interface PromptDialogResult {
 
 @Component({
   selector: 'app-prompt-dialog',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormField,
     MatButtonModule,

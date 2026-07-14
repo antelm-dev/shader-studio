@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
@@ -34,7 +33,6 @@ const DEFAULT_FOLDER = 'Parameters';
 
 @Component({
   selector: 'app-gui-panel',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div #host class="gui-host"></div>
     @if (store.controls().length === 0 && store.record()) {

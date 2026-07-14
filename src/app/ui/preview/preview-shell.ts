@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -68,7 +68,6 @@ interface Gesture {
 
 @Component({
   selector: 'app-preview-shell',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     MatDividerModule,
     MatIconModule,

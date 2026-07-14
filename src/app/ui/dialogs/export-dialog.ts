@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormField, form } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -29,7 +29,6 @@ const FORMAT_VALUES = ['webm', 'png'] as const;
 
 @Component({
   selector: 'app-export-dialog',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormField,
     MatButtonModule,

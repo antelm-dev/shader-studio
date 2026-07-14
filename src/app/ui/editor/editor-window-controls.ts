@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -25,7 +25,6 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
 
 @Component({
   selector: 'app-editor-window-controls',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
   template: `
     <button

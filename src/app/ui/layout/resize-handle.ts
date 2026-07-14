@@ -1,12 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  ElementRef,
-  inject,
-  input,
-  output,
-  signal,
-} from '@angular/core';
+import { Component, ElementRef, inject, input, output, signal } from '@angular/core';
 
 /**
  * A vertical separator that resizes the panel beside it.
@@ -29,7 +21,6 @@ const NUDGE_FAST = 64;
 
 @Component({
   selector: 'app-resize-handle',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: '',
   styles: `
     :host {

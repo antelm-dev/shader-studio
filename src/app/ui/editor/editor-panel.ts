@@ -1,13 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  input,
-  output,
-  signal,
-  viewChild,
-} from '@angular/core';
+import { Component, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
@@ -29,7 +20,6 @@ import { WorkspaceActions } from '../workspace-actions';
 
 @Component({
   selector: 'app-editor-panel',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CodeEditor,
     EditorTabs,

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDividerModule } from '@angular/material/divider';
@@ -22,7 +22,6 @@ import { findFont } from '../../editor/google-fonts';
  */
 @Component({
   selector: 'app-type-layout-panel',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule,
     MatButtonToggleModule,

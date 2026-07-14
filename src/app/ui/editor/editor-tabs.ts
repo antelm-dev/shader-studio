@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -27,7 +27,6 @@ export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
  */
 @Component({
   selector: 'app-editor-tabs',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatDividerModule, MatIconModule, MatMenuModule, MatTooltipModule],
   template: `
     <div class="tabs" role="tablist" aria-label="Shader documents">

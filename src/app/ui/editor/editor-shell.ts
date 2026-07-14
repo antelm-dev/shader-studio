@@ -1,6 +1,5 @@
 import { isPlatformBrowser } from '@angular/common';
 import {
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
@@ -59,7 +58,6 @@ interface Gesture {
 
 @Component({
   selector: 'app-editor-shell',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [EditorPanel],
   template: `
     <!-- The docked panel's free edge. A separator, so a keyboard can resize it. -->

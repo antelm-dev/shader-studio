@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -25,7 +25,6 @@ const FILTER_OPTIONS: readonly { value: TextureFilterMode; labelKey: Translation
 
 @Component({
   selector: 'app-texture-panel',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatIconModule, MatProgressSpinnerModule, MatTooltipModule, TranslatePipe],
   template: `
     <div class="grid">

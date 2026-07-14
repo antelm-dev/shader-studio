@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { FormField, form, maxLength, requiredError, validate } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -21,7 +21,6 @@ interface ShadertoyImportModel {
 
 @Component({
   selector: 'app-shadertoy-import-dialog',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormField,
     MatButtonModule,

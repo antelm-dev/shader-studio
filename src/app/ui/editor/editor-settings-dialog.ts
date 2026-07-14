@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
@@ -47,7 +47,6 @@ void main() {
 
 @Component({
   selector: 'app-editor-settings-dialog',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CodeEditor,
     FontPickerPanel,
