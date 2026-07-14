@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { FormField, form, maxLength, requiredError, validate } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -14,11 +14,16 @@ export interface ShadertoyImportDialogResult {
   source: string;
 }
 
+interface ShadertoyImportModel {
+  name: string;
+  source: string;
+}
+
 @Component({
   selector: 'app-shadertoy-import-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    FormsModule,
+    FormField,
     MatButtonModule,
     MatDialogModule,
     MatFormFieldModule,
@@ -31,29 +36,17 @@ export interface ShadertoyImportDialogResult {
       <p class="intro">{{ 'shadertoy.intro' | translate }}</p>
       <mat-form-field appearance="outline">
         <mat-label>{{ 'shadertoy.name' | translate }}</mat-label>
-        <input
-          matInput
-          cdkFocusInitial
-          [maxlength]="nameMaxLength"
-          [ngModel]="name()"
-          (ngModelChange)="name.set($event)"
-        />
+        <input matInput cdkFocusInitial [formField]="form.name" />
       </mat-form-field>
       <mat-form-field appearance="outline">
         <mat-label>{{ 'shadertoy.source' | translate }}</mat-label>
-        <textarea
-          matInput
-          rows="16"
-          spellcheck="false"
-          [ngModel]="source()"
-          (ngModelChange)="source.set($event)"
-        ></textarea>
+        <textarea matInput rows="16" spellcheck="false" [formField]="form.source"></textarea>
         <mat-hint>{{ 'shadertoy.hint' | translate }}</mat-hint>
       </mat-form-field>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button matButton mat-dialog-close type="button">{{ 'action.cancel' | translate }}</button>
-      <button matButton="filled" type="button" [disabled]="!valid()" (click)="confirm()">
+      <button matButton="filled" type="button" [disabled]="form().invalid()" (click)="confirm()">
         {{ 'shadertoy.import' | translate }}
       </button>
     </mat-dialog-actions>
@@ -79,17 +72,20 @@ export class ShadertoyImportDialog {
   private readonly dialogRef =
     inject<MatDialogRef<ShadertoyImportDialog, ShadertoyImportDialogResult>>(MatDialogRef);
   private readonly i18n = inject(I18n);
-  readonly nameMaxLength = LIMITS.nameLength;
-  readonly name = signal(this.i18n.t('shadertoy.defaultName'));
-  readonly source = signal('');
 
-  valid(): boolean {
-    return this.name().trim().length > 0 && this.source().trim().length > 0;
-  }
+  protected readonly model = signal<ShadertoyImportModel>({
+    name: this.i18n.t('shadertoy.defaultName'),
+    source: '',
+  });
+  protected readonly form = form(this.model, (path) => {
+    maxLength(path.name, LIMITS.nameLength);
+    validate(path.name, ({ value }) => (value().trim().length > 0 ? undefined : requiredError()));
+    validate(path.source, ({ value }) => (value().trim().length > 0 ? undefined : requiredError()));
+  });
 
   confirm(): void {
-    if (this.valid()) {
-      this.dialogRef.close({ name: this.name().trim(), source: this.source().trim() });
-    }
+    if (this.form().invalid()) return;
+    const { name, source } = this.model();
+    this.dialogRef.close({ name: name.trim(), source: source.trim() });
   }
 }
