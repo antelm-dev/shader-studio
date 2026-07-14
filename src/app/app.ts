@@ -4,7 +4,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  HostListener,
   PLATFORM_ID,
   afterNextRender,
   afterRenderEffect,
@@ -58,6 +57,10 @@ import { TranslatePipe } from './i18n/translate.pipe';
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '(window:keydown)': 'onKeydown($event)',
+    '(window:beforeunload)': 'onBeforeUnload($event)',
+  },
   imports: [
     AppTitlebar,
     EditorShell,
@@ -411,7 +414,6 @@ export class App {
    * mid-edit. The bare-letter ones (Space, H, S) are ignored inside a text field
    * or the code editor, where they are simply characters.
    */
-  @HostListener('window:keydown', ['$event'])
   protected onKeydown(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
 
@@ -510,7 +512,6 @@ export class App {
     }
   }
 
-  @HostListener('window:beforeunload', ['$event'])
   protected onBeforeUnload(event: BeforeUnloadEvent): void {
     if (this.desktop.available || !this.store.dirty()) return;
     this.store.flushRecovery();
