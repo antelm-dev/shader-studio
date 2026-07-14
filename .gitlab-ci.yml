@@ -1,0 +1,126 @@
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_COMMIT_TAG =~ /^v/
+
+stages:
+  - verify
+  - package
+  - release
+
+variables:
+  PNPM_HOME: .pnpm-home
+  PNPM_STORE_PATH: .pnpm-store
+  FF_USE_FASTZIP: "true"
+
+.linux_node:
+  image: node:26.5.0
+  interruptible: true
+  timeout: 20 minutes
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.28.2 --activate
+    - pnpm config set store-dir "$PNPM_STORE_PATH"
+    - pnpm install --frozen-lockfile
+
+.windows_node:
+  tags:
+    - saas-windows-medium-amd64
+  interruptible: true
+  timeout: 20 minutes
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+  before_script:
+    - $ErrorActionPreference = "Stop"
+    - $nodeVersion = "26.5.0"
+    - $nodeHome = "C:\node\node-v$nodeVersion-win-x64"
+    - |
+      if (-not (Test-Path "$nodeHome\node.exe")) {
+        $zip = Join-Path $env:TEMP "node-$nodeVersion.zip"
+        Invoke-WebRequest "https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-win-x64.zip" -OutFile $zip
+        New-Item -ItemType Directory -Force -Path "C:\node" | Out-Null
+        Expand-Archive $zip -DestinationPath "C:\node" -Force
+      }
+    - $env:PATH = "$nodeHome;$env:PATH"
+    - corepack enable
+    - corepack prepare pnpm@10.28.2 --activate
+    - pnpm config set store-dir $env:PNPM_STORE_PATH
+    - pnpm install --frozen-lockfile
+
+check:
+  extends: .linux_node
+  stage: verify
+  script:
+    - pnpm lint
+    - pnpm format:check
+    - pnpm check
+    - pnpm typecheck
+    - pnpm test
+    - pnpm build
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+smoke:
+  extends: .linux_node
+  stage: verify
+  script:
+    - pnpm gen:ipc
+    - pnpm exec playwright install chromium --with-deps
+    - pnpm smoke
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+desktop:
+  extends: .windows_node
+  stage: package
+  script:
+    - pnpm pack:win
+  artifacts:
+    when: on_success
+    expire_in: 7 days
+    paths:
+      - release/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+release:windows:
+  extends: .windows_node
+  stage: release
+  timeout: 25 minutes
+  interruptible: false
+  script:
+    - |
+      $version = node -p "require('./package.json').version"
+      if ($env:CI_COMMIT_TAG -ne "v$version") {
+        Write-Error "Tag $env:CI_COMMIT_TAG does not match package version $version"
+        exit 1
+      }
+    - pnpm dist:win
+  variables:
+    ELECTRON_BUILDER_PUBLISH: always
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/

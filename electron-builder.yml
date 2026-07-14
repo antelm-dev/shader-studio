@@ -30,7 +30,5 @@ nsis:
 portable:
   artifactName: ${name}-${version}-portable.${ext}
 publish:
-  provider: github
-  owner: antelm-dev
-  repo: shader-studio
+  provider: gitlab
   releaseType: release

@@ -7,7 +7,7 @@
   </p>
 
   <p>
-    <a href="https://github.com/antelm-dev/shader-studio/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/antelm-dev/shader-studio/actions/workflows/ci.yml/badge.svg" /></a>
+    <a href="https://gitlab.com/antelm-dev/shader-studio/-/pipelines"><img alt="CI status" src="https://gitlab.com/antelm-dev/shader-studio/badges/master/pipeline.svg" /></a>
     <a href="https://angular.dev/"><img alt="Angular 22" src="https://img.shields.io/badge/Angular-22-DD0031?logo=angular&amp;logoColor=white" /></a>
     <a href="https://nodejs.org/"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-22%2B-5FA04E?logo=nodedotjs&amp;logoColor=white" /></a>
     <a href="https://pnpm.io/"><img alt="pnpm 10" src="https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&amp;logoColor=white" /></a>
