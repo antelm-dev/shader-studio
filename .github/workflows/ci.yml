@@ -13,9 +13,9 @@ concurrency:
 
 jobs:
   check:
-    name: lint · typecheck · test · build
+    name: lint · check · typecheck · test · build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v5
@@ -38,6 +38,9 @@ jobs:
       - name: Format
         run: pnpm format:check
 
+      - name: Check i18n · fonts · ipc
+        run: pnpm check
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -46,6 +49,25 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  smoke:
+    name: UI smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26.5.0'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install chromium --with-deps
+      - name: Smoke
+        run: pnpm smoke
 
   desktop:
     name: Windows desktop package
