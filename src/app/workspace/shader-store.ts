@@ -60,6 +60,7 @@ import {
 import { defaultParams, sanitizeParams, validateControls } from '@shader-studio/shared/validate';
 import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
+import { CompilationService } from './compilation.service';
 import { McpPatchService } from './mcp-patch.service';
 import { PresetService } from './preset.service';
 import { ProjectPersistence } from './project-persistence';
@@ -132,12 +133,6 @@ export interface EditorDocument {
 export interface CompileOutcome {
   revision: number;
   diagnostics: readonly CompileDiagnostic[];
-}
-
-interface CompileWaiter {
-  resolve: (outcome: CompileOutcome) => void;
-  reject: (error: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
 }
 
 /** One replacement of `[start, end)` in a document's source with `text`. Offsets are 0-based character positions. */
@@ -217,6 +212,7 @@ export class ShaderStore {
   private readonly mcpPatch = inject(McpPatchService);
   private readonly textureService = inject(TextureService);
   private readonly presetService = inject(PresetService);
+  private readonly compilation = inject(CompilationService);
 
   /** True once the client has taken over the server's snapshot. */
   private hydrated = false;
@@ -295,18 +291,17 @@ export class ShaderStore {
    * Bumped once by every `patchDraft` call — the single choke point behind
    * every project/controls/render mutation. This is what `apply_shader_patch`
    * checks a `baseRevision` against, and what `waitForCompile` correlates a
-   * finished compile back to a specific edit.
+   * finished compile back to a specific edit. Owned by `CompilationService`;
+   * aliased here so external readers (`shader-canvas`, `McpBridge`) keep
+   * reading it straight off the store.
    */
-  readonly draftRevision = signal(0);
+  readonly draftRevision = this.compilation.draftRevision;
 
   /** The revision `recordCompileResult` most recently landed. -1 until the first compile. */
-  readonly compiledRevision = signal(-1);
+  readonly compiledRevision = this.compilation.compiledRevision;
 
   /** Bumped to ask `shader-canvas` to flush its debounce timer immediately instead of waiting ~400ms. */
-  readonly immediateCompileRequest = signal(0);
-
-  private lastCompileOutcome: CompileOutcome | null = null;
-  private readonly compileWaiters = new Map<number, CompileWaiter[]>();
+  readonly immediateCompileRequest = this.compilation.immediateCompileRequest;
 
   // --- Derived ------------------------------------------------------------
 
@@ -762,10 +757,10 @@ export class ShaderStore {
    * even though nothing changed", which is what the user means by Ctrl+Enter
    * after the driver has been sulking or a texture has finished loading.
    */
-  readonly recompileRequest = signal(0);
+  readonly recompileRequest = this.compilation.recompileRequest;
 
   recompile(): void {
-    this.recompileRequest.update((n) => n + 1);
+    this.compilation.recompile();
   }
 
   // --- Passes -------------------------------------------------------------
@@ -999,45 +994,12 @@ export class ShaderStore {
    */
   recordCompileResult(revision: number, diagnostics: readonly CompileDiagnostic[]): void {
     this.setCompileDiagnostics(diagnostics);
-
-    const outcome: CompileOutcome = { revision, diagnostics: this.allDiagnostics() };
-    this.lastCompileOutcome = outcome;
-    this.compiledRevision.set(revision);
-
-    for (const [waitingRevision, waiters] of [...this.compileWaiters]) {
-      if (waitingRevision > revision) continue;
-      this.compileWaiters.delete(waitingRevision);
-      for (const waiter of waiters) {
-        clearTimeout(waiter.timer);
-        waiter.resolve(outcome);
-      }
-    }
+    this.compilation.recordCompileResult(revision, this.allDiagnostics());
   }
 
   /** Resolves once a compile at or after `revision` has landed, or rejects after `timeoutMs`. */
   waitForCompile(revision: number, timeoutMs = 10_000): Promise<CompileOutcome> {
-    if (this.compiledRevision() >= revision && this.lastCompileOutcome) {
-      return Promise.resolve(this.lastCompileOutcome);
-    }
-
-    return new Promise<CompileOutcome>((resolve, reject) => {
-      const waiters = this.compileWaiters.get(revision) ?? [];
-      const waiter: CompileWaiter = {
-        resolve,
-        reject,
-        timer: setTimeout(() => {
-          const list = this.compileWaiters.get(revision);
-          if (list) {
-            const index = list.indexOf(waiter);
-            if (index >= 0) list.splice(index, 1);
-            if (list.length === 0) this.compileWaiters.delete(revision);
-          }
-          reject(new Error(`Timed out waiting for a compile of revision ${revision}`));
-        }, timeoutMs),
-      };
-      waiters.push(waiter);
-      this.compileWaiters.set(revision, waiters);
-    });
+    return this.compilation.waitForCompile(revision, timeoutMs);
   }
 
   /**
@@ -1057,17 +1019,7 @@ export class ShaderStore {
   }
 
   private resetCompileState(): void {
-    this.draftRevision.set(0);
-    this.compiledRevision.set(-1);
-    this.lastCompileOutcome = null;
-
-    for (const waiters of this.compileWaiters.values()) {
-      for (const waiter of waiters) {
-        clearTimeout(waiter.timer);
-        waiter.reject(new Error('The shader changed before this compile finished.'));
-      }
-    }
-    this.compileWaiters.clear();
+    this.compilation.reset();
   }
 
   // --- Patches (MCP) --------------------------------------------------------
