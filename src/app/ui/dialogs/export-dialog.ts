@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { FormField, form } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -31,7 +31,7 @@ const FORMAT_VALUES = ['webm', 'png'] as const;
   selector: 'app-export-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    FormsModule,
+    FormField,
     MatButtonModule,
     MatDialogModule,
     MatFormFieldModule,
@@ -57,10 +57,7 @@ const FORMAT_VALUES = ['webm', 'png'] as const;
         <div class="grid">
           <mat-form-field appearance="outline">
             <mat-label>{{ 'export.format' | translate }}</mat-label>
-            <mat-select
-              [ngModel]="settings().format"
-              (ngModelChange)="patch({ format: $event })"
-            >
+            <mat-select [formField]="form.format">
               @for (option of formats(); track option.value) {
                 <mat-option [value]="option.value">{{ option.label }}</mat-option>
               }
@@ -69,7 +66,7 @@ const FORMAT_VALUES = ['webm', 'png'] as const;
 
           <mat-form-field appearance="outline">
             <mat-label>{{ 'export.resolution' | translate }}</mat-label>
-            <mat-select [ngModel]="sizeKey()" (ngModelChange)="setSize($event)">
+            <mat-select [value]="sizeKey()" (selectionChange)="setSize($event.value)">
               @for (option of resolutions; track option.label) {
                 <mat-option [value]="option.label">{{ option.label }}</mat-option>
               }
@@ -80,77 +77,42 @@ const FORMAT_VALUES = ['webm', 'png'] as const;
           @if (sizeKey() === 'custom') {
             <mat-form-field appearance="outline">
               <mat-label>{{ 'export.width' | translate }}</mat-label>
-              <input
-                matInput
-                type="number"
-                [ngModel]="settings().width"
-                (ngModelChange)="patch({ width: +$event })"
-              />
+              <input matInput type="number" [formField]="form.width" />
             </mat-form-field>
             <mat-form-field appearance="outline">
               <mat-label>{{ 'export.height' | translate }}</mat-label>
-              <input
-                matInput
-                type="number"
-                [ngModel]="settings().height"
-                (ngModelChange)="patch({ height: +$event })"
-              />
+              <input matInput type="number" [formField]="form.height" />
             </mat-form-field>
           }
 
           <mat-form-field appearance="outline">
             <mat-label>{{ 'export.fps' | translate }}</mat-label>
-            <input
-              matInput
-              type="number"
-              [ngModel]="settings().fps"
-              (ngModelChange)="patch({ fps: +$event })"
-            />
+            <input matInput type="number" [formField]="form.fps" />
           </mat-form-field>
 
           <mat-form-field appearance="outline">
             <mat-label>{{ 'export.duration' | translate }}</mat-label>
-            <input
-              matInput
-              type="number"
-              step="0.5"
-              [ngModel]="settings().duration"
-              (ngModelChange)="patch({ duration: +$event })"
-            />
+            <input matInput type="number" step="0.5" [formField]="form.duration" />
             <span matTextSuffix>s</span>
             <mat-hint>{{ 'export.durationHint' | translate }}</mat-hint>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
             <mat-label>{{ 'export.startAt' | translate }}</mat-label>
-            <input
-              matInput
-              type="number"
-              step="0.5"
-              [ngModel]="settings().startTime"
-              (ngModelChange)="patch({ startTime: +$event })"
-            />
+            <input matInput type="number" step="0.5" [formField]="form.startTime" />
             <span matTextSuffix>s</span>
             <mat-hint>{{ 'export.startAtHint' | translate }}</mat-hint>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
             <mat-label>{{ 'export.loops' | translate }}</mat-label>
-            <input
-              matInput
-              type="number"
-              [ngModel]="settings().loops"
-              (ngModelChange)="patch({ loops: +$event })"
-            />
+            <input matInput type="number" [formField]="form.loops" />
             <mat-hint>{{ 'export.loopsHint' | translate }}</mat-hint>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
             <mat-label>{{ 'export.motionBlur' | translate }}</mat-label>
-            <mat-select
-              [ngModel]="settings().subframes"
-              (ngModelChange)="patch({ subframes: +$event })"
-            >
+            <mat-select [formField]="form.subframes">
               @for (option of subframes(); track option.value) {
                 <mat-option [value]="option.value">{{ option.label }}</mat-option>
               }
@@ -160,10 +122,7 @@ const FORMAT_VALUES = ['webm', 'png'] as const;
 
           <mat-form-field appearance="outline">
             <mat-label>{{ 'export.supersampling' | translate }}</mat-label>
-            <mat-select
-              [ngModel]="settings().supersample"
-              (ngModelChange)="patch({ supersample: +$event })"
-            >
+            <mat-select [formField]="form.supersample">
               @for (option of supersample(); track option.value) {
                 <mat-option [value]="option.value">{{ option.label }}</mat-option>
               }
@@ -284,6 +243,7 @@ export class ExportDialog {
   );
 
   protected readonly settings = signal<CaptureSettings>(this.preferences.value().capture);
+  protected readonly form = form(this.settings);
 
   /** The plan the current settings would actually run as — clamped, rounded, made even. */
   private readonly plan = computed(() => planCapture(this.settings()));
