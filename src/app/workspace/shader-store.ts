@@ -61,15 +61,14 @@ import { defaultParams, sanitizeParams, validateControls } from '@shader-studio/
 import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { CompilationService } from './compilation.service';
+import { controlsToText } from './controls-text';
 import { McpPatchService } from './mcp-patch.service';
+import { PersistenceService } from './persistence.service';
 import { PresetService } from './preset.service';
 import { ProjectPersistence } from './project-persistence';
 import { TextureService } from './texture.service';
-import { RendererHandle } from '../rendering/renderer-handle';
 import { ApiError, ShaderApi } from '../api/shader-api';
 import { Preferences } from '../prefs/preferences';
-import { TextureAssets } from '../assets/texture-assets';
-import { ThumbnailAssets } from '../assets/thumbnail-assets';
 
 /**
  * The single source of truth for the workspace.
@@ -157,10 +156,6 @@ export interface SetParamsOutcome {
   errors: Record<string, string>;
 }
 
-function controlsToText(controls: readonly ShaderControl[]): string {
-  return JSON.stringify(controls, null, 2);
-}
-
 /**
  * One error, once.
  *
@@ -206,13 +201,11 @@ export class ShaderStore {
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
   private readonly recovery = inject(DraftRecovery);
   private readonly projects = inject(ProjectPersistence);
-  private readonly textures = inject(TextureAssets);
-  private readonly thumbnails = inject(ThumbnailAssets);
-  private readonly renderer = inject(RendererHandle);
   private readonly mcpPatch = inject(McpPatchService);
   private readonly textureService = inject(TextureService);
   private readonly presetService = inject(PresetService);
   private readonly compilation = inject(CompilationService);
+  private readonly persistence = inject(PersistenceService);
 
   /** True once the client has taken over the server's snapshot. */
   private hydrated = false;
@@ -1099,37 +1092,21 @@ export class ShaderStore {
 
     this.saving.set(true);
     try {
-      // The whole project goes to the server — buffers, Common, files, wiring
-      // included. `fragment`/`vertex` are not sent alongside it: the server
-      // derives its own mirrors from the project's Image pass source and
-      // vertex shader, so sending both would just be two copies of the truth.
-      const saved = await this.api.update(record.id, {
-        project: draft.project,
-        controls,
-        render: draft.render,
-      });
-
-      const project = structuredClone(draft.project);
-
       // Keep the live params and the open preset across a save: the user was
       // editing the source, not resetting the knobs.
-      const params = this.params();
       const presetId = this.activePresetId();
+      const result = await this.persistence.save(record.id, draft, controls, this.params());
 
-      this.record.set(saved);
-      this.savedProject.set(structuredClone(project));
-      this.draft.set({
-        project,
-        controlsText: controlsToText(saved.controls),
-        render: structuredClone(saved.render),
-      });
-      this.params.set(sanitizeParams(saved.controls, params));
+      this.record.set(result.record);
+      this.savedProject.set(structuredClone(result.draft.project));
+      this.draft.set(result.draft);
+      this.params.set(result.params);
       this.activePresetId.set(presetId);
 
       await this.refreshList();
-      this.notice.set({ text: `Saved “${saved.name}”`, error: false });
-      this.recovery.remove(saved.id);
-      void this.capturePreview(saved.id);
+      this.notice.set({ text: `Saved “${result.record.name}”`, error: false });
+      this.recovery.remove(result.record.id);
+      void this.capturePreview(result.record.id);
       return true;
     } catch (error) {
       this.report(error);
@@ -1156,11 +1133,8 @@ export class ShaderStore {
    */
   private async capturePreview(id: string): Promise<void> {
     try {
-      const upload = await this.renderer.captureThumbnail();
-      if (!upload) return;
-
-      const { thumbnail } = await this.api.setThumbnail(id, upload);
-      this.thumbnails.releaseShader(id);
+      const thumbnail = await this.persistence.capturePreview(id);
+      if (thumbnail === null) return;
 
       // Patch the capture into what is already on screen rather than adopting
       // the server's whole record: a newer save may have landed in the
@@ -1182,7 +1156,7 @@ export class ShaderStore {
 
   async create(name: string): Promise<void> {
     try {
-      const created = await this.api.create(name);
+      const created = await this.persistence.create(name);
       await this.refreshList();
       this.adopt(created);
       this.preferences.patch({ lastShaderId: created.id });
@@ -1194,7 +1168,7 @@ export class ShaderStore {
 
   async duplicate(id: string, name?: string): Promise<void> {
     try {
-      const copy = await this.api.duplicate(id, name);
+      const copy = await this.persistence.duplicate(id, name);
       await this.refreshList();
       this.adopt(copy);
       this.preferences.patch({ lastShaderId: copy.id });
@@ -1206,7 +1180,7 @@ export class ShaderStore {
 
   async rename(id: string, name: string): Promise<void> {
     try {
-      const updated = await this.api.update(id, { name });
+      const updated = await this.persistence.rename(id, name);
       await this.refreshList();
       if (this.selectedId() === id) {
         this.record.update((record) => (record ? { ...record, name: updated.name } : record));
@@ -1219,11 +1193,7 @@ export class ShaderStore {
 
   async remove(id: string): Promise<void> {
     try {
-      await this.api.remove(id);
-      this.recovery.remove(id);
-      this.projects.remove(id);
-      this.textures.releaseShader(id);
-      this.thumbnails.releaseShader(id);
+      await this.persistence.remove(id);
       await this.refreshList();
 
       if (this.selectedId() === id) {

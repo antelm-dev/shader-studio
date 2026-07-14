@@ -65,11 +65,7 @@ export class PresetService {
     return { preset, presets };
   }
 
-  async delete(
-    recordId: string,
-    presetId: string,
-    existing: readonly Preset[],
-  ): Promise<Preset[]> {
+  async delete(recordId: string, presetId: string, existing: readonly Preset[]): Promise<Preset[]> {
     await this.api.deletePreset(recordId, presetId);
     return existing.filter((preset) => preset.id !== presetId);
   }
