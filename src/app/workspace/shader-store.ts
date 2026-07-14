@@ -61,6 +61,7 @@ import { defaultParams, sanitizeParams, validateControls } from '@shader-studio/
 import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { McpPatchService } from './mcp-patch.service';
+import { PresetService } from './preset.service';
 import { ProjectPersistence } from './project-persistence';
 import { TextureService } from './texture.service';
 import { RendererHandle } from '../rendering/renderer-handle';
@@ -215,6 +216,7 @@ export class ShaderStore {
   private readonly renderer = inject(RendererHandle);
   private readonly mcpPatch = inject(McpPatchService);
   private readonly textureService = inject(TextureService);
+  private readonly presetService = inject(PresetService);
 
   /** True once the client has taken over the server's snapshot. */
   private hydrated = false;
@@ -1302,16 +1304,13 @@ export class ShaderStore {
     if (!record || !draft) return;
 
     try {
-      const preset = await this.api.savePreset(
+      const { preset, presets } = await this.presetService.save(
         record.id,
         name,
         this.params(),
         withRender ? draft.render : undefined,
+        record.presets,
       );
-      const presets = record.presets.some((entry) => entry.id === preset.id)
-        ? record.presets.map((entry) => (entry.id === preset.id ? preset : entry))
-        : [...record.presets, preset];
-
       this.record.update((current) => (current ? { ...current, presets } : current));
       this.activePresetId.set(preset.id);
       await this.refreshList();
@@ -1331,12 +1330,12 @@ export class ShaderStore {
    * live knob, and pretending otherwise would lose the change on the next load.
    */
   applyPreset(presetId: string): void {
-    const preset = this.presets().find((entry) => entry.id === presetId);
-    if (!preset) return;
+    const plan = this.presetService.planApply(this.presets(), this.controls(), presetId);
+    if (!plan) return;
 
-    this.params.set(sanitizeParams(this.controls(), preset.values));
-    if (preset.render) this.setRender(structuredClone(preset.render));
-    this.activePresetId.set(preset.id);
+    this.params.set(plan.params);
+    if (plan.render) this.setRender(plan.render);
+    this.activePresetId.set(plan.presetId);
   }
 
   async deletePreset(presetId: string): Promise<void> {
@@ -1344,12 +1343,8 @@ export class ShaderStore {
     if (!record) return;
 
     try {
-      await this.api.deletePreset(record.id, presetId);
-      this.record.update((current) =>
-        current
-          ? { ...current, presets: current.presets.filter((preset) => preset.id !== presetId) }
-          : current,
-      );
+      const presets = await this.presetService.delete(record.id, presetId, record.presets);
+      this.record.update((current) => (current ? { ...current, presets } : current));
       if (this.activePresetId() === presetId) this.activePresetId.set(null);
       await this.refreshList();
       this.notice.set({ text: 'Preset deleted', error: false });
