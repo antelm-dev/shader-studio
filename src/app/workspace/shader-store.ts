@@ -57,17 +57,12 @@ import {
   type RenderPass,
   type ShaderProject,
 } from '@shader-studio/shared/project';
-import {
-  defaultParams,
-  extFromMime,
-  LIMITS,
-  sanitizeParams,
-  validateControls,
-} from '@shader-studio/shared/validate';
+import { defaultParams, sanitizeParams, validateControls } from '@shader-studio/shared/validate';
 import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { McpPatchService } from './mcp-patch.service';
 import { ProjectPersistence } from './project-persistence';
+import { TextureService } from './texture.service';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { ApiError, ShaderApi } from '../api/shader-api';
 import { Preferences } from '../prefs/preferences';
@@ -219,6 +214,7 @@ export class ShaderStore {
   private readonly thumbnails = inject(ThumbnailAssets);
   private readonly renderer = inject(RendererHandle);
   private readonly mcpPatch = inject(McpPatchService);
+  private readonly textureService = inject(TextureService);
 
   /** True once the client has taken over the server's snapshot. */
   private hydrated = false;
@@ -1364,47 +1360,19 @@ export class ShaderStore {
 
   // --- Textures -------------------------------------------------------------
 
-  /**
-   * Decodes the file locally first, both to reject anything that is not
-   * actually an image before spending a round trip on it, and to get the
-   * pixel dimensions the server wants alongside the bytes.
-   */
   async setTextureImage(channel: 0 | 1 | 2 | 3, file: File): Promise<void> {
     const record = this.record();
     if (!record) return;
 
-    const ext = extFromMime(file.type);
-    if (!ext) {
-      this.notice.set({ text: `“${file.name}” must be a PNG, JPEG or WebP image`, error: true });
-      return;
-    }
-    if (file.size > LIMITS.textureBytes) {
-      this.notice.set({
-        text: `“${file.name}” is larger than ${Math.round(LIMITS.textureBytes / (1024 * 1024))} MB`,
-        error: true,
-      });
-      return;
-    }
-
-    let width: number;
-    let height: number;
     try {
-      const bitmap = await createImageBitmap(file);
-      width = bitmap.width;
-      height = bitmap.height;
-      bitmap.close();
-    } catch {
-      this.notice.set({ text: `“${file.name}” is not a readable image`, error: true });
-      return;
-    }
-
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const updated = await this.api.setTexture(record.id, channel, { ext, bytes, width, height });
-      this.textures.releaseShader(record.id);
-      this.record.set(updated);
+      const result = await this.textureService.setImage(record.id, channel, file);
+      if (!result.ok) {
+        this.notice.set({ text: result.message, error: true });
+        return;
+      }
+      this.record.set(result.record);
       await this.refreshList();
-      this.notice.set({ text: `Assigned “${file.name}” to iChannel${channel}`, error: false });
+      this.notice.set({ text: result.notice, error: false });
     } catch (error) {
       this.report(error);
     }
@@ -1415,11 +1383,10 @@ export class ShaderStore {
     if (!record) return;
 
     try {
-      const updated = await this.api.clearTexture(record.id, channel);
-      this.textures.releaseShader(record.id);
-      this.record.set(updated);
+      const result = await this.textureService.clearImage(record.id, channel);
+      this.record.set(result.record);
       await this.refreshList();
-      this.notice.set({ text: `Cleared iChannel${channel}`, error: false });
+      this.notice.set({ text: result.notice, error: false });
     } catch (error) {
       this.report(error);
     }
@@ -1432,12 +1399,8 @@ export class ShaderStore {
     const record = this.record();
     if (!record) return;
 
-    const channels: TextureChannelSettingsPatch[] = [0, 1, 2, 3].map((index) =>
-      index === channel ? patch : {},
-    );
-
     try {
-      const updated = await this.api.update(record.id, { channels });
+      const updated = await this.textureService.setChannelSettings(record.id, channel, patch);
       this.record.set(updated);
     } catch (error) {
       this.report(error);
