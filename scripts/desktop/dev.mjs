@@ -1,18 +1,18 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
+import { createLogger } from '../_lib/logger.mjs';
+
 const require = createRequire(import.meta.url);
 const commands = [
   {
     name: 'angular',
-    color: '\x1b[34m',
     entry: require.resolve('@angular/cli/bin/ng.js'),
     args: ['run', 'shader-studio:desktop-serve:development'],
     stdin: 'ignore',
   },
   {
     name: 'rollup',
-    color: '\x1b[35m',
     entry: require.resolve('rollup/dist/bin/rollup'),
     args: ['-c', '--environment', 'NODE_ENV:development', '--watch'],
     stdin: 'inherit',
@@ -24,7 +24,8 @@ let stopping = false;
 let exitCode = 0;
 
 for (const command of commands) {
-  console.log(`${command.color}[${command.name}]\x1b[0m ${command.args.join(' ')}`);
+  const log = createLogger(command.name);
+  log.info(command.args.join(' '));
 
   const child = spawn(process.execPath, [command.entry, ...command.args], {
     stdio: [command.stdin, 'inherit', 'inherit'],
@@ -34,7 +35,7 @@ for (const command of commands) {
   children.set(command.name, child);
 
   child.once('error', (error) => {
-    console.error(`${command.color}[${command.name}]\x1b[0m Failed to start`, error);
+    log.error('Failed to start', error);
     stop(1, command.name);
   });
 
@@ -43,7 +44,7 @@ for (const command of commands) {
 
     if (!stopping) {
       const reason = signal ? `signal ${signal}` : `exit code ${code ?? 1}`;
-      console.log(`${command.color}[${command.name}]\x1b[0m Exited with ${reason}`);
+      log.info(`Exited with ${reason}`);
       stop(code ?? 1, command.name);
     }
 

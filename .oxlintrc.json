@@ -10,9 +10,7 @@
     "dist-renderer/**",
     "release/**",
     "data/**",
-    "main/generated/**",
-    "packages/electron-ipc-module/**",
-    "packages/electron-run/**"
+    "main/generated/**"
   ],
   "rules": {
     "typescript/no-explicit-any": "error",

@@ -25,10 +25,6 @@
       "types": "./src/validate/index.ts",
       "default": "./src/validate/index.ts"
     },
-    "./mcp": {
-      "types": "./src/mcp/index.ts",
-      "default": "./src/mcp/index.ts"
-    },
     "./mcp-protocol": {
       "types": "./src/mcp/protocol.ts",
       "default": "./src/mcp/protocol.ts"
@@ -38,10 +34,6 @@
       "default": "./src/mcp/port.ts"
     },
     "./diagnostic": {
-      "types": "./src/diagnostics/types.ts",
-      "default": "./src/diagnostics/types.ts"
-    },
-    "./diagnostics": {
       "types": "./src/diagnostics/types.ts",
       "default": "./src/diagnostics/types.ts"
     },
@@ -69,10 +61,6 @@
       "types": "./src/capture/index.ts",
       "default": "./src/capture/index.ts"
     },
-    "./capture": {
-      "types": "./src/capture/index.ts",
-      "default": "./src/capture/index.ts"
-    },
     "./geometry": {
       "types": "./src/geometry.ts",
       "default": "./src/geometry.ts"
@@ -89,18 +77,6 @@
       "types": "./src/prefs/panel.ts",
       "default": "./src/prefs/panel.ts"
     },
-    "./prefs/editor": {
-      "types": "./src/prefs/editor.ts",
-      "default": "./src/prefs/editor.ts"
-    },
-    "./prefs/preview": {
-      "types": "./src/prefs/preview.ts",
-      "default": "./src/prefs/preview.ts"
-    },
-    "./prefs/panel": {
-      "types": "./src/prefs/panel.ts",
-      "default": "./src/prefs/panel.ts"
-    },
     "./templates": {
       "types": "./src/templates.ts",
       "default": "./src/templates.ts"
@@ -110,9 +86,11 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
   "devDependencies": {
     "typescript": "~6.0.2",
-    "vitest": "^4.0.8",
-    "zod": "^4.4.3"
+    "vitest": "^4.0.8"
   }
 }

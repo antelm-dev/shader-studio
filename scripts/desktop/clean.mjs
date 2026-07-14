@@ -1,7 +1,9 @@
 import { rm } from 'node:fs/promises';
 
-await Promise.all(
-  ['dist-main', 'dist-renderer', 'release'].map((path) =>
-    rm(path, { recursive: true, force: true }),
-  ),
-);
+import { createLogger } from '../_lib/logger.mjs';
+
+const log = createLogger('clean');
+const paths = ['dist-main', 'dist-renderer', 'release'];
+
+await Promise.all(paths.map((path) => rm(path, { recursive: true, force: true })));
+log.info(`Removed ${paths.join(', ')}`);

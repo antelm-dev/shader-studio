@@ -36,6 +36,8 @@ last valid version running and places compiler diagnostics in the editor.
   bloom, render scaling, and texture inputs are built in.
 - **Web and desktop** — run the SSR web app on your own machine or package the
   Electron desktop app for Windows.
+- **MCP server** — let Claude Code, Codex, or Cursor drive a running Shader
+  Studio tab: list shaders, edit GLSL, tune uniforms, and capture screenshots.
 
 ## Contents
 
@@ -46,6 +48,7 @@ last valid version running and places compiler diagnostics in the editor.
 - [Shader format](#shader-format)
 - [Import and export](#import-and-export)
 - [API](#api)
+- [MCP server](#mcp-server)
 - [Included shaders](#included-shaders)
 - [Architecture](#architecture)
 - [Development](#development)
@@ -138,8 +141,9 @@ pnpm pack:win     # unpacked app in release/win-unpacked
 pnpm dist:win     # NSIS installer and portable executable in release/
 ```
 
-The desktop target uses the workspace packages
-`electron-ipc-module` and `electron-run` under `packages/`. It stores its
+The desktop target uses
+[`electron-ipc-module`](https://github.com/antelm-dev/electron-ipc-module) and
+[`electron-run`](https://github.com/antelm-dev/electron-run). It stores its
 library in Electron's per-user application-data directory and does not start the
 Express server. The web and SSR targets continue to use the REST API.
 
@@ -153,10 +157,11 @@ three.js, lil-gui, and Monaco.
 | `pnpm dev`       | Dev server with HMR, SSR and the API |
 | `pnpm build`     | Production build into `dist/`        |
 | `pnpm serve:ssr` | Run the built SSR server             |
-| `pnpm test`      | Unit tests (Vitest)                  |
+| `pnpm test`      | Unit tests (Vitest), incl. the MCP server |
 | `pnpm lint`      | Oxlint                               |
 | `pnpm format`    | Oxfmt                                |
 | `pnpm typecheck` | `tsc -b`, strict                     |
+| `pnpm dev:mcp`   | Run the [MCP server](#mcp-server) from source |
 
 ## Using Shader Studio
 
@@ -220,8 +225,10 @@ packages/
                      wiring, plus `migrateLegacyProject`/`sanitizeProject`
     validate.ts      every rule, in one place. The API is the authority; the
                      client reuses it to pre-validate the config editor.
-  electron-ipc-module/   typed Electron IPC + preload bridge generation
-  electron-run/          Rollup plugin that live-reloads Electron on rebuild
+  mcp/                   `@shader-studio/mcp` — MCP server, published
+                          standalone; drives a running Shader Studio tab over
+                          an authenticated localhost WebSocket bridge
+                          (see packages/mcp/README.md)
 
 src/
   server/          Node only
@@ -535,6 +542,28 @@ All errors are `{ "error": { "code", "message", "details"? } }`.
 
 Preset values are sanitized against the shader's schema on save, so a preset can
 never carry a value for a control that does not exist.
+
+---
+
+## MCP server
+
+`packages/mcp` publishes [`@shader-studio/mcp`](https://www.npmjs.com/package/@shader-studio/mcp)
+on npm: an [MCP](https://modelcontextprotocol.io) server that lets Claude Code,
+Codex, Cursor, and other MCP clients drive a **locally-open Shader Studio
+tab** — list shaders, edit GLSL live, tune uniforms, apply presets, and
+capture screenshots — through the same authenticated localhost WebSocket
+bridge the app already exposes. It speaks MCP over stdio to the client and
+makes no outbound network calls of its own.
+
+```bash
+npx -y @shader-studio/mcp
+# or, wired into Claude Code:
+claude mcp add shader-studio -- npx -y @shader-studio/mcp
+```
+
+Pairing the browser tab, the security model, environment variables, and
+per-client config (Codex, Cursor, Windows) are documented in
+[`packages/mcp/README.md`](packages/mcp/README.md).
 
 ---
 

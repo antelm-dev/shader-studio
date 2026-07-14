@@ -1,9 +1,11 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { createLogger } from '../_lib/logger.mjs';
 import { root } from '../_lib/paths.mjs';
 import { FONT_OVERLAY, SYSTEM_FONT_ENTRY } from './font-overlay.mjs';
 
+const log = createLogger('gen:fonts');
 const METADATA_URL = 'https://fonts.google.com/metadata/fonts';
 const CODING_WEIGHTS = [300, 400, 500, 600, 700];
 
@@ -11,7 +13,8 @@ const outFile = resolve(root, 'src/app/editor/font-catalogue.ts');
 
 const response = await fetch(METADATA_URL);
 if (!response.ok) {
-  throw new Error(`Google Fonts metadata failed: ${response.status} ${response.statusText}`);
+  log.error(`Google Fonts metadata failed: ${response.status} ${response.statusText}`);
+  process.exit(1);
 }
 
 const metadata = JSON.parse((await response.text()).replace(/^\)\]\}'\s*/, ''));
@@ -19,11 +22,12 @@ const byFamily = new Map(metadata.familyMetadataList.map((font) => [font.family,
 
 const missing = FONT_OVERLAY.filter((entry) => !byFamily.has(entry.family));
 if (missing.length > 0) {
-  throw new Error(
+  log.error(
     `Curated fonts missing from Google Fonts metadata:\n${missing
       .map((entry) => `  - ${entry.family}`)
       .join('\n')}`,
   );
+  process.exit(1);
 }
 
 const monospaceCount = metadata.familyMetadataList.filter((font) =>
@@ -44,7 +48,7 @@ const catalogue = [
 ];
 
 writeFileSync(outFile, renderCatalogue(catalogue), 'utf8');
-console.log(
+log.info(
   `Wrote ${catalogue.length} fonts to ${outFile} (${monospaceCount} monospace on Google Fonts).`,
 );
 

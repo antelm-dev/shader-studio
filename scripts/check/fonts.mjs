@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { createLogger } from '../_lib/logger.mjs';
 import { root } from '../_lib/paths.mjs';
 import { FONT_OVERLAY, SYSTEM_FONT_ENTRY } from '../gen/font-overlay.mjs';
 
+const log = createLogger('fonts');
 const source = readFileSync(resolve(root, 'src/app/editor/font-catalogue.ts'), 'utf8');
 
 const entryPattern =
@@ -68,7 +70,7 @@ if (errors.length > 0) {
   );
 }
 
-console.log(
+log.info(
   `fonts ok — ${catalogue.length} entries match scripts/gen/font-overlay.mjs (offline drift check)`,
 );
 
@@ -80,6 +82,6 @@ function unquote(raw) {
 }
 
 function fail(message) {
-  console.error(message);
+  log.error(message);
   process.exit(1);
 }

@@ -1,8 +1,0 @@
-{
-  "references": [
-    { "path": "./tsconfig.shared.json" },
-    { "path": "./tsconfig.runtime.json" },
-    { "path": "./tsconfig.rollup.json" }
-  ],
-  "files": []
-}

@@ -15,6 +15,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/electron-ipc-module/package.json ./packages/electron-ipc-module/
 COPY packages/electron-run/package.json ./packages/electron-run/
+COPY packages/mcp/package.json ./packages/mcp/
 
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --ignore-scripts

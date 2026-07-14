@@ -5,8 +5,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { chromium } from 'playwright';
 
+import { createLogger } from './_lib/logger.mjs';
 import { root, script } from './_lib/paths.mjs';
 
+const log = createLogger('smoke');
 const require = createRequire(resolve(root, 'package.json'));
 const ngCli = require.resolve('@angular/cli/bin/ng.js');
 const PORT = Number(process.env.SMOKE_PORT ?? 4321);
@@ -18,8 +20,8 @@ const ipc = spawnSync(process.execPath, [script('gen/ipc.mjs')], {
   encoding: 'utf8',
 });
 if (ipc.status !== 0) {
-  console.error('smoke requires gen:ipc — window.electron types come from main/generated/');
-  console.error(ipc.stderr || ipc.stdout);
+  log.error('smoke requires gen:ipc — window.electron types come from main/generated/');
+  log.error(ipc.stderr || ipc.stdout);
   process.exit(ipc.status ?? 1);
 }
 
@@ -73,14 +75,14 @@ try {
   await page.locator('.monaco-editor').waitFor({ state: 'visible', timeout: 30_000 });
 
   await browser.close();
-  console.log('smoke ok — drawer, inspector controls, and Monaco editor loaded');
+  log.info('smoke ok — drawer, inspector controls, and Monaco editor loaded');
   await shutdown(0);
 } catch (error) {
-  console.error('smoke failed');
-  console.error(error);
+  log.error('smoke failed');
+  log.error(error);
   if (output.trim()) {
-    console.error('\n--- ng serve output ---\n');
-    console.error(output.slice(-8_000));
+    log.error('--- ng serve output ---');
+    log.error(output.slice(-8_000));
   }
   await shutdown(1);
 }

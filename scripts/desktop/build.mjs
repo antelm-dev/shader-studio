@@ -2,6 +2,10 @@ import { spawn } from 'node:child_process';
 
 import { Arch, Platform, build as buildInstaller } from 'electron-builder';
 
+import { createLogger } from '../_lib/logger.mjs';
+
+const log = createLogger('desktop');
+
 const commands = {
   clean: ['node', 'scripts/desktop/clean.mjs'],
   ipc: ['node', 'scripts/gen/ipc.mjs'],
@@ -24,7 +28,7 @@ if (options.mode !== 'build') {
 
 async function buildDesktop() {
   for (const [name, command] of Object.entries(commands)) {
-    console.log(`\n\x1b[36m[desktop:${name}]\x1b[0m ${command.join(' ')}`);
+    log.info(`${name}: ${command.join(' ')}`);
     await run(command);
   }
 }
@@ -34,7 +38,7 @@ async function packageDesktop() {
   const target = options.mode === 'pack' ? 'dir' : null;
   const arch = options.arch ? [options.arch] : [];
 
-  console.log(`\n\x1b[36m[desktop:package]\x1b[0m ${platform.name}${target ? ` (${target})` : ''}`);
+  log.info(`package: ${platform.name}${target ? ` (${target})` : ''}`);
 
   const artifacts = await buildInstaller({
     targets: platform.createTarget(target, ...arch),
@@ -42,7 +46,7 @@ async function packageDesktop() {
   });
 
   for (const artifact of artifacts) {
-    console.log(`\x1b[32mCreated\x1b[0m ${artifact}`);
+    log.info(`Created ${artifact}`);
   }
 }
 
@@ -106,8 +110,8 @@ function parseArch(value) {
 }
 
 function usage(error) {
-  console.error(`\n${error}\n`);
-  console.error(
+  log.error(error);
+  log.error(
     'Usage: node scripts/desktop/build.mjs [build|pack|dist] [--win|--mac|--linux] [--arch=x64|arm64|ia32|armv7l]',
   );
   process.exit(1);

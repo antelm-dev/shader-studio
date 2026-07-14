@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { createLogger } from '../_lib/logger.mjs';
 import { root } from '../_lib/paths.mjs';
 
+const log = createLogger('i18n');
 const keysSource = readFileSync(resolve(root, 'src/app/i18n/keys.ts'), 'utf8');
 const locales = ['en', 'fr'];
 
@@ -69,7 +71,7 @@ if (errors.length > 0) {
   fail(`i18n check failed (${errors.length}):\n${errors.map(bullet).join('\n')}`);
 }
 
-console.log(`i18n ok — ${keys.length} keys × ${locales.length} locales`);
+log.info(`i18n ok — ${keys.length} keys × ${locales.length} locales`);
 
 function bullet(line) {
   return `  - ${line}`;
@@ -80,6 +82,6 @@ function unique(values) {
 }
 
 function fail(message) {
-  console.error(message);
+  log.error(message);
   process.exit(1);
 }
