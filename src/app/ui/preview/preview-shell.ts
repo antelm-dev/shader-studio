@@ -5,11 +5,9 @@ import { MatMenuModule } from '@angular/material/menu';
 
 import { DesktopPlatform } from '../../desktop/desktop-platform';
 import {
+  arrowKeyDelta,
   containPoint,
   containRect,
-  RESIZE_EDGES,
-  RESIZE_NUDGE,
-  RESIZE_NUDGE_FAST,
   resizeRect,
   type Point,
   type Rect,
@@ -29,8 +27,11 @@ import { ShaderCanvas } from '../../rendering/shader-canvas';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import type { TranslationKey } from '../../i18n/keys';
+import { PointerGesture } from '../layout/pointer-gesture';
+import { ResizeHandles } from '../layout/resize-handles';
 import { PreviewMenuCommands } from './preview-menu-commands';
 import { PreviewWindowControls } from './preview-window-controls';
+import { WorkspaceWindowStack } from '../workspace-window-stack';
 
 /**
  * The preview's frame: where it sits, and how you move and size it.
@@ -55,10 +56,6 @@ import { PreviewWindowControls } from './preview-window-controls';
  */
 
 interface Gesture {
-  pointerId: number;
-  /** Pointer position when the gesture began, in client coordinates. */
-  originX: number;
-  originY: number;
   /** The geometry as it was when the gesture began, in workspace coordinates. */
   rect: Rect;
   point: Point;
@@ -73,6 +70,7 @@ interface Gesture {
     MatIconModule,
     MatMenuModule,
     PreviewWindowControls,
+    ResizeHandles,
     ShaderCanvas,
     TranslatePipe,
   ],
@@ -101,7 +99,7 @@ interface Gesture {
 
     <mat-menu #previewMenu="matMenu">
       @if (!stageOnly()) {
-        <button mat-menu-item type="button" (click)="preview.toggleDetached()">
+        <button mat-menu-item type="button" (click)="toggleDetached()">
           <mat-icon>{{ onStage() ? 'open_in_new' : 'wallpaper' }}</mat-icon>
           <span>{{
             (onStage() ? 'action.detachPreview' : 'action.returnToStage') | translate
@@ -219,17 +217,11 @@ interface Gesture {
          when floating: the stage has no edges of its own, a maximized window's
          are the workspace's, and a collapsed one is a bar. -->
     @if (floating()) {
-      @for (edge of edges; track edge) {
-        <div
-          class="handle handle-{{ edge }}"
-          role="separator"
-          tabindex="0"
-          [attr.aria-orientation]="edge === 'n' || edge === 's' ? 'horizontal' : 'vertical'"
-          [attr.aria-label]="resizeLabel(edge)"
-          (pointerdown)="startResize($event, edge)"
-          (keydown)="onHandleKeydown($event, edge)"
-        ></div>
-      }
+      <app-resize-handles
+        [label]="resizeLabel"
+        (pointerDown)="startResize($event.event, $event.edge)"
+        (keyDown)="onHandleKeydown($event.event, $event.edge)"
+      />
     }
   `,
   styles: `
@@ -255,19 +247,15 @@ interface Gesture {
       z-index: 0;
     }
 
-    /* Above the chrome, which is what "detached" has always meant here: the
-       preview is the subject, and a window over the shader that the toolbar could
-       cover would be a window you have to fight. */
+    /* Windowed frames are stacked dynamically by WorkspaceWindowStack. */
     :host(.floating),
     :host(.minimized) {
-      z-index: 4;
       border: 1px solid var(--mat-sys-outline-variant);
       border-radius: var(--mat-sys-corner-medium, 8px);
       box-shadow: var(--mat-sys-level4);
     }
 
     :host(.maximized) {
-      z-index: 4;
       border: 1px solid var(--mat-sys-outline-variant);
     }
 
@@ -335,88 +323,6 @@ interface Gesture {
       min-width: 0;
     }
 
-    /* --- Handles --------------------------------------------------------- */
-
-    .handle {
-      position: absolute;
-      z-index: 1;
-      /* Transparent, but a real target: 6px of grab area is the difference
-         between resizing a window and hunting for its edge. */
-      background: transparent;
-      touch-action: none;
-    }
-
-    .handle:focus-visible {
-      outline: 2px solid var(--mat-sys-primary);
-      outline-offset: -2px;
-      background: color-mix(in srgb, var(--mat-sys-primary) 24%, transparent);
-    }
-
-    .handle-n,
-    .handle-s {
-      left: 0;
-      right: 0;
-      height: 6px;
-      cursor: ns-resize;
-    }
-
-    .handle-e,
-    .handle-w {
-      top: 0;
-      bottom: 0;
-      width: 6px;
-      cursor: ew-resize;
-    }
-
-    .handle-n {
-      top: 0;
-    }
-
-    .handle-s {
-      bottom: 0;
-    }
-
-    .handle-e {
-      right: 0;
-    }
-
-    .handle-w {
-      left: 0;
-    }
-
-    .handle-ne,
-    .handle-nw,
-    .handle-se,
-    .handle-sw {
-      width: 14px;
-      height: 14px;
-      z-index: 2;
-    }
-
-    .handle-ne {
-      top: 0;
-      right: 0;
-      cursor: nesw-resize;
-    }
-
-    .handle-nw {
-      top: 0;
-      left: 0;
-      cursor: nwse-resize;
-    }
-
-    .handle-se {
-      bottom: 0;
-      right: 0;
-      cursor: nwse-resize;
-    }
-
-    .handle-sw {
-      bottom: 0;
-      left: 0;
-      cursor: nesw-resize;
-    }
-
     .hint {
       margin-left: auto;
       padding-left: 24px;
@@ -431,6 +337,9 @@ interface Gesture {
     '[style.top.px]': 'frame()?.y',
     '[style.width.px]': 'frame()?.width',
     '[style.height.px]': 'frameHeight()',
+    '[style.z-index]': 'windowZIndex()',
+    '(pointerdown)': 'activate()',
+    '(focusin)': 'activate()',
     role: 'region',
     'aria-label': 'Shader preview',
   },
@@ -442,6 +351,7 @@ export class PreviewShell {
   protected readonly desktop = inject(DesktopPlatform);
   protected readonly i18n = inject(I18n);
   protected readonly commands = inject(PreviewMenuCommands);
+  private readonly windowStack = inject(WorkspaceWindowStack);
 
   /**
    * The output window renders the same shader with none of the chrome, and it
@@ -454,8 +364,6 @@ export class PreviewShell {
    */
   readonly stageOnly = input(false);
 
-  protected readonly edges = RESIZE_EDGES;
-
   protected readonly mode = computed<PreviewMode>(() =>
     this.stageOnly() ? 'stage' : this.preview.mode(),
   );
@@ -465,6 +373,9 @@ export class PreviewShell {
   protected readonly maximized = computed(() => this.mode() === 'maximized');
   protected readonly minimized = computed(() => this.mode() === 'minimized');
   protected readonly windowed = computed(() => !this.onStage());
+  protected readonly windowZIndex = computed(() =>
+    this.windowed() ? this.windowStack.zIndex('preview') : null,
+  );
 
   /** A maximized window fills the workspace; there is nothing to drag it to. */
   protected readonly draggable = computed(() => this.floating() || this.minimized());
@@ -482,7 +393,7 @@ export class PreviewShell {
    * preference object to `localStorage` sixty times a second, for a value that is
    * only interesting once the user lets go.
    */
-  private readonly gesture = signal<Gesture | null>(null);
+  private readonly pointerGesture = new PointerGesture();
   private readonly liveRect = signal<Rect | null>(null);
   private readonly livePoint = signal<Point | null>(null);
 
@@ -559,43 +470,27 @@ export class PreviewShell {
    * — and `preventDefault` is what stops it from also selecting text on the way.
    */
   private begin(event: PointerEvent, edge: ResizeEdge | null): void {
+    this.activate();
     event.preventDefault();
     event.stopPropagation();
 
-    const target = event.currentTarget as HTMLElement | null;
-    target?.setPointerCapture?.(event.pointerId);
-
-    this.gesture.set({
-      pointerId: event.pointerId,
-      originX: event.clientX,
-      originY: event.clientY,
+    const gesture: Gesture = {
       rect: this.preview.floatingRect(),
       point: this.preview.minimizedPoint(),
       edge,
-    });
-
-    const move = (moveEvent: PointerEvent) => this.onPointerMove(moveEvent);
-    const end = (endEvent: PointerEvent) => {
-      if (endEvent.pointerId !== this.gesture()?.pointerId) return;
-      target?.releasePointerCapture?.(endEvent.pointerId);
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', end);
-      window.removeEventListener('pointercancel', end);
-      this.commit();
     };
 
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', end);
+    const target = event.currentTarget as HTMLElement | null;
+    this.pointerGesture.begin(event, target, {
+      onMove: (dx, dy) => this.applyMove(gesture, dx, dy),
+      onCommit: (dx, dy) => {
+        this.applyMove(gesture, dx, dy);
+        this.commit();
+      },
+    });
   }
 
-  private onPointerMove(event: PointerEvent): void {
-    const gesture = this.gesture();
-    if (!gesture || event.pointerId !== gesture.pointerId) return;
-
-    const dx = event.clientX - gesture.originX;
-    const dy = event.clientY - gesture.originY;
-
+  private applyMove(gesture: Gesture, dx: number, dy: number): void {
     if (gesture.edge) {
       this.liveRect.set(this.resized(gesture, dx, dy));
       return;
@@ -650,9 +545,17 @@ export class PreviewShell {
     if (rect) this.preview.setFloatingRect(rect);
     if (point) this.preview.setMinimizedPoint(point);
 
-    this.gesture.set(null);
     this.liveRect.set(null);
     this.livePoint.set(null);
+  }
+
+  protected activate(): void {
+    if (this.windowed()) this.windowStack.activate('preview');
+  }
+
+  protected toggleDetached(): void {
+    if (this.onStage()) this.windowStack.activate('preview');
+    this.preview.toggleDetached();
   }
 
   // --- Keyboard -----------------------------------------------------------
@@ -665,25 +568,13 @@ export class PreviewShell {
    * handles are focusable separators, and the arrow keys pull them.
    */
   protected onHandleKeydown(event: KeyboardEvent, edge: ResizeEdge): void {
-    const step = event.shiftKey ? RESIZE_NUDGE_FAST : RESIZE_NUDGE;
-
-    const delta: Record<string, [number, number]> = {
-      ArrowLeft: [-step, 0],
-      ArrowRight: [step, 0],
-      ArrowUp: [0, -step],
-      ArrowDown: [0, step],
-    };
-
-    const move = delta[event.key];
+    const move = arrowKeyDelta(event);
     if (!move) return;
 
     event.preventDefault();
     const [dx, dy] = move;
 
     const gesture: Gesture = {
-      pointerId: -1,
-      originX: 0,
-      originY: 0,
       rect: this.preview.floatingRect(),
       point: this.preview.minimizedPoint(),
       edge,
@@ -692,7 +583,7 @@ export class PreviewShell {
     this.preview.setFloatingRect(this.resized(gesture, dx, dy));
   }
 
-  protected resizeLabel(edge: ResizeEdge): string {
+  protected readonly resizeLabel = (edge: ResizeEdge): string => {
     const keys: Record<ResizeEdge, TranslationKey> = {
       n: 'preview.edge.n',
       s: 'preview.edge.s',
@@ -704,5 +595,5 @@ export class PreviewShell {
       sw: 'preview.edge.sw',
     };
     return this.i18n.t('preview.resizeEdge', { edge: this.i18n.t(keys[edge]) });
-  }
+  };
 }

@@ -15,16 +15,17 @@ import {
 
 import { EDITOR_LIMITS } from '@shader-studio/shared/editor-prefs';
 import {
+  arrowKeyDelta,
   containRect,
-  RESIZE_EDGES,
-  RESIZE_NUDGE,
-  RESIZE_NUDGE_FAST,
   resizeRect,
   type Rect,
   type ResizeEdge,
 } from '@shader-studio/shared/geometry';
 import { EditorWindow } from '../../editor/editor-window';
 import { EditorPanel } from './editor-panel';
+import { PointerGesture } from '../layout/pointer-gesture';
+import { ResizeHandles } from '../layout/resize-handles';
+import { WorkspaceWindowStack } from '../workspace-window-stack';
 
 /**
  * The editor's frame: where the panel sits, and how you move and size it.
@@ -45,10 +46,6 @@ import { EditorPanel } from './editor-panel';
  */
 
 interface Gesture {
-  pointerId: number;
-  /** Pointer position when the gesture began, in client coordinates. */
-  originX: number;
-  originY: number;
   /** The rect (or docked size) as it was when the gesture began. */
   rect: Rect;
   height: number;
@@ -58,7 +55,7 @@ interface Gesture {
 
 @Component({
   selector: 'app-editor-shell',
-  imports: [EditorPanel],
+  imports: [EditorPanel, ResizeHandles],
   template: `
     <!-- The docked panel's free edge. A separator, so a keyboard can resize it. -->
     @if (mode() === 'docked') {
@@ -87,17 +84,11 @@ interface Gesture {
          when floating: a docked panel has one edge that means anything, and a
          maximized one has none. -->
     @if (mode() === 'floating') {
-      @for (edge of edges; track edge) {
-        <div
-          class="handle handle-{{ edge }}"
-          role="separator"
-          tabindex="0"
-          [attr.aria-orientation]="edge === 'n' || edge === 's' ? 'horizontal' : 'vertical'"
-          [attr.aria-label]="resizeLabel(edge)"
-          (pointerdown)="startResize($event, edge)"
-          (keydown)="onHandleKeydown($event, edge)"
-        ></div>
-      }
+      <app-resize-handles
+        [label]="resizeLabel"
+        (pointerDown)="startResize($event.event, $event.edge)"
+        (keyDown)="onHandleKeydown($event.event, $event.edge)"
+      />
     }
   `,
   styles: `
@@ -165,7 +156,6 @@ interface Gesture {
     :host(.maximized) {
       position: absolute;
       inset: 0;
-      z-index: 3;
       border-width: 1px 0 0;
     }
 
@@ -173,10 +163,15 @@ interface Gesture {
 
     :host(.floating) {
       position: absolute;
-      z-index: 3;
       overflow: hidden;
       border-radius: var(--mat-sys-corner-medium, 8px);
       box-shadow: var(--mat-sys-level4);
+    }
+
+    /* Matches the docked handle's own north grip, so the top edge is grabbable
+       from the same distance in every mode. */
+    app-resize-handles {
+      --resize-handle-top-offset: -3px;
     }
 
     /* Squeezed to the toolbar. The shader behind it is the point of collapsing. */
@@ -201,12 +196,15 @@ interface Gesture {
       background: color-mix(in srgb, var(--mat-sys-primary) 24%, transparent);
     }
 
-    .handle-n,
-    .handle-s {
+    /* Only n, e and w: the docked panel's free edge is the only one this
+       handle is for — see app-resize-handles for the floating window's
+       other seven. */
+    .handle-n {
       left: 0;
       right: 0;
       height: 6px;
       cursor: ns-resize;
+      top: -3px;
     }
 
     .handle-e,
@@ -217,53 +215,12 @@ interface Gesture {
       cursor: ew-resize;
     }
 
-    .handle-n {
-      top: -3px;
-    }
-
-    .handle-s {
-      bottom: 0;
-    }
-
     .handle-e {
       right: 0;
     }
 
     .handle-w {
       left: 0;
-    }
-
-    .handle-ne,
-    .handle-nw,
-    .handle-se,
-    .handle-sw {
-      width: 14px;
-      height: 14px;
-      z-index: 2;
-    }
-
-    .handle-ne {
-      top: 0;
-      right: 0;
-      cursor: nesw-resize;
-    }
-
-    .handle-nw {
-      top: 0;
-      left: 0;
-      cursor: nwse-resize;
-    }
-
-    .handle-se {
-      bottom: 0;
-      right: 0;
-      cursor: nwse-resize;
-    }
-
-    .handle-sw {
-      bottom: 0;
-      left: 0;
-      cursor: nesw-resize;
     }
 
     /* The docked handle sits on the panel's free edge and has to be
@@ -291,12 +248,15 @@ interface Gesture {
     '[class.dock-bottom]': 'dockSide() === "bottom"',
     '[class.dock-left]': 'dockSide() === "left"',
     '[class.dock-right]': 'dockSide() === "right"',
-    '[class.dragging]': 'gesture() !== null',
-    '[class.animating]': 'gesture() === null',
+    '[class.dragging]': 'dragging()',
+    '[class.animating]': '!dragging()',
     '[style.height.px]': 'hostHeight()',
     '[style.width.px]': 'hostWidth()',
     '[style.left.px]': 'hostRect()?.x',
     '[style.top.px]': 'hostRect()?.y',
+    '[style.z-index]': 'windowZIndex()',
+    '(pointerdown)': 'activate()',
+    '(focusin)': 'activate()',
     role: 'region',
     'aria-label': 'Source editor',
   },
@@ -308,13 +268,17 @@ export class EditorShell {
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly destroyRef = inject(DestroyRef);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private readonly windowStack = inject(WorkspaceWindowStack);
 
   private readonly panel = viewChild.required(EditorPanel);
 
-  protected readonly edges = RESIZE_EDGES;
-
   protected readonly mode = this.editorWindow.mode;
   protected readonly dockSide = this.editorWindow.dockSide;
+  protected readonly windowZIndex = computed(() =>
+    this.mode() === 'floating' || this.mode() === 'maximized'
+      ? this.windowStack.zIndex('editor')
+      : null,
+  );
 
   protected readonly dockResizeEdge = computed<ResizeEdge>(() => {
     const side = this.dockSide();
@@ -341,7 +305,8 @@ export class EditorShell {
    * preference object to `localStorage` sixty times a second, for a value that is
    * only interesting once the user lets go.
    */
-  protected readonly gesture = signal<Gesture | null>(null);
+  private readonly pointerGesture = new PointerGesture();
+  protected readonly dragging = this.pointerGesture.dragging;
   private readonly live = signal<Rect | null>(null);
   private readonly liveHeight = signal<number | null>(null);
   private readonly liveWidth = signal<number | null>(null);
@@ -445,44 +410,28 @@ export class EditorShell {
    * `preventDefault` is what stops it from also selecting text on the way.
    */
   private begin(event: PointerEvent, edge: ResizeEdge | null): void {
+    this.activate();
     event.preventDefault();
     event.stopPropagation();
 
-    const target = event.currentTarget as HTMLElement | null;
-    target?.setPointerCapture?.(event.pointerId);
-
-    this.gesture.set({
-      pointerId: event.pointerId,
-      originX: event.clientX,
-      originY: event.clientY,
+    const gesture: Gesture = {
       rect: this.editorWindow.floatingRect(),
       height: this.editorWindow.dockedHeight(),
       width: this.editorWindow.dockedWidth(),
       edge,
-    });
-
-    const move = (moveEvent: PointerEvent) => this.onPointerMove(moveEvent);
-    const end = (endEvent: PointerEvent) => {
-      if (endEvent.pointerId !== this.gesture()?.pointerId) return;
-      target?.releasePointerCapture?.(endEvent.pointerId);
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', end);
-      window.removeEventListener('pointercancel', end);
-      this.commit();
     };
 
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', end);
+    const target = event.currentTarget as HTMLElement | null;
+    this.pointerGesture.begin(event, target, {
+      onMove: (dx, dy) => this.applyMove(gesture, dx, dy),
+      onCommit: (dx, dy) => {
+        this.applyMove(gesture, dx, dy);
+        this.commit();
+      },
+    });
   }
 
-  private onPointerMove(event: PointerEvent): void {
-    const gesture = this.gesture();
-    if (!gesture || event.pointerId !== gesture.pointerId) return;
-
-    const dx = event.clientX - gesture.originX;
-    const dy = event.clientY - gesture.originY;
-
+  private applyMove(gesture: Gesture, dx: number, dy: number): void {
     // Docked: pull the free edge. Bottom grows upward; left grows rightward;
     // right grows leftward.
     if (this.mode() === 'docked') {
@@ -560,11 +509,16 @@ export class EditorShell {
     if (height !== null) this.editorWindow.setDockedHeight(height);
     if (width !== null) this.editorWindow.setDockedWidth(width);
 
-    this.gesture.set(null);
     this.live.set(null);
     this.liveHeight.set(null);
     this.liveWidth.set(null);
     this.scheduleRelayout();
+  }
+
+  protected activate(): void {
+    if (this.mode() === 'floating' || this.mode() === 'maximized') {
+      this.windowStack.activate('editor');
+    }
   }
 
   // --- Keyboard -----------------------------------------------------------
@@ -576,16 +530,7 @@ export class EditorShell {
    * have. The handles are focusable separators, and the arrow keys pull them.
    */
   protected onHandleKeydown(event: KeyboardEvent, edge: ResizeEdge): void {
-    const step = event.shiftKey ? RESIZE_NUDGE_FAST : RESIZE_NUDGE;
-
-    const delta: Record<string, [number, number]> = {
-      ArrowLeft: [-step, 0],
-      ArrowRight: [step, 0],
-      ArrowUp: [0, -step],
-      ArrowDown: [0, step],
-    };
-
-    const move = delta[event.key];
+    const move = arrowKeyDelta(event);
     if (!move) return;
 
     event.preventDefault();
@@ -605,9 +550,6 @@ export class EditorShell {
     }
 
     const gesture: Gesture = {
-      pointerId: -1,
-      originX: 0,
-      originY: 0,
       rect: this.editorWindow.floatingRect(),
       height: this.editorWindow.dockedHeight(),
       width: this.editorWindow.dockedWidth(),

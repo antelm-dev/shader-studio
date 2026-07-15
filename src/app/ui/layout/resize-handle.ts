@@ -1,4 +1,6 @@
-import { Component, ElementRef, inject, input, output, signal } from '@angular/core';
+import { Component, ElementRef, inject, input, output } from '@angular/core';
+
+import { PointerGesture } from './pointer-gesture';
 
 /**
  * A vertical separator that resizes the panel beside it.
@@ -102,7 +104,8 @@ export class ResizeHandle {
   /** Fires once the gesture ends, or on a keyboard nudge. Safe to persist. */
   readonly commit = output<number>();
 
-  protected readonly dragging = signal(false);
+  private readonly gesture = new PointerGesture();
+  protected readonly dragging = this.gesture.dragging;
 
   private readonly host = inject(ElementRef<HTMLElement>);
 
@@ -111,34 +114,13 @@ export class ResizeHandle {
     event.preventDefault();
     event.stopPropagation();
 
-    const host = this.host.nativeElement;
-    host.setPointerCapture?.(event.pointerId);
-
-    const originX = event.clientX;
     const start = this.value();
-    const widthAt = (clientX: number): number =>
-      this.clamp(start + this.sign() * (clientX - originX));
+    const widthAt = (dx: number): number => this.clamp(start + this.sign() * dx);
 
-    this.dragging.set(true);
-
-    const move = (moveEvent: PointerEvent): void => {
-      if (moveEvent.pointerId !== event.pointerId) return;
-      this.preview.emit(widthAt(moveEvent.clientX));
-    };
-
-    const end = (endEvent: PointerEvent): void => {
-      if (endEvent.pointerId !== event.pointerId) return;
-      host.releasePointerCapture?.(endEvent.pointerId);
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', end);
-      window.removeEventListener('pointercancel', end);
-      this.dragging.set(false);
-      this.commit.emit(widthAt(endEvent.clientX));
-    };
-
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', end);
+    this.gesture.begin(event, this.host.nativeElement, {
+      onMove: (dx) => this.preview.emit(widthAt(dx)),
+      onCommit: (dx) => this.commit.emit(widthAt(dx)),
+    });
   }
 
   /**

@@ -5,9 +5,12 @@
       "args": ["-y", "@angular/cli@22", "mcp"]
     },
     "shader-studio": {
-      "command": "npx",
-      "args": ["-y", "tsx", "packages/mcp/src/server.ts"],
-      "env": { "SHADER_STUDIO_MCP_PORT": "4310" }
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "tsx", "packages/mcp/src/server.ts"],
+      "env": {
+        "SHADER_STUDIO_MCP_PORT": "4310",
+        "SHADER_STUDIO_MCP_TOKEN": "shader-studio-dev-token"
+      }
     }
   }
 }
