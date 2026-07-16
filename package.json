@@ -4,7 +4,7 @@
   "private": true,
   "description": "A shader collection viewer and editor: browse, edit, tune and share WebGL shaders.",
   "keywords": [],
-  "license": "ISC",
+  "license": "Apache-2.0",
   "author": "Adel Terki",
   "type": "module",
   "main": "dist-main/main.cjs",

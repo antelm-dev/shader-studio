@@ -57,6 +57,14 @@
       "types": "./src/glsl/shadertoy.ts",
       "default": "./src/glsl/shadertoy.ts"
     },
+    "./shadertoy-api": {
+      "types": "./src/glsl/shadertoy-api.ts",
+      "default": "./src/glsl/shadertoy-api.ts"
+    },
+    "./image-dimensions": {
+      "types": "./src/glsl/image-dimensions.ts",
+      "default": "./src/glsl/image-dimensions.ts"
+    },
     "./capture-plan": {
       "types": "./src/capture/index.ts",
       "default": "./src/capture/index.ts"

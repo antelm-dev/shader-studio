@@ -87,6 +87,13 @@ export class DesktopShaderApi extends ShaderApi {
     return this.request(() => window.electron.bridge.shader.importBundle(bundle, mode));
   }
 
+  override importShadertoy(
+    idOrUrl: string,
+    apiKey: string,
+  ): Promise<{ bundle: Bundle; warnings: string[] }> {
+    return this.request(() => window.electron.bridge.shader.importShadertoy(idOrUrl, apiKey));
+  }
+
   override setTexture(id: string, channel: number, upload: TextureUpload): Promise<ShaderRecord> {
     return this.request(() => window.electron.bridge.shader.setTexture(id, channel, upload));
   }

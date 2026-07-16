@@ -1,5 +1,6 @@
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
+import { importShadertoyShader } from '@shader-studio/shared/shadertoy-api';
 import type { ImportMode, RenderSettings, ShaderParams } from '@shader-studio/shared/model';
 import {
   buildCollectionBundle,
@@ -64,6 +65,14 @@ export function createShaderIpc(storage: ShaderStorage) {
       if (!parsed.ok)
         throw new StorageError('invalid', 'The bundle could not be imported', parsed.errors);
       return storage.importPayloads(parsed.value, parsedMode.value);
+    }),
+    'import-shadertoy': handle(async (_event, idOrUrl: string, apiKey: string) => {
+      const { payload, warnings } = await importShadertoyShader(
+        stringArg(idOrUrl, 'idOrUrl'),
+        stringArg(apiKey, 'apiKey'),
+        { fetch },
+      );
+      return { bundle: buildShaderBundle(payload), warnings };
     }),
     'set-texture': handle(
       (

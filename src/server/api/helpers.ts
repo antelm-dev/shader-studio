@@ -50,6 +50,15 @@ export function extFromContentType(contentType: string | undefined): string {
   return ext;
 }
 
+/** A required string field on a JSON request body. */
+export function stringBody(body: Record<string, unknown>, name: string): string {
+  const value = body[name];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new StorageError('invalid', `"${name}" must be a non-empty string`);
+  }
+  return value;
+}
+
 /** Positive integer query param, e.g. `?width=512`. */
 export function intQuery(req: Request, name: string): number {
   const raw = req.query[name];

@@ -87,6 +87,11 @@ export abstract class ShaderApi {
   abstract setTexture(id: string, channel: number, upload: TextureUpload): Promise<ShaderRecord>;
   abstract clearTexture(id: string, channel: number): Promise<ShaderRecord>;
   abstract setThumbnail(id: string, upload: ThumbnailUpload): Promise<ShaderRecord>;
+  /** Fetches a shader from Shadertoy and returns it as an importable bundle. */
+  abstract importShadertoy(
+    idOrUrl: string,
+    apiKey: string,
+  ): Promise<{ bundle: Bundle; warnings: string[] }>;
 }
 
 @Injectable()
@@ -202,6 +207,16 @@ export class HttpShaderApi extends ShaderApi {
 
   override importBundle(bundle: unknown, mode: ImportMode): Promise<ImportResult> {
     return this.post<ImportResult>('/import', { bundle, mode });
+  }
+
+  override importShadertoy(
+    idOrUrl: string,
+    apiKey: string,
+  ): Promise<{ bundle: Bundle; warnings: string[] }> {
+    return this.post<{ bundle: Bundle; warnings: string[] }>('/import/shadertoy', {
+      idOrUrl,
+      apiKey,
+    });
   }
 
   // --- Textures -------------------------------------------------------------

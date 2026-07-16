@@ -169,6 +169,7 @@ class FakePreferences implements Partial<Preferences> {
   private readonly state = signal<WorkspacePreferences>({
     language: 'en',
     lastShaderId: null,
+    shadertoyApiKey: null,
     browserOpen: true,
     editorOpen: false,
     guiVisible: true,

@@ -55,6 +55,8 @@ export function colorSchemeIcon(scheme: ColorScheme): string {
 export interface WorkspacePreferences {
   language: AppLocale;
   lastShaderId: string | null;
+  /** Remembered so importing from Shadertoy doesn't ask for it every time. */
+  shadertoyApiKey: string | null;
   browserOpen: boolean;
   editorOpen: boolean;
   /** Whether the inspector rail is showing. Toggled by the H shortcut. */
@@ -86,6 +88,7 @@ export interface WorkspacePreferences {
 const DEFAULTS: WorkspacePreferences = {
   language: 'en',
   lastShaderId: null,
+  shadertoyApiKey: null,
   browserOpen: true,
   editorOpen: false,
   guiVisible: true,
@@ -175,6 +178,8 @@ export class Preferences {
         language: sanitizeLanguage(parsed.language),
         lastShaderId:
           typeof parsed.lastShaderId === 'string' ? parsed.lastShaderId : DEFAULTS.lastShaderId,
+        shadertoyApiKey:
+          typeof parsed.shadertoyApiKey === 'string' ? parsed.shadertoyApiKey : DEFAULTS.shadertoyApiKey,
         browserOpen: parsed.browserOpen ?? DEFAULTS.browserOpen,
         editorOpen: parsed.editorOpen ?? DEFAULTS.editorOpen,
         guiVisible: parsed.guiVisible ?? DEFAULTS.guiVisible,

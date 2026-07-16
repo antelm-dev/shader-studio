@@ -54,6 +54,7 @@ last valid version running and places compiler diagnostics in the editor.
 - [Development](#development)
 - [Tests](#tests)
 - [Known limitations](#known-limitations)
+- [License](#license)
 
 ## Quick start
 
@@ -579,6 +580,9 @@ per-client config (Codex, Cursor, Windows) are documented in
 Poured Paint and its five presets are carried over from the project this app grew
 out of, and are the reference for what the format can express.
 
+All shaders distributed in `examples/shaders` are original Shader Studio examples
+and are licensed under Apache-2.0 with the rest of the project.
+
 ---
 
 ## Tests
@@ -641,3 +645,13 @@ pnpm test
   recompile costs one hidden frame.
 - GLSL diagnostics come from the driver, so their exact wording varies by
   browser and GPU.
+
+---
+
+## License
+
+Copyright 2026 Adel Terki.
+
+Shader Studio is licensed under the [Apache License 2.0](LICENSE). Third-party
+software included by the project remains under its respective license; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

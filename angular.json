@@ -73,6 +73,9 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "prebundle": { "exclude": ["@shader-studio/shared"] }
+          },
           "configurations": {
             "production": {
               "buildTarget": "shader-studio:build:production"
@@ -126,7 +129,7 @@
         },
         "desktop-serve": {
           "builder": "@angular/build:dev-server",
-          "options": { "port": 4201 },
+          "options": { "port": 4201, "prebundle": { "exclude": ["@shader-studio/shared"] } },
           "configurations": {
             "production": { "buildTarget": "shader-studio:desktop:production" },
             "development": { "buildTarget": "shader-studio:desktop:development" }

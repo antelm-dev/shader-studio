@@ -9,7 +9,7 @@
     "glsl",
     "shaders"
   ],
-  "license": "ISC",
+  "license": "Apache-2.0",
   "author": "Adel Terki",
   "homepage": "https://github.com/antelm-dev/shader-studio/tree/master/packages/mcp",
   "repository": {

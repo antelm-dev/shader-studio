@@ -1354,6 +1354,31 @@ export class ShaderStore {
     }
   }
 
+  /**
+   * Fetches a shader from Shadertoy and imports it the same way a `.shader.json`
+   * bundle is: buffers, the Common tab and channel wiring survive because the
+   * mapper (`@shader-studio/shared/shadertoy-api`) already produced a full
+   * bundle — this just runs it through the existing import pipeline.
+   */
+  async importShadertoyShader(idOrUrl: string, apiKey: string): Promise<void> {
+    try {
+      const { bundle, warnings } = await this.api.importShadertoy(idOrUrl, apiKey);
+      const result = await this.api.importBundle(bundle, 'rename');
+      await this.refreshList();
+
+      const first = result.imported[0];
+      if (first) await this.forceSelect(first.id);
+
+      const suffix = warnings.length ? ` ${warnings.join(' ')}` : '';
+      this.notice.set({
+        text: `Imported “${first?.name ?? 'shader'}” from Shadertoy.${suffix}`,
+        error: false,
+      });
+    } catch (error) {
+      this.report(error);
+    }
+  }
+
   /** `select`, but reloads even if the id is already the open one. */
   private async forceSelect(id: string): Promise<void> {
     this.record.set(null);

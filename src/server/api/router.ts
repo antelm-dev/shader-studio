@@ -28,6 +28,7 @@ import {
   mimeFromExt,
   param,
   route,
+  stringBody,
   TEXTURE_BODY_LIMIT,
   THUMBNAIL_BODY_LIMIT,
 } from './helpers';
@@ -263,6 +264,25 @@ export function createApiRouter(storage: ShaderStorage, i18nDir?: string): Route
 
       const result = await storage.importPayloads(parsed.value, mode.value);
       res.status(201).json(result);
+    }),
+  );
+
+  api.post(
+    '/import/shadertoy',
+    route(async (req, res) => {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const idOrUrl = stringBody(body, 'idOrUrl');
+      const apiKey = stringBody(body, 'apiKey');
+
+      let result: { payload: import('@shader-studio/shared/model').ShaderPayload; warnings: string[] };
+      try {
+        const { importShadertoyShader } = await import('@shader-studio/shared/shadertoy-api');
+        result = await importShadertoyShader(idOrUrl, apiKey, { fetch });
+      } catch (error) {
+        throw new StorageError('io', error instanceof Error ? error.message : String(error));
+      }
+
+      res.status(201).json({ bundle: buildShaderBundle(result.payload), warnings: result.warnings });
     }),
   );
 
