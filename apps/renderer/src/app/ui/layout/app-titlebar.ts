@@ -334,6 +334,7 @@ export class AppTitlebar {
     this.commands.import('rename', 'action.import'),
     this.commands.import('overwrite', 'action.importReplace'),
     this.commands.exportShader,
+    this.commands.exportWallpaper,
     this.commands.exportAll,
   ];
 

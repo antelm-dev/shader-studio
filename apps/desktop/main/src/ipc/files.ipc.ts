@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { randomBytes } from 'node:crypto';
-import { readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
@@ -65,6 +65,7 @@ const MAX_FRAME_BYTES = 64 * 1024 * 1024;
 const MAX_SEQUENCE_FRAMES = 100_000;
 /** A few minutes of 4K VP9 can land here; past this the renderer should have streamed. */
 const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;
+const MAX_WALLPAPER_BYTES = 256 * 1024 * 1024;
 
 /** Whatever the shader was called, reduced to something that is only ever a file name. */
 function sanitizeStem(stem: string): string {
@@ -240,6 +241,39 @@ export function createFilesIpc() {
         if (picked.canceled || !picked.filePath) return { status: 'cancelled' };
         try {
           await atomicWrite(picked.filePath, bytes);
+          return { status: 'ok', value: null };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+    ),
+    'save-wallpaper': handle(
+      async (event, filename: string, bytes: Uint8Array): Promise<DialogResult<null>> => {
+        if (
+          !(bytes instanceof Uint8Array) ||
+          bytes.byteLength < 16 ||
+          bytes.byteLength > MAX_WALLPAPER_BYTES ||
+          bytes[0] !== 0x3c
+        ) {
+          return { status: 'error', message: 'Invalid or oversized wallpaper HTML document' };
+        }
+        const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+        const options: OpenDialogOptions = {
+          title: 'Choose where to create the Wallpaper Engine project folder',
+          properties: ['openDirectory', 'createDirectory'],
+        };
+        const picked = owner
+          ? await dialog.showOpenDialog(owner, options)
+          : await dialog.showOpenDialog(options);
+        if (picked.canceled || !picked.filePaths[0]) return { status: 'cancelled' };
+        try {
+          const stem = sanitizeStem(filename.replace(/\.html$/i, ''));
+          const directory = join(picked.filePaths[0], stem);
+          await mkdir(directory, { recursive: true });
+          await atomicWrite(join(directory, 'index.html'), bytes);
           return { status: 'ok', value: null };
         } catch (error) {
           return {

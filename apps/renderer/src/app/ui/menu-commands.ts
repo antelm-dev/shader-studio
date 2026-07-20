@@ -137,6 +137,14 @@ export class MenuCommands {
     action: () => this.exportCurrent(),
   };
 
+  readonly exportWallpaper: MenuCommand = {
+    id: 'export-wallpaper',
+    icon: () => 'wallpaper',
+    label: () => this.i18n.t('action.exportWallpaper'),
+    disabled: this.noShader,
+    action: () => void this.workspace.exportWallpaper(),
+  };
+
   readonly exportSequence: MenuCommand = {
     id: 'export-sequence',
     icon: () => 'movie',

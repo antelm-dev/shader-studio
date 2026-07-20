@@ -164,6 +164,7 @@ export class App {
       action: () => void this.workspace.importShadertoy(),
     },
     this.commands.exportShader,
+    this.commands.exportWallpaper,
     this.commands.exportAll,
   ];
 
@@ -172,6 +173,7 @@ export class App {
     this.commands.renameShader,
     this.commands.duplicateShader,
     this.commands.exportShader,
+    this.commands.exportWallpaper,
     {
       id: 'delete-shader',
       icon: () => 'delete',

@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { createIpcContainer } from 'electron-ipc-module';
 
+import { resolveI18nDir } from '@shader-studio/backend/i18n';
 import { ShaderStorage } from '@shader-studio/backend/storage';
 import { prepare } from './core/bootstrap';
 import { createCustomScheme } from './core/electron';
@@ -120,11 +121,14 @@ prepare({
     const migrationPath = join(userData, 'migration.json');
     const saved = await readWindowState(statePath);
     const bounds = validBounds(saved.bounds);
-    const examplesDir = env.production
-      ? join(process.resourcesPath, 'examples')
-      : resolve('examples');
-    const i18nDir = env.production ? join(process.resourcesPath, 'i18n') : resolve('i18n');
-    const storage = new ShaderStorage({ dataDir: join(userData, 'library'), examplesDir });
+    const examplesDir = env.production ? join(process.resourcesPath, 'examples') : undefined;
+    const i18nDir = env.production
+      ? join(process.resourcesPath, 'i18n')
+      : await resolveI18nDir();
+    const storage = new ShaderStorage({
+      dataDir: join(userData, 'library'),
+      ...(examplesDir ? { examplesDir } : {}),
+    });
     await storage.init();
 
     const ipc = createIpcContainer();

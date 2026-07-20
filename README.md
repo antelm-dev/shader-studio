@@ -16,7 +16,7 @@
 
 <br />
 
-![Shader Studio showing the Aurora Veil shader and its generated controls](docs/shader-studio-preview.jpg)
+![Shader Studio showing the Warp Tunnel shader and its generated controls — sliders, a checkbox, a select, and color pickers](docs/shader-studio-preview.jpg)
 
 The shader you select becomes the application canvas, so you edit the thing you
 are looking at. A broken draft never blanks the preview: Shader Studio keeps the
@@ -32,6 +32,8 @@ last valid version running and places compiler diagnostics in the editor.
   disk, with atomic writes and no external database.
 - **Portable by design** — export one shader or the complete collection to a
   versioned JSON bundle and import it elsewhere.
+- **Wallpaper Engine HTML** — export the current shader as one self-contained,
+  live WebGL document and drag it directly into Wallpaper Engine.
 - **Interactive previews** — pointer velocity, click ripples, pause, screenshots,
   bloom, render scaling, and texture inputs are built in.
 - **Web and desktop** — run the SSR web app on your own machine or package the
@@ -506,6 +508,27 @@ UI asks before it overwrites.
 
 Bundles are validated on the way in, and a bundle with a broken id but a usable
 name is recovered rather than rejected — hand-edited files are expected.
+
+### Wallpaper Engine HTML
+
+**Import & export → Export Wallpaper Engine HTML…** downloads one standalone
+`.html` file. The desktop app creates a dedicated project folder containing
+`index.html`; after a web download, put the HTML in its own folder yourself. Then
+drag `index.html` onto Wallpaper Engine's **Create Wallpaper** target. This matters
+because Wallpaper Engine copies the selected file's whole directory. The document
+contains its WebGL runtime, composed Image and buffer passes, current parameter
+values, and base64-embedded channel textures; it has no CDN or network dependency.
+
+Time, resolution, pointer velocity, click ripples, texture sampling, fixed/scaled
+buffer resolutions, and multipass feedback are supported. Bloom post-processing
+is not currently reproduced by the standalone runtime, and the export reports a
+warning when the source project has bloom enabled.
+
+Shader controls are exported with stable Wallpaper Engine property keys. Their
+current values work immediately. To expose a control in Wallpaper Engine's user
+interface, add a matching property under **Edit → Change Project settings**:
+Slider for number/select, Checkbox for boolean, or Color for color. The generated
+HTML contains the key mapping in `window.__SHADER_STUDIO_WALLPAPER__.controls`.
 
 ---
 

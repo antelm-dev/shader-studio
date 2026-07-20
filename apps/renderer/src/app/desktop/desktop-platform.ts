@@ -46,6 +46,14 @@ export class DesktopPlatform {
     return result.status === 'ok';
   }
 
+  async saveWallpaper(filename: string, archive: Blob): Promise<boolean> {
+    if (!this.available) return false;
+    const bytes = new Uint8Array(await archive.arrayBuffer());
+    const result = await window.electron.bridge.files.saveWallpaper(filename, bytes);
+    if (result.status === 'error') throw new Error(result.message);
+    return result.status === 'ok';
+  }
+
   /**
    * Opens a save dialog for a WebM export. `null` if the user declined.
    *

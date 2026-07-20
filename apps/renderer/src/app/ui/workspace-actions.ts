@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 
-import type { ImportMode } from '@shader-studio/shared/model';
+import type { ImportMode, ShaderBundle } from '@shader-studio/shared/model';
 import { composePass } from '@shader-studio/shared/pass-source';
 import { imagePass } from '@shader-studio/shared/project';
 import { DesktopPlatform } from '../desktop/desktop-platform';
@@ -15,6 +15,7 @@ import type { NewShaderDialogResult } from './dialogs/new-shader-dialog';
 import type { PromptDialogData, PromptDialogResult } from './dialogs/prompt-dialog';
 import type { ShadertoyImportDialogResult } from './dialogs/shadertoy-import-dialog';
 import type { UnsavedChoice } from './dialogs/unsaved-changes-dialog';
+import { buildWallpaperDocument } from '../rendering/wallpaper-export';
 
 /**
  * The user-facing verbs of the app: the flows that need a dialog or a file
@@ -374,6 +375,44 @@ export class WorkspaceActions {
     }
   }
 
+  async exportWallpaper(): Promise<void> {
+    const record = this.store.record();
+    const draft = this.store.draft();
+    if (!record || !draft) return;
+
+    try {
+      // The bundle supplies texture bytes. Editable parts come from the draft,
+      // so exporting is a snapshot and never forces an unrelated save.
+      const bundle = (await this.store.exportShader(record.id)) as ShaderBundle;
+      const wallpaper = buildWallpaperDocument({
+        name: record.name,
+        ...(record.author ? { author: record.author } : {}),
+        project: draft.project,
+        controls: this.store.controls(),
+        params: this.store.params(),
+        channels: bundle.shader.channels,
+        bloomEnabled: draft.render.bloom.enabled,
+      });
+
+      if (this.desktop.available) {
+        if (!(await this.desktop.saveWallpaper(wallpaper.filename, wallpaper.document))) return;
+      } else {
+        this.downloadBlob(wallpaper.document, wallpaper.filename);
+      }
+
+      const warning = wallpaper.warnings.length > 0 ? ` ${wallpaper.warnings.join(' ')}` : '';
+      this.store.notice.set({
+        text: this.i18n.t('notice.wallpaperExported', { name: record.name, warning }),
+        error: false,
+      });
+    } catch (error) {
+      this.store.notice.set({
+        text: this.i18n.t('notice.wallpaperExportFailed', { error: String(error) }),
+        error: true,
+      });
+    }
+  }
+
   async exportAll(): Promise<void> {
     try {
       const bundle = await this.store.exportAll();
@@ -474,6 +513,10 @@ export class WorkspaceActions {
 
   private download(bundle: unknown, filename: string): void {
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    this.downloadBlob(blob, filename);
+  }
+
+  private downloadBlob(blob: Blob, filename: string): void {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
