@@ -7,11 +7,17 @@
  * config is what dev and CI type-check against.
  */
 {
-  "extends": "./tsconfig.json",
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
     "types": ["node"],
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["apps/renderer/src/**/*.ts", "apps/server/src/**/*.ts"],
-  "exclude": ["apps/**/*.spec.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../server/src/**/*.ts",
+    "../../packages/backend/src/**/*.ts",
+    "../../packages/desktop-api/src/**/*.ts",
+    "../../packages/shared/src/**/*.ts"
+  ],
+  "exclude": ["src/**/*.spec.ts"]
 }

@@ -3,12 +3,8 @@ import { access, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
-import { ShaderStorage } from '../../../../server/src/storage';
-
-export type MigrationResult =
-  | { status: 'ok'; imported: number; skipped: number }
-  | { status: 'cancelled' }
-  | { status: 'error'; message: string };
+import { ShaderStorage } from '@shader-studio/backend/storage';
+import type { MigrationResult } from '@shader-studio/desktop-api/contracts';
 
 async function exists(path: string): Promise<boolean> {
   try {

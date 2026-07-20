@@ -12,9 +12,11 @@ ENV CI=true \
 RUN npm install --global pnpm@10.28.2
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/renderer/package.json ./apps/renderer/
+COPY apps/server/package.json ./apps/server/
+COPY packages/backend/package.json ./packages/backend/
+COPY packages/desktop-api/package.json ./packages/desktop-api/
 COPY packages/shared/package.json ./packages/shared/
-COPY packages/electron-ipc-module/package.json ./packages/electron-ipc-module/
-COPY packages/electron-run/package.json ./packages/electron-run/
 COPY packages/mcp/package.json ./packages/mcp/
 
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
@@ -25,7 +27,7 @@ COPY . .
 # `apps/desktop/` is left out of the build context; these two files replace the
 # renderer's desktop declaration. See docker/electron.d.ts.
 COPY docker/electron.d.ts apps/renderer/src/electron.d.ts
-COPY docker/tsconfig.app.json tsconfig.app.json
+COPY docker/tsconfig.app.json apps/renderer/tsconfig.app.json
 
 RUN pnpm build
 

@@ -1,0 +1,29 @@
+{
+  "name": "@shader-studio/backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./storage": {
+      "types": "./src/storage/index.ts",
+      "default": "./src/storage/index.ts"
+    },
+    "./i18n": {
+      "types": "./src/i18n-catalog.ts",
+      "default": "./src/i18n-catalog.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@shader-studio/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.19",
+    "typescript": "~6.0.2",
+    "vitest": "^4.0.8"
+  }
+}

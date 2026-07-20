@@ -26,6 +26,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
+import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
@@ -108,10 +109,15 @@ export class ShaderStorage {
   private readonly locks = new Map<string, Promise<unknown>>();
 
   constructor(options: StorageOptions = {}) {
-    this.dataDir = path.resolve(options.dataDir ?? process.env['SHADER_DATA_DIR'] ?? 'data');
+    const workspaceRoot = findWorkspaceRoot();
+    this.dataDir = path.resolve(
+      options.dataDir ?? process.env['SHADER_DATA_DIR'] ?? path.join(workspaceRoot, 'data'),
+    );
     this.shadersDir = path.join(this.dataDir, 'shaders');
     this.examplesDir = path.resolve(
-      options.examplesDir ?? process.env['SHADER_EXAMPLES_DIR'] ?? 'examples',
+      options.examplesDir ??
+        process.env['SHADER_EXAMPLES_DIR'] ??
+        path.join(workspaceRoot, 'examples'),
     );
     this.seed = options.seed ?? process.env['SHADER_SEED'] !== '0';
   }
@@ -1027,5 +1033,15 @@ export class ShaderStorage {
 
     await this.writeFileAtomic(path.join(this.dataDir, SEED_MARKER), new Date().toISOString());
     console.log(`[storage] seeded ${examples.length} example shader(s) into ${this.shadersDir}`);
+  }
+}
+
+function findWorkspaceRoot(): string {
+  let current = process.cwd();
+  while (true) {
+    if (existsSync(path.join(current, 'pnpm-workspace.yaml'))) return current;
+    const parent = path.dirname(current);
+    if (parent === current) return process.cwd();
+    current = parent;
   }
 }

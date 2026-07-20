@@ -3,11 +3,11 @@ import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { createLogger } from '../_lib/logger.mjs';
-import { root, script } from '../_lib/paths.mjs';
+import { root } from '../_lib/paths.mjs';
 
 const log = createLogger('ipc');
 const ipcDir = resolve(root, 'apps/desktop/main/src/ipc');
-const outFile = resolve(root, 'apps/desktop/generated/ipc-bridge.ts');
+const outFile = resolve(root, 'packages/desktop-api/src/ipc-bridge.ts');
 
 const moduleNames = readdirSync(ipcDir)
   .filter((name) => name.endsWith('.ipc.ts'))
@@ -23,9 +23,10 @@ const moduleNames = readdirSync(ipcDir)
 
 if (moduleNames.length === 0) fail('No IPC modules found under apps/desktop/main/src/ipc');
 
-const generated = spawnSync(process.execPath, [script('gen/ipc.mjs')], {
+const generated = spawnSync('pnpm', ['--filter', '@shader-studio/desktop', 'gen:ipc'], {
   cwd: root,
   encoding: 'utf8',
+  shell: process.platform === 'win32',
 });
 if (generated.status !== 0) {
   fail(`gen:ipc failed:\n${generated.stderr || generated.stdout}`);

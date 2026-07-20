@@ -1,20 +1,25 @@
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
 
 import { Arch, Platform, build as buildInstaller } from 'electron-builder';
 
-import { createLogger } from '../_lib/logger.mjs';
+import { createLogger } from '../../../scripts/_lib/logger.mjs';
 
 const log = createLogger('desktop');
+const root = resolve(import.meta.dirname, '../../..');
+const require = createRequire(import.meta.url);
+const electronVersion = require('electron/package.json').version;
 
 const commands = {
-  clean: ['node', 'scripts/desktop/clean.mjs'],
-  ipc: ['node', 'scripts/gen/ipc.mjs'],
-  types: ['pnpm', 'exec', 'tsc', '-p', 'tsconfig.app.json', '--noEmit'],
-  testsTypes: ['pnpm', 'exec', 'tsc', '-p', 'tsconfig.spec.json', '--noEmit'],
+  clean: ['pnpm', 'run', 'clean'],
+  ipc: ['pnpm', 'run', 'gen:ipc'],
+  rendererTypes: ['pnpm', '--filter', '@shader-studio/renderer', 'typecheck'],
+  backendTypes: ['pnpm', '--filter', '@shader-studio/backend', 'typecheck'],
   mainTypes: ['pnpm', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.main.json'],
   preloadTypes: ['pnpm', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.preload.json'],
-  renderer: ['pnpm', 'exec', 'ng', 'run', 'shader-studio:desktop:production'],
-  main: ['pnpm', 'exec', 'rollup', '-c', '--environment', 'NODE_ENV:production'],
+  renderer: ['pnpm', '--filter', '@shader-studio/renderer', 'build:desktop'],
+  main: ['pnpm', 'run', 'build:main'],
 };
 
 const modes = new Set(['build', 'pack', 'dist']);
@@ -41,6 +46,11 @@ async function packageDesktop() {
   log.info(`package: ${platform.name}${target ? ` (${target})` : ''}`);
 
   const artifacts = await buildInstaller({
+    projectDir: root,
+    config: {
+      extends: 'apps/desktop/electron-builder.yml',
+      electronVersion,
+    },
     targets: platform.createTarget(target, ...arch),
     publish: process.env.ELECTRON_BUILDER_PUBLISH ?? 'never',
   });
@@ -112,7 +122,7 @@ function parseArch(value) {
 function usage(error) {
   log.error(error);
   log.error(
-    'Usage: node scripts/desktop/build.mjs [build|pack|dist] [--win|--mac|--linux] [--arch=x64|arm64|ia32|armv7l]',
+    'Usage: node scripts/build.mjs [build|pack|dist] [--win|--mac|--linux] [--arch=x64|arm64|ia32|armv7l]',
   );
   process.exit(1);
 }

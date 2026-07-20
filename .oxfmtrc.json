@@ -8,7 +8,7 @@
     "dist-renderer/**",
     "release/**",
     "data/**",
-    "apps/desktop/generated/**",
+    "packages/desktop-api/src/ipc-bridge.ts",
     ".angular/**"
   ]
 }

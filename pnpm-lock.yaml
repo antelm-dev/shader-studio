@@ -4,9 +4,78 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+packageExtensionsChecksum: sha256-kzBsn+uJRx7lDsHDYgSRyWep+uhr7JpYKBB542PPVVo=
+
 importers:
 
   .:
+    devDependencies:
+      oxfmt:
+        specifier: ^0.58.0
+        version: 0.58.0
+      oxlint:
+        specifier: ^1.73.0
+        version: 1.73.0
+      playwright:
+        specifier: ^1.57.0
+        version: 1.61.1
+
+  apps/desktop:
+    dependencies:
+      '@shader-studio/backend':
+        specifier: workspace:*
+        version: link:../../packages/backend
+      '@shader-studio/desktop-api':
+        specifier: workspace:*
+        version: link:../../packages/desktop-api
+      '@shader-studio/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      electron-ipc-module:
+        specifier: github:antelm-dev/electron-ipc-module#main
+        version: https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/7c2bc6ad101ade5b97951238cce147ede9c50b98(electron@40.10.6)
+      electron-updater:
+        specifier: 6.8.9
+        version: 6.8.9
+    devDependencies:
+      '@rollup/plugin-commonjs':
+        specifier: ^28.0.2
+        version: 28.0.9(rollup@4.60.2)
+      '@rollup/plugin-json':
+        specifier: ^6.1.0
+        version: 6.1.0(rollup@4.60.2)
+      '@rollup/plugin-node-resolve':
+        specifier: ^16.0.0
+        version: 16.0.3(rollup@4.60.2)
+      '@rollup/plugin-replace':
+        specifier: ^6.0.2
+        version: 6.0.3(rollup@4.60.2)
+      '@rollup/plugin-terser':
+        specifier: ^0.4.4
+        version: 0.4.4(rollup@4.60.2)
+      '@rollup/plugin-typescript':
+        specifier: ^12.1.2
+        version: 12.3.0(rollup@4.60.2)(tslib@2.8.1)(typescript@6.0.3)
+      '@types/node':
+        specifier: ^20.17.19
+        version: 20.19.43
+      electron:
+        specifier: ^40.8.0
+        version: 40.10.6
+      electron-builder:
+        specifier: ^26.0.12
+        version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
+      electron-run:
+        specifier: github:antelm-dev/electron-run#master
+        version: rollup-plugin-electron-run@https://codeload.github.com/antelm-dev/electron-run/tar.gz/6dcb979dd9279ceda7b6e297d7b71cb2c7d6b669(electron@40.10.6)(rollup@4.60.2)
+      rollup:
+        specifier: ^4.30.1
+        version: 4.60.2
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+
+  apps/renderer:
     dependencies:
       '@angular/cdk':
         specifier: 22.0.4
@@ -41,12 +110,15 @@ importers:
       '@angular/ssr':
         specifier: ^22.0.6
         version: 22.0.6(c6550795abed03903e7776896288b468)
+      '@shader-studio/backend':
+        specifier: workspace:*
+        version: link:../../packages/backend
+      '@shader-studio/desktop-api':
+        specifier: workspace:*
+        version: link:../../packages/desktop-api
       '@shader-studio/shared':
         specifier: workspace:*
-        version: link:packages/shared
-      electron-updater:
-        specifier: 6.8.9
-        version: 6.8.9
+        version: link:../../packages/shared
       express:
         specifier: ^5.1.0
         version: 5.2.1
@@ -76,74 +148,82 @@ importers:
         specifier: ^22.0.6
         version: 22.0.6(f5f9af0508d7e0eeb85ef6df7a49ded4)
       '@angular/cli':
-        specifier: ^22.0.6
+        specifier: ^22.0.0
         version: 22.0.6(@types/node@20.19.43)(chokidar@5.0.0)
       '@angular/compiler-cli':
         specifier: ^22.0.0
         version: 22.0.6(@angular/compiler@22.0.6)(typescript@6.0.3)
-      '@rollup/plugin-commonjs':
-        specifier: ^28.0.2
-        version: 28.0.9(rollup@4.60.2)
-      '@rollup/plugin-json':
-        specifier: ^6.1.0
-        version: 6.1.0(rollup@4.60.2)
-      '@rollup/plugin-node-resolve':
-        specifier: ^16.0.0
-        version: 16.0.3(rollup@4.60.2)
-      '@rollup/plugin-replace':
-        specifier: ^6.0.2
-        version: 6.0.3(rollup@4.60.2)
-      '@rollup/plugin-terser':
-        specifier: ^0.4.4
-        version: 0.4.4(rollup@4.60.2)
-      '@rollup/plugin-typescript':
-        specifier: ^12.1.2
-        version: 12.3.0(rollup@4.60.2)(tslib@2.8.1)(typescript@6.0.3)
-      '@types/express':
-        specifier: ^5.0.1
-        version: 5.0.6
       '@types/node':
         specifier: ^20.17.19
         version: 20.19.43
       '@types/three':
         specifier: ^0.185.1
         version: 0.185.1
-      electron:
-        specifier: ^40.8.0
-        version: 40.10.6
-      electron-builder:
-        specifier: ^26.0.12
-        version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
-      electron-ipc-module:
-        specifier: github:antelm-dev/electron-ipc-module#main
-        version: https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/9129cc71f91c8a926fca39ddeebfa86819d328eb(electron@40.10.6)
-      electron-run:
-        specifier: github:antelm-dev/electron-run#master
-        version: https://codeload.github.com/antelm-dev/electron-run/tar.gz/b171f923df1730f12243c484fcdc25ec93108283(electron@40.10.6)(rollup@4.60.2)
       jsdom:
         specifier: ^28.0.0
         version: 28.1.0(@noble/hashes@2.2.0)
-      oxfmt:
-        specifier: ^0.58.0
-        version: 0.58.0
-      oxlint:
-        specifier: ^1.73.0
-        version: 1.73.0
-      playwright:
-        specifier: ^1.57.0
-        version: 1.61.1
-      rollup:
-        specifier: ^4.30.1
-        version: 4.60.2
-      tsx:
-        specifier: ^4.23.1
-        version: 4.23.1
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
       vitest:
         specifier: ^4.0.8
         version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(@noble/hashes@2.2.0))(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(sass@1.99.0)(terser@5.49.0)(tsx@4.23.1))
+
+  apps/server:
+    dependencies:
+      '@angular/ssr':
+        specifier: ^22.0.6
+        version: 22.0.6(c6550795abed03903e7776896288b468)
+      '@shader-studio/backend':
+        specifier: workspace:*
+        version: link:../../packages/backend
+      '@shader-studio/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      express:
+        specifier: ^5.1.0
+        version: 5.2.1
+    devDependencies:
+      '@types/express':
+        specifier: ^5.0.1
+        version: 5.0.6
+      '@types/node':
+        specifier: ^20.17.19
+        version: 20.19.43
+      tsx:
+        specifier: ^4.23.1
+        version: 4.23.1
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+
+  packages/backend:
+    dependencies:
+      '@shader-studio/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.19
+        version: 20.19.43
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.0.8
+        version: 4.1.10(@types/node@20.19.43)(jsdom@28.1.0(@noble/hashes@2.2.0))(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(sass@1.99.0)(terser@5.49.0)(tsx@4.23.1))
+
+  packages/desktop-api:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.19
+        version: 20.19.43
+      electron:
+        specifier: ^40.8.0
+        version: 40.10.6
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
 
   packages/mcp:
     devDependencies:
@@ -2057,9 +2137,6 @@ packages:
   '@types/node@20.19.43':
     resolution: {integrity: sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA==}
 
-  '@types/node@22.20.1':
-    resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
-
   '@types/node@24.13.3':
     resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
 
@@ -2578,24 +2655,14 @@ packages:
     engines: {node: '>=14.0.0'}
     hasBin: true
 
-  electron-ipc-module@https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/9129cc71f91c8a926fca39ddeebfa86819d328eb:
-    resolution: {tarball: https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/9129cc71f91c8a926fca39ddeebfa86819d328eb}
+  electron-ipc-module@https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/7c2bc6ad101ade5b97951238cce147ede9c50b98:
+    resolution: {tarball: https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/7c2bc6ad101ade5b97951238cce147ede9c50b98}
     version: 0.1.0
     peerDependencies:
-      electron: '>=40.0.0'
+      electron: '>=12.0.0'
 
   electron-publish@26.15.3:
     resolution: {integrity: sha512-g/2bn8YTavY4cuS5F+jOS7zmZbXXBV8KZ8yHKfJjFPoKtzBqrpCdNPxBd3tqdBwP7BVd0lGzf7Bk2s0KesWZ4Q==}
-
-  electron-run@https://codeload.github.com/antelm-dev/electron-run/tar.gz/b171f923df1730f12243c484fcdc25ec93108283:
-    resolution: {tarball: https://codeload.github.com/antelm-dev/electron-run/tar.gz/b171f923df1730f12243c484fcdc25ec93108283}
-    version: 0.1.0
-    peerDependencies:
-      electron: '>=20.0.0'
-      rollup: ^4.0.0
-    peerDependenciesMeta:
-      rollup:
-        optional: true
 
   electron-to-chromium@1.5.389:
     resolution: {integrity: sha512-cEto7aeOqBfU1D+c5py5pE+ooscKE75JifxLBdFUZsqAxRS6y7kebtxAZvICszSl05gPjYHDTjY+lXpyGvpJbg==}
@@ -3672,6 +3739,16 @@ packages:
   roarr@2.15.4:
     resolution: {integrity: sha512-CHhPh+UNHD2GTXNYhPWLnU8ONHdI+5DI+4EYIAOaiD63rHeYlZvyh8P+in5999TTSFgUYuKUAjzRI4mdh/p+2A==}
     engines: {node: '>=8.0'}
+
+  rollup-plugin-electron-run@https://codeload.github.com/antelm-dev/electron-run/tar.gz/6dcb979dd9279ceda7b6e297d7b71cb2c7d6b669:
+    resolution: {tarball: https://codeload.github.com/antelm-dev/electron-run/tar.gz/6dcb979dd9279ceda7b6e297d7b71cb2c7d6b669}
+    version: 0.1.0
+    peerDependencies:
+      electron: '>=20.0.0'
+      rollup: ^4.0.0
+    peerDependenciesMeta:
+      rollup:
+        optional: true
 
   rollup@4.60.2:
     resolution: {integrity: sha512-J9qZyW++QK/09NyN/zeO0dG/1GdGfyp9lV8ajHnRVLfo/uFsbji5mHnDgn/qYdUHyCkM2N+8VyspgZclfAh0eQ==}
@@ -5433,7 +5510,7 @@ snapshots:
       lru-cache: 11.5.2
       npm-pick-manifest: 11.0.3
       proc-log: 6.1.0
-      semver: 7.7.4
+      semver: 7.8.5
       which: 6.0.1
 
   '@npmcli/installed-package-contents@4.0.0':
@@ -5450,7 +5527,7 @@ snapshots:
       hosted-git-info: 9.0.3
       json-parse-even-better-errors: 5.0.0
       proc-log: 6.1.0
-      semver: 7.7.4
+      semver: 7.8.5
       spdx-expression-parse: 4.0.0
 
   '@npmcli/promise-spawn@9.0.1':
@@ -5625,7 +5702,7 @@ snapshots:
       detect-libc: 2.1.2
       is-glob: 4.0.3
       node-addon-api: 7.1.1
-      picomatch: 4.0.4
+      picomatch: 4.0.5
     optionalDependencies:
       '@parcel/watcher-android-arm64': 2.5.6
       '@parcel/watcher-darwin-arm64': 2.5.6
@@ -5881,13 +5958,13 @@ snapshots:
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 22.20.1
+      '@types/node': 20.19.43
 
   '@types/cacheable-request@6.0.3':
     dependencies:
       '@types/http-cache-semantics': 4.2.0
       '@types/keyv': 3.1.4
-      '@types/node': 22.20.1
+      '@types/node': 20.19.43
       '@types/responselike': 1.0.3
 
   '@types/chai@5.2.3':
@@ -5897,7 +5974,7 @@ snapshots:
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 20.19.43
 
   '@types/debug@4.1.13':
     dependencies:
@@ -5917,7 +5994,7 @@ snapshots:
 
   '@types/express-serve-static-core@5.1.2':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 20.19.43
       '@types/qs': 6.15.1
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
@@ -5930,7 +6007,7 @@ snapshots:
 
   '@types/fs-extra@9.0.13':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 20.19.43
 
   '@types/http-cache-semantics@4.2.0': {}
 
@@ -5938,15 +6015,11 @@ snapshots:
 
   '@types/keyv@3.1.4':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 20.19.43
 
   '@types/ms@2.1.0': {}
 
   '@types/node@20.19.43':
-    dependencies:
-      undici-types: 6.21.0
-
-  '@types/node@22.20.1':
     dependencies:
       undici-types: 6.21.0
 
@@ -5962,16 +6035,16 @@ snapshots:
 
   '@types/responselike@1.0.3':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 20.19.43
 
   '@types/send@1.2.1':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 20.19.43
 
   '@types/serve-static@2.2.0':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 22.20.1
+      '@types/node': 20.19.43
 
   '@types/stats.js@0.17.4': {}
 
@@ -5991,7 +6064,7 @@ snapshots:
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 20.19.43
 
   '@vitejs/plugin-basic-ssl@2.3.0(vite@7.3.5(@types/node@20.19.43)(jiti@2.7.0)(sass@1.99.0)(terser@5.49.0)(tsx@4.23.1))':
     dependencies:
@@ -6568,10 +6641,11 @@ snapshots:
       - electron-builder-squirrel-windows
       - supports-color
 
-  electron-ipc-module@https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/9129cc71f91c8a926fca39ddeebfa86819d328eb(electron@40.10.6):
+  electron-ipc-module@https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/7c2bc6ad101ade5b97951238cce147ede9c50b98(electron@40.10.6):
     dependencies:
       electron: 40.10.6
       glob: 11.1.0
+      typescript: 6.0.3
 
   electron-publish@26.15.3:
     dependencies:
@@ -6586,12 +6660,6 @@ snapshots:
       mime: 2.6.0
     transitivePeerDependencies:
       - supports-color
-
-  electron-run@https://codeload.github.com/antelm-dev/electron-run/tar.gz/b171f923df1730f12243c484fcdc25ec93108283(electron@40.10.6)(rollup@4.60.2):
-    dependencies:
-      electron: 40.10.6
-    optionalDependencies:
-      rollup: 4.60.2
 
   electron-to-chromium@1.5.389: {}
 
@@ -6808,10 +6876,6 @@ snapshots:
   fast-wrap-ansi@0.2.2:
     dependencies:
       fast-string-width: 3.0.2
-
-  fdir@6.5.0(picomatch@4.0.4):
-    optionalDependencies:
-      picomatch: 4.0.4
 
   fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
@@ -7481,7 +7545,7 @@ snapshots:
     dependencies:
       hosted-git-info: 9.0.3
       proc-log: 6.1.0
-      semver: 7.7.4
+      semver: 7.8.5
       validate-npm-package-name: 7.0.2
 
   npm-packlist@10.0.4:
@@ -7494,7 +7558,7 @@ snapshots:
       npm-install-checks: 8.0.0
       npm-normalize-package-bin: 5.0.0
       npm-package-arg: 13.0.2
-      semver: 7.7.4
+      semver: 7.8.5
 
   npm-registry-fetch@19.1.1:
     dependencies:
@@ -7832,6 +7896,12 @@ snapshots:
       sprintf-js: 1.1.3
     optional: true
 
+  rollup-plugin-electron-run@https://codeload.github.com/antelm-dev/electron-run/tar.gz/6dcb979dd9279ceda7b6e297d7b71cb2c7d6b669(electron@40.10.6)(rollup@4.60.2):
+    dependencies:
+      electron: 40.10.6
+    optionalDependencies:
+      rollup: 4.60.2
+
   rollup@4.60.2:
     dependencies:
       '@types/estree': 1.0.8
@@ -8149,8 +8219,8 @@ snapshots:
 
   tinyglobby@0.2.16:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
 
   tinyglobby@0.2.17:
     dependencies:
@@ -8253,11 +8323,11 @@ snapshots:
   vite@7.3.5(@types/node@20.19.43)(jiti@2.7.0)(sass@1.99.0)(terser@5.49.0)(tsx@4.23.1):
     dependencies:
       esbuild: 0.27.7
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
       postcss: 8.5.17
       rollup: 4.60.2
-      tinyglobby: 0.2.16
+      tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 20.19.43
       fsevents: 2.3.3

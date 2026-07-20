@@ -1,4 +1,6 @@
-import type { ElectronApi } from '../../desktop/preload/src/preload';
+import type { bridge } from '@shader-studio/desktop-api';
+
+type ElectronApi = { bridge: typeof bridge };
 
 declare global {
   interface Window {

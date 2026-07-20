@@ -12,9 +12,8 @@ import type {
   ShaderParams,
   ShaderRecord,
   ShaderSummary,
-  TextureChannelSettingsPatch,
 } from '@shader-studio/shared/model';
-import type { ShaderProject } from '@shader-studio/shared/project';
+import type { UpdateShaderPatch } from '@shader-studio/shared/api';
 import { mimeFromExt } from '@shader-studio/shared/validate';
 import { API_BASE_URL } from './api-base-url';
 
@@ -49,22 +48,7 @@ export class ApiError extends Error {
   }
 }
 
-export interface UpdateShaderPatch {
-  name?: string;
-  description?: string;
-  controls?: unknown;
-  render?: unknown;
-  fragment?: string;
-  vertex?: string;
-  /**
-   * The whole project — buffers, Common, files, wiring. The source of truth
-   * once given: `fragment`/`vertex` above are then ignored server-side in
-   * favor of the project's Image pass source and vertex shader.
-   */
-  project?: ShaderProject;
-  /** Settings only (wrap/filter/flipY), one entry per channel — never image bytes. */
-  channels?: readonly TextureChannelSettingsPatch[];
-}
+export type { UpdateShaderPatch } from '@shader-studio/shared/api';
 
 export abstract class ShaderApi {
   abstract list(): Promise<ShaderSummary[]>;

@@ -1,20 +1,18 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-import { createLogger } from '../_lib/logger.mjs';
+import { createLogger } from '../../../scripts/_lib/logger.mjs';
 
-const require = createRequire(import.meta.url);
 const commands = [
   {
     name: 'angular',
-    entry: require.resolve('@angular/cli/bin/ng.js'),
-    args: ['run', 'shader-studio:desktop-serve:development'],
+    entry: process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+    args: ['--filter', '@shader-studio/renderer', 'dev:desktop'],
     stdin: 'ignore',
   },
   {
     name: 'rollup',
-    entry: require.resolve('rollup/dist/bin/rollup'),
-    args: ['-c', '--environment', 'NODE_ENV:development', '--watch'],
+    entry: process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+    args: ['exec', 'rollup', '-c', '--environment', 'NODE_ENV:development', '--watch'],
     stdin: 'inherit',
   },
 ];
@@ -27,9 +25,10 @@ for (const command of commands) {
   const log = createLogger(command.name);
   log.info(command.args.join(' '));
 
-  const child = spawn(process.execPath, [command.entry, ...command.args], {
+  const child = spawn(command.entry, command.args, {
     stdio: [command.stdin, 'inherit', 'inherit'],
     env: { ...process.env, FORCE_COLOR: process.env.FORCE_COLOR ?? '1' },
+    shell: process.platform === 'win32' && command.entry.endsWith('.cmd'),
   });
 
   children.set(command.name, child);

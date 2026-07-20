@@ -1,6 +1,8 @@
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
 import { importShadertoyShader } from '@shader-studio/shared/shadertoy-api';
+import type { UpdateShaderPatch } from '@shader-studio/shared/api';
+import { ShaderStorage, StorageError } from '@shader-studio/backend/storage';
 import type { ImportMode, RenderSettings, ShaderParams } from '@shader-studio/shared/model';
 import {
   buildCollectionBundle,
@@ -8,8 +10,6 @@ import {
   parseBundle,
   validateImportMode,
 } from '@shader-studio/shared/validate';
-import type { UpdateShaderPatch } from '../../../../renderer/src/app/api/shader-api';
-import { ShaderStorage, StorageError } from '../../../../server/src/storage';
 
 function stringArg(value: unknown, name: string): string {
   if (typeof value !== 'string') throw new StorageError('invalid', `${name} must be a string`);

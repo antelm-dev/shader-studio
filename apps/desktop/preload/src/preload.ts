@@ -1,6 +1,6 @@
 import { contextBridge } from 'electron';
 
-import { bridge } from '../../generated/ipc-bridge';
+import { bridge } from '@shader-studio/desktop-api';
 
 const api = { bridge };
 export type ElectronApi = typeof api;

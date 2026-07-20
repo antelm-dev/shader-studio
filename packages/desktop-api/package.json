@@ -1,0 +1,25 @@
+{
+  "name": "@shader-studio/desktop-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/ipc-bridge.ts",
+      "default": "./src/ipc-bridge.ts"
+    },
+    "./contracts": {
+      "types": "./src/contracts.ts",
+      "default": "./src/contracts.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.19",
+    "electron": "^40.8.0",
+    "typescript": "~6.0.2"
+  }
+}

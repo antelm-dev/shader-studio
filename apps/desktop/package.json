@@ -1,0 +1,38 @@
+{
+  "name": "@shader-studio/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:main": "rollup -c --environment NODE_ENV:production",
+    "clean": "node scripts/clean.mjs",
+    "dev": "node scripts/dev.mjs",
+    "gen:ipc": "node scripts/gen-ipc.mjs",
+    "pack:dir": "node scripts/build.mjs pack",
+    "pack:win": "node scripts/build.mjs pack --win",
+    "dist:win": "node scripts/build.mjs dist --win",
+    "typecheck": "pnpm gen:ipc && tsc --noEmit -p tsconfig.main.json && tsc --noEmit -p tsconfig.preload.json"
+  },
+  "dependencies": {
+    "@shader-studio/backend": "workspace:*",
+    "@shader-studio/desktop-api": "workspace:*",
+    "@shader-studio/shared": "workspace:*",
+    "electron-ipc-module": "github:antelm-dev/electron-ipc-module#main",
+    "electron-updater": "6.8.9"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-replace": "^6.0.2",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@types/node": "^20.17.19",
+    "electron": "^40.8.0",
+    "electron-builder": "^26.0.12",
+    "electron-run": "github:antelm-dev/electron-run#master",
+    "rollup": "^4.30.1",
+    "typescript": "~6.0.2"
+  }
+}

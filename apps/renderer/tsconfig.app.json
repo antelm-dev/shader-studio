@@ -8,10 +8,16 @@
    * the command line instead, which keeps tsc from scattering .js files next to
    * the sources without breaking the builder.
    */
-  "extends": "./tsconfig.json",
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
     "types": ["node", "@angular/localize"]
   },
-  "include": ["apps/renderer/src/**/*.ts", "apps/server/src/**/*.ts"],
-  "exclude": ["apps/**/*.spec.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../server/src/**/*.ts",
+    "../../packages/backend/src/**/*.ts",
+    "../../packages/desktop-api/src/**/*.ts",
+    "../../packages/shared/src/**/*.ts"
+  ],
+  "exclude": ["src/**/*.spec.ts"]
 }

@@ -6,27 +6,29 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 
 import { createLogger } from './_lib/logger.mjs';
-import { root, script } from './_lib/paths.mjs';
+import { root } from './_lib/paths.mjs';
 
 const log = createLogger('smoke');
-const require = createRequire(resolve(root, 'package.json'));
+const rendererDir = resolve(root, 'apps/renderer');
+const require = createRequire(resolve(rendererDir, 'package.json'));
 const ngCli = require.resolve('@angular/cli/bin/ng.js');
 const PORT = Number(process.env.SMOKE_PORT ?? 4321);
 const BASE = `http://127.0.0.1:${PORT}`;
 const READY = /Local:\s+http:\/\/(?:localhost|127\.0\.0\.1):/;
 
-const ipc = spawnSync(process.execPath, [script('gen/ipc.mjs')], {
+const ipc = spawnSync('pnpm', ['--filter', '@shader-studio/desktop', 'gen:ipc'], {
   cwd: root,
   encoding: 'utf8',
+  shell: process.platform === 'win32',
 });
 if (ipc.status !== 0) {
-  log.error('smoke requires gen:ipc — window.electron types come from apps/desktop/generated/');
+  log.error('smoke requires gen:ipc — window.electron types come from @shader-studio/desktop-api');
   log.error(ipc.stderr || ipc.stdout);
   process.exit(ipc.status ?? 1);
 }
 
 const server = spawn(process.execPath, [ngCli, 'serve', `--port=${PORT}`, '--host=127.0.0.1'], {
-  cwd: root,
+  cwd: rendererDir,
   env: { ...process.env, FORCE_COLOR: '0' },
   stdio: ['ignore', 'pipe', 'pipe'],
   windowsHide: true,

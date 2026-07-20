@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 
 import { extFromMime } from '@shader-studio/shared/validate';
-import { StorageError } from '../storage/storage-error';
+import { StorageError } from '@shader-studio/backend/storage';
 
 // A textured shader's bundle inlines its channel images as base64 (~33%
 // inflation), and a collection can hold many shaders — comfortably larger

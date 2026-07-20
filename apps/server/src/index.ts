@@ -21,7 +21,7 @@ import express from 'express';
 import { join } from 'node:path';
 
 import { createApiRouter } from './api/router';
-import { ShaderStorage } from './storage';
+import { ShaderStorage } from '@shader-studio/backend/storage';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 

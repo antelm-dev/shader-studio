@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
-import type { UpdateState } from '../ipc/update.ipc';
+import type { UpdateState } from '@shader-studio/desktop-api/contracts';
 
 const unsupportedState = (): UpdateState => ({
   status: 'unavailable',

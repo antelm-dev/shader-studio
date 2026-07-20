@@ -11,14 +11,14 @@
 import express, { type NextFunction, type Request, type Response, type Router } from 'express';
 
 import type { ApiErrorBody } from '@shader-studio/shared/model';
+import { I18N_LOCALES, loadI18nCatalog } from '@shader-studio/backend/i18n';
+import { ShaderStorage, StorageError } from '@shader-studio/backend/storage';
 import {
   buildCollectionBundle,
   buildShaderBundle,
   parseBundle,
   validateImportMode,
 } from '@shader-studio/shared/validate';
-import { ShaderStorage, StorageError } from '../storage';
-import { I18N_LOCALES, loadI18nCatalog } from '../i18n-catalog';
 import {
   attachmentName,
   BODY_LIMIT,

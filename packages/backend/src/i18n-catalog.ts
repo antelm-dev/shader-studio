@@ -23,6 +23,8 @@ export async function resolveI18nDir(override?: string): Promise<string> {
 
   const candidates = [
     resolve('i18n'),
+    resolve('../i18n'),
+    resolve('../../i18n'),
     resolve(fileURLToPath(new URL('../../../i18n', import.meta.url))),
     resolve(fileURLToPath(new URL('../../i18n', import.meta.url))),
     resolve(fileURLToPath(new URL('../i18n', import.meta.url))),

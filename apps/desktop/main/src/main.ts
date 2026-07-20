@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { createIpcContainer } from 'electron-ipc-module';
 
-import { ShaderStorage } from '../../../server/src/storage';
+import { ShaderStorage } from '@shader-studio/backend/storage';
 import { prepare } from './core/bootstrap';
 import { createCustomScheme } from './core/electron';
 import { UpdateController } from './core/updater';

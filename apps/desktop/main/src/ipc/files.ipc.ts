@@ -5,16 +5,12 @@ import { basename, dirname, join } from 'node:path';
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
 import { parseBundle } from '@shader-studio/shared/validate';
+import type { DialogResult } from '@shader-studio/desktop-api/contracts';
 
 // A textured shader's bundle inlines its channel images as base64, and a
 // collection can hold many shaders — comfortably larger than the old
 // text-only limit.
 const MAX_IMPORT_BYTES = 64 * 1024 * 1024;
-export type DialogResult<T> =
-  | { status: 'ok'; value: T }
-  | { status: 'cancelled' }
-  | { status: 'error'; message: string };
-
 async function atomicWrite(path: string, data: string | Uint8Array): Promise<void> {
   const temp = join(dirname(path), `.${randomBytes(6).toString('hex')}.tmp`);
   try {

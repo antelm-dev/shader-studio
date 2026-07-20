@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node", "electron"],
+    "moduleResolution": "Bundler",
+    "outDir": "../../dist-main",
+    "rootDir": "../..",
+    "sourceMap": true
+  },
+  "include": ["main/src/**/*.ts"],
+  "exclude": ["generated/**", "**/*.spec.ts"]
+}

@@ -22,7 +22,10 @@ class FakeStore implements Partial<ShaderStore> {
 
 class FileCatalog extends I18nCatalog {
   override load(locale: 'en' | 'fr'): Promise<I18nCatalogMap> {
-    const raw = readFileSync(resolve(`i18n/${locale}.json`), 'utf8');
+    const raw = readFileSync(
+      resolve(import.meta.dirname, `../../../../../../i18n/${locale}.json`),
+      'utf8',
+    );
     return Promise.resolve(JSON.parse(raw) as I18nCatalogMap);
   }
 }

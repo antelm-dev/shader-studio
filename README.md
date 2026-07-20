@@ -230,12 +230,18 @@ apps/
   desktop/
     main/src/            Electron lifecycle, windows, updates, and IPC handlers
     preload/src/         sandboxed context bridge
-    generated/           generated IPC bridge consumed by the preload
+    package.json         desktop build, development, packaging, and type checks
 
 packages/
   shared/                model, validation, GLSL, capture, and MCP contracts
+  backend/               Node-only storage and i18n shared by server and desktop
+  desktop-api/           generated, typed IPC bridge contract
   mcp/                   standalone `@shader-studio/mcp` server
 ```
+
+Each directory above is a pnpm workspace package with its own dependency manifest and
+runtime-specific scripts/configuration. The root package only orchestrates workspace commands and
+retains the desktop application metadata consumed by Electron Builder.
 
 The store keeps three layers of state deliberately distinct:
 
