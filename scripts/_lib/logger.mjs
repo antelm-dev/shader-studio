@@ -22,10 +22,7 @@ export function createLogger(label, level = 'info') {
         hour12: false,
         hourCycle: 'h23',
       });
-      console[logLevel](
-        `\x1b[${COLORS[logLevel]}m${timestamp} [${label}]\x1b[0m`,
-        ...args,
-      );
+      console[logLevel](`\x1b[${COLORS[logLevel]}m${timestamp} [${label}]\x1b[0m`, ...args);
     };
   };
 

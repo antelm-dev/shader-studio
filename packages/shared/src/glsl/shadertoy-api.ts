@@ -1,4 +1,8 @@
-import { DEFAULT_RENDER, type ShaderPayload, type TextureChannelPayload } from '@shader-studio/shared/model';
+import {
+  DEFAULT_RENDER,
+  type ShaderPayload,
+  type TextureChannelPayload,
+} from '@shader-studio/shared/model';
 import {
   BUFFER_SLOTS,
   CHANNEL_COUNT,
@@ -403,7 +407,9 @@ async function claimTextureSlot(
     };
     return slot;
   } catch (error) {
-    warnings.push(`Failed to download a texture for "${queued.passName}": ${(error as Error).message}`);
+    warnings.push(
+      `Failed to download a texture for "${queued.passName}": ${(error as Error).message}`,
+    );
     return undefined;
   }
 }

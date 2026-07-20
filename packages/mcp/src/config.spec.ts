@@ -26,12 +26,9 @@ describe('loadConfig', () => {
     expect(config.port).toBe(0);
   });
 
-  it.each(['-1', '65536', 'not-a-number', '3.5'])(
-    'rejects an invalid port %s',
-    (raw) => {
-      expect(() => loadConfig(env({ SHADER_STUDIO_MCP_PORT: raw }))).toThrow(ConfigError);
-    },
-  );
+  it.each(['-1', '65536', 'not-a-number', '3.5'])('rejects an invalid port %s', (raw) => {
+    expect(() => loadConfig(env({ SHADER_STUDIO_MCP_PORT: raw }))).toThrow(ConfigError);
+  });
 
   it('defaults the host to 127.0.0.1', () => {
     const config = loadConfig(env());

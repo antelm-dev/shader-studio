@@ -45,7 +45,8 @@ function readJpeg(bytes: Uint8Array): ImageDimensions | null {
     }
     const marker = bytes[offset + 1];
     // SOFn markers carry the dimensions, except the DHT/JPG/DAC lookalikes.
-    const isSof = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+    const isSof =
+      marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
     if (isSof) {
       return { height: readUint16BE(bytes, offset + 5), width: readUint16BE(bytes, offset + 7) };
     }

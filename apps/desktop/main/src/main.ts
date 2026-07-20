@@ -122,9 +122,7 @@ prepare({
     const saved = await readWindowState(statePath);
     const bounds = validBounds(saved.bounds);
     const examplesDir = env.production ? join(process.resourcesPath, 'examples') : undefined;
-    const i18nDir = env.production
-      ? join(process.resourcesPath, 'i18n')
-      : await resolveI18nDir();
+    const i18nDir = env.production ? join(process.resourcesPath, 'i18n') : await resolveI18nDir();
     const storage = new ShaderStorage({
       dataDir: join(userData, 'library'),
       ...(examplesDir ? { examplesDir } : {}),

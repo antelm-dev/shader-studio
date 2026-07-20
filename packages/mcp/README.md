@@ -81,12 +81,12 @@ skip step 1 and use that value directly in step 3.
 
 ## Environment variables
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `SHADER_STUDIO_MCP_PORT` | `4310` | Port for the localhost WebSocket bridge. |
-| `SHADER_STUDIO_MCP_HOST` | `127.0.0.1` | Host to bind. Anything other than a loopback address is honored but logged as a warning. |
-| `SHADER_STUDIO_MCP_TOKEN` | _(auto-generated)_ | Pins a token across restarts instead of generating a new one each run. |
-| `SHADER_STUDIO_MCP_LOG_LEVEL` | `info` | One of `silent`, `error`, `warn`, `info`, `debug`. All output goes to stderr. |
+| Variable                      | Default            | Description                                                                              |
+| ----------------------------- | ------------------ | ---------------------------------------------------------------------------------------- |
+| `SHADER_STUDIO_MCP_PORT`      | `4310`             | Port for the localhost WebSocket bridge.                                                 |
+| `SHADER_STUDIO_MCP_HOST`      | `127.0.0.1`        | Host to bind. Anything other than a loopback address is honored but logged as a warning. |
+| `SHADER_STUDIO_MCP_TOKEN`     | _(auto-generated)_ | Pins a token across restarts instead of generating a new one each run.                   |
+| `SHADER_STUDIO_MCP_LOG_LEVEL` | `info`             | One of `silent`, `error`, `warn`, `info`, `debug`. All output goes to stderr.            |
 
 ## Troubleshooting
 

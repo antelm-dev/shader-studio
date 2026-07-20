@@ -43,7 +43,9 @@ function waitFor(predicate: () => boolean, timeoutMs: number, label: string): Pr
 
 beforeAll(() => {
   if (!existsSync(distPath)) {
-    throw new Error(`Expected a built server at ${distPath}. Run \`pnpm build:mcp\` before running these tests.`);
+    throw new Error(
+      `Expected a built server at ${distPath}. Run \`pnpm build:mcp\` before running these tests.`,
+    );
   }
   scratchDir = mkdtempSync(path.join(tmpdir(), 'shader-studio-mcp-pack-'));
 });
@@ -95,7 +97,10 @@ describe('npm tarball', () => {
       stdio: 'pipe',
     });
 
-    const installedServer = path.join(installDir, 'node_modules/@shader-studio/mcp/dist/server.mjs');
+    const installedServer = path.join(
+      installDir,
+      'node_modules/@shader-studio/mcp/dist/server.mjs',
+    );
     expect(existsSync(installedServer)).toBe(true);
 
     const installedPkg = JSON.parse(
@@ -122,7 +127,10 @@ describe('npm tarball', () => {
       stdio: 'pipe',
     });
 
-    const installedServer = path.join(installDir, 'node_modules/@shader-studio/mcp/dist/server.mjs');
+    const installedServer = path.join(
+      installDir,
+      'node_modules/@shader-studio/mcp/dist/server.mjs',
+    );
 
     let child: ChildProcess | null = null;
     try {
@@ -137,7 +145,11 @@ describe('npm tarball', () => {
 
       const stderrChunks: string[] = [];
       child.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString('utf8')));
-      await waitFor(() => stderrChunks.join('').includes('listening'), 5000, 'bridge listening log');
+      await waitFor(
+        () => stderrChunks.join('').includes('listening'),
+        5000,
+        'bridge listening log',
+      );
 
       // Closing stdin (rather than a signal) shuts the server down cleanly
       // cross-platform — on Windows, `kill('SIGTERM')` unconditionally

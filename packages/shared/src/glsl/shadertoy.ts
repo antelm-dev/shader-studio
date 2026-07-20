@@ -29,10 +29,7 @@ export interface WrapMainImageOptions {
  * synthesized `main()`. Shared by the paste-one-pass flow and the Shadertoy API
  * importer, which both produce this same shape per pass.
  */
-export function wrapMainImage(
-  source: string,
-  options: WrapMainImageOptions = {},
-): ShadertoyImport {
+export function wrapMainImage(source: string, options: WrapMainImageOptions = {}): ShadertoyImport {
   const { warnUnassignedChannels = true } = options;
   let fragment = source.trim().replace(/\\\*/g, '*');
   if (!/\bvoid\s+mainImage\s*\(/.test(fragment)) {

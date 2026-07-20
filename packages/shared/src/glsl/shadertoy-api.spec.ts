@@ -18,7 +18,12 @@ function pngBytes(width: number, height: number): Uint8Array {
 }
 
 function jsonResponse(body: unknown): ShadertoyFetchResponse {
-  return { ok: true, status: 200, json: async () => body, arrayBuffer: async () => new ArrayBuffer(0) };
+  return {
+    ok: true,
+    status: 200,
+    json: async () => body,
+    arrayBuffer: async () => new ArrayBuffer(0),
+  };
 }
 
 function textureResponse(bytes: Uint8Array): ShadertoyFetchResponse {
@@ -111,7 +116,13 @@ describe('importShadertoyShader', () => {
       { id: 4, channel: 3, ctype: 'texture', src: '/media/a/three.png' },
     ];
     const passes = [
-      renderpass('image', 'Image', 'void mainImage(out vec4 c, in vec2 uv) { c = vec4(0.0); }', 4, inputs),
+      renderpass(
+        'image',
+        'Image',
+        'void mainImage(out vec4 c, in vec2 uv) { c = vec4(0.0); }',
+        4,
+        inputs,
+      ),
       renderpass('buffer', 'Buf A', MAIN_IMAGE_SRC, 257, [
         { id: 5, channel: 0, ctype: 'texture', src: '/media/a/four.png' },
       ]),
@@ -149,7 +160,13 @@ describe('importShadertoyShader', () => {
       { id: 4, channel: 3, ctype: 'texture', src: '/media/a/d.png' },
     ];
     const passes = [
-      renderpass('image', 'Image', 'void mainImage(out vec4 c, in vec2 uv) { c = vec4(0.0); }', 4, inputs),
+      renderpass(
+        'image',
+        'Image',
+        'void mainImage(out vec4 c, in vec2 uv) { c = vec4(0.0); }',
+        4,
+        inputs,
+      ),
       renderpass('buffer', 'Buf A', MAIN_IMAGE_SRC, 257, [
         { id: 5, channel: 0, ctype: 'texture', src: '/media/a/e.png' }, // 5th distinct texture
       ]),
@@ -189,9 +206,7 @@ describe('importShadertoyShader', () => {
 
   it('drops unsupported input kinds with a warning and leaves the channel unbound', async () => {
     const passes = [
-      renderpass('image', 'Image', MAIN_IMAGE_SRC, 4, [
-        { id: 1, channel: 0, ctype: 'keyboard' },
-      ]),
+      renderpass('image', 'Image', MAIN_IMAGE_SRC, 4, [{ id: 1, channel: 0, ctype: 'keyboard' }]),
     ];
 
     const { payload, warnings } = await importShadertoyShader('abcdef', 'key', {
