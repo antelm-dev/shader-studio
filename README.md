@@ -7,7 +7,7 @@
   </p>
 
   <p>
-    <a href="https://github.com/antelm-dev/shader-studio/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/antelm-dev/shader-studio/actions/workflows/ci.yml/badge.svg" /></a>
+    <a href="https://gitlab.com/antelm-dev/shader-studio/-/pipelines"><img alt="CI status" src="https://gitlab.com/antelm-dev/shader-studio/badges/master/pipeline.svg" /></a>
     <a href="https://angular.dev/"><img alt="Angular 22" src="https://img.shields.io/badge/Angular-22-DD0031?logo=angular&amp;logoColor=white" /></a>
     <a href="https://nodejs.org/"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-22%2B-5FA04E?logo=nodedotjs&amp;logoColor=white" /></a>
     <a href="https://pnpm.io/"><img alt="pnpm 10" src="https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&amp;logoColor=white" /></a>
@@ -16,7 +16,7 @@
 
 <br />
 
-![Shader Studio showing the Aurora Veil shader and its generated controls](docs/shader-studio-preview.jpg)
+![Shader Studio showing the Warp Tunnel shader and its generated controls — sliders, a checkbox, a select, and color pickers](docs/shader-studio-preview.jpg)
 
 The shader you select becomes the application canvas, so you edit the thing you
 are looking at. A broken draft never blanks the preview: Shader Studio keeps the
@@ -32,6 +32,8 @@ last valid version running and places compiler diagnostics in the editor.
   disk, with atomic writes and no external database.
 - **Portable by design** — export one shader or the complete collection to a
   versioned JSON bundle and import it elsewhere.
+- **Wallpaper Engine HTML** — export the current shader as one self-contained,
+  live WebGL document and drag it directly into Wallpaper Engine.
 - **Interactive previews** — pointer velocity, click ripples, pause, screenshots,
   bloom, render scaling, and texture inputs are built in.
 - **Web and desktop** — run the SSR web app on your own machine or package the
@@ -54,6 +56,7 @@ last valid version running and places compiler diagnostics in the editor.
 - [Development](#development)
 - [Tests](#tests)
 - [Known limitations](#known-limitations)
+- [License](#license)
 
 ## Quick start
 
@@ -152,15 +155,15 @@ Express server. The web and SSR targets continue to use the REST API.
 The application uses Angular 22 (zoneless SSR), Angular Material, Express,
 three.js, lil-gui, and Monaco.
 
-| Script           | What it does                         |
-| ---------------- | ------------------------------------ |
-| `pnpm dev`       | Dev server with HMR, SSR and the API |
-| `pnpm build`     | Production build into `dist/`        |
-| `pnpm serve:ssr` | Run the built SSR server             |
-| `pnpm test`      | Unit tests (Vitest), incl. the MCP server |
-| `pnpm lint`      | Oxlint                               |
-| `pnpm format`    | Oxfmt                                |
-| `pnpm typecheck` | `tsc -b`, strict                     |
+| Script           | What it does                                  |
+| ---------------- | --------------------------------------------- |
+| `pnpm dev`       | Dev server with HMR, SSR and the API          |
+| `pnpm build`     | Production build into `dist/`                 |
+| `pnpm serve:ssr` | Run the built SSR server                      |
+| `pnpm test`      | Unit tests (Vitest), incl. the MCP server     |
+| `pnpm lint`      | Oxlint                                        |
+| `pnpm format`    | Oxfmt                                         |
+| `pnpm typecheck` | `tsc -b`, strict                              |
 | `pnpm dev:mcp`   | Run the [MCP server](#mcp-server) from source |
 
 ## Using Shader Studio
@@ -218,41 +221,29 @@ with them is up to it.
 Four concerns, kept apart on purpose. Nothing below the line knows about Angular.
 
 ```
+apps/
+  renderer/
+    src/                 Angular browser, SSR, and desktop-renderer entry points
+      app/               workspace state, rendering, editor, and UI
+  server/
+    src/                 Express SSR host and REST API
+      api/               route parsing and HTTP error mapping
+      storage/           file-backed persistence and example seeding
+  desktop/
+    main/src/            Electron lifecycle, windows, updates, and IPC handlers
+    preload/src/         sandboxed context bridge
+    package.json         desktop build, development, packaging, and type checks
+
 packages/
-  shared/          model + validation — imported by server, client, main, and MCP
-    model.ts         the shader document: controls, presets, bundles
-    project.ts       the multi-pass project: passes, buffers, files, channel
-                     wiring, plus `migrateLegacyProject`/`sanitizeProject`
-    validate.ts      every rule, in one place. The API is the authority; the
-                     client reuses it to pre-validate the config editor.
-  mcp/                   `@shader-studio/mcp` — MCP server, published
-                          standalone; drives a running Shader Studio tab over
-                          an authenticated localhost WebSocket bridge
-                          (see packages/mcp/README.md)
-
-src/
-  server/          Node only
-    storage.ts       file-backed persistence: atomic writes, per-shader locks,
-                     path-traversal defence, example seeding
-    api.ts           the REST routes — thin; they parse, delegate, map errors
-  server.ts        Express: mounts /api, then server-renders everything else
-
-  app/
-    core/          state and transport
-      shader-store.ts       the single source of truth (signals)
-      shader-api.ts         HTTP client
-      project-persistence.ts  reads/clears a pre-upgrade browser copy of a
-                             shader's project — the server now holds it
-      draft-recovery.ts     unsaved-edit recovery, still localStorage-backed
-      preferences.ts        localStorage-backed workspace prefs
-    rendering/     three.js. Knows nothing about HTTP or the DOM beyond a canvas
-      shader-engine.ts     compile, uniforms, ripples, bloom, screenshots
-      glsl-diagnostics.ts  driver info-logs -> editor markers
-      shader-canvas.ts     the only place the store is wired to the engine
-    gui/           lil-gui, generated from the control schema
-    editor/        Monaco
-    ui/            Material components: browser, presets, editor panel, dialogs
+  shared/                model, validation, GLSL, capture, and MCP contracts
+  backend/               Node-only storage and i18n shared by server and desktop
+  desktop-api/           generated, typed IPC bridge contract
+  mcp/                   standalone `@shader-studio/mcp` server
 ```
+
+Each directory above is a pnpm workspace package with its own dependency manifest and
+runtime-specific scripts/configuration. The root package only orchestrates workspace commands and
+retains the desktop application metadata consumed by Electron Builder.
 
 The store keeps three layers of state deliberately distinct:
 
@@ -518,6 +509,27 @@ UI asks before it overwrites.
 Bundles are validated on the way in, and a bundle with a broken id but a usable
 name is recovered rather than rejected — hand-edited files are expected.
 
+### Wallpaper Engine HTML
+
+**Import & export → Export Wallpaper Engine HTML…** downloads one standalone
+`.html` file. The desktop app creates a dedicated project folder containing
+`index.html`; after a web download, put the HTML in its own folder yourself. Then
+drag `index.html` onto Wallpaper Engine's **Create Wallpaper** target. This matters
+because Wallpaper Engine copies the selected file's whole directory. The document
+contains its WebGL runtime, composed Image and buffer passes, current parameter
+values, and base64-embedded channel textures; it has no CDN or network dependency.
+
+Time, resolution, pointer velocity, click ripples, texture sampling, fixed/scaled
+buffer resolutions, and multipass feedback are supported. Bloom post-processing
+is not currently reproduced by the standalone runtime, and the export reports a
+warning when the source project has bloom enabled.
+
+Shader controls are exported with stable Wallpaper Engine property keys. Their
+current values work immediately. To expose a control in Wallpaper Engine's user
+interface, add a matching property under **Edit → Change Project settings**:
+Slider for number/select, Checkbox for boolean, or Color for color. The generated
+HTML contains the key mapping in `window.__SHADER_STUDIO_WALLPAPER__.controls`.
+
 ---
 
 ## API
@@ -578,6 +590,9 @@ per-client config (Codex, Cursor, Windows) are documented in
 
 Poured Paint and its five presets are carried over from the project this app grew
 out of, and are the reference for what the format can express.
+
+All shaders distributed in `examples/shaders` are original Shader Studio examples
+and are licensed under Apache-2.0 with the rest of the project.
 
 ---
 
@@ -641,3 +656,13 @@ pnpm test
   recompile costs one hidden frame.
 - GLSL diagnostics come from the driver, so their exact wording varies by
   browser and GPU.
+
+---
+
+## License
+
+Copyright 2026 Adel Terki.
+
+Shader Studio is licensed under the [Apache License 2.0](LICENSE). Third-party
+software included by the project remains under its respective license; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

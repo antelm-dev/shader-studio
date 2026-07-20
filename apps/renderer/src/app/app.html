@@ -1,0 +1,351 @@
+<!-- The shader is the page: everything below is painted on top of it — until you
+     detach it, at which point the same canvas becomes a window over the stage it
+     was. The output window only ever gets the page. -->
+<app-preview-shell [stageOnly]="outputMode" />
+<router-outlet />
+
+@if (!outputMode) {
+
+<input
+  #fileInput
+  type="file"
+  class="file-input"
+  accept="application/json,.json"
+  tabindex="-1"
+  aria-hidden="true"
+  (change)="onFilePicked($event)"
+/>
+
+<div class="shell">
+  <!-- Fullscreen only takes away the window chrome: the OS frame is gone, so the
+       title bar that stands in for it goes with it. The app's own surfaces stay. -->
+  @if (desktop.available && !desktop.fullscreen()) {
+  <app-titlebar />
+  }
+
+  <mat-toolbar class="toolbar">
+    <button
+      matIconButton
+      type="button"
+      [matTooltip]="'toolbar.toggleBrowser' | translate"
+      [attr.aria-label]="'toolbar.toggleBrowser' | translate"
+      [attr.aria-expanded]="drawerOpen()"
+      (click)="toggleBrowser()"
+    >
+      <mat-icon>menu</mat-icon>
+    </button>
+
+    <!-- The desktop title bar already carries the app's identity a few pixels
+         above this. Repeating it here is the second of the three stacked titles
+         the toolbar is meant to be replacing. -->
+    @if (!desktop.available) {
+    <span class="brand" aria-label="Shader Studio">
+      <span class="brand-title">Shader Studio</span>
+    </span>
+    }
+
+    <!-- The open document: its name, and what it is doing. Not a pill — a title. -->
+    @if (store.record(); as shader) {
+    <div class="document">
+      <span
+        class="doc-name"
+        [title]="'toolbar.documentActions' | translate: { description: shader.description }"
+        [matContextMenuTriggerFor]="shaderMenu"
+      >
+        {{ shader.name }}
+      </span>
+
+      <span class="doc-meta">
+        @if (status.state() !== 'none') {
+        <span class="doc-status" [class]="'is-' + status.state()" aria-live="polite">
+          @if (status.state() === 'unsaved') {
+          <span class="dot" aria-hidden="true">•</span>
+          } @else if (status.state() === 'saved') {
+          <mat-icon class="status-icon" aria-hidden="true">check</mat-icon>
+          } {{ status.label() }}
+        </span>
+        }
+
+        <!-- Errors are not a save state: you can save a shader that does not
+             compile. They get their own affordance, which opens the editor. -->
+        @if (status.errorCount(); as errors) {
+        <button
+          type="button"
+          class="doc-errors"
+          [matTooltip]="status.errorHint()"
+          [attr.aria-label]="status.errorHint()"
+          (click)="openProblems()"
+        >
+          <mat-icon aria-hidden="true">error</mat-icon>
+          {{ errors }}
+        </button>
+        }
+      </span>
+    </div>
+
+    <mat-menu #shaderMenu="matMenu">
+      @for (item of documentCommands; track item.id) {
+      <button mat-menu-item type="button" (click)="item.action()">
+        <mat-icon>{{ item.icon() }}</mat-icon>
+        <span>{{ item.label() }}</span>
+      </button>
+      }
+    </mat-menu>
+    }
+
+    <span class="spacer"></span>
+
+    <button
+      matIconButton
+      type="button"
+      [matTooltip]="'action.more' | translate"
+      [attr.aria-label]="'action.more' | translate"
+      [matMenuTriggerFor]="moreMenu"
+    >
+      <mat-icon>more_vert</mat-icon>
+    </button>
+
+    <!-- Four sections, because a flat list of nine commands is a list you read
+         rather than a menu you scan. -->
+    <mat-menu #moreMenu="matMenu">
+      <h3 class="menu-section">{{ 'menu.view' | translate }}</h3>
+      @for (item of viewCommands; track item.id) {
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="item.disabled?.() ?? false"
+        (click)="item.action()"
+      >
+        <mat-icon>{{ item.icon() }}</mat-icon>
+        <span>{{ item.label() }}</span>
+        @if (item.shortcut) {
+        <span class="menu-hint">{{ item.shortcut }}</span>
+        }
+      </button>
+      }
+      <!-- The output window is the desktop's alone, and it is a toggle over a
+           window that may not exist — it does not reduce to a command. -->
+      @if (desktop.available) {
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="!store.record()"
+        (click)="desktop.outputOpen() ? desktop.closeOutput() : desktop.openOutput()"
+      >
+        <mat-icon>{{ desktop.outputOpen() ? 'close_fullscreen' : 'open_in_new' }}</mat-icon>
+        <span
+          >{{ (desktop.outputOpen() ? 'action.closeOutput' : 'action.openOutput') | translate
+          }}</span
+        >
+      </button>
+      }
+
+      <mat-divider />
+
+      <h3 class="menu-section">{{ 'menu.shader' | translate }}</h3>
+      @for (item of shaderCommands; track item.id) {
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="item.disabled?.() ?? false"
+        (click)="item.action()"
+      >
+        <mat-icon>{{ item.icon() }}</mat-icon>
+        <span>{{ item.label() }}</span>
+      </button>
+      }
+
+      <mat-divider />
+
+      <h3 class="menu-section">{{ 'menu.importExport' | translate }}</h3>
+      @for (item of importExportCommands; track item.id) {
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="item.disabled?.() ?? false"
+        (click)="item.action()"
+      >
+        <mat-icon>{{ item.icon() }}</mat-icon>
+        <span>{{ item.label() }}</span>
+      </button>
+      }
+
+      <mat-divider />
+
+      <h3 class="menu-section">{{ 'menu.settings' | translate }}</h3>
+      <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
+        <mat-icon>{{ themeIcon() }}</mat-icon>
+        <span>{{ 'menu.theme' | translate }}</span>
+      </button>
+      <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
+        <mat-icon>settings</mat-icon>
+        <span>{{ 'menu.editorAppearance' | translate }}</span>
+      </button>
+      @if (desktop.available) {
+      <button mat-menu-item type="button" (click)="workspace.openDesktopVersion()">
+        <mat-icon>info</mat-icon>
+        <span>{{ 'menu.desktopVersion' | translate }}</span>
+      </button>
+      }
+      <button mat-menu-item type="button" [matMenuTriggerFor]="languageMenu">
+        <mat-icon>language</mat-icon>
+        <span>{{ 'menu.language' | translate }}</span>
+      </button>
+    </mat-menu>
+
+    <mat-menu #themeMenu="matMenu">
+      @for (option of colorSchemeOptions; track option.value) {
+      <button
+        mat-menu-item
+        type="button"
+        [attr.aria-checked]="preferences.value().colorScheme === option.value"
+        (click)="setColorScheme(option.value)"
+      >
+        <mat-icon>{{ option.icon }}</mat-icon>
+        <span>{{ themeLabel(option.value) }}</span>
+        @if (preferences.value().colorScheme === option.value) {
+        <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
+        }
+      </button>
+      }
+    </mat-menu>
+
+    <mat-menu #languageMenu="matMenu">
+      @for (option of languageOptions; track option.value) {
+      <button
+        mat-menu-item
+        type="button"
+        role="menuitemradio"
+        [attr.aria-checked]="i18n.locale() === option.value"
+        (click)="setLanguage(option.value)"
+      >
+        <mat-icon>translate</mat-icon>
+        <span>{{ option.labelKey | translate }}</span>
+        @if (i18n.locale() === option.value) {
+        <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
+        }
+      </button>
+      }
+    </mat-menu>
+
+    <!-- `disabledInteractive` keeps the button focusable and hoverable while it
+         is disabled, which is the only way a disabled control can explain itself:
+         a plain `disabled` button takes no pointer events and no focus, so its
+         tooltip can never be read and a screen reader is told nothing but
+         "dimmed". `saveHint` names whichever of the four reasons applies. -->
+    <button
+      matButton="tonal"
+      type="button"
+      class="save"
+      [disabledInteractive]="true"
+      [disabled]="!status.canSave()"
+      [matTooltip]="status.saveHint()"
+      [attr.aria-label]="'toolbar.saveLabel' | translate: { hint: status.saveHint() }"
+      (click)="store.save()"
+    >
+      <mat-icon>save</mat-icon>
+      {{ (store.saving() ? 'action.saving' : 'action.saveShader') | translate }}
+    </button>
+
+    @if (store.loading() || store.saving()) {
+    <mat-progress-bar
+      class="loading"
+      mode="indeterminate"
+      [attr.aria-label]="'workspace.working' | translate"
+    />
+    }
+  </mat-toolbar>
+
+  <mat-sidenav-container class="body" [hasBackdrop]="isHandset()">
+    <mat-sidenav
+      class="drawer"
+      [mode]="isHandset() ? 'over' : 'side'"
+      [opened]="drawerOpen()"
+      [style.width.px]="browserWidth()"
+      (closedStart)="closeBrowser()"
+    >
+      <app-shader-browser />
+    </mat-sidenav>
+
+    <mat-sidenav-content class="workspace">
+      <div class="content">
+        <!-- Everything the source editor can occupy — docked, floating or
+           maximized — lives in here, and nowhere else: it is the editor's
+           positioning container, the box `EditorShell` measures as its
+           workspace and the one a maximized editor's `inset: 0` resolves
+           against. The bottom panel is a sibling *outside* it for exactly
+           that reason — a maximized editor must stop at its top edge, not
+           cover it, and the only way CSS can promise that is if the editor
+           is never positioned against a box the panel is also inside of. -->
+        <div
+          class="workspace-main"
+          [class.dock-editor-left]="editorWindow.dockSide() === 'left'"
+          [class.dock-editor-right]="editorWindow.dockSide() === 'right'"
+        >
+          <!-- The region a windowed preview lives in: what "maximized" fills, and
+             what a floating one is held inside. Empty, because the preview itself
+             is painted behind all of this. -->
+          <div class="stage" appPreviewStage></div>
+
+          <!-- The content box begins exactly where the drawer ends, so the browser's
+             separator is simply pinned to its left edge. Only when the drawer is a
+             rail: dragging the width of a sheet that covers the screen is not a
+             gesture anyone wants. -->
+          @if (drawerOpen() && !isHandset()) {
+          <app-resize-handle
+            class="browser-handle"
+            grow="e"
+            [label]="'workspace.resizeBrowser' | translate"
+            [value]="browserWidth()"
+            [min]="panelLimits.browserWidth.min"
+            [max]="panelLimits.browserWidth.max"
+            [defaultValue]="defaultWidths.browser"
+            (preview)="liveBrowserWidth.set($event)"
+            (commit)="commitBrowserWidth($event)"
+          />
+          } @if (inspectorOpen()) {
+          <aside
+            class="inspector"
+            [style.width.px]="inspectorWidth()"
+            [attr.aria-label]="'workspace.inspector' | translate"
+          >
+            <app-inspector-panel />
+          </aside>
+
+          <app-resize-handle
+            class="inspector-handle"
+            grow="w"
+            [label]="'workspace.resizeInspector' | translate"
+            [style.right.px]="inspectorWidth() + 7"
+            [value]="inspectorWidth()"
+            [min]="panelLimits.inspectorWidth.min"
+            [max]="panelLimits.inspectorWidth.max"
+            [defaultValue]="defaultWidths.inspector"
+            (preview)="liveInspectorWidth.set($event)"
+            (commit)="commitInspectorWidth($event)"
+          />
+          } @else {
+          <!-- Collapsing the inspector has to leave something behind to open it
+             again, or the only way back is a keyboard shortcut and a menu item. -->
+          <button
+            type="button"
+            class="inspector-rail"
+            [matTooltip]="'workspace.showInspectorShortcut' | translate"
+            [attr.aria-label]="'action.showInspector' | translate"
+            (click)="commands.toggle('guiVisible')"
+          >
+            <mat-icon>tune</mat-icon>
+          </button>
+          } @if (preferences.value().editorOpen) {
+          <app-editor-shell class="editor" />
+          }
+        </div>
+
+        @if (preferences.value().bottomPanelOpen) {
+        <app-bottom-panel class="bottom-panel" />
+        }
+      </div>
+    </mat-sidenav-content>
+  </mat-sidenav-container>
+</div>
+}

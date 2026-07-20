@@ -3,22 +3,21 @@
   "version": "0.1.0",
   "description": "MCP server that lets Codex, Claude Code, Cursor, and other MCP clients drive a locally-open Shader Studio tab.",
   "keywords": [
+    "glsl",
     "mcp",
     "model-context-protocol",
     "shader-studio",
-    "glsl",
     "shaders"
   ],
-  "license": "ISC",
-  "author": "Adel Terki",
   "homepage": "https://github.com/antelm-dev/shader-studio/tree/master/packages/mcp",
+  "bugs": "https://github.com/antelm-dev/shader-studio/issues",
+  "license": "Apache-2.0",
+  "author": "Adel Terki",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/antelm-dev/shader-studio.git",
     "directory": "packages/mcp"
   },
-  "bugs": "https://github.com/antelm-dev/shader-studio/issues",
-  "type": "module",
   "bin": {
     "shader-studio-mcp": "./dist/server.mjs"
   },
@@ -27,17 +26,15 @@
     "README.md",
     "LICENSE"
   ],
+  "type": "module",
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
     "build": "rollup -c",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "pnpm build && vitest run",
     "pack:tarball": "pnpm run build && node -e \"require('node:fs').mkdirSync('dist-pack',{recursive:true})\" && npm pack --pack-destination ./dist-pack"
-  },
-  "engines": {
-    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -54,5 +51,8 @@
     "vitest": "^4.0.8",
     "ws": "^8.21.0",
     "zod": "^4.4.3"
+  },
+  "engines": {
+    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
   }
 }

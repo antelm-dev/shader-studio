@@ -1,0 +1,12 @@
+/* To learn more about Typescript configuration file: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html. */
+/* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
+{
+  /* See tsconfig.app.json: "noEmit" belongs on the tsc command line, not here. */
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // The storage tests drive the real filesystem, so the Node types have to be
+    // in scope here as well as in the app build.
+    "types": ["vitest/globals", "node", "@angular/localize"]
+  },
+  "include": ["src/**/*.d.ts", "src/**/*.spec.ts"]
+}

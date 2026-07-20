@@ -5,12 +5,12 @@ import { createLogger } from '../_lib/logger.mjs';
 import { root } from '../_lib/paths.mjs';
 
 const log = createLogger('i18n');
-const keysSource = readFileSync(resolve(root, 'src/app/i18n/keys.ts'), 'utf8');
+const keysSource = readFileSync(resolve(root, 'apps/renderer/src/app/i18n/keys.ts'), 'utf8');
 const locales = ['en', 'fr'];
 
 const keysMatch = keysSource.match(/export const TRANSLATION_KEYS = \[([\s\S]*?)\] as const/);
 if (!keysMatch) {
-  fail('Could not parse TRANSLATION_KEYS from src/app/i18n/keys.ts');
+  fail('Could not parse TRANSLATION_KEYS from apps/renderer/src/app/i18n/keys.ts');
 }
 
 const keys = [...keysMatch[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);

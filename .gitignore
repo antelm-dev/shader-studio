@@ -36,7 +36,7 @@ yarn-error.log
 .history/*
 
 # Miscellaneous
-/.angular/cache
+**/.angular/cache
 .sass-cache/
 /connect.lock
 /coverage
@@ -54,6 +54,6 @@ Thumbs.db
 /data
 *.log
 *.tsbuildinfo
-/main/generated
+/packages/desktop-api/src/ipc-bridge.ts
 /electron-run-*.json
 

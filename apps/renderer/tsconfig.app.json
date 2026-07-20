@@ -1,0 +1,23 @@
+/* To learn more about Typescript configuration file: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html. */
+/* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
+{
+  /*
+   * Do not add "noEmit" here. Angular's development build ends up with an empty
+   * TypeScript program if it is set, and every file then fails with
+   * "not found in TypeScript compilation". `pnpm typecheck` passes --noEmit on
+   * the command line instead, which keeps tsc from scattering .js files next to
+   * the sources without breaking the builder.
+   */
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "@angular/localize"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "../server/src/**/*.ts",
+    "../../packages/backend/src/**/*.ts",
+    "../../packages/desktop-api/src/**/*.ts",
+    "../../packages/shared/src/**/*.ts"
+  ],
+  "exclude": ["src/**/*.spec.ts"]
+}

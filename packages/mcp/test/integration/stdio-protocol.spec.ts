@@ -61,7 +61,10 @@ function waitFor(predicate: () => boolean, timeoutMs: number, label: string): Pr
 
 function waitForExit(child: ChildProcess, timeoutMs: number): Promise<number | null> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Timed out waiting for process exit')), timeoutMs);
+    const timer = setTimeout(
+      () => reject(new Error('Timed out waiting for process exit')),
+      timeoutMs,
+    );
     child.once('exit', (code) => {
       clearTimeout(timer);
       resolve(code);
@@ -188,7 +191,11 @@ describe('built server.mjs', () => {
 
       const stderrChunks: string[] = [];
       child.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString('utf8')));
-      await waitFor(() => stderrChunks.join('').includes('listening'), 5000, 'bridge listening log');
+      await waitFor(
+        () => stderrChunks.join('').includes('listening'),
+        5000,
+        'bridge listening log',
+      );
 
       child.kill(signal);
       const code = await waitForExit(child, 5000);

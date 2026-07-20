@@ -107,6 +107,34 @@ export const RESIZE_NUDGE_FAST = 64;
  * the minimum size rather than turning the rect inside out. The result is not
  * itself contained to a viewport — pass it through `containRect` for that.
  */
+/** The two fields `arrowKeyDelta` needs from a `KeyboardEvent` — kept local so this package never has to depend on `lib.dom`. */
+export interface ArrowKeyEvent {
+  readonly key: string;
+  readonly shiftKey: boolean;
+}
+
+/**
+ * Which way, and how far, an arrow key moves or resizes a window — `null` for
+ * any other key. Both windows bind the same four keys to the same deltas, with
+ * Shift stepping four times as far; this is the one thing they'd otherwise have
+ * copied into two identical `Record` literals.
+ */
+export function arrowKeyDelta(event: ArrowKeyEvent): [number, number] | null {
+  const step = event.shiftKey ? RESIZE_NUDGE_FAST : RESIZE_NUDGE;
+  switch (event.key) {
+    case 'ArrowLeft':
+      return [-step, 0];
+    case 'ArrowRight':
+      return [step, 0];
+    case 'ArrowUp':
+      return [0, -step];
+    case 'ArrowDown':
+      return [0, step];
+    default:
+      return null;
+  }
+}
+
 export function resizeRect(rect: Rect, edge: ResizeEdge, dx: number, dy: number, min: Size): Rect {
   let { x, y, width, height } = rect;
 

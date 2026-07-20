@@ -16,7 +16,7 @@ data
 
 # The Electron main process. It is not part of the web build — see
 # docker/electron.d.ts.
-main
+apps/desktop
 
 *.log
 *.tsbuildinfo

@@ -6,7 +6,10 @@ import { root } from '../_lib/paths.mjs';
 import { FONT_OVERLAY, SYSTEM_FONT_ENTRY } from '../gen/font-overlay.mjs';
 
 const log = createLogger('fonts');
-const source = readFileSync(resolve(root, 'src/app/editor/font-catalogue.ts'), 'utf8');
+const source = readFileSync(
+  resolve(root, 'apps/renderer/src/app/editor/font-catalogue.ts'),
+  'utf8',
+);
 
 const entryPattern =
   /\{\s*family:\s*(SYSTEM_FONT|'[^']*'|"[^"]*")\s*,\s*weights:\s*\[([^\]]*)\]\s*,\s*ligatures:\s*(true|false)\s*,\s*note:\s*('(?:\\'|[^'])*'|"(?:\\"|[^"])*")\s*,?\s*\}/gs;
@@ -24,7 +27,9 @@ const catalogue = [...source.matchAll(entryPattern)].map((match) => {
 });
 
 if (catalogue.length === 0) {
-  fail('Could not parse FONT_CATALOGUE entries from src/app/editor/font-catalogue.ts');
+  fail(
+    'Could not parse FONT_CATALOGUE entries from apps/renderer/src/app/editor/font-catalogue.ts',
+  );
 }
 
 const expected = [SYSTEM_FONT_ENTRY, ...FONT_OVERLAY];

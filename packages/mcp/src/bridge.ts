@@ -302,7 +302,10 @@ export async function startBridge(
   throw new Error(`Could not bind ws://${host}:${port}`);
 }
 
-export function installBridgeShutdown(wss: WebSocketServer, logger: Logger = createLogger('silent')): void {
+export function installBridgeShutdown(
+  wss: WebSocketServer,
+  logger: Logger = createLogger('silent'),
+): void {
   const shutdown = (reason: string) => {
     logger.info(`Shutting down (${reason}).`);
     rejectAllPending('Bridge shutting down');
