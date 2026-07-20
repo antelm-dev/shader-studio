@@ -16,19 +16,37 @@ import { Preferences } from '../prefs/preferences';
 import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { ShaderStore } from '../workspace/shader-store';
 import { TextureAssets } from '../assets/texture-assets';
+import { OutputLog } from '../ui/bottom-panel/output-log';
 import type { GlContext } from './gl-context';
 import { GlContextRegistry } from './gl-context-registry';
 import { RendererHandle } from './renderer-handle';
 import { type ChannelSource, type EnginePass, ShaderEngine } from './shader-engine';
 
 const EMPTY_CHANNELS: readonly (ChannelSource | null)[] = [null, null, null, null];
+const TRANSITION_DURATION_MS = 220;
+const SETTLE_FRAMES = 2;
+
+interface ChannelState {
+  shaderId: string | null;
+  sources: readonly (ChannelSource | null)[];
+  resolved: boolean;
+}
 
 /** Also used by `McpBridge` to know how long to wait before reading back diagnostics. */
 export const RECOMPILE_DEBOUNCE_MS = 400;
 
 @Component({
   selector: 'app-shader-canvas',
-  template: ` <canvas #canvas class="shader-canvas" aria-hidden="true"></canvas> `,
+  template: `
+    <canvas #canvas class="shader-canvas" aria-hidden="true"></canvas>
+    <canvas
+      #transitionFrame
+      class="transition-frame"
+      [class.active]="transitionActive()"
+      [class.fading]="transitionFading()"
+      aria-hidden="true"
+    ></canvas>
+  `,
   styles: `
     /*
      * The canvas fills whatever it is given and knows nothing about what that
@@ -49,6 +67,36 @@ export const RECOMPILE_DEBOUNCE_MS = 400;
       height: 100%;
       touch-action: none;
     }
+
+    /* A frozen copy of the last complete frame hides compilation, target
+       recreation and texture decoding while the live canvas keeps rendering. */
+    .transition-frame {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: block;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .transition-frame.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .transition-frame.active.fading {
+      opacity: 0;
+      transition: opacity ${TRANSITION_DURATION_MS}ms ease-out;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .transition-frame.active.fading {
+        transition-duration: 1ms;
+      }
+    }
   `,
 })
 export class ShaderCanvas {
@@ -58,8 +106,11 @@ export class ShaderCanvas {
   private readonly contexts = inject(GlContextRegistry);
   private readonly destroyRef = inject(DestroyRef);
   private readonly textures = inject(TextureAssets);
+  private readonly outputLog = inject(OutputLog);
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
+  private readonly transitionFrameRef =
+    viewChild.required<ElementRef<HTMLCanvasElement>>('transitionFrame');
   private readonly engine = signal<ShaderEngine | null>(null);
 
   /**
@@ -111,12 +162,26 @@ export class ShaderCanvas {
   private readonly debouncedPasses = signal<readonly EnginePass[] | null>(null);
   /** The `draftRevision` that produced `debouncedPasses` — what the compile effect reports its result against. */
   private readonly debouncedRevision = signal(0);
-  private readonly channelSources = signal<readonly (ChannelSource | null)[]>(EMPTY_CHANNELS);
+  private readonly channelState = signal<ChannelState>({
+    shaderId: null,
+    sources: EMPTY_CHANNELS,
+    resolved: true,
+  });
+
+  protected readonly transitionActive = signal(false);
+  protected readonly transitionFading = signal(false);
+  private readonly transitionTarget = signal<string | null>(null);
+  private readonly compiledShaderId = signal<string | null>(null);
+  private renderedShaderId: string | null = null;
+  private settleFramesRemaining = 0;
+  private transitionTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** The last `recompileRequest` acted on, so a new one can be told from a redraw. */
   private lastRecompile = 0;
   /** The last `immediateCompileRequest` acted on — flush the debounce timer instead of waiting it out. */
   private lastImmediateCompile = 0;
+  /** Shader selection compiles immediately; only edits within one shader are debounced. */
+  private lastQueuedShaderId: string | null = null;
 
   constructor() {
     afterNextRender(() => {
@@ -137,6 +202,7 @@ export class ShaderCanvas {
       const revision = this.store.draftRevision();
       const passes = this.passes();
       const immediate = this.store.immediateCompileRequest();
+      const shaderId = this.store.selectedId();
 
       if (!passes) {
         this.debouncedPasses.set(null);
@@ -148,7 +214,9 @@ export class ShaderCanvas {
       // `compileNow()` wants the debounce flushed immediately rather than
       // waited out — the same "force" idea as Ctrl+Enter, but for timing
       // instead of the engine's unchanged-source skip.
-      if (immediate !== this.lastImmediateCompile) {
+      const shaderChanged = shaderId !== this.lastQueuedShaderId;
+      this.lastQueuedShaderId = shaderId;
+      if (shaderChanged || immediate !== this.lastImmediateCompile) {
         this.lastImmediateCompile = immediate;
         this.debouncedPasses.set(passes);
         this.debouncedRevision.set(revision);
@@ -167,6 +235,7 @@ export class ShaderCanvas {
       const passes = this.debouncedPasses();
       const revision = this.debouncedRevision();
       const controls = this.store.controls();
+      const shaderId = this.store.selectedId();
 
       // Ctrl+Enter. Tracked, so asking for a recompile of a source nobody touched
       // still runs one — which is the entire point of asking.
@@ -177,7 +246,12 @@ export class ShaderCanvas {
       if (!engine || !passes) return;
 
       untracked(() => {
+        if (shaderId && this.renderedShaderId && shaderId !== this.renderedShaderId) {
+          this.beginTransition(shaderId);
+        }
+
         const draft = this.store.draft();
+        const channelState = this.channelState();
         const diagnostics = engine.setPasses(
           {
             vertex: this.store.vertex(),
@@ -187,13 +261,16 @@ export class ShaderCanvas {
               bloom: { enabled: false, strength: 0, radius: 0, threshold: 1 },
             },
             passes,
-            textures: this.channelSources(),
+            textures: channelState.shaderId === shaderId ? channelState.sources : EMPTY_CHANNELS,
           },
           force,
         );
 
+        this.renderedShaderId = shaderId;
+        this.compiledShaderId.set(shaderId);
         this.store.recordCompileResult(revision, [...this.compositionErrors(), ...diagnostics]);
         this.store.compiling.set(new Set());
+        this.armRevealWhenReady();
       });
     });
 
@@ -210,28 +287,48 @@ export class ShaderCanvas {
       const record = this.store.record();
       const channels = this.store.channels();
       if (!record) {
-        this.channelSources.set(EMPTY_CHANNELS);
+        this.channelState.set({ shaderId: null, sources: EMPTY_CHANNELS, resolved: true });
         return;
       }
+
+      // Change ownership immediately. Until the new URLs resolve, the new
+      // program gets placeholders rather than the previous shader's textures.
+      this.channelState.set({
+        shaderId: record.id,
+        sources: EMPTY_CHANNELS,
+        resolved: false,
+      });
 
       let cancelled = false;
       onCleanup(() => {
         cancelled = true;
       });
 
-      void Promise.all(
+      void Promise.allSettled(
         channels.map((channel, index) =>
           this.textures.resolve(record.id, index, channel, record.updatedAt),
         ),
-      ).then((resolved) => {
-        if (!cancelled) this.channelSources.set(resolved);
+      ).then((results) => {
+        if (cancelled) return;
+
+        const sources = results.map((result, index) => {
+          if (result.status === 'fulfilled') return result.value;
+          this.outputLog.warning(
+            'renderer',
+            `Could not resolve texture channel ${index}: ${String(result.reason)}`,
+          );
+          return null;
+        });
+        this.channelState.set({ shaderId: record.id, sources, resolved: true });
       });
     });
 
     effect(() => {
       const engine = this.engine();
-      const channels = this.channelSources();
-      engine?.setChannels(channels);
+      const state = this.channelState();
+      const shaderId = this.store.selectedId();
+      engine?.setChannels(state.shaderId === shaderId ? state.sources : EMPTY_CHANNELS);
+      this.armRevealWhenReady();
     });
 
     effect(() => {
@@ -248,6 +345,10 @@ export class ShaderCanvas {
       engine.setResolutionScale(resolutionScale);
       engine.setAutoRipples(autoRipples);
     });
+
+    this.destroyRef.onDestroy(() => {
+      if (this.transitionTimer !== null) clearTimeout(this.transitionTimer);
+    });
   }
 
   private async boot(): Promise<void> {
@@ -257,27 +358,32 @@ export class ShaderCanvas {
     let context: GlContext;
     try {
       context = await this.contexts.create(canvas);
-      engine = await ShaderEngine.create(context);
+      engine = await ShaderEngine.create(context, {}, this.outputLog);
     } catch (error) {
-      this.store.notice.set({
-        text: `WebGL is unavailable, so the preview is disabled: ${String(error)}`,
-        error: true,
-      });
+      const message = `WebGL is unavailable, so the preview is disabled: ${String(error)}`;
+      this.store.notice.set({ text: message, error: true });
+      this.outputLog.error('renderer', message);
       return;
     }
 
     engine.onFps = (fps) => this.handle.fps.set(fps);
+    engine.onFrameRendered = () => this.onFrameRendered();
+    engine.onTextureSettled = () => this.armRevealWhenReady();
 
     // A lost context is recoverable and usually brief (a driver reset, a GPU
     // switch), so say so rather than reporting a failure: the shader, the
     // parameters and the clock are all still here, waiting to be replayed.
-    engine.onContextLost = () =>
+    engine.onContextLost = () => {
       this.store.notice.set({
         text: 'The GPU context was lost. Restoring the preview…',
         error: false,
       });
-    engine.onContextRestored = () =>
+      this.outputLog.warning('renderer', 'The GPU context was lost. Restoring the preview…');
+    };
+    engine.onContextRestored = () => {
       this.store.notice.set({ text: 'The GPU context was restored.', error: false });
+      this.outputLog.info('renderer', 'The GPU context was restored.');
+    };
 
     this.engine.set(engine);
     this.handle.register(context.id, engine);
@@ -291,5 +397,80 @@ export class ShaderCanvas {
       // Disposes this context and nothing else: any other preview keeps running.
       this.contexts.destroy(context.id);
     });
+  }
+
+  /** Freeze the last complete WebGL frame before installing another project. */
+  private beginTransition(shaderId: string): void {
+    if (this.transitionTimer !== null) {
+      clearTimeout(this.transitionTimer);
+      this.transitionTimer = null;
+    }
+
+    // During rapid navigation retain the original clean frame. Recapturing now
+    // could photograph the half-prepared shader the overlay is hiding.
+    if (!this.transitionActive()) {
+      const source = this.canvasRef().nativeElement;
+      const frame = this.transitionFrameRef().nativeElement;
+      if (source.width === 0 || source.height === 0) return;
+
+      frame.width = source.width;
+      frame.height = source.height;
+      const context = frame.getContext('2d');
+      if (!context) return;
+
+      try {
+        context.drawImage(source, 0, 0);
+      } catch {
+        // If the drawing buffer is unavailable, switching the shader still
+        // matters more than decorating the switch.
+        return;
+      }
+      this.transitionActive.set(true);
+    }
+
+    this.transitionFading.set(false);
+    this.transitionTarget.set(shaderId);
+    this.settleFramesRemaining = 0;
+  }
+
+  /** Arm the fade only when source, textures and GPU programs belong to one shader. */
+  private armRevealWhenReady(): void {
+    const target = this.transitionTarget();
+    const engine = this.engine();
+    const channels = this.channelState();
+    if (
+      !target ||
+      !this.transitionActive() ||
+      this.transitionFading() ||
+      this.store.selectedId() !== target ||
+      this.compiledShaderId() !== target ||
+      channels.shaderId !== target ||
+      !channels.resolved ||
+      !engine?.channelsReady
+    ) {
+      return;
+    }
+
+    // Two complete draws let newly allocated multipass targets receive useful
+    // contents before they become visible.
+    if (this.settleFramesRemaining === 0) this.settleFramesRemaining = SETTLE_FRAMES;
+  }
+
+  private onFrameRendered(): void {
+    const target = this.transitionTarget();
+    if (!target || this.settleFramesRemaining === 0 || this.store.selectedId() !== target) return;
+
+    this.settleFramesRemaining--;
+    if (this.settleFramesRemaining > 0) return;
+
+    this.transitionFading.set(true);
+    const finishingTarget = target;
+    this.transitionTimer = setTimeout(() => {
+      this.transitionTimer = null;
+      if (this.transitionTarget() !== finishingTarget) return;
+      this.transitionActive.set(false);
+      this.transitionFading.set(false);
+      this.transitionTarget.set(null);
+    }, TRANSITION_DURATION_MS);
   }
 }

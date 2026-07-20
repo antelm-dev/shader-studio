@@ -29,7 +29,7 @@ export interface MenuCommand {
 /** The panels a menu can show and hide. */
 export type TogglablePanel = keyof Pick<
   WorkspacePreferences,
-  'browserOpen' | 'editorOpen' | 'guiVisible'
+  'browserOpen' | 'editorOpen' | 'guiVisible' | 'bottomPanelOpen'
 >;
 
 /**
@@ -158,6 +158,18 @@ export class MenuCommands {
     label: () =>
       this.i18n.t(this.preferences.value().editorOpen ? 'action.hideEditor' : 'action.showEditor'),
     action: () => this.toggle('editorOpen'),
+  };
+
+  /** Problems and Output — the bottom panel, not the desktop's detached output window. */
+  readonly togglePanel: MenuCommand = {
+    id: 'toggle-panel',
+    icon: () => 'terminal',
+    label: () =>
+      this.i18n.t(
+        this.preferences.value().bottomPanelOpen ? 'action.hidePanel' : 'action.showPanel',
+      ),
+    shortcut: 'Ctrl+J',
+    action: () => this.toggle('bottomPanelOpen'),
   };
 
   /** The label is the menu's own: "Import shader…" reads oddly under a File menu. */

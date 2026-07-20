@@ -18,6 +18,7 @@ import {
   type TextureWrapMode,
 } from '@shader-studio/shared';
 import { VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
+import type { EngineOutputLevel, EngineOutputSink, EngineOutputSource } from './engine-output-sink';
 import { GlContext, type GlContextOptions, type ThreeModule } from './gl-context';
 import { parseInfoLog, prefixLineCount } from '@shader-studio/shared/glsl-diagnostics';
 import { expandMacros } from '@shader-studio/shared/glsl-export';
@@ -218,6 +219,8 @@ export class ShaderEngine {
 
   /** Keyed by `url|wrap|filter|flipY`, so swapping settings on the same image gets its own entry. */
   private readonly textureCache = new Map<string, THREE.Texture>();
+  /** Decode state for cached image textures; a transition waits until none are still loading. */
+  private readonly textureStatus = new Map<string, 'loading' | 'settled'>();
   private readonly placeholderTexture: THREE.Texture;
 
   private render: RenderSettings = {
@@ -256,6 +259,12 @@ export class ShaderEngine {
 
   onFps: ((fps: number) => void) | null = null;
 
+  /** Fired after a live animation frame has completely reached the canvas. */
+  onFrameRendered: (() => void) | null = null;
+
+  /** Fired when an asynchronously decoded channel either becomes usable or fails. */
+  onTextureSettled: (() => void) | null = null;
+
   /** Fired when this engine's context is lost or comes back. Never fired for a sibling's. */
   onContextLost: (() => void) | null = null;
   onContextRestored: (() => void) | null = null;
@@ -264,7 +273,15 @@ export class ShaderEngine {
   private readonly canvas: HTMLCanvasElement;
   private readonly renderer: THREE.WebGLRenderer;
 
-  private constructor(readonly context: GlContext) {
+  /** The last message written, so an identical repeat (a Ctrl+Enter with nothing changed) is not logged twice. */
+  private lastOutputMessage: string | null = null;
+  /** The last failure logged per pass, so a debounce that fires on unchanged, still-broken source does not repeat it. */
+  private readonly lastFailureByPass = new Map<string, string>();
+
+  private constructor(
+    readonly context: GlContext,
+    private readonly sink: EngineOutputSink | null = null,
+  ) {
     const T = context.three;
     this.three = T;
     this.canvas = context.canvas;
@@ -326,10 +343,11 @@ export class ShaderEngine {
   static async create(
     target: HTMLCanvasElement | GlContext,
     options: GlContextOptions = {},
+    sink: EngineOutputSink | null = null,
   ): Promise<ShaderEngine> {
     const context = target instanceof GlContext ? target : await GlContext.create(target, options);
 
-    const engine = new ShaderEngine(context);
+    const engine = new ShaderEngine(context, sink);
     engine.start();
     return engine;
   }
@@ -477,6 +495,21 @@ export class ShaderEngine {
 
     this.setRenderSettings(spec.render);
 
+    // A concise summary, only for an *explicit* compile — Ctrl+Enter or a save.
+    // Every keystroke also lands here through the debounce, and a line in the
+    // Output tab per keystroke would drown out the one summary anyone wants.
+    if (force) {
+      if (diagnostics.length === 0) {
+        this.logOutput('info', 'compiler', 'Shader compiled successfully.');
+      } else {
+        this.logOutput(
+          'error',
+          'compiler',
+          `Compilation failed with ${diagnostics.length} ${diagnostics.length === 1 ? 'error' : 'errors'}.`,
+        );
+      }
+    }
+
     return diagnostics;
   }
 
@@ -501,8 +534,13 @@ export class ShaderEngine {
     const raw = this.probe(material, fragment, vertex);
     if (raw.length > 0) {
       material.dispose();
-      return { pass: null as never, diagnostics: attribute(raw, pass) };
+      const diagnostics = attribute(raw, pass);
+      this.logCompileFailure(pass.id, diagnostics);
+      return { pass: null as never, diagnostics };
     }
+
+    // Whatever this pass failed with before, it is not failing with it now.
+    this.lastFailureByPass.delete(pass.id);
 
     return {
       pass: {
@@ -516,6 +554,43 @@ export class ShaderEngine {
       },
       diagnostics: [],
     };
+  }
+
+  /**
+   * Writes to the sink, deduplicating an exact repeat of the last message —
+   * pressing Ctrl+Enter twice with nothing changed must not double the line.
+   */
+  private logOutput(level: EngineOutputLevel, source: EngineOutputSource, message: string): void {
+    if (!this.sink) return;
+
+    const key = `${level}|${source}|${message}`;
+    if (key === this.lastOutputMessage) return;
+
+    this.lastOutputMessage = key;
+    this.sink.write(level, source, message);
+  }
+
+  /**
+   * The raw driver output for one pass's failed compile, deduplicated per pass:
+   * a debounce that fires again on source the user has not touched — or a
+   * `force` recompile of every pass, whether it changed or not — must not repeat
+   * the same driver log for a shader that is still broken in exactly the way it
+   * was a moment ago.
+   */
+  private logCompileFailure(passId: string, diagnostics: readonly CompileDiagnostic[]): void {
+    if (!this.sink) return;
+
+    const signature = diagnostics.map((diagnostic) => diagnostic.message).join('\n');
+    if (this.lastFailureByPass.get(passId) === signature) return;
+    this.lastFailureByPass.set(passId, signature);
+
+    const count = diagnostics.length;
+    this.logOutput(
+      'error',
+      'compiler',
+      `Pass "${passId}" failed to compile (${count} ${count === 1 ? 'issue' : 'issues'}).`,
+    );
+    for (const diagnostic of diagnostics) this.logOutput('error', 'compiler', diagnostic.message);
   }
 
   /** The shader currently on screen: the last one the driver accepted. */
@@ -768,10 +843,22 @@ export class ShaderEngine {
     const cached = this.textureCache.get(key);
     if (cached) return cached;
 
+    this.textureStatus.set(key, 'loading');
     const texture = this.context.own(
-      new this.three.TextureLoader().load(spec.url, undefined, undefined, (error) => {
-        console.warn(`[shader-engine] failed to load texture "${spec.url}":`, error);
-      }),
+      new this.three.TextureLoader().load(
+        spec.url,
+        () => this.settleTexture(key),
+        undefined,
+        (error) => {
+          console.warn(`[shader-engine] failed to load texture "${spec.url}":`, error);
+          this.logOutput(
+            'warning',
+            'renderer',
+            `Failed to load texture "${spec.url}": ${String(error)}`,
+          );
+          this.settleTexture(key);
+        },
+      ),
     );
 
     const wrap = this.wrapModeFor(spec.wrap);
@@ -787,6 +874,22 @@ export class ShaderEngine {
     return texture;
   }
 
+  private settleTexture(key: string): void {
+    // A late callback from a texture pruned during a rapid shader switch no
+    // longer belongs to the live project and must not release its transition.
+    if (!this.textureStatus.has(key)) return;
+    this.textureStatus.set(key, 'settled');
+    this.onTextureSettled?.();
+  }
+
+  /** True once every image texture used by the current project has decoded or failed. */
+  get channelsReady(): boolean {
+    return this.textureSlots.every((source) => {
+      if (!source) return true;
+      return this.textureStatus.get(ShaderEngine.cacheKey(source)) !== 'loading';
+    });
+  }
+
   /** Disposes any cached texture no longer referenced by the current channels. */
   private pruneTextureCache(channels: readonly (ChannelSource | null)[]): void {
     const used = new Set(
@@ -798,6 +901,7 @@ export class ShaderEngine {
       if (used.has(key)) continue;
       texture.dispose();
       this.textureCache.delete(key);
+      this.textureStatus.delete(key);
     }
   }
 
@@ -1355,6 +1459,7 @@ export class ShaderEngine {
 
     // Draw even while paused, so parameter edits stay visible with time frozen.
     this.draw();
+    this.onFrameRendered?.();
   }
 
   /**
@@ -1459,7 +1564,11 @@ export class ShaderEngine {
     this.mesh.geometry.dispose();
     for (const texture of this.textureCache.values()) texture.dispose();
     this.textureCache.clear();
+    this.textureStatus.clear();
     this.placeholderTexture.dispose();
+
+    this.onFrameRendered = null;
+    this.onTextureSettled = null;
 
     // Disposes the renderer. Re-entrant: this is also what runs when the
     // context is destroyed from the registry rather than from here.

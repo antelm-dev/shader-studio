@@ -158,10 +158,10 @@ describe('DocumentStatus', () => {
 
     it('pluralises its hint', () => {
       store.diagnostics.set([error('fragment')]);
-      expect(status.errorHint()).toBe('1 error — open the editor to see it');
+      expect(status.errorHint()).toBe('1 error — open the Problems panel to see it');
 
       store.diagnostics.set([error('fragment'), error('vertex')]);
-      expect(status.errorHint()).toBe('2 errors — open the editor to see them');
+      expect(status.errorHint()).toBe('2 errors — open the Problems panel to see them');
     });
   });
 });

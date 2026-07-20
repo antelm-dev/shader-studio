@@ -120,6 +120,21 @@ describe('multiple WebGL contexts', () => {
     expect(textureA).not.toBe(textureB);
   });
 
+  it('reports when a complete live frame has reached the canvas', () => {
+    const rendered = vi.fn();
+    engineA.onFrameRendered = rendered;
+
+    runFrame();
+
+    expect(rendered).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports channel readiness after the current textures have settled', () => {
+    engineA.setShader(spec('// textured', [channel('ready.png'), null, null, null]));
+
+    expect(engineA.channelsReady).toBe(true);
+  });
+
   it('isolates resources: every GPU object is tagged with the context that made it', () => {
     engineA.setShader(spec('// A', [channel('a.png'), null, null, null]));
     engineB.setShader(spec('// B', [channel('b.png'), null, null, null]));

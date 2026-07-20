@@ -26,6 +26,7 @@
 .browser-handle,
 .inspector-handle,
 .editor,
+.bottom-panel,
 .loading,
 app-titlebar {
   pointer-events: auto;
@@ -218,33 +219,62 @@ app-titlebar {
   overflow: hidden;
 }
 
+// Two rows, and nothing else: the main workspace — stage, inspector and the
+// source editor, in whatever arrangement `.workspace-main` below puts them in
+// — sits above the bottom panel, full stop. Keeping the split here rather than
+// inside one grid is what lets a maximized editor's `inset: 0` resolve against
+// `.workspace-main` instead of this box: it never learns the bottom panel's row
+// exists, so it cannot cover it.
 .content {
   position: absolute;
   inset: 0;
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'workspace-main'
+    'bottom-panel';
+  min-height: 0;
+  overflow: hidden;
+}
+
+// The editor's positioning container. `EditorShell` measures its own DOM
+// parent as the workspace it is docked, floated and maximized against —
+// see `EditorShell.observeWorkspace`/`measure` — so this being the editor's
+// actual parent is what keeps every one of those modes, and the floating
+// rect's viewport clamp, confined to the area above the bottom panel without
+// either component needing to know the other's height.
+.workspace-main {
+  position: relative;
+  grid-area: workspace-main;
+  display: grid;
   grid-template-columns: 1fr auto;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas:
     'stage inspector'
     'editor editor';
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 
   &.dock-editor-left {
     grid-template-columns: auto 1fr auto;
-    grid-template-rows: 1fr;
+    grid-template-rows: minmax(0, 1fr);
     grid-template-areas: 'editor stage inspector';
   }
 
   &.dock-editor-right {
     grid-template-columns: 1fr auto auto;
-    grid-template-rows: 1fr;
+    grid-template-rows: minmax(0, 1fr);
     grid-template-areas: 'stage inspector editor';
   }
 }
 
 .stage {
   grid-area: stage;
+}
+
+.bottom-panel {
+  grid-area: bottom-panel;
 }
 
 .inspector {
@@ -315,9 +345,9 @@ app-titlebar {
 // editor takes the full height: on a phone there is no room for both at once.
 
 @media (max-width: 900px) {
-  .content {
+  .workspace-main {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto auto;
+    grid-template-rows: minmax(0, 1fr) auto auto;
     grid-template-areas:
       'stage'
       'inspector'
@@ -326,7 +356,7 @@ app-titlebar {
     &.dock-editor-left,
     &.dock-editor-right {
       grid-template-columns: 1fr;
-      grid-template-rows: 1fr auto auto;
+      grid-template-rows: minmax(0, 1fr) auto auto;
       grid-template-areas:
         'stage'
         'inspector'
@@ -345,6 +375,14 @@ app-titlebar {
   .browser-handle,
   .inspector-handle {
     display: none;
+  }
+
+  // The editor and the bottom panel can each be dragged to ~72% of the
+  // workspace on their own; stacked on a phone, that combination is the
+  // workspace. A firm cap on the panel keeps the stage from disappearing
+  // under both at once.
+  .bottom-panel {
+    max-height: 34dvh;
   }
 
   // The status stays; the name is what the title bar and the browser already

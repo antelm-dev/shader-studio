@@ -89,6 +89,13 @@ export class GlobalShortcuts {
         void this.closeActiveDoc();
         return true;
 
+      // The classic editor convention for a bottom panel. Handled here, ahead
+      // of `isTyping`, so it also works while Monaco has focus.
+      case 'j':
+        event.preventDefault();
+        this.commands.toggle('bottomPanelOpen');
+        return true;
+
       case 'pageup':
         event.preventDefault();
         this.store.cycleDoc(-1);

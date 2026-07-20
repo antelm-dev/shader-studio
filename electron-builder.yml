@@ -31,4 +31,4 @@ portable:
   artifactName: ${name}-${version}-portable.${ext}
 publish:
   provider: gitlab
-  releaseType: release
+  projectId: antelm-dev/shader-studio

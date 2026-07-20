@@ -1,4 +1,14 @@
-import { Component, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,8 +18,12 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { findPass } from '@shader-studio/shared/project';
 import { CodeEditor, type EditorDoc } from '../../editor/code-editor';
 import { EditorSettings } from '../../editor/editor-settings';
+import {
+  EditorNavigation,
+  resolveNavigationTarget,
+  type EditorLocationRequest,
+} from '../../editor/editor-navigation';
 import { Preferences } from '../../prefs/preferences';
-import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { ShaderStore } from '../../workspace/shader-store';
 import { DocumentStatus } from './document-status';
 import { EditorTabs } from './editor-tabs';
@@ -160,33 +174,6 @@ import { WorkspaceActions } from '../workspace-actions';
         <p class="empty">{{ 'editor.empty' | translate }}</p>
       }
     </div>
-
-    @if (diagnostics().length > 0 && !collapsed()) {
-      <ul
-        class="diagnostics"
-        [attr.aria-label]="'editor.diagnostics' | translate"
-        aria-live="polite"
-      >
-        @for (diagnostic of diagnostics(); track $index) {
-          <li class="diagnostic" [class.warning]="diagnostic.severity === 'warning'">
-            <!-- The whole row is the target: a diagnostic you cannot click is a
-                 line number you have to go and find by hand. -->
-            <button type="button" class="diagnostic-go" (click)="reveal(diagnostic)">
-              <mat-icon class="diagnostic-icon">
-                {{ diagnostic.severity === 'warning' ? 'warning' : 'error' }}
-              </mat-icon>
-              <span class="diagnostic-where">
-                {{ diagnostic.docName ?? diagnostic.source }}
-                @if (diagnostic.line) {
-                  <span>:{{ diagnostic.line }}</span>
-                }
-              </span>
-              <span class="diagnostic-message">{{ diagnostic.message }}</span>
-            </button>
-          </li>
-        }
-      </ul>
-    }
   `,
   styles: `
     :host {
@@ -284,58 +271,6 @@ import { WorkspaceActions } from '../workspace-actions';
       margin: 0;
       color: var(--mat-sys-on-surface-variant);
     }
-
-    .diagnostics {
-      flex: 0 0 auto;
-      max-height: 132px;
-      overflow-y: auto;
-      margin: 0;
-      padding: 4px 0;
-      list-style: none;
-      border-top: 1px solid var(--mat-sys-outline-variant);
-      background: var(--mat-sys-surface-container);
-    }
-
-    .diagnostic-go {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-      width: 100%;
-      padding: 3px 12px;
-      border: 0;
-      background: transparent;
-      text-align: left;
-      cursor: pointer;
-      font: var(--mat-sys-body-small);
-      font-family: 'JetBrains Mono', Consolas, monospace;
-    }
-
-    .diagnostic-go:hover {
-      background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
-    }
-
-    .diagnostic-icon {
-      align-self: center;
-      font-size: 16px;
-      width: 16px;
-      height: 16px;
-      color: var(--mat-sys-error);
-    }
-
-    .diagnostic.warning .diagnostic-icon {
-      color: var(--mat-sys-tertiary);
-    }
-
-    .diagnostic-where {
-      flex: 0 0 auto;
-      color: var(--mat-sys-on-surface-variant);
-      white-space: nowrap;
-    }
-
-    .diagnostic-message {
-      color: var(--mat-sys-on-surface);
-      overflow-wrap: anywhere;
-    }
   `,
   host: {
     style: 'container-type: inline-size',
@@ -383,14 +318,19 @@ export class EditorPanel {
     this.store.diagnosticsFor(this.activeDoc()?.id ?? ''),
   );
 
-  /**
-   * Every diagnostic in the project, not just the open document's.
-   *
-   * A multi-pass shader fails in a pass you are not looking at at least as often
-   * as in the one you are, and a panel that only showed the current tab's errors
-   * would leave you staring at a frozen picture and a clean editor.
-   */
-  protected readonly diagnostics = computed(() => this.store.allDiagnostics());
+  private readonly editorNavigation = inject(EditorNavigation);
+
+  constructor() {
+    // The Problems panel does not hold a reference to `CodeEditor` — it asks
+    // through `EditorNavigation` instead, and this is the one place that picks
+    // the request up and acts on it, the same way `reveal` below used to for a
+    // click on the (now removed) inline diagnostics list.
+    effect(() => {
+      const request = this.editorNavigation.request();
+      if (!request) return;
+      untracked(() => this.handleNavigation(request));
+    });
+  }
 
   relayout(): void {
     this.editor()?.layout();
@@ -406,22 +346,25 @@ export class EditorPanel {
   }
 
   /**
-   * Open the file a diagnostic belongs to and put the cursor on its line.
+   * Select the document a navigation request names and put the cursor on its
+   * line.
    *
-   * The reveal is *handed to* the editor rather than performed here, because the
-   * document it names is usually not mounted yet — mounting happens in an effect,
-   * and effects have not run. The editor holds the request until the model is in.
+   * The reveal is *handed to* the editor rather than performed by the caller,
+   * because the document it names is usually not mounted yet — mounting happens
+   * in an effect, and effects have not run. `CodeEditor.revealIn` holds the
+   * request until the model is in.
    */
-  protected reveal(diagnostic: CompileDiagnostic): void {
-    const id = diagnostic.docId;
-    const known = id && this.store.documents().some((doc) => doc.id === id);
+  private handleNavigation(request: EditorLocationRequest): void {
+    const resolved = resolveNavigationTarget(
+      request,
+      this.store.documents().map((doc) => doc.id),
+      this.activeDoc()?.id ?? null,
+    );
+    if (!resolved) return;
 
-    if (known) this.store.selectDoc(id);
+    this.store.selectDoc(resolved.docId);
 
-    const target = known ? id : this.activeDoc()?.id;
-    if (!target) return;
-
-    if (diagnostic.line > 0) this.editor()?.revealIn(target, diagnostic.line);
+    if (resolved.reveal) this.editor()?.revealIn(resolved.docId, resolved.line);
     else this.focusEditor();
 
     queueMicrotask(() => this.relayout());

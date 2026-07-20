@@ -195,8 +195,10 @@ export const fakeThree = {
   WebGLRenderTarget: FakeRenderTarget,
   DataTexture: class extends FakeTexture {},
   TextureLoader: class {
-    load(url: string): FakeTexture {
-      return new FakeTexture(url);
+    load(url: string, onLoad?: (texture: FakeTexture) => void): FakeTexture {
+      const texture = new FakeTexture(url);
+      onLoad?.(texture);
+      return texture;
     }
   },
   Vector2: FakeVector,

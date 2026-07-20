@@ -35,6 +35,7 @@ import { DesktopPlatform } from './desktop/desktop-platform';
 import { ShaderStore } from './workspace/shader-store';
 import { EditorWindow } from './editor/editor-window';
 import { EditorShell } from './ui/editor/editor-shell';
+import { BottomPanel } from './ui/bottom-panel/bottom-panel';
 import { AppTitlebar } from './ui/layout/app-titlebar';
 import { DocumentStatus } from './ui/editor/document-status';
 import { GlobalShortcuts } from './ui/layout/global-shortcuts';
@@ -55,6 +56,7 @@ import { TranslatePipe } from './i18n/translate.pipe';
   hostDirectives: [GlobalShortcuts],
   imports: [
     AppTitlebar,
+    BottomPanel,
     EditorShell,
     InspectorPanel,
     TranslatePipe,
@@ -134,6 +136,7 @@ export class App {
       action: () => this.commands.toggle('guiVisible'),
     },
     this.commands.toggleEditor,
+    this.commands.togglePanel,
     {
       id: 'capture-image',
       icon: () => 'photo_camera',
@@ -303,8 +306,12 @@ export class App {
     if (file) await this.workspace.importFile(file, this.importMode());
   }
 
-  /** Opening the editor is what an error badge is *for*. */
-  protected showEditor(): void {
-    this.preferences.patch({ editorOpen: true });
+  /**
+   * What the document error badge is *for*: it exposes Problems, not the
+   * source editor — clicking a specific diagnostic there is what opens the
+   * editor, via `EditorWindow.openEditor()`.
+   */
+  protected openProblems(): void {
+    this.preferences.patch({ bottomPanelOpen: true, bottomPanelTab: 'problems' });
   }
 }

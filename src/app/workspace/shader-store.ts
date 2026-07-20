@@ -69,6 +69,7 @@ import { ProjectPersistence } from './project-persistence';
 import { TextureService } from './texture.service';
 import { ApiError, ShaderApi } from '../api/shader-api';
 import { Preferences } from '../prefs/preferences';
+import { OutputLog } from '../ui/bottom-panel/output-log';
 
 /**
  * The single source of truth for the workspace.
@@ -206,6 +207,7 @@ export class ShaderStore {
   private readonly presetService = inject(PresetService);
   private readonly compilation = inject(CompilationService);
   private readonly persistence = inject(PersistenceService);
+  private readonly outputLog = inject(OutputLog);
 
   /** True once the client has taken over the server's snapshot. */
   private hydrated = false;
@@ -637,7 +639,9 @@ export class ShaderStore {
       }
       this.projects.remove(shaderId);
     } catch (error) {
+      const message = `Could not migrate the local project for "${shaderId}": ${String(error)}`;
       console.warn(`[store] could not migrate the local project for "${shaderId}"`, error);
+      this.outputLog.warning('workspace', message);
     } finally {
       this.migratingProjects.delete(shaderId);
     }
@@ -1145,6 +1149,10 @@ export class ShaderStore {
       );
     } catch (error) {
       console.warn(`[store] could not capture a preview of "${id}"`, error);
+      this.outputLog.warning(
+        'workspace',
+        `Could not capture a preview of "${id}": ${String(error)}`,
+      );
     }
   }
 
@@ -1391,5 +1399,6 @@ export class ShaderStore {
     const message = error instanceof ApiError ? error.summary : String(error);
     console.error('[shader-store]', error);
     this.notice.set({ text: message, error: true });
+    this.outputLog.error('workspace', message);
   }
 }

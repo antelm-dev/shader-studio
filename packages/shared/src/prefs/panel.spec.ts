@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_PANEL_WIDTHS, PANEL_LIMITS, clampPanelWidth, sanitizeInspectorTab } from './panel';
+import {
+  BOTTOM_PANEL_HEIGHT_LIMITS,
+  DEFAULT_BOTTOM_PANEL_HEIGHT,
+  DEFAULT_PANEL_WIDTHS,
+  PANEL_LIMITS,
+  clampBottomPanelHeight,
+  clampPanelWidth,
+  sanitizeBottomPanelTab,
+  sanitizeInspectorTab,
+} from './panel';
 
 /**
  * `localStorage` is user-writable and outlives any given build of this app, so
@@ -59,5 +68,52 @@ describe('sanitizeInspectorTab', () => {
 
   it.each([['presets-old'], [''], [null], [3]])('falls back to controls for %s', (value) => {
     expect(sanitizeInspectorTab(value)).toBe('controls');
+  });
+});
+
+describe('sanitizeBottomPanelTab', () => {
+  it('keeps a known tab', () => {
+    expect(sanitizeBottomPanelTab('output')).toBe('output');
+    expect(sanitizeBottomPanelTab('problems')).toBe('problems');
+  });
+
+  it.each([['diagnostics'], [''], [null], [undefined], [1]])(
+    'falls back to problems for %s',
+    (value) => {
+      expect(sanitizeBottomPanelTab(value)).toBe('problems');
+    },
+  );
+});
+
+describe('clampBottomPanelHeight', () => {
+  it('keeps a height that is already in range', () => {
+    expect(clampBottomPanelHeight(300)).toBe(300);
+  });
+
+  it('clamps a height below the minimum', () => {
+    expect(clampBottomPanelHeight(10)).toBe(BOTTOM_PANEL_HEIGHT_LIMITS.min);
+  });
+
+  it('clamps a height above the maximum', () => {
+    expect(clampBottomPanelHeight(50_000)).toBe(BOTTOM_PANEL_HEIGHT_LIMITS.max);
+  });
+
+  it('rounds to whole pixels', () => {
+    expect(clampBottomPanelHeight(220.4)).toBe(220);
+  });
+
+  it.each([
+    ['a string', '220'],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['null', null],
+    ['undefined', undefined],
+    ['an object', {}],
+  ])('falls back to the default height for %s', (_label, value) => {
+    expect(clampBottomPanelHeight(value)).toBe(DEFAULT_BOTTOM_PANEL_HEIGHT);
+  });
+
+  it('falls back to a caller-supplied default', () => {
+    expect(clampBottomPanelHeight('nonsense', 340)).toBe(340);
   });
 });

@@ -74,7 +74,7 @@
           class="doc-errors"
           [matTooltip]="status.errorHint()"
           [attr.aria-label]="status.errorHint()"
-          (click)="showEditor()"
+          (click)="openProblems()"
         >
           <mat-icon aria-hidden="true">error</mat-icon>
           {{ errors }}
@@ -268,67 +268,81 @@
     </mat-sidenav>
 
     <mat-sidenav-content class="workspace">
-      <div
-        class="content"
-        [class.dock-editor-left]="editorWindow.dockSide() === 'left'"
-        [class.dock-editor-right]="editorWindow.dockSide() === 'right'"
-      >
-        <!-- The region a windowed preview lives in: what "maximized" fills, and
-           what a floating one is held inside. Empty, because the preview itself
-           is painted behind all of this. -->
-        <div class="stage" appPreviewStage></div>
-
-        <!-- The content box begins exactly where the drawer ends, so the browser's
-           separator is simply pinned to its left edge. Only when the drawer is a
-           rail: dragging the width of a sheet that covers the screen is not a
-           gesture anyone wants. -->
-        @if (drawerOpen() && !isHandset()) {
-        <app-resize-handle
-          class="browser-handle"
-          grow="e"
-          [label]="'workspace.resizeBrowser' | translate"
-          [value]="browserWidth()"
-          [min]="panelLimits.browserWidth.min"
-          [max]="panelLimits.browserWidth.max"
-          [defaultValue]="defaultWidths.browser"
-          (preview)="liveBrowserWidth.set($event)"
-          (commit)="commitBrowserWidth($event)"
-        />
-        } @if (inspectorOpen()) {
-        <aside
-          class="inspector"
-          [style.width.px]="inspectorWidth()"
-          [attr.aria-label]="'workspace.inspector' | translate"
+      <div class="content">
+        <!-- Everything the source editor can occupy — docked, floating or
+           maximized — lives in here, and nowhere else: it is the editor's
+           positioning container, the box `EditorShell` measures as its
+           workspace and the one a maximized editor's `inset: 0` resolves
+           against. The bottom panel is a sibling *outside* it for exactly
+           that reason — a maximized editor must stop at its top edge, not
+           cover it, and the only way CSS can promise that is if the editor
+           is never positioned against a box the panel is also inside of. -->
+        <div
+          class="workspace-main"
+          [class.dock-editor-left]="editorWindow.dockSide() === 'left'"
+          [class.dock-editor-right]="editorWindow.dockSide() === 'right'"
         >
-          <app-inspector-panel />
-        </aside>
+          <!-- The region a windowed preview lives in: what "maximized" fills, and
+             what a floating one is held inside. Empty, because the preview itself
+             is painted behind all of this. -->
+          <div class="stage" appPreviewStage></div>
 
-        <app-resize-handle
-          class="inspector-handle"
-          grow="w"
-          [label]="'workspace.resizeInspector' | translate"
-          [style.right.px]="inspectorWidth() + 7"
-          [value]="inspectorWidth()"
-          [min]="panelLimits.inspectorWidth.min"
-          [max]="panelLimits.inspectorWidth.max"
-          [defaultValue]="defaultWidths.inspector"
-          (preview)="liveInspectorWidth.set($event)"
-          (commit)="commitInspectorWidth($event)"
-        />
-        } @else {
-        <!-- Collapsing the inspector has to leave something behind to open it
-           again, or the only way back is a keyboard shortcut and a menu item. -->
-        <button
-          type="button"
-          class="inspector-rail"
-          [matTooltip]="'workspace.showInspectorShortcut' | translate"
-          [attr.aria-label]="'action.showInspector' | translate"
-          (click)="commands.toggle('guiVisible')"
-        >
-          <mat-icon>tune</mat-icon>
-        </button>
-        } @if (preferences.value().editorOpen) {
-        <app-editor-shell class="editor" />
+          <!-- The content box begins exactly where the drawer ends, so the browser's
+             separator is simply pinned to its left edge. Only when the drawer is a
+             rail: dragging the width of a sheet that covers the screen is not a
+             gesture anyone wants. -->
+          @if (drawerOpen() && !isHandset()) {
+          <app-resize-handle
+            class="browser-handle"
+            grow="e"
+            [label]="'workspace.resizeBrowser' | translate"
+            [value]="browserWidth()"
+            [min]="panelLimits.browserWidth.min"
+            [max]="panelLimits.browserWidth.max"
+            [defaultValue]="defaultWidths.browser"
+            (preview)="liveBrowserWidth.set($event)"
+            (commit)="commitBrowserWidth($event)"
+          />
+          } @if (inspectorOpen()) {
+          <aside
+            class="inspector"
+            [style.width.px]="inspectorWidth()"
+            [attr.aria-label]="'workspace.inspector' | translate"
+          >
+            <app-inspector-panel />
+          </aside>
+
+          <app-resize-handle
+            class="inspector-handle"
+            grow="w"
+            [label]="'workspace.resizeInspector' | translate"
+            [style.right.px]="inspectorWidth() + 7"
+            [value]="inspectorWidth()"
+            [min]="panelLimits.inspectorWidth.min"
+            [max]="panelLimits.inspectorWidth.max"
+            [defaultValue]="defaultWidths.inspector"
+            (preview)="liveInspectorWidth.set($event)"
+            (commit)="commitInspectorWidth($event)"
+          />
+          } @else {
+          <!-- Collapsing the inspector has to leave something behind to open it
+             again, or the only way back is a keyboard shortcut and a menu item. -->
+          <button
+            type="button"
+            class="inspector-rail"
+            [matTooltip]="'workspace.showInspectorShortcut' | translate"
+            [attr.aria-label]="'action.showInspector' | translate"
+            (click)="commands.toggle('guiVisible')"
+          >
+            <mat-icon>tune</mat-icon>
+          </button>
+          } @if (preferences.value().editorOpen) {
+          <app-editor-shell class="editor" />
+          }
+        </div>
+
+        @if (preferences.value().bottomPanelOpen) {
+        <app-bottom-panel class="bottom-panel" />
         }
       </div>
     </mat-sidenav-content>

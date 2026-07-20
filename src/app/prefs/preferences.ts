@@ -12,10 +12,16 @@ import {
   type EditorWindowState,
 } from '@shader-studio/shared/editor-prefs';
 import {
+  DEFAULT_BOTTOM_PANEL_HEIGHT,
+  DEFAULT_BOTTOM_PANEL_OPEN,
+  DEFAULT_BOTTOM_PANEL_TAB,
   DEFAULT_PANEL_WIDTHS,
   PANEL_LIMITS,
+  clampBottomPanelHeight,
   clampPanelWidth,
+  sanitizeBottomPanelTab,
   sanitizeInspectorTab,
+  type BottomPanelTab,
   type InspectorTab,
 } from '@shader-studio/shared/panel-prefs';
 import {
@@ -67,6 +73,12 @@ export interface WorkspacePreferences {
   inspectorWidth: number;
   /** Which inspector tab was last open. */
   inspectorTab: InspectorTab;
+  /** Whether the bottom panel (Problems / Output) is showing. */
+  bottomPanelOpen: boolean;
+  /** Height of the bottom panel, in pixels. */
+  bottomPanelHeight: number;
+  /** Which bottom panel tab was last open. */
+  bottomPanelTab: BottomPanelTab;
   resolutionScale: number;
   paused: boolean;
   autoRipples: boolean;
@@ -95,6 +107,9 @@ const DEFAULTS: WorkspacePreferences = {
   browserWidth: DEFAULT_PANEL_WIDTHS.browser,
   inspectorWidth: DEFAULT_PANEL_WIDTHS.inspector,
   inspectorTab: 'controls',
+  bottomPanelOpen: DEFAULT_BOTTOM_PANEL_OPEN,
+  bottomPanelHeight: DEFAULT_BOTTOM_PANEL_HEIGHT,
+  bottomPanelTab: DEFAULT_BOTTOM_PANEL_TAB,
   resolutionScale: 1,
   paused: false,
   autoRipples: false,
@@ -179,7 +194,9 @@ export class Preferences {
         lastShaderId:
           typeof parsed.lastShaderId === 'string' ? parsed.lastShaderId : DEFAULTS.lastShaderId,
         shadertoyApiKey:
-          typeof parsed.shadertoyApiKey === 'string' ? parsed.shadertoyApiKey : DEFAULTS.shadertoyApiKey,
+          typeof parsed.shadertoyApiKey === 'string'
+            ? parsed.shadertoyApiKey
+            : DEFAULTS.shadertoyApiKey,
         browserOpen: parsed.browserOpen ?? DEFAULTS.browserOpen,
         editorOpen: parsed.editorOpen ?? DEFAULTS.editorOpen,
         guiVisible: parsed.guiVisible ?? DEFAULTS.guiVisible,
@@ -197,6 +214,15 @@ export class Preferences {
           DEFAULTS.inspectorWidth,
         ),
         inspectorTab: sanitizeInspectorTab(parsed.inspectorTab),
+        bottomPanelOpen:
+          typeof parsed.bottomPanelOpen === 'boolean'
+            ? parsed.bottomPanelOpen
+            : DEFAULTS.bottomPanelOpen,
+        bottomPanelHeight: clampBottomPanelHeight(
+          parsed.bottomPanelHeight,
+          DEFAULTS.bottomPanelHeight,
+        ),
+        bottomPanelTab: sanitizeBottomPanelTab(parsed.bottomPanelTab),
         resolutionScale:
           typeof parsed.resolutionScale === 'number' &&
           parsed.resolutionScale >= 0.25 &&
