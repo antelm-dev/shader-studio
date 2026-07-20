@@ -8,5 +8,5 @@
     "rootDir": ".",
     "sourceMap": true
   },
-  "include": ["main/preload.ts", "main/generated/ipc-bridge.ts"]
+  "include": ["apps/desktop/preload/src/**/*.ts", "apps/desktop/generated/ipc-bridge.ts"]
 }

@@ -12,6 +12,6 @@
     "types": ["node"],
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.spec.ts"]
+  "include": ["apps/renderer/src/**/*.ts", "apps/server/src/**/*.ts"],
+  "exclude": ["apps/**/*.spec.ts"]
 }

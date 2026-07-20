@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 
-import type { UpdateState } from '../../../main/ipc/update.ipc';
+import type { UpdateState } from '../../../../desktop/main/src/ipc/update.ipc';
 
 const WEB_STATE: UpdateState = {
   status: 'unavailable',

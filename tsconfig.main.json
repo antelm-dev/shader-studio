@@ -8,6 +8,10 @@
     "rootDir": ".",
     "sourceMap": true
   },
-  "include": ["main/**/*.ts", "src/server/**/*.ts", "src/app/api/shader-api.ts"],
-  "exclude": ["main/preload.ts", "main/generated/**", "**/*.spec.ts"]
+  "include": [
+    "apps/desktop/main/src/**/*.ts",
+    "apps/server/src/**/*.ts",
+    "apps/renderer/src/app/api/shader-api.ts"
+  ],
+  "exclude": ["apps/desktop/generated/**", "**/*.spec.ts"]
 }

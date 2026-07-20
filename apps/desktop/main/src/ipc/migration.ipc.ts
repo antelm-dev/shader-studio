@@ -3,7 +3,7 @@ import { access, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
-import { ShaderStorage } from '../../src/server/storage';
+import { ShaderStorage } from '../../../../server/src/storage';
 
 export type MigrationResult =
   | { status: 'ok'; imported: number; skipped: number }

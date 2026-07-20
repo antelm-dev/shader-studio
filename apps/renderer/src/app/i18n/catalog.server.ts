@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import { loadI18nCatalog } from '../../server/i18n-catalog';
+import { loadI18nCatalog } from '../../../../server/src/i18n-catalog';
 import { I18nCatalog, type I18nCatalogMap } from './catalog';
 import type { AppLocale } from './keys';
 

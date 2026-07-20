@@ -153,15 +153,15 @@ Express server. The web and SSR targets continue to use the REST API.
 The application uses Angular 22 (zoneless SSR), Angular Material, Express,
 three.js, lil-gui, and Monaco.
 
-| Script           | What it does                         |
-| ---------------- | ------------------------------------ |
-| `pnpm dev`       | Dev server with HMR, SSR and the API |
-| `pnpm build`     | Production build into `dist/`        |
-| `pnpm serve:ssr` | Run the built SSR server             |
-| `pnpm test`      | Unit tests (Vitest), incl. the MCP server |
-| `pnpm lint`      | Oxlint                               |
-| `pnpm format`    | Oxfmt                                |
-| `pnpm typecheck` | `tsc -b`, strict                     |
+| Script           | What it does                                  |
+| ---------------- | --------------------------------------------- |
+| `pnpm dev`       | Dev server with HMR, SSR and the API          |
+| `pnpm build`     | Production build into `dist/`                 |
+| `pnpm serve:ssr` | Run the built SSR server                      |
+| `pnpm test`      | Unit tests (Vitest), incl. the MCP server     |
+| `pnpm lint`      | Oxlint                                        |
+| `pnpm format`    | Oxfmt                                         |
+| `pnpm typecheck` | `tsc -b`, strict                              |
 | `pnpm dev:mcp`   | Run the [MCP server](#mcp-server) from source |
 
 ## Using Shader Studio
@@ -219,40 +219,22 @@ with them is up to it.
 Four concerns, kept apart on purpose. Nothing below the line knows about Angular.
 
 ```
+apps/
+  renderer/
+    src/                 Angular browser, SSR, and desktop-renderer entry points
+      app/               workspace state, rendering, editor, and UI
+  server/
+    src/                 Express SSR host and REST API
+      api/               route parsing and HTTP error mapping
+      storage/           file-backed persistence and example seeding
+  desktop/
+    main/src/            Electron lifecycle, windows, updates, and IPC handlers
+    preload/src/         sandboxed context bridge
+    generated/           generated IPC bridge consumed by the preload
+
 packages/
-  shared/          model + validation — imported by server, client, main, and MCP
-    model.ts         the shader document: controls, presets, bundles
-    project.ts       the multi-pass project: passes, buffers, files, channel
-                     wiring, plus `migrateLegacyProject`/`sanitizeProject`
-    validate.ts      every rule, in one place. The API is the authority; the
-                     client reuses it to pre-validate the config editor.
-  mcp/                   `@shader-studio/mcp` — MCP server, published
-                          standalone; drives a running Shader Studio tab over
-                          an authenticated localhost WebSocket bridge
-                          (see packages/mcp/README.md)
-
-src/
-  server/          Node only
-    storage.ts       file-backed persistence: atomic writes, per-shader locks,
-                     path-traversal defence, example seeding
-    api.ts           the REST routes — thin; they parse, delegate, map errors
-  server.ts        Express: mounts /api, then server-renders everything else
-
-  app/
-    core/          state and transport
-      shader-store.ts       the single source of truth (signals)
-      shader-api.ts         HTTP client
-      project-persistence.ts  reads/clears a pre-upgrade browser copy of a
-                             shader's project — the server now holds it
-      draft-recovery.ts     unsaved-edit recovery, still localStorage-backed
-      preferences.ts        localStorage-backed workspace prefs
-    rendering/     three.js. Knows nothing about HTTP or the DOM beyond a canvas
-      shader-engine.ts     compile, uniforms, ripples, bloom, screenshots
-      glsl-diagnostics.ts  driver info-logs -> editor markers
-      shader-canvas.ts     the only place the store is wired to the engine
-    gui/           lil-gui, generated from the control schema
-    editor/        Monaco
-    ui/            Material components: browser, presets, editor panel, dialogs
+  shared/                model, validation, GLSL, capture, and MCP contracts
+  mcp/                   standalone `@shader-studio/mcp` server
 ```
 
 The store keeps three layers of state deliberately distinct:

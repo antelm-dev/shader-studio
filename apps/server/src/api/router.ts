@@ -274,7 +274,10 @@ export function createApiRouter(storage: ShaderStorage, i18nDir?: string): Route
       const idOrUrl = stringBody(body, 'idOrUrl');
       const apiKey = stringBody(body, 'apiKey');
 
-      let result: { payload: import('@shader-studio/shared/model').ShaderPayload; warnings: string[] };
+      let result: {
+        payload: import('@shader-studio/shared/model').ShaderPayload;
+        warnings: string[];
+      };
       try {
         const { importShadertoyShader } = await import('@shader-studio/shared/shadertoy-api');
         result = await importShadertoyShader(idOrUrl, apiKey, { fetch });
@@ -282,7 +285,9 @@ export function createApiRouter(storage: ShaderStorage, i18nDir?: string): Route
         throw new StorageError('io', error instanceof Error ? error.message : String(error));
       }
 
-      res.status(201).json({ bundle: buildShaderBundle(result.payload), warnings: result.warnings });
+      res
+        .status(201)
+        .json({ bundle: buildShaderBundle(result.payload), warnings: result.warnings });
     }),
   );
 

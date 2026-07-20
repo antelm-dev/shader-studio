@@ -20,7 +20,7 @@ const ipc = spawnSync(process.execPath, [script('gen/ipc.mjs')], {
   encoding: 'utf8',
 });
 if (ipc.status !== 0) {
-  log.error('smoke requires gen:ipc — window.electron types come from main/generated/');
+  log.error('smoke requires gen:ipc — window.electron types come from apps/desktop/generated/');
   log.error(ipc.stderr || ipc.stdout);
   process.exit(ipc.status ?? 1);
 }

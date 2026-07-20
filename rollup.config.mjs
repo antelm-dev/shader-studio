@@ -13,14 +13,14 @@ const production = process.env.NODE_ENV === 'production';
 
 export default defineConfig([
   {
-    input: './main/preload.ts',
+    input: './apps/desktop/preload/src/preload.ts',
     cache: false,
     output: { file: './dist-main/preload.cjs', format: 'cjs', sourcemap: !production },
     external: ['electron'],
     plugins: [
       ipcBridge({
-        ipcDir: './main/ipc',
-        outFile: './main/generated/ipc-bridge.ts',
+        ipcDir: './apps/desktop/main/src/ipc',
+        outFile: './apps/desktop/generated/ipc-bridge.ts',
         tsconfig: './tsconfig.main.json',
       }),
       json(),
@@ -33,7 +33,7 @@ export default defineConfig([
     ],
   },
   {
-    input: './main/main.ts',
+    input: './apps/desktop/main/src/main.ts',
     cache: false,
     watch: { clearScreen: false },
     output: { file: './dist-main/main.cjs', format: 'cjs', sourcemap: !production },

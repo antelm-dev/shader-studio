@@ -8,5 +8,5 @@
     // in scope here as well as in the app build.
     "types": ["vitest/globals", "node", "@angular/localize"]
   },
-  "include": ["src/**/*.d.ts", "src/**/*.spec.ts"]
+  "include": ["apps/renderer/src/**/*.d.ts", "apps/**/*.spec.ts"]
 }

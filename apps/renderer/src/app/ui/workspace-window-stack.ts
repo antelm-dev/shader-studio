@@ -1,4 +1,4 @@
- import { Injectable, signal } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 
 export type WorkspaceWindow = 'editor' | 'preview';
 

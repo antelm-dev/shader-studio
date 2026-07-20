@@ -1,7 +1,7 @@
 /**
- * Container-build replacement for `src/electron.d.ts`.
+ * Container-build replacement for `apps/renderer/src/electron.d.ts`.
  *
- * The real declaration types `window.electron` by importing from `main/preload`,
+ * The real declaration types `window.electron` by importing from the desktop preload,
  * which drags the whole Electron main process — and its workspace dependency
  * `electron-ipc-module` — into the TypeScript program. Neither is available in
  * the image, and neither has anything to do with the web build: the desktop

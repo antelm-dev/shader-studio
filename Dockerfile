@@ -22,9 +22,9 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
 
 COPY . .
 
-# `main/` (the Electron process) is left out of the build context; these two
-# files replace what `src/` uses from it. See docker/electron.d.ts.
-COPY docker/electron.d.ts src/electron.d.ts
+# `apps/desktop/` is left out of the build context; these two files replace the
+# renderer's desktop declaration. See docker/electron.d.ts.
+COPY docker/electron.d.ts apps/renderer/src/electron.d.ts
 COPY docker/tsconfig.app.json tsconfig.app.json
 
 RUN pnpm build

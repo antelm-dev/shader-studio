@@ -326,7 +326,9 @@ export class WorkspaceActions {
       // The importer fetches the shader, its buffers/Common tab/channel wiring
       // and its textures, then imports the resulting bundle directly — there is
       // no intermediate "create, then fill in" step like the paste flow below.
-      await this.guardedTransition(() => this.store.importShadertoyShader(input.idOrUrl, input.apiKey));
+      await this.guardedTransition(() =>
+        this.store.importShadertoyShader(input.idOrUrl, input.apiKey),
+      );
       return;
     }
 

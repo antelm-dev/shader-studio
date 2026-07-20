@@ -54,6 +54,6 @@ Thumbs.db
 /data
 *.log
 *.tsbuildinfo
-/main/generated
+/apps/desktop/generated
 /electron-run-*.json
 

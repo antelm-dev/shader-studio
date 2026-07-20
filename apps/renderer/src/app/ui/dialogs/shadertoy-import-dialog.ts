@@ -39,11 +39,7 @@ interface PasteModel {
   template: `
     <h2 mat-dialog-title>{{ 'shadertoy.title' | translate }}</h2>
     <mat-dialog-content>
-      <mat-button-toggle-group
-        class="mode"
-        [value]="mode()"
-        (valueChange)="mode.set($event)"
-      >
+      <mat-button-toggle-group class="mode" [value]="mode()" (valueChange)="mode.set($event)">
         <mat-button-toggle value="api">{{ 'shadertoy.modeApi' | translate }}</mat-button-toggle>
         <mat-button-toggle value="paste">{{ 'shadertoy.modePaste' | translate }}</mat-button-toggle>
       </mat-button-toggle-group>

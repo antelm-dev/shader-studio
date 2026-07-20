@@ -9,7 +9,7 @@ const log = createLogger('gen:fonts');
 const METADATA_URL = 'https://fonts.google.com/metadata/fonts';
 const CODING_WEIGHTS = [300, 400, 500, 600, 700];
 
-const outFile = resolve(root, 'src/app/editor/font-catalogue.ts');
+const outFile = resolve(root, 'apps/renderer/src/app/editor/font-catalogue.ts');
 
 const response = await fetch(METADATA_URL);
 if (!response.ok) {

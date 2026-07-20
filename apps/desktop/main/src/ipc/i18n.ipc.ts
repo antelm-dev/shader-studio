@@ -1,6 +1,6 @@
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
-import { loadI18nCatalog } from '../../src/server/i18n-catalog';
+import { loadI18nCatalog } from '../../../../server/src/i18n-catalog';
 
 export function createI18nIpc(i18nDir: string) {
   return defineIpcModule('i18n', {
