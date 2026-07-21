@@ -95,6 +95,27 @@
 
     <span class="spacer"></span>
 
+    <!-- The most-used view toggles, promoted out of "More actions" for when
+         there is room to hold them — see the container query in app.scss.
+         They duplicate entries in `moreMenu` rather than replace them, so
+         nothing becomes less discoverable on a narrow window. -->
+    <div class="quick-actions">
+      @for (item of quickActions; track item.id) {
+      <button
+        matIconButton
+        type="button"
+        [matTooltip]="item.shortcut ? item.label() + ' (' + item.shortcut + ')' : item.label()"
+        [attr.aria-label]="item.label()"
+        [attr.aria-pressed]="isQuickActionActive(item.id)"
+        [class.is-active]="isQuickActionActive(item.id)"
+        [disabled]="item.disabled?.() ?? false"
+        (click)="item.action()"
+      >
+        <mat-icon>{{ item.icon() }}</mat-icon>
+      </button>
+      }
+    </div>
+
     <button
       matIconButton
       type="button"

@@ -43,6 +43,12 @@ app-titlebar {
   backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--mat-sys-outline-variant);
 
+  // The toolbar's own width — not the viewport's — decides whether the quick
+  // actions fit: the browser rail and inspector can each be dragged wider or
+  // narrower without the window changing size at all.
+  container-type: inline-size;
+  container-name: toolbar;
+
   // Material's default toolbar and icon-button metrics are intentionally roomy.
   // Keep the app chrome compact so it does not compete with the shader canvas.
   button[matIconButton] {
@@ -58,6 +64,17 @@ app-titlebar {
     }
   }
 
+  .quick-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+
+    button[matIconButton].is-active {
+      background: var(--mat-sys-secondary-container);
+      color: var(--mat-sys-on-secondary-container);
+    }
+  }
+
   .save {
     min-width: 0;
     height: 32px;
@@ -70,6 +87,20 @@ app-titlebar {
       font-size: 18px;
       line-height: 18px;
     }
+  }
+}
+
+// Below this, the quick actions cost more room than the toolbar has to spare
+// once the document title, ⋮, and Save are all accounted for — fold back into
+// today's overflow-only behavior instead of wrapping or crowding the title.
+//
+// Nested under `.toolbar` so the compiled selector matches `.quick-actions`'s
+// own `display: flex` rule in specificity — a top-level `.quick-actions`
+// selector here would lose that fight regardless of which one the container
+// query matches.
+@container toolbar (max-width: 720px) {
+  .toolbar .quick-actions {
+    display: none;
   }
 }
 

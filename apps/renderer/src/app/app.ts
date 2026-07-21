@@ -124,29 +124,66 @@ export class App {
   // icon-label-verb rows — the Theme submenu, the desktop-only output window —
   // stay written out in the template, where their exceptions are visible.
 
+  private readonly toggleInspector: MenuCommand = {
+    id: 'toggle-inspector',
+    icon: () => 'tune',
+    label: () =>
+      this.i18n.t(
+        this.preferences.value().guiVisible ? 'action.hideInspector' : 'action.showInspector',
+      ),
+    shortcut: 'H',
+    action: () => this.commands.toggle('guiVisible'),
+  };
+
+  private readonly captureImage: MenuCommand = {
+    id: 'capture-image',
+    icon: () => 'photo_camera',
+    label: () => this.i18n.t('action.captureImage'),
+    disabled: () => !this.store.record(),
+    shortcut: 'S',
+    action: () => this.commands.captureImage(),
+  };
+
   protected readonly viewCommands: readonly MenuCommand[] = [
-    {
-      id: 'toggle-inspector',
-      icon: () => 'tune',
-      label: () =>
-        this.i18n.t(
-          this.preferences.value().guiVisible ? 'action.hideInspector' : 'action.showInspector',
-        ),
-      shortcut: 'H',
-      action: () => this.commands.toggle('guiVisible'),
-    },
+    this.toggleInspector,
     this.commands.toggleEditor,
     this.commands.togglePanel,
-    {
-      id: 'capture-image',
-      icon: () => 'photo_camera',
-      label: () => this.i18n.t('action.captureImage'),
-      disabled: () => !this.store.record(),
-      shortcut: 'S',
-      action: () => this.commands.captureImage(),
-    },
+    this.captureImage,
     this.commands.exportSequence,
   ];
+
+  /**
+   * The same commands as the top of `viewCommands`, rendered a second way: as
+   * inline toolbar buttons for when there is room, so the single most-used
+   * toggles do not cost a trip through "More actions". `exportSequence` opens
+   * a dialog rather than acting immediately, so — like Save — it is left out.
+   */
+  protected readonly quickActions: readonly MenuCommand[] = [
+    this.toggleInspector,
+    this.commands.toggleEditor,
+    this.commands.togglePanel,
+    this.captureImage,
+  ];
+
+  protected readonly editorOpen = computed(() => this.preferences.value().editorOpen);
+  protected readonly bottomPanelOpen = computed(() => this.preferences.value().bottomPanelOpen);
+
+  /**
+   * Whether a quick action's target panel is currently open — `capture-image`
+   * has no on/off state and simply falls through to `false`.
+   */
+  protected isQuickActionActive(id: string): boolean {
+    switch (id) {
+      case 'toggle-inspector':
+        return this.inspectorOpen();
+      case 'toggle-editor':
+        return this.editorOpen();
+      case 'toggle-panel':
+        return this.bottomPanelOpen();
+      default:
+        return false;
+    }
+  }
 
   protected readonly shaderCommands: readonly MenuCommand[] = [
     this.commands.newShader,

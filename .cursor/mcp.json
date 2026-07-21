@@ -6,7 +6,7 @@
     },
     "shader-studio": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "tsx", "packages/mcp/src/server.ts"],
+      "args": ["/c", "node", "packages/mcp/dist/server.mjs"],
       "env": {
         "SHADER_STUDIO_MCP_PORT": "4310",
         "SHADER_STUDIO_MCP_TOKEN": "shader-studio-dev-token"

@@ -16,16 +16,19 @@
  *
  * The id is both the primary key and the directory name, which is why it is
  * validated (`validateId`) before it is ever joined onto a path, and why the
- * join is then re-checked against the root (`shaderDir`). Renaming a shader
- * changes its display name only; the id — and therefore the path — is stable.
+ * join is then re-checked against the root (`resolveScoped`, in `file-store.ts`).
+ * Renaming a shader changes its display name only; the id — and therefore the
+ * path — is stable.
  *
  * Writes go through `writeFileAtomic`, and every mutation of a given shader is
  * serialized by `withLock`, so a half-written meta.json is not observable even
- * if two requests race.
+ * if two requests race. Generic file-system primitives (locking, atomic
+ * writes, tolerant JSON reads) live in `file-store.ts`; the texture/thumbnail
+ * file layout lives in `texture-store.ts`; preset (de)serialization lives in
+ * `preset-store.ts`. This module is the shader/project domain logic that
+ * composes them.
  */
 
-import { randomBytes } from 'node:crypto';
-import { constants } from 'node:fs';
 import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -40,7 +43,6 @@ import {
   type ImportResult,
   type Preset,
   type RenderSettings,
-  type ShaderControl,
   type ShaderMeta,
   type ShaderParams,
   type ShaderPayload,
@@ -72,7 +74,6 @@ import {
   validateDescription,
   validateId,
   validateName,
-  validatePreset,
   validateRender,
   validateSource,
   validateThumbnailMeta,
@@ -84,29 +85,32 @@ import {
   TEMPLATE_FRAGMENT,
 } from '@shader-studio/shared/templates';
 import type { StorageOptions } from './types';
+import { KeyedLock, pathExists, readJson, readOptionalJson, resolveScoped, writeFileAtomic } from './file-store';
+import {
+  CHANNEL_INDICES,
+  copyTextures,
+  isChannelIndex,
+  removeSlotFiles,
+  removeTextureFile,
+  textureFile,
+  texturesDir,
+  THUMBNAIL_BASENAME,
+  thumbnailFile,
+} from './texture-store';
+import { readPresets, writePresets } from './preset-store';
 
 const META_FILE = 'meta.json';
 const FRAGMENT_FILE = 'fragment.glsl';
 const VERTEX_FILE = 'vertex.glsl';
 const PROJECT_FILE = 'project.json';
-const PRESETS_FILE = 'presets.json';
-const TEXTURES_DIR = 'textures';
-const THUMBNAIL_BASENAME = 'thumbnail';
 const SEED_MARKER = '.seeded';
-
-const CHANNEL_INDICES = [0, 1, 2, 3] as const;
-type ChannelIndex = (typeof CHANNEL_INDICES)[number];
-
-function isChannelIndex(value: number): value is ChannelIndex {
-  return Number.isInteger(value) && value >= 0 && value <= 3;
-}
 
 export class ShaderStorage {
   private readonly dataDir: string;
   private readonly shadersDir: string;
   private readonly examplesDir: string;
   private readonly seed: boolean;
-  private readonly locks = new Map<string, Promise<unknown>>();
+  private readonly locks = new KeyedLock();
 
   constructor(options: StorageOptions = {}) {
     const workspaceRoot = findWorkspaceRoot();
@@ -124,132 +128,11 @@ export class ShaderStorage {
 
   private shaderDir(id: string): string {
     const validated = expect(validateId(id), `Invalid shader id "${id}"`);
-    const dir = path.resolve(this.shadersDir, validated);
-    const root = this.shadersDir + path.sep;
-    if (!dir.startsWith(root)) {
-      throw new StorageError('invalid', `Invalid shader id "${id}"`);
-    }
-    return dir;
+    return resolveScoped(this.shadersDir, validated);
   }
 
-  private async withLock<T>(id: string, work: () => Promise<T>): Promise<T> {
-    const previous = this.locks.get(id) ?? Promise.resolve();
-    const current = previous.then(work, work);
-    this.locks.set(
-      id,
-      current.catch(() => undefined),
-    );
-    try {
-      return await current;
-    } finally {
-      if (this.locks.get(id) === current) this.locks.delete(id);
-    }
-  }
-
-  private async writeFileAtomic(file: string, contents: string | Uint8Array): Promise<void> {
-    const temp = `${file}.${randomBytes(6).toString('hex')}.tmp`;
-    try {
-      if (typeof contents === 'string') {
-        await fs.writeFile(temp, contents, 'utf8');
-      } else {
-        await fs.writeFile(temp, contents);
-      }
-      await fs.rename(temp, file);
-    } catch (error) {
-      await fs.rm(temp, { force: true }).catch(() => undefined);
-      throw new StorageError('io', `Failed to write ${path.basename(file)}`, [String(error)]);
-    }
-  }
-
-  private texturesDir(dir: string): string {
-    return path.join(dir, TEXTURES_DIR);
-  }
-
-  private textureFile(dir: string, channel: ChannelIndex, ext: string): string {
-    return path.join(this.texturesDir(dir), `${channel}.${ext}`);
-  }
-
-  private thumbnailFile(dir: string, ext: string): string {
-    return path.join(dir, `${THUMBNAIL_BASENAME}.${ext}`);
-  }
-
-  /**
-   * Removes every `<basename>.*` in a directory. An image slot — a channel, or
-   * the thumbnail — keeps its name and changes its extension when the format
-   * changes, so replacing one means clearing whatever is there under any
-   * extension, not just the one we are about to write.
-   */
-  private async removeSlotFiles(dir: string, basename: string): Promise<void> {
-    let entries;
-    try {
-      entries = await fs.readdir(dir);
-    } catch {
-      return;
-    }
-    const prefix = `${basename}.`;
-    await Promise.all(
-      entries
-        .filter((entry) => entry.startsWith(prefix))
-        .map((entry) => fs.rm(path.join(dir, entry), { force: true })),
-    );
-  }
-
-  private removeTextureFile(dir: string, channel: ChannelIndex): Promise<void> {
-    return this.removeSlotFiles(this.texturesDir(dir), String(channel));
-  }
-
-  private async copyTextures(
-    fromDir: string,
-    toDir: string,
-    channels: TextureChannels,
-  ): Promise<void> {
-    await fs.mkdir(this.texturesDir(toDir), { recursive: true });
-    await Promise.all(
-      CHANNEL_INDICES.map(async (channel) => {
-        const ext = channels[channel].ext;
-        if (ext === null) return;
-        try {
-          await fs.copyFile(
-            this.textureFile(fromDir, channel, ext),
-            this.textureFile(toDir, channel, ext),
-          );
-        } catch (error) {
-          console.warn(`[storage] failed to copy texture for channel ${channel}: ${String(error)}`);
-        }
-      }),
-    );
-  }
-
-  private async readJson(file: string): Promise<unknown> {
-    const raw = await fs.readFile(file, 'utf8');
-    try {
-      return JSON.parse(raw);
-    } catch (error) {
-      throw new StorageError('io', `${path.basename(file)} is not valid JSON`, [String(error)]);
-    }
-  }
-
-  /**
-   * Same as `readJson`, but a missing file or invalid JSON is `undefined`
-   * rather than a thrown error. Used for `project.json`: a shader that
-   * predates projects has none, and a corrupt one must degrade to
-   * `sanitizeProject`'s fallback rather than take the whole shader down.
-   */
-  private async readOptionalJson(file: string): Promise<unknown> {
-    try {
-      return JSON.parse(await fs.readFile(file, 'utf8'));
-    } catch {
-      return undefined;
-    }
-  }
-
-  private async exists(target: string): Promise<boolean> {
-    try {
-      await fs.access(target, constants.F_OK);
-      return true;
-    } catch {
-      return false;
-    }
+  private withLock<T>(id: string, work: () => Promise<T>): Promise<T> {
+    return this.locks.run(id, work);
   }
 
   async init(): Promise<void> {
@@ -296,10 +179,10 @@ export class ShaderStorage {
     let projectRaw: unknown;
     try {
       [metaRaw, fragment, vertex, projectRaw] = await Promise.all([
-        this.readJson(path.join(dir, META_FILE)),
+        readJson(path.join(dir, META_FILE)),
         fs.readFile(path.join(dir, FRAGMENT_FILE), 'utf8'),
         fs.readFile(path.join(dir, VERTEX_FILE), 'utf8'),
-        this.readOptionalJson(path.join(dir, PROJECT_FILE)),
+        readOptionalJson(path.join(dir, PROJECT_FILE)),
       ]);
     } catch (error) {
       if (error instanceof StorageError) throw error;
@@ -307,7 +190,7 @@ export class ShaderStorage {
     }
 
     const meta = this.parseMeta(id, metaRaw);
-    const presets = await this.readPresets(dir, meta.controls);
+    const presets = await readPresets(dir, meta.controls);
     // A shader that predates `project.json` (or one whose copy is corrupt)
     // transparently becomes a single-pass project built from its mirrors —
     // no separate migration step to run on read.
@@ -343,35 +226,6 @@ export class ShaderStorage {
     };
   }
 
-  private async readPresets(dir: string, controls: ShaderControl[]): Promise<Preset[]> {
-    const file = path.join(dir, PRESETS_FILE);
-    if (!(await this.exists(file))) return [];
-
-    const raw = await this.readJson(file);
-    const list = Array.isArray((raw as { presets?: unknown })?.presets)
-      ? (raw as { presets: unknown[] }).presets
-      : [];
-
-    const presets: Preset[] = [];
-    const used = new Set<string>();
-    for (const [index, entry] of list.entries()) {
-      const candidate = entry as Record<string, unknown> | null;
-      const base =
-        typeof candidate?.['id'] === 'string' && validateId(candidate['id']).ok
-          ? (candidate['id'] as string)
-          : slugify(
-              typeof candidate?.['name'] === 'string' ? candidate['name'] : `preset-${index + 1}`,
-            );
-      const id = uniqueId(base, used);
-      const result = validatePreset(entry, controls, id);
-      if (result.ok) {
-        used.add(id);
-        presets.push(result.value);
-      }
-    }
-    return presets;
-  }
-
   private async writeMeta(dir: string, meta: ShaderMeta): Promise<void> {
     const persisted = {
       name: meta.name,
@@ -385,24 +239,11 @@ export class ShaderStorage {
       thumbnail: meta.thumbnail,
     };
 
-    await this.writeFileAtomic(
-      path.join(dir, META_FILE),
-      `${JSON.stringify(persisted, null, 2)}\n`,
-    );
-  }
-
-  private async writePresets(dir: string, presets: Preset[]): Promise<void> {
-    await this.writeFileAtomic(
-      path.join(dir, PRESETS_FILE),
-      `${JSON.stringify({ presets }, null, 2)}\n`,
-    );
+    await writeFileAtomic(path.join(dir, META_FILE), `${JSON.stringify(persisted, null, 2)}\n`);
   }
 
   private async writeProject(dir: string, project: ShaderProject): Promise<void> {
-    await this.writeFileAtomic(
-      path.join(dir, PROJECT_FILE),
-      `${JSON.stringify(project, null, 2)}\n`,
-    );
+    await writeFileAtomic(path.join(dir, PROJECT_FILE), `${JSON.stringify(project, null, 2)}\n`);
   }
 
   /**
@@ -418,7 +259,7 @@ export class ShaderStorage {
   private async writeAll(payload: ShaderPayload): Promise<ShaderRecord> {
     const dir = this.shaderDir(payload.id);
     await fs.mkdir(dir, { recursive: true });
-    await fs.mkdir(this.texturesDir(dir), { recursive: true });
+    await fs.mkdir(texturesDir(dir), { recursive: true });
 
     const fragment = imagePass(payload.project).source;
     const vertex = payload.project.vertex;
@@ -453,22 +294,22 @@ export class ShaderStorage {
     const textureWrites = CHANNEL_INDICES.map(async (channel) => {
       const entry = payload.channels[channel];
       if (entry.ext === null || entry.data === null) return;
-      await this.writeFileAtomic(
-        this.textureFile(dir, channel, entry.ext),
+      await writeFileAtomic(
+        textureFile(dir, channel, entry.ext),
         Buffer.from(entry.data, 'base64'),
       );
     });
 
     await Promise.all([
       this.writeMeta(dir, meta),
-      this.writeFileAtomic(path.join(dir, FRAGMENT_FILE), fragment),
-      this.writeFileAtomic(path.join(dir, VERTEX_FILE), vertex),
+      writeFileAtomic(path.join(dir, FRAGMENT_FILE), fragment),
+      writeFileAtomic(path.join(dir, VERTEX_FILE), vertex),
       this.writeProject(dir, payload.project),
-      this.writePresets(dir, payload.presets),
+      writePresets(dir, payload.presets),
       ...textureWrites,
       payload.thumbnail
-        ? this.writeFileAtomic(
-            this.thumbnailFile(dir, payload.thumbnail.ext),
+        ? writeFileAtomic(
+            thumbnailFile(dir, payload.thumbnail.ext),
             Buffer.from(payload.thumbnail.data, 'base64'),
           )
         : Promise.resolve(),
@@ -635,12 +476,12 @@ export class ShaderStorage {
         this.writeMeta(dir, meta),
         fragment === current.fragment
           ? Promise.resolve()
-          : this.writeFileAtomic(path.join(dir, FRAGMENT_FILE), fragment),
+          : writeFileAtomic(path.join(dir, FRAGMENT_FILE), fragment),
         vertex === current.vertex
           ? Promise.resolve()
-          : this.writeFileAtomic(path.join(dir, VERTEX_FILE), vertex),
+          : writeFileAtomic(path.join(dir, VERTEX_FILE), vertex),
         projectTouched ? this.writeProject(dir, project) : Promise.resolve(),
-        patch.controls === undefined ? Promise.resolve() : this.writePresets(dir, presets),
+        patch.controls === undefined ? Promise.resolve() : writePresets(dir, presets),
       ]);
 
       return { ...meta, fragment, vertex, presets, project };
@@ -660,7 +501,7 @@ export class ShaderStorage {
   async remove(id: string): Promise<void> {
     const dir = this.shaderDir(id);
     return this.withLock(id, async () => {
-      if (!(await this.exists(dir))) {
+      if (!(await pathExists(dir))) {
         throw new StorageError('not_found', `Shader "${id}" was not found`);
       }
       await fs.rm(dir, { recursive: true, force: true });
@@ -689,7 +530,7 @@ export class ShaderStorage {
       });
       // `toPayload` never touches disk, so its channels carry no image bytes
       // (`data` is always `null`) — copy the actual files across ourselves.
-      await this.copyTextures(this.shaderDir(id), this.shaderDir(copyId), source.channels);
+      await copyTextures(this.shaderDir(id), this.shaderDir(copyId), source.channels);
       return record;
     });
   }
@@ -734,10 +575,10 @@ export class ShaderStorage {
       const current = await this.read(id);
       const dir = this.shaderDir(id);
 
-      await fs.mkdir(this.texturesDir(dir), { recursive: true });
+      await fs.mkdir(texturesDir(dir), { recursive: true });
       // The previous file for this channel may have had a different extension.
-      await this.removeTextureFile(dir, channel);
-      await this.writeFileAtomic(this.textureFile(dir, channel, ext), input.bytes);
+      await removeTextureFile(dir, channel);
+      await writeFileAtomic(textureFile(dir, channel, ext), input.bytes);
 
       const channels = CHANNEL_INDICES.map((index) =>
         index === channel
@@ -766,7 +607,7 @@ export class ShaderStorage {
       const current = await this.read(id);
       const dir = this.shaderDir(id);
 
-      await this.removeTextureFile(dir, channel);
+      await removeTextureFile(dir, channel);
 
       const channels = CHANNEL_INDICES.map((index) =>
         index === channel ? { ...DEFAULT_TEXTURE_CHANNEL } : current.channels[index],
@@ -793,7 +634,7 @@ export class ShaderStorage {
     if (ext === null) return null;
 
     try {
-      const bytes = await fs.readFile(this.textureFile(this.shaderDir(id), channel, ext));
+      const bytes = await fs.readFile(textureFile(this.shaderDir(id), channel, ext));
       return { bytes, ext };
     } catch {
       return null;
@@ -828,8 +669,8 @@ export class ShaderStorage {
       const current = await this.read(id);
       const dir = this.shaderDir(id);
 
-      await this.removeSlotFiles(dir, THUMBNAIL_BASENAME);
-      await this.writeFileAtomic(this.thumbnailFile(dir, ext), input.bytes);
+      await removeSlotFiles(dir, THUMBNAIL_BASENAME);
+      await writeFileAtomic(thumbnailFile(dir, ext), input.bytes);
 
       const meta: ShaderMeta = {
         ...current,
@@ -853,7 +694,7 @@ export class ShaderStorage {
 
     const { ext } = record.thumbnail;
     try {
-      const bytes = await fs.readFile(this.thumbnailFile(this.shaderDir(id), ext));
+      const bytes = await fs.readFile(thumbnailFile(this.shaderDir(id), ext));
       return { bytes, ext };
     } catch {
       return null;
@@ -912,7 +753,7 @@ export class ShaderStorage {
         ? shader.presets.map((entry) => (entry.id === presetId ? preset : entry))
         : [...shader.presets, preset];
 
-      await this.writePresets(dir, presets);
+      await writePresets(dir, presets);
       await this.touch(dir, shader);
       return preset;
     });
@@ -930,7 +771,7 @@ export class ShaderStorage {
         throw new StorageError('not_found', `Preset "${presetId}" was not found on shader "${id}"`);
       }
 
-      await this.writePresets(dir, presets);
+      await writePresets(dir, presets);
       await this.touch(dir, shader);
     });
   }
@@ -950,7 +791,7 @@ export class ShaderStorage {
         const entry = payload.channels[channel];
         if (entry.ext === null) return entry;
         try {
-          const bytes = await fs.readFile(this.textureFile(dir, channel, entry.ext));
+          const bytes = await fs.readFile(textureFile(dir, channel, entry.ext));
           return { ...entry, data: bytes.toString('base64') };
         } catch (error) {
           console.warn(`[storage] failed to read texture ${channel} of "${id}": ${String(error)}`);
@@ -1004,9 +845,9 @@ export class ShaderStorage {
 
   private async seedIfEmpty(): Promise<void> {
     if (!this.seed) return;
-    if (await this.exists(path.join(this.dataDir, SEED_MARKER))) return;
+    if (await pathExists(path.join(this.dataDir, SEED_MARKER))) return;
     if ((await this.listIds()).length > 0) {
-      await this.writeFileAtomic(path.join(this.dataDir, SEED_MARKER), new Date().toISOString());
+      await writeFileAtomic(path.join(this.dataDir, SEED_MARKER), new Date().toISOString());
       return;
     }
 
@@ -1031,7 +872,7 @@ export class ShaderStorage {
       }
     }
 
-    await this.writeFileAtomic(path.join(this.dataDir, SEED_MARKER), new Date().toISOString());
+    await writeFileAtomic(path.join(this.dataDir, SEED_MARKER), new Date().toISOString());
     console.log(`[storage] seeded ${examples.length} example shader(s) into ${this.shadersDir}`);
   }
 }

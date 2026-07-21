@@ -44,7 +44,6 @@
     "dev:mcp": "pnpm --filter @shader-studio/mcp exec tsx src/server.ts",
     "verify:mcp": "pnpm --filter @shader-studio/mcp exec tsx scripts/verify-bridge.ts"
   },
-  "dependencies": {},
   "devDependencies": {
     "oxfmt": "^0.58.0",
     "oxlint": "^1.73.0",
@@ -66,12 +65,13 @@
       }
     },
     "onlyBuiltDependencies": [
+      "@parcel/watcher",
       "electron",
       "electron-ipc-module",
       "electron-run",
-      "rollup-plugin-electron-run",
       "electron-winstaller",
-      "esbuild"
+      "esbuild",
+      "rollup-plugin-electron-run"
     ]
   }
 }
