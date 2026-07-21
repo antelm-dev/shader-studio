@@ -1,6 +1,6 @@
 import ipcBridge from 'electron-ipc-module/rollup-plugin';
 
-import { createLogger } from '../../../scripts/_lib/logger.mjs';
+import { createLogger } from './_lib/logger.mjs';
 
 const log = createLogger('gen:ipc');
 const outFile = '../../packages/desktop-api/src/ipc-bridge.ts';

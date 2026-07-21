@@ -2,8 +2,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { createLogger } from '../_lib/logger.mjs';
-import { root } from '../_lib/paths.mjs';
+import { createLogger } from '../_lib/logger.js';
+import { root } from '../_lib/paths.js';
 
 const log = createLogger('ipc');
 const ipcDir = resolve(root, 'apps/desktop/main/src/ipc');
@@ -37,7 +37,7 @@ if (!existsSync(outFile)) {
 }
 
 const bridge = readFileSync(outFile, 'utf8');
-const errors = [];
+const errors: string[] = [];
 
 for (const name of moduleNames) {
   if (!new RegExp(`\\b${name}\\s*:`).test(bridge)) {
@@ -57,7 +57,7 @@ if (errors.length > 0) {
 
 log.info(`ipc ok — generated bridge for ${moduleNames.join(', ')}`);
 
-function fail(message) {
+function fail(message: string): never {
   log.error(message);
   process.exit(1);
 }

@@ -3,18 +3,32 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "ng serve",
+      "name": "Launch renderer (chrome)",
       "type": "chrome",
       "request": "launch",
-      "preLaunchTask": "npm: start",
-      "url": "http://localhost:4200/"
+      "preLaunchTask": "renderer: dev (ng serve)",
+      "url": "http://localhost:4200/",
+      "webRoot": "${workspaceFolder}/apps/renderer"
     },
     {
-      "name": "ng test",
-      "type": "chrome",
+      "name": "Debug server (tsx)",
+      "type": "node",
       "request": "launch",
-      "preLaunchTask": "npm: test",
-      "url": "http://localhost:9876/debug.html"
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@shader-studio/server", "exec", "tsx", "--inspect-brk", "src/index.ts"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Debug mcp server (tsx)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@shader-studio/mcp", "exec", "tsx", "--inspect-brk", "src/server.ts"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
     }
   ]
 }

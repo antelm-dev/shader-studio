@@ -4,5 +4,49 @@
   "editor.codeActionsOnSave": {
     "source.fixAll.oxc": "always"
   },
-  "oxc.fmt.configPath": ".oxfmtrc.json"
+  "oxc.fmt.configPath": ".oxfmtrc.json",
+
+  "typescript.tsdk": "apps/renderer/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.preferences.autoImportFileExcludePatterns": ["**/dist/**", "**/dist-*/**"],
+
+  "files.associations": {
+    "*.glsl": "glsl",
+    "*.frag": "glsl",
+    "*.vert": "glsl",
+    "*.wgsl": "wgsl"
+  },
+  "files.eol": "\n",
+  "files.exclude": {
+    "**/.git": true,
+    "**/dist": true,
+    "**/dist-main": true,
+    "**/dist-renderer": true,
+    "**/release": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/dist-main": true,
+    "**/dist-renderer": true,
+    "**/release": true,
+    "**/pnpm-lock.yaml": true,
+    "data/**": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/dist-main/**": true,
+    "**/dist-renderer/**": true,
+    "**/release/**": true,
+    "**/.angular/**": true
+  },
+
+  "[markdown]": {
+    "editor.formatOnSave": false
+  },
+
+  "eslint.enable": false,
+  "npm.packageManager": "pnpm",
+  "npm.enableRunFromFolder": true
 }

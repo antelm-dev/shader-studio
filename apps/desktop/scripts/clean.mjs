@@ -1,7 +1,7 @@
 import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { createLogger } from '../../../scripts/_lib/logger.mjs';
+import { createLogger } from './_lib/logger.mjs';
 
 const log = createLogger('clean');
 const root = resolve(import.meta.dirname, '../../..');

@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 
-import { createLogger } from '../../../scripts/_lib/logger.mjs';
+import { createLogger } from './_lib/logger.mjs';
 
 const commands = [
   {

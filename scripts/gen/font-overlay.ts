@@ -1,12 +1,21 @@
-export const SYSTEM_FONT_ENTRY = {
+export interface FontOverlayEntry {
+  family: string;
+  ligatures: boolean;
+  note: string;
+}
+
+export interface SystemFontEntry extends FontOverlayEntry {
+  weights: readonly number[];
+}
+
+export const SYSTEM_FONT_ENTRY: SystemFontEntry = {
   family: 'System monospace',
   weights: [300, 400, 500, 600, 700],
   ligatures: false,
   note: 'Whatever this machine uses for code',
 };
 
-/** @type {readonly { family: string; ligatures: boolean; note: string }[]} */
-export const FONT_OVERLAY = [
+export const FONT_OVERLAY: readonly FontOverlayEntry[] = [
   {
     family: 'JetBrains Mono',
     ligatures: true,

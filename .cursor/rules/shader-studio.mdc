@@ -1,0 +1,45 @@
+---
+description: Shader Studio project conventions — package manager, commands, formatting/linting, testing
+alwaysApply: true
+---
+
+# Shader Studio
+
+A self-hosted WebGL shader viewer/editor. pnpm monorepo (`pnpm@10`, Node `^22.22.3 || ^24.15.0 || >=26.0.0`).
+
+## Layout
+
+- `apps/renderer` — Angular 22 app (`@shader-studio/renderer`), the editor/viewer UI.
+- `apps/desktop` — Electron shell (`@shader-studio/desktop`), wraps the renderer for desktop distribution.
+- `apps/server` — Express/Angular SSR server (`@shader-studio/server`).
+- `packages/backend` — shared backend logic (file storage, project model) used by renderer/server/desktop.
+- `packages/desktop-api` — typed IPC surface between renderer and Electron main (`gen:ipc` generates the bridge).
+- `packages/mcp` — MCP server exposing Shader Studio to AI tools (bridges to the running app via `SHADER_STUDIO_MCP_PORT`/`SHADER_STUDIO_MCP_TOKEN`, default port 4310).
+- `packages/shared` — types/utilities shared across all packages.
+- `examples/shaders/*` — example GLSL shaders (`fragment.glsl` / `vertex.glsl` pairs), not app code.
+
+Never edit generated output directly: `dist/`, `dist-main/`, `dist-renderer/`, `release/`, and `packages/desktop-api/src/ipc-bridge.ts` (regenerate via `pnpm gen:ipc` instead).
+
+## Commands (always run from repo root with pnpm, never npm/yarn)
+
+- `pnpm dev` — renderer dev server (`ng serve`, port 4200).
+- `pnpm dev:desktop` — Electron app against the dev renderer (port 4201).
+- `pnpm dev:server` / `pnpm dev:mcp` — run the server / MCP server via `tsx`.
+- `pnpm build`, `pnpm build:desktop`, `pnpm build:mcp` — production builds.
+- `pnpm test` — vitest across all packages; `pnpm test:mcp` builds mcp first.
+- `pnpm typecheck` — regenerates IPC types then typechecks every package.
+- `pnpm lint` / `pnpm lint:fix` — oxlint.
+- `pnpm format` / `pnpm format:check` — oxfmt.
+- `pnpm check` — i18n + fonts + IPC consistency checks.
+
+Use `pnpm --filter <package-name> <script>` to target a single workspace package (e.g. `pnpm --filter @shader-studio/mcp test`).
+
+## Formatting & linting
+
+- Formatter is **oxfmt** (`.oxfmtrc.json`: single quotes, 100 print width) — not Prettier. Linter is **oxlint** (`.oxlintrc.json`) — not ESLint.
+- `noExplicitAny` and `no-unused-vars` are lint errors; the root `tsconfig.json` has `strict`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns` on — don't suppress these, fix the underlying issue.
+- 2-space indentation, single quotes in `.ts`, final newline, trimmed trailing whitespace (see `.editorconfig`).
+
+## Testing
+
+Vitest is the test runner everywhere (Angular's `test` target uses `@angular/build:unit-test` with the vitest runner, not Karma). `packages/mcp` and `packages/shared` have standalone `vitest.config.ts` files.

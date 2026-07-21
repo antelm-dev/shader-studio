@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 import { Arch, Platform, build as buildInstaller } from 'electron-builder';
 
-import { createLogger } from '../../../scripts/_lib/logger.mjs';
+import { createLogger } from './_lib/logger.mjs';
 
 const log = createLogger('desktop');
 const root = resolve(import.meta.dirname, '../../..');

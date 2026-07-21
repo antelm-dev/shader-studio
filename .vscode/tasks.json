@@ -5,38 +5,71 @@
     {
       "type": "npm",
       "script": "dev",
+      "label": "renderer: dev (ng serve)",
       "isBackground": true,
       "problemMatcher": {
         "owner": "typescript",
         "pattern": "$tsc",
         "background": {
           "activeOnStart": true,
-          "beginsPattern": {
-            "regexp": "Changes detected"
-          },
-          "endsPattern": {
-            "regexp": "bundle generation (complete|failed)"
-          }
+          "beginsPattern": { "regexp": "Changes detected" },
+          "endsPattern": { "regexp": "Application bundle generation (complete|failed)" }
         }
       }
     },
     {
       "type": "npm",
-      "script": "test",
+      "script": "dev:desktop",
+      "label": "desktop: dev (electron)",
       "isBackground": true,
-      "problemMatcher": {
-        "owner": "typescript",
-        "pattern": "$tsc",
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": {
-            "regexp": "Changes detected"
-          },
-          "endsPattern": {
-            "regexp": "bundle generation (complete|failed)"
-          }
-        }
-      }
+      "problemMatcher": []
+    },
+    {
+      "type": "npm",
+      "script": "dev:server",
+      "label": "server: dev (tsx)",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "type": "npm",
+      "script": "dev:mcp",
+      "label": "mcp: dev (tsx)",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "type": "npm",
+      "script": "test",
+      "label": "test: all packages",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "type": "npm",
+      "script": "typecheck",
+      "label": "typecheck: all packages",
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "type": "npm",
+      "script": "lint",
+      "label": "lint: oxlint",
+      "problemMatcher": []
+    },
+    {
+      "type": "npm",
+      "script": "format",
+      "label": "format: oxfmt",
+      "problemMatcher": []
+    },
+    {
+      "type": "npm",
+      "script": "build",
+      "label": "renderer: build",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$tsc"]
     }
   ]
 }

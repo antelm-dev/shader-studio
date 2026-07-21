@@ -5,14 +5,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { chromium } from 'playwright';
 
-import { createLogger } from './_lib/logger.mjs';
-import { root } from './_lib/paths.mjs';
+import { createLogger } from './_lib/logger.js';
+import { root } from './_lib/paths.js';
 
 const log = createLogger('smoke');
 const rendererDir = resolve(root, 'apps/renderer');
 const require = createRequire(resolve(rendererDir, 'package.json'));
 const ngCli = require.resolve('@angular/cli/bin/ng.js');
-const PORT = Number(process.env.SMOKE_PORT ?? 4321);
+const PORT = Number(process.env['SMOKE_PORT'] ?? 4321);
 const BASE = `http://127.0.0.1:${PORT}`;
 const READY = /Local:\s+http:\/\/(?:localhost|127\.0\.0\.1):/;
 
@@ -35,11 +35,11 @@ const server = spawn(process.execPath, [ngCli, 'serve', `--port=${PORT}`, '--hos
 });
 
 let output = '';
-const onChunk = (chunk) => {
+const onChunk = (chunk: Buffer) => {
   output += chunk.toString();
 };
-server.stdout.on('data', onChunk);
-server.stderr.on('data', onChunk);
+server.stdout?.on('data', onChunk);
+server.stderr?.on('data', onChunk);
 
 let exiting = false;
 const shutdown = async (code = 0) => {
@@ -89,14 +89,14 @@ try {
   await shutdown(1);
 }
 
-function assertServeHealthy() {
+function assertServeHealthy(): void {
   if (/Application bundle generation failed|ERROR in |✘ \[ERROR\]/i.test(output)) {
     throw new Error('ng serve reported a compile failure');
   }
 }
 
-function waitForReady(timeoutMs) {
-  return new Promise((resolveReady, reject) => {
+function waitForReady(timeoutMs: number): Promise<void> {
+  return new Promise<void>((resolveReady, reject) => {
     const started = Date.now();
 
     const check = () => {

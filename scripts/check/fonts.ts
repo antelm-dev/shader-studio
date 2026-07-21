@@ -1,9 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { createLogger } from '../_lib/logger.mjs';
-import { root } from '../_lib/paths.mjs';
-import { FONT_OVERLAY, SYSTEM_FONT_ENTRY } from '../gen/font-overlay.mjs';
+import { createLogger } from '../_lib/logger.js';
+import { root } from '../_lib/paths.js';
+import { FONT_OVERLAY, SYSTEM_FONT_ENTRY, type FontOverlayEntry } from '../gen/font-overlay.js';
+
+interface CatalogueEntry {
+  family: string;
+  weights: number[];
+  ligatures: boolean;
+  note: string;
+}
 
 const log = createLogger('fonts');
 const source = readFileSync(
@@ -14,7 +21,7 @@ const source = readFileSync(
 const entryPattern =
   /\{\s*family:\s*(SYSTEM_FONT|'[^']*'|"[^"]*")\s*,\s*weights:\s*\[([^\]]*)\]\s*,\s*ligatures:\s*(true|false)\s*,\s*note:\s*('(?:\\'|[^'])*'|"(?:\\"|[^"])*")\s*,?\s*\}/gs;
 
-const catalogue = [...source.matchAll(entryPattern)].map((match) => {
+const catalogue: CatalogueEntry[] = [...source.matchAll(entryPattern)].map((match) => {
   const familyRaw = match[1];
   const family = familyRaw === 'SYSTEM_FONT' ? SYSTEM_FONT_ENTRY.family : familyRaw.slice(1, -1);
   const weights = match[2]
@@ -32,8 +39,11 @@ if (catalogue.length === 0) {
   );
 }
 
-const expected = [SYSTEM_FONT_ENTRY, ...FONT_OVERLAY];
-const errors = [];
+const expected: (FontOverlayEntry | typeof SYSTEM_FONT_ENTRY)[] = [
+  SYSTEM_FONT_ENTRY,
+  ...FONT_OVERLAY,
+];
+const errors: string[] = [];
 
 if (catalogue.length !== expected.length) {
   errors.push(
@@ -76,17 +86,17 @@ if (errors.length > 0) {
 }
 
 log.info(
-  `fonts ok — ${catalogue.length} entries match scripts/gen/font-overlay.mjs (offline drift check)`,
+  `fonts ok — ${catalogue.length} entries match scripts/gen/font-overlay.ts (offline drift check)`,
 );
 
-function unquote(raw) {
+function unquote(raw: string): string {
   const quote = raw[0];
   const inner = raw.slice(1, -1);
   if (quote === '"') return JSON.parse(raw);
   return inner.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
 }
 
-function fail(message) {
+function fail(message: string): never {
   log.error(message);
   process.exit(1);
 }

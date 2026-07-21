@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { createLogger } from '../_lib/logger.mjs';
-import { root } from '../_lib/paths.mjs';
+import { createLogger } from '../_lib/logger.js';
+import { root } from '../_lib/paths.js';
+
+type Catalog = Record<string, string>;
 
 const log = createLogger('i18n');
 const keysSource = readFileSync(resolve(root, 'apps/renderer/src/app/i18n/keys.ts'), 'utf8');
-const locales = ['en', 'fr'];
+const locales = ['en', 'fr'] as const;
 
 const keysMatch = keysSource.match(/export const TRANSLATION_KEYS = \[([\s\S]*?)\] as const/);
 if (!keysMatch) {
@@ -21,14 +23,14 @@ if (duplicates.length > 0) {
   fail(`Duplicate TranslationKey entries:\n${unique(duplicates).map(bullet).join('\n')}`);
 }
 
-const catalogs = Object.fromEntries(
+const catalogs: Record<(typeof locales)[number], Catalog> = Object.fromEntries(
   locales.map((locale) => {
     const path = resolve(root, `i18n/${locale}.json`);
     return [locale, JSON.parse(readFileSync(path, 'utf8'))];
   }),
-);
+) as Record<(typeof locales)[number], Catalog>;
 
-const errors = [];
+const errors: string[] = [];
 
 for (const locale of locales) {
   const catalog = catalogs[locale];
@@ -51,7 +53,7 @@ for (const locale of locales) {
   }
 }
 
-const placeholderNames = (value) =>
+const placeholderNames = (value: string): string[] =>
   [...value.matchAll(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g)].map((match) => match[1]).sort();
 
 for (const key of keys) {
@@ -73,15 +75,15 @@ if (errors.length > 0) {
 
 log.info(`i18n ok — ${keys.length} keys × ${locales.length} locales`);
 
-function bullet(line) {
+function bullet(line: string): string {
   return `  - ${line}`;
 }
 
-function unique(values) {
+function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-function fail(message) {
+function fail(message: string): never {
   log.error(message);
   process.exit(1);
 }

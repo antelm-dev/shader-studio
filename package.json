@@ -14,7 +14,7 @@
     "build": "pnpm --filter @shader-studio/renderer build",
     "clean:desktop": "pnpm --filter @shader-studio/desktop clean",
     "gen:ipc": "pnpm --filter @shader-studio/desktop gen:ipc",
-    "gen:fonts": "node scripts/gen/fonts.mjs",
+    "gen:fonts": "tsx scripts/gen/fonts.ts",
     "build:renderer": "pnpm --filter @shader-studio/renderer build:desktop",
     "build:main": "pnpm --filter @shader-studio/desktop build:main",
     "build:desktop": "pnpm --filter @shader-studio/desktop build",
@@ -30,13 +30,14 @@
     "build:mcp": "pnpm --filter @shader-studio/mcp build",
     "test:mcp": "pnpm --filter @shader-studio/mcp build && pnpm --filter @shader-studio/mcp test",
     "pack:mcp": "pnpm --filter @shader-studio/mcp run pack:tarball",
-    "typecheck": "pnpm gen:ipc && pnpm -r --if-present typecheck",
+    "typecheck": "pnpm gen:ipc && pnpm typecheck:scripts && pnpm -r --if-present typecheck",
     "typecheck:mcp": "pnpm --filter @shader-studio/mcp typecheck",
-    "check:i18n": "node scripts/check/i18n.mjs",
-    "check:fonts": "node scripts/check/fonts.mjs",
-    "check:ipc": "node scripts/check/ipc.mjs",
+    "typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json",
+    "check:i18n": "tsx scripts/check/i18n.ts",
+    "check:fonts": "tsx scripts/check/fonts.ts",
+    "check:ipc": "tsx scripts/check/ipc.ts",
     "check": "pnpm check:i18n && pnpm check:fonts && pnpm check:ipc",
-    "smoke": "node scripts/smoke.mjs",
+    "smoke": "tsx scripts/smoke.ts",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",
@@ -45,9 +46,12 @@
     "verify:mcp": "pnpm --filter @shader-studio/mcp exec tsx scripts/verify-bridge.ts"
   },
   "devDependencies": {
+    "@types/node": "^20.17.19",
     "oxfmt": "^0.58.0",
     "oxlint": "^1.73.0",
-    "playwright": "^1.57.0"
+    "playwright": "^1.57.0",
+    "tsx": "^4.23.1",
+    "typescript": "~6.0.2"
   },
   "engines": {
     "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
