@@ -52,8 +52,14 @@ Thumbs.db
 # Shaders the user creates at runtime. The store seeds itself from examples/,
 # which IS tracked — see the README's storage section.
 /data
+# SQLite databases: the desktop store and the server's dev fallback live outside
+# version control, wherever they land (e.g. a stray apps/*/data/ during a build).
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 *.log
 *.tsbuildinfo
 /packages/desktop-api/src/ipc-bridge.ts
 /electron-run-*.json
+**/electron-run-*.json
 

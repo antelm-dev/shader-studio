@@ -81,43 +81,51 @@ the real Express API and SSR application; the API is not mocked.
 
 ### Docker
 
-The fastest way to run Shader Studio. It needs nothing but Docker:
+The fastest way to run Shader Studio. Compose brings up PostgreSQL and the app
+together; the app waits for the database to be healthy before it starts.
 
 ```bash
 git clone https://github.com/antelm-dev/shader-studio.git
 cd shader-studio
-docker compose up -d
+cp .env.example .env         # then set POSTGRES_PASSWORD to a long random value
+docker compose up -d --build
 ```
 
 Shader Studio is then available at [http://localhost:4000](http://localhost:4000),
-with the four example shaders already seeded.
+with the five example shaders already seeded.
 
-Your shaders live in the `shader-data` volume, mounted at `/data`; everything
-else in the image is disposable. Reaching the app under any name other than
-`localhost` — a machine name on your LAN, a domain behind a reverse proxy —
-means telling SSR about it, otherwise the request is rejected:
+Your shaders live in **PostgreSQL**, persisted in the named `postgres-data`
+volume; everything else in the image is disposable. The database is not published
+on a host port — only the app container reaches it, over Compose's internal
+network — and the connection string never leaves the server (the browser only
+ever talks to the REST API).
+
+Reaching the app under any name other than `localhost` — a machine name on your
+LAN, a domain behind a reverse proxy — means telling SSR about it in `.env`,
+otherwise the request is rejected:
 
 ```bash
-SHADER_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],shaders.example.com docker compose up -d
+SHADER_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],shaders.example.com
 ```
 
-`docker-compose.yml` also reads `SHADER_PORT` (host port, default `4000`) and
-`SHADER_SEED`. To upgrade, pull and rebuild with `docker compose up -d --build`;
-the volume is left alone.
+`.env` also sets `SHADER_PORT` (host port, default `4000`) and `SHADER_SEED`. To
+upgrade, `docker compose up -d --build`; the volume and its data are left alone.
 
 ### From source
 
-Build the production application and run its Node server:
+Build the production application and run its Node server against PostgreSQL:
 
 ```bash
 pnpm build
-pnpm serve:ssr
+DATABASE_URL=postgres://user:pass@localhost:5432/shader_studio pnpm serve:ssr
 ```
 
 Shader Studio is then available at [http://localhost:4000](http://localhost:4000).
-Persist the directory configured by `SHADER_DATA_DIR`; it contains the complete
-shader library. When exposing the app beyond localhost, set `NG_ALLOWED_HOSTS`
-to the hostnames that are allowed to reach SSR.
+When `DATABASE_URL` is set the server uses PostgreSQL; when it is **not** set the
+server falls back to a local SQLite file under `SHADER_DATA_DIR` (`./data`),
+which is convenient for `pnpm dev:server` but not intended for production. When
+exposing the app beyond localhost, set `NG_ALLOWED_HOSTS` to the hostnames that
+are allowed to reach SSR.
 
 > [!IMPORTANT]
 > Shader Studio has no authentication or multi-user isolation. Deploy it only on
@@ -126,13 +134,65 @@ to the hostnames that are allowed to reach SSR.
 
 ### Configuration
 
-| Variable              | Default                     | Purpose                                                           |
-| --------------------- | --------------------------- | ----------------------------------------------------------------- |
-| `PORT`                | `4000`                      | Port for the SSR server                                           |
-| `SHADER_DATA_DIR`     | `./data`                    | Persistent shader storage                                         |
-| `SHADER_EXAMPLES_DIR` | `./examples`                | Source directory for bundled examples                             |
-| `SHADER_SEED`         | —                           | Set to `0` to disable seeding an empty store                      |
-| `NG_ALLOWED_HOSTS`    | `localhost,127.0.0.1,[::1]` | Comma-separated hosts SSR may render for; set this when deploying |
+The server reads these directly; under Compose they are derived from `.env`
+(see [`.env.example`](.env.example)).
+
+| Variable              | Default                     | Purpose                                                                      |
+| --------------------- | --------------------------- | ---------------------------------------------------------------------------- |
+| `DATABASE_URL`        | —                           | PostgreSQL connection string; when set, selects PostgreSQL, otherwise SQLite |
+| `PORT`                | `4000`                      | Port for the SSR server                                                      |
+| `SHADER_DATA_DIR`     | `./data`                    | SQLite database directory (used only when `DATABASE_URL` is unset)           |
+| `SHADER_EXAMPLES_DIR` | `./examples`                | Source directory for the bundled examples that seed an empty store           |
+| `SHADER_SEED`         | —                           | Set to `0` to disable seeding an empty store                                 |
+| `NG_ALLOWED_HOSTS`    | `localhost,127.0.0.1,[::1]` | Comma-separated hosts SSR may render for; set this when deploying            |
+| `DATABASE_POOL_MAX`   | `10`                        | Maximum PostgreSQL pool connections                                          |
+
+Compose-only variables (`.env`): `POSTGRES_DB`, `POSTGRES_USER`,
+`POSTGRES_PASSWORD` (build `DATABASE_URL`), plus `SHADER_PORT` (host port) and
+`SHADER_ALLOWED_HOSTS` (feeds `NG_ALLOWED_HOSTS`).
+
+### Data & backups
+
+**PostgreSQL (Web / Docker)** is the primary store. Back it up and restore it
+with the standard tools, e.g. against the bundled Compose service:
+
+```bash
+# Backup
+docker compose exec -T postgres pg_dump -U shader_studio shader_studio > backup.sql
+# Restore (into an empty database)
+docker compose exec -T postgres psql -U shader_studio -d shader_studio < backup.sql
+```
+
+**SQLite (Desktop / dev)** lives at one file. On the desktop app it is
+`<userData>/library/shader-studio.sqlite` (`%APPDATA%/Shader Studio/library` on
+Windows, `~/Library/Application Support/Shader Studio/library` on macOS,
+`~/.config/Shader Studio/library` on Linux). From-source dev without
+`DATABASE_URL` uses `<SHADER_DATA_DIR>/shader-studio.sqlite`. Back it up by
+copying the file (and its `-wal`/`-shm` siblings) while the app is closed.
+
+**Importing an old file library.** The legacy per-shader folder format is never
+deleted. The desktop app imports `<userData>/library/shaders` automatically on
+first launch after upgrading (once, verified, files kept). For Docker, mount the
+old library and run the one-shot importer explicitly — it never modifies the
+source:
+
+```bash
+# with the old library mounted at /legacy-data (see docker-compose.yml)
+docker compose --profile migrate run --rm migrate --source=/legacy-data
+# add --mode=overwrite to replace shaders whose id already exists (default: rename)
+```
+
+**Disabling examples.** Set `SHADER_SEED=0` to start with an empty library.
+Seeding is idempotent and versioned in the database, so it never overwrites your
+shaders and a deleted example does not reappear.
+
+**Diagnostics.** The app fails fast and loudly if the database is unreachable or
+its schema cannot be brought to the expected version — check the container logs
+(`docker compose logs shader-studio` / `docker compose logs postgres`). The
+health of the API is `GET /api/shaders` (also the container `HEALTHCHECK`).
+Internal database errors are never leaked to the client: the REST/IPC layer only
+ever returns `{ error: { code, message, details? } }`, never SQL, the connection
+string, or a stack trace.
 
 ## Desktop app
 
@@ -147,8 +207,9 @@ pnpm dist:win     # NSIS installer and portable executable in release/
 The desktop target uses
 [`electron-ipc-module`](https://github.com/antelm-dev/electron-ipc-module) and
 [`electron-run`](https://github.com/antelm-dev/electron-run). It stores its
-library in Electron's per-user application-data directory and does not start the
-Express server. The web and SSR targets continue to use the REST API.
+library in a SQLite database under Electron's per-user application-data directory
+(`<userData>/library/shader-studio.sqlite`) and does not start the Express
+server. The web and SSR targets use PostgreSQL behind the same REST API.
 
 ## Development
 
@@ -228,7 +289,8 @@ apps/
   server/
     src/                 Express SSR host and REST API
       api/               route parsing and HTTP error mapping
-      storage/           file-backed persistence and example seeding
+      create-library.ts  picks PostgreSQL (DATABASE_URL) or SQLite, then seeds
+      cli.ts             `migrate-files` — one-shot legacy import
   desktop/
     main/src/            Electron lifecycle, windows, updates, and IPC handlers
     preload/src/         sandboxed context bridge
@@ -237,9 +299,33 @@ apps/
 packages/
   shared/                model, validation, GLSL, capture, and MCP contracts
   backend/               Node-only storage and i18n shared by server and desktop
+    src/library/         ShaderLibrary — engine-agnostic shader domain logic
+    src/persistence/     ShaderRepository + SQLite / Postgres / legacy adapters
+    src/storage/         the legacy file store, now a read-only import source
   desktop-api/           generated, typed IPC bridge contract
   mcp/                   standalone `@shader-studio/mcp` server
 ```
+
+### Storage
+
+Shaders, projects, presets, textures and thumbnails live in **SQL**: SQLite in
+the Electron app (via Node's built-in `node:sqlite`, so there is no native module
+to rebuild), PostgreSQL on the Web/Docker server (via `pg`). Both sit behind one
+`ShaderRepository` contract, and all the domain logic — validation, id
+generation, deriving `fragment`/`vertex` from the project, presets, import/export,
+seeding — lives once in `ShaderLibrary`, above the contract. The renderer knows
+none of this: it still talks only to `ShaderApi` (`HttpShaderApi` over REST,
+`DesktopShaderApi` over IPC), so SQLite stays in the Electron main process and the
+PostgreSQL connection string never reaches the browser.
+
+Every mutation of a shader and its dependents runs in a transaction. The schema
+is versioned by ordered, deterministic migrations that run before any API/IPC is
+exposed and fail loudly rather than auto-generate. Concurrent writes are caught
+with a per-shader `revision`: a save may send the revision it read as
+`expectedRevision` and get a `409 conflict` instead of silently clobbering a newer
+write (absent, it stays last-writer-wins). The old per-shader file library is no
+longer the primary store but is kept as a read-only import source — imported once
+on the desktop, or on demand via `migrate-files` under Docker, and never deleted.
 
 Each directory above is a pnpm workspace package with its own dependency manifest and
 runtime-specific scripts/configuration. The root package only orchestrates workspace commands and
@@ -286,6 +372,13 @@ diagnostic lands on the line you are actually looking at.
 ---
 
 ## Shader format
+
+> [!NOTE]
+> The live store is now SQL (see [Storage](#storage)). The per-shader directory
+> layout below is the **legacy/import** format: it is what the old file store
+> wrote, what the desktop app and `migrate-files` read to import into the
+> database, and the shape the examples ship in. The `.shader.json` bundle format
+> further down is unchanged and remains the interchange format for import/export.
 
 One directory per shader. The directory name is the id — it is the primary key,
 which is why it is validated before it is ever joined onto a path.
@@ -602,16 +695,29 @@ and are licensed under Apache-2.0 with the rest of the project.
 pnpm test
 ```
 
-478 tests, focused where a bug would actually cost you something:
+~600 tests, focused where a bug would actually cost you something:
+
+- **`backend/library/conformance.ts`** — one behavioural suite the storage engines
+  must both pass, run against SQLite (a temp file) and, when
+  `SHADER_TEST_DATABASE_URL` is set, PostgreSQL. It is where "the logic is not
+  duplicated between engines" is enforced: init/migrations, CRUD, sorted listing,
+  cascade delete, duplicate, presets, textures on all four channels, thumbnails,
+  import/export (v1 and v2, rename/overwrite), multipass projects, idempotent
+  seeding, transaction rollback, revision conflicts, legacy migration, corrupt
+  JSON and missing assets, and persistence across a restart.
+- **`server/api/router.spec.ts`** — the REST layer over a real SQLite-backed
+  library: status codes, the `{ error: { code, message } }` envelope, a `409` on
+  a stale `expectedRevision`, and texture upload/serve/clear.
 
 - **`packages/shared/validate.spec.ts`** — ids (every traversal and reserved-name case),
   the control schema, preset sanitization and clamping, and bundle round-trips —
   including a `shader-studio/v1` bundle (no `project` field) synthesizing one via
   `migrateLegacyProject`, and a malformed `project` being sanitized rather than
   failing the import.
-- **`server/storage/shader-storage.spec.ts`** — runs against a real temp
-  directory, not a mocked fs, because the whole point of that layer is what it
-  does to the filesystem and a mock would let a traversal bug through. Covers
+- **`backend/storage/shader-storage.spec.ts`** — the legacy file store (now the
+  read-only import source) against a real temp directory, not a mocked fs,
+  because the whole point of that layer is what it does to the filesystem and a
+  mock would let a traversal bug through. Covers
   CRUD, path traversal, atomic update, preset lifecycle, import modes, and
   seeding, plus a `project` describe block: `project.json` round-trips through a
   fresh read and a fresh `ShaderStorage`, a shader with none reads as a
