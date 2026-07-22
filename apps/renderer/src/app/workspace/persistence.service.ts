@@ -50,11 +50,15 @@ export class PersistenceService {
     draft: ShaderDraft,
     controls: ShaderControl[],
     currentParams: ShaderParams,
+    expectedRevision?: number,
   ): Promise<SaveResult> {
     const saved = await this.api.update(recordId, {
       project: draft.project,
       controls,
       render: draft.render,
+      // Optimistic concurrency: refuse the write if the shader moved on since it
+      // was read. Omitted callers keep last-writer-wins.
+      ...(expectedRevision === undefined ? {} : { expectedRevision }),
     });
 
     const project = structuredClone(draft.project);

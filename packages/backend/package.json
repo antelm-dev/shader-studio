@@ -5,6 +5,26 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./library": {
+      "types": "./src/library/index.ts",
+      "default": "./src/library/index.ts"
+    },
+    "./persistence": {
+      "types": "./src/persistence/index.ts",
+      "default": "./src/persistence/index.ts"
+    },
+    "./persistence/sqlite": {
+      "types": "./src/persistence/sqlite/index.ts",
+      "default": "./src/persistence/sqlite/index.ts"
+    },
+    "./persistence/postgres": {
+      "types": "./src/persistence/postgres/index.ts",
+      "default": "./src/persistence/postgres/index.ts"
+    },
+    "./persistence/legacy": {
+      "types": "./src/persistence/legacy-files/index.ts",
+      "default": "./src/persistence/legacy-files/index.ts"
+    },
     "./storage": {
       "types": "./src/storage/index.ts",
       "default": "./src/storage/index.ts"
@@ -19,10 +39,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@shader-studio/shared": "workspace:*"
+    "@shader-studio/shared": "workspace:*",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "@types/node": "^20.17.19",
+    "@types/pg": "^8.11.10",
     "typescript": "~6.0.2",
     "vitest": "^4.0.8"
   }

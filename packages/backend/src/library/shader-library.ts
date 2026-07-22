@@ -1,0 +1,927 @@
+/**
+ * The engine-agnostic shader domain: everything that used to live in
+ * `ShaderStorage` except the filesystem. It validates input, generates ids,
+ * derives `fragment`/`vertex` from the project, duplicates, manages presets,
+ * textures and thumbnails, imports/exports bundles, and seeds examples — all
+ * against a `ShaderRepository` it never inspects. SQLite and Postgres therefore
+ * share one copy of this logic; only the repository underneath differs.
+ *
+ * The project (`project_json`) is the source of truth. `fragment` and `vertex`
+ * on a returned `ShaderRecord` are reconstructed from it on read (the Image
+ * pass's source and the project's vertex), never stored on their own. Every
+ * mutation of a shader and its dependents runs inside `repo.transaction`, so a
+ * shader, its presets and its assets always move together.
+ */
+
+import {
+  DEFAULT_CHANNELS,
+  DEFAULT_RENDER,
+  DEFAULT_TEXTURE_CHANNEL,
+  toPayload,
+  type ImportMode,
+  type ImportResult,
+  type Preset,
+  type ShaderControl,
+  type ShaderParams,
+  type ShaderPayload,
+  type ShaderRecord,
+  type ShaderSummary,
+  type TextureChannel,
+  type TextureChannelPayloads,
+  type TextureChannels,
+  type TextureChannelSettingsPatch,
+  type ThumbnailMeta,
+} from '@shader-studio/shared/model';
+import {
+  imagePass,
+  migrateLegacyProject,
+  sanitizeProject,
+  setPassSource,
+  setVertexSource,
+  type ShaderProject,
+} from '@shader-studio/shared/project';
+import {
+  LIMITS,
+  sanitizeParams,
+  slugify,
+  TEXTURE_EXTENSIONS,
+  uniqueId,
+  validateChannels,
+  validateChannelSettingsPatch,
+  validateControls,
+  validateDescription,
+  validateId,
+  validateName,
+  validatePreset,
+  validateRender,
+  validateSource,
+  validateThumbnailMeta,
+} from '@shader-studio/shared/validate';
+import {
+  DEFAULT_VERTEX,
+  TEMPLATE_CONTROLS,
+  TEMPLATE_FRAGMENT,
+} from '@shader-studio/shared/templates';
+
+import { expect, StorageError } from './storage-error';
+import {
+  textureAssetKey,
+  THUMBNAIL_ASSET_KEY,
+  type AssetMeta,
+  type PresetRow,
+  type ShaderMutableFields,
+  type ShaderRepository,
+  type ShaderRow,
+  type ShaderTx,
+  type StoredShader,
+} from '../persistence/shader-repository';
+
+/** Bump when the bundled examples change in a way that should reach existing stores. */
+export const SEED_VERSION = 1;
+
+const CHANNEL_INDICES = [0, 1, 2, 3] as const;
+type ChannelIndex = (typeof CHANNEL_INDICES)[number];
+
+function isChannelIndex(value: number): value is ChannelIndex {
+  return Number.isInteger(value) && value >= 0 && value <= 3;
+}
+
+/** A read-only source of exportable payloads — the legacy file store, or the examples folder. */
+export interface PayloadSource {
+  listIds(): Promise<string[]>;
+  exportOne(id: string): Promise<ShaderPayload>;
+}
+
+export interface LegacyMigrationSummary {
+  imported: number;
+  skipped: number;
+}
+
+export class ShaderLibrary {
+  constructor(private readonly repo: ShaderRepository) {}
+
+  /** Opens the store and brings the schema to the current version. */
+  init(): Promise<void> {
+    return this.repo.init();
+  }
+
+  close(): Promise<void> {
+    return this.repo.close();
+  }
+
+  // --- Reads ---------------------------------------------------------------
+
+  async list(): Promise<ShaderSummary[]> {
+    const rows = await this.repo.listShaders();
+    return rows
+      .map(
+        (row): ShaderSummary => ({
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          updatedAt: row.updatedAt,
+          controlCount: row.controlCount,
+          presetCount: row.presetCount,
+          thumbnail: row.thumbnail
+            ? { ext: row.thumbnail.extension, updatedAt: row.thumbnail.updatedAt }
+            : null,
+        }),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async read(id: string): Promise<ShaderRecord> {
+    const validId = this.validId(id);
+    const stored = await this.repo.loadShader(validId);
+    if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+    return this.mapRecord(stored);
+  }
+
+  // --- Create / update / delete -------------------------------------------
+
+  async create(input: {
+    name: unknown;
+    description?: unknown;
+    controls?: unknown;
+    render?: unknown;
+    fragment?: unknown;
+    vertex?: unknown;
+    project?: unknown;
+  }): Promise<ShaderRecord> {
+    const name = expect(validateName(input.name), 'Invalid shader name');
+    const description = expect(validateDescription(input.description), 'Invalid description');
+    const fragment = expect(
+      validateSource(input.fragment ?? TEMPLATE_FRAGMENT, 'fragment'),
+      'Invalid fragment shader',
+    );
+    const vertex = expect(
+      validateSource(input.vertex ?? DEFAULT_VERTEX, 'vertex'),
+      'Invalid vertex shader',
+    );
+    const controls = expect(
+      validateControls(input.controls ?? TEMPLATE_CONTROLS),
+      'Invalid control schema',
+    );
+    const project =
+      input.project === undefined
+        ? migrateLegacyProject(fragment, vertex)
+        : sanitizeProject(input.project, fragment, vertex);
+    const render =
+      input.render === undefined ? { ...DEFAULT_RENDER } : validateRender(input.render);
+
+    const id = uniqueId(slugify(name), await this.ids());
+    const now = new Date().toISOString();
+    const row: ShaderRow = {
+      id,
+      name,
+      description,
+      author: null,
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+      projectJson: JSON.stringify(project),
+      controlsJson: JSON.stringify(controls),
+      renderJson: JSON.stringify(render),
+      channelsJson: JSON.stringify(cloneDefaultChannels()),
+    };
+
+    await this.repo.transaction((tx) => tx.insertShader(row));
+    return this.read(id);
+  }
+
+  async update(
+    id: string,
+    patch: {
+      name?: unknown;
+      description?: unknown;
+      controls?: unknown;
+      render?: unknown;
+      fragment?: unknown;
+      vertex?: unknown;
+      project?: unknown;
+      channels?: unknown;
+      expectedRevision?: unknown;
+    },
+  ): Promise<ShaderRecord> {
+    const validId = this.validId(id);
+    const expectedRevision = parseExpectedRevision(patch.expectedRevision);
+
+    // Validate everything the caller supplied *before* opening the transaction,
+    // so a bad patch never even starts a write.
+    const name =
+      patch.name === undefined
+        ? undefined
+        : expect(validateName(patch.name), 'Invalid shader name');
+    const description =
+      patch.description === undefined
+        ? undefined
+        : expect(validateDescription(patch.description), 'Invalid description');
+    const controls =
+      patch.controls === undefined
+        ? undefined
+        : expect(validateControls(patch.controls), 'Invalid control schema');
+    const suppliedFragment =
+      patch.fragment === undefined
+        ? undefined
+        : expect(validateSource(patch.fragment, 'fragment'), 'Invalid fragment shader');
+    const suppliedVertex =
+      patch.vertex === undefined
+        ? undefined
+        : expect(validateSource(patch.vertex, 'vertex'), 'Invalid vertex shader');
+    const render = patch.render === undefined ? undefined : validateRender(patch.render);
+    const channelsPatch =
+      patch.channels === undefined ? undefined : validateChannelSettingsPatch(patch.channels);
+
+    await this.repo.transaction(async (tx) => {
+      const stored = await tx.loadShader(validId);
+      if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+      const current = this.mapRecord(stored);
+
+      // The project is the source of truth once present; a caller that only
+      // knows the old fragment/vertex shape gets those reconciled onto the
+      // *current* project rather than replacing it.
+      let project = current.project;
+      let projectTouched = false;
+      if (patch.project !== undefined) {
+        project = sanitizeProject(
+          patch.project,
+          suppliedFragment ?? current.fragment,
+          suppliedVertex ?? current.vertex,
+        );
+        projectTouched = true;
+      } else if (suppliedFragment !== undefined || suppliedVertex !== undefined) {
+        const image = imagePass(current.project);
+        if (suppliedFragment !== undefined)
+          project = setPassSource(project, image.id, suppliedFragment);
+        if (suppliedVertex !== undefined) project = setVertexSource(project, suppliedVertex);
+        projectTouched = true;
+      }
+
+      const nextControls = controls ?? current.controls;
+      const channels =
+        channelsPatch === undefined
+          ? current.channels
+          : mergeChannelSettings(current.channels, channelsPatch);
+
+      const fields: ShaderMutableFields = {
+        name: name ?? current.name,
+        description: description ?? current.description,
+        author: current.author ?? null,
+        updatedAt: new Date().toISOString(),
+        projectJson: JSON.stringify(projectTouched ? project : current.project),
+        controlsJson: JSON.stringify(nextControls),
+        renderJson: JSON.stringify(render ?? current.render),
+        channelsJson: JSON.stringify(channels),
+      };
+
+      await tx.updateShader(validId, fields, expectedRevision);
+
+      // Re-project presets against a changed schema, exactly as the file store did.
+      if (controls !== undefined) {
+        const reprojected = current.presets.map((preset) => ({
+          ...preset,
+          values: sanitizeParams(nextControls, preset.values),
+        }));
+        await tx.replacePresets(validId, reprojected.map(presetToRow));
+      }
+    });
+
+    return this.read(id);
+  }
+
+  async remove(id: string): Promise<void> {
+    const validId = this.validId(id);
+    await this.repo.transaction(async (tx) => {
+      const existed = await tx.deleteShader(validId);
+      if (!existed) throw new StorageError('not_found', `Shader "${id}" was not found`);
+    });
+  }
+
+  async duplicate(id: string, name?: unknown): Promise<ShaderRecord> {
+    const source = await this.exportOne(id);
+    const copyName = expect(
+      validateName(name ?? `${source.name} copy`.slice(0, LIMITS.nameLength)),
+      'Invalid shader name',
+    );
+    const copyId = uniqueId(slugify(copyName), await this.ids());
+
+    await this.repo.transaction((tx) =>
+      this.insertPayload(tx, { ...source, id: copyId, name: copyName }),
+    );
+    return this.read(copyId);
+  }
+
+  // --- Texture channels ----------------------------------------------------
+
+  async setTexture(
+    id: string,
+    channel: number,
+    input: { ext: string; bytes: Uint8Array; width: number; height: number },
+  ): Promise<ShaderRecord> {
+    const validId = this.validId(id);
+    if (!isChannelIndex(channel)) {
+      throw new StorageError('invalid', `Invalid channel index "${channel}"`);
+    }
+    const ext = input.ext.toLowerCase();
+    if (!TEXTURE_EXTENSIONS.has(ext)) {
+      throw new StorageError('invalid', `Unsupported image type ".${input.ext}"`);
+    }
+    if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength === 0) {
+      throw new StorageError('invalid', 'Texture data is empty');
+    }
+    if (input.bytes.byteLength > LIMITS.textureBytes) {
+      throw new StorageError(
+        'invalid',
+        `Texture must be at most ${Math.round(LIMITS.textureBytes / (1024 * 1024))} MB`,
+      );
+    }
+    const width = Math.round(input.width);
+    const height = Math.round(input.height);
+    if (
+      !Number.isFinite(width) ||
+      !Number.isFinite(height) ||
+      width <= 0 ||
+      height <= 0 ||
+      width > LIMITS.textureDimension ||
+      height > LIMITS.textureDimension
+    ) {
+      throw new StorageError('invalid', 'Invalid texture dimensions');
+    }
+
+    await this.repo.transaction(async (tx) => {
+      const stored = await tx.loadShader(validId);
+      if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+      const current = this.mapRecord(stored);
+      const now = new Date().toISOString();
+
+      await tx.putAsset(validId, {
+        key: textureAssetKey(channel),
+        extension: ext,
+        width,
+        height,
+        updatedAt: now,
+        data: input.bytes,
+      });
+
+      const channels = CHANNEL_INDICES.map((index) =>
+        index === channel
+          ? { ...current.channels[index], ext, width, height }
+          : current.channels[index],
+      ) as unknown as TextureChannels;
+
+      await tx.updateShader(validId, this.fieldsWithChannels(current, channels, now));
+    });
+
+    return this.read(id);
+  }
+
+  async clearTexture(id: string, channel: number): Promise<ShaderRecord> {
+    const validId = this.validId(id);
+    if (!isChannelIndex(channel)) {
+      throw new StorageError('invalid', `Invalid channel index "${channel}"`);
+    }
+
+    await this.repo.transaction(async (tx) => {
+      const stored = await tx.loadShader(validId);
+      if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+      const current = this.mapRecord(stored);
+      const now = new Date().toISOString();
+
+      await tx.deleteAsset(validId, textureAssetKey(channel));
+
+      const channels = CHANNEL_INDICES.map((index) =>
+        index === channel ? { ...DEFAULT_TEXTURE_CHANNEL } : current.channels[index],
+      ) as unknown as TextureChannels;
+
+      await tx.updateShader(validId, this.fieldsWithChannels(current, channels, now));
+    });
+
+    return this.read(id);
+  }
+
+  /** A channel's raw image bytes, for serving to the client. */
+  async readTexture(
+    id: string,
+    channel: number,
+  ): Promise<{ bytes: Uint8Array; ext: string } | null> {
+    if (!isChannelIndex(channel)) return null;
+    const asset = await this.repo.loadAsset(this.validId(id), textureAssetKey(channel));
+    return asset ? { bytes: asset.data, ext: asset.extension } : null;
+  }
+
+  // --- Thumbnail -----------------------------------------------------------
+
+  /**
+   * Stores the preview the client captured. It deliberately does *not* touch the
+   * shader row: a thumbnail is a picture of the document, not a change to it, so
+   * `updatedAt` and `revision` stay put and a "recently modified" list does not
+   * reorder every time a preview refreshes.
+   */
+  async setThumbnail(id: string, input: { ext: string; bytes: Uint8Array }): Promise<ShaderRecord> {
+    const validId = this.validId(id);
+    const ext = input.ext.toLowerCase();
+    if (!TEXTURE_EXTENSIONS.has(ext)) {
+      throw new StorageError('invalid', `Unsupported image type ".${input.ext}"`);
+    }
+    if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength === 0) {
+      throw new StorageError('invalid', 'Thumbnail data is empty');
+    }
+    if (input.bytes.byteLength > LIMITS.thumbnailBytes) {
+      throw new StorageError(
+        'invalid',
+        `Thumbnail must be at most ${Math.round(LIMITS.thumbnailBytes / 1024)} KB`,
+      );
+    }
+
+    await this.repo.transaction(async (tx) => {
+      const stored = await tx.loadShader(validId);
+      if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+      await tx.putAsset(validId, {
+        key: THUMBNAIL_ASSET_KEY,
+        extension: ext,
+        width: null,
+        height: null,
+        updatedAt: new Date().toISOString(),
+        data: input.bytes,
+      });
+    });
+
+    return this.read(id);
+  }
+
+  /** The preview's raw image bytes, for serving to the client. */
+  async readThumbnail(id: string): Promise<{ bytes: Uint8Array; ext: string } | null> {
+    const asset = await this.repo.loadAsset(this.validId(id), THUMBNAIL_ASSET_KEY);
+    return asset ? { bytes: asset.data, ext: asset.extension } : null;
+  }
+
+  // --- Presets -------------------------------------------------------------
+
+  async savePreset(
+    id: string,
+    input: { name: unknown; values: unknown; render?: unknown },
+  ): Promise<Preset> {
+    const validId = this.validId(id);
+    const name = expect(validateName(input.name, 'preset.name'), 'Invalid preset name');
+
+    return this.repo.transaction(async (tx) => {
+      const stored = await tx.loadShader(validId);
+      if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+      const shader = this.mapRecord(stored);
+
+      if (shader.presets.length >= LIMITS.presetCount) {
+        throw new StorageError(
+          'conflict',
+          `Shader "${id}" already has the maximum number of presets`,
+        );
+      }
+
+      const existing = shader.presets.find((preset) => preset.name === name);
+      const presetId =
+        existing?.id ??
+        uniqueId(
+          slugify(name),
+          shader.presets.map((preset) => preset.id),
+        );
+
+      const preset: Preset = {
+        id: presetId,
+        name,
+        createdAt: existing?.createdAt ?? new Date().toISOString(),
+        values: sanitizeParams(shader.controls, input.values as ShaderParams),
+        ...(input.render === undefined || input.render === null
+          ? {}
+          : { render: validateRender(input.render) }),
+      };
+
+      const presets = existing
+        ? shader.presets.map((entry) => (entry.id === presetId ? preset : entry))
+        : [...shader.presets, preset];
+
+      await tx.replacePresets(validId, presets.map(presetToRow));
+      await this.touch(tx, shader);
+      return preset;
+    });
+  }
+
+  async deletePreset(id: string, presetId: string): Promise<void> {
+    const validId = this.validId(id);
+    expect(validateId(presetId), `Invalid preset id "${presetId}"`);
+
+    await this.repo.transaction(async (tx) => {
+      const stored = await tx.loadShader(validId);
+      if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+      const shader = this.mapRecord(stored);
+
+      const presets = shader.presets.filter((preset) => preset.id !== presetId);
+      if (presets.length === shader.presets.length) {
+        throw new StorageError('not_found', `Preset "${presetId}" was not found on shader "${id}"`);
+      }
+
+      await tx.replacePresets(validId, presets.map(presetToRow));
+      await this.touch(tx, shader);
+    });
+  }
+
+  // --- Import / export -----------------------------------------------------
+
+  async exportOne(id: string): Promise<ShaderPayload> {
+    const record = await this.read(id);
+    const payload = toPayload(record);
+
+    const channels = await Promise.all(
+      CHANNEL_INDICES.map(async (channel) => {
+        const entry = payload.channels[channel];
+        if (entry.ext === null) return entry;
+        const asset = await this.repo.loadAsset(record.id, textureAssetKey(channel));
+        if (!asset) {
+          console.warn(`[storage] texture ${channel} of "${id}" is missing`);
+          return { ...DEFAULT_TEXTURE_CHANNEL, data: null };
+        }
+        return { ...entry, data: toBase64(asset.data) };
+      }),
+    );
+
+    let thumbnail = payload.thumbnail;
+    if (record.thumbnail) {
+      const asset = await this.repo.loadAsset(record.id, THUMBNAIL_ASSET_KEY);
+      thumbnail = asset
+        ? {
+            ext: record.thumbnail.ext,
+            updatedAt: record.thumbnail.updatedAt,
+            data: toBase64(asset.data),
+          }
+        : null;
+    }
+
+    return {
+      ...payload,
+      channels: channels as unknown as TextureChannelPayloads,
+      thumbnail,
+    };
+  }
+
+  async exportAll(): Promise<ShaderPayload[]> {
+    const summaries = await this.repo.listShaders();
+    const payloads: ShaderPayload[] = [];
+    for (const summary of summaries) {
+      try {
+        payloads.push(await this.exportOne(summary.id));
+      } catch (error) {
+        console.warn(`[storage] excluding shader "${summary.id}" from export: ${String(error)}`);
+      }
+    }
+    return payloads;
+  }
+
+  async importPayloads(payloads: ShaderPayload[], mode: ImportMode): Promise<ImportResult> {
+    const imported: ImportResult['imported'] = [];
+    const taken = new Set(await this.ids());
+
+    for (const payload of payloads) {
+      const collides = taken.has(payload.id);
+      const replaced = collides && mode === 'overwrite';
+      const id = replaced || !collides ? payload.id : uniqueId(payload.id, taken);
+
+      await this.repo.transaction(async (tx) => {
+        if (replaced) await tx.deleteShader(id);
+        await this.insertPayload(tx, { ...payload, id });
+      });
+
+      taken.add(id);
+      imported.push({ id, name: payload.name, replaced });
+    }
+
+    return { imported };
+  }
+
+  // --- Seeding & legacy migration -----------------------------------------
+
+  /**
+   * Installs the bundled examples once per seed version, idempotently: it only
+   * inserts examples whose id is not already present, so it never overwrites a
+   * user's shader, and it records the seed version so a deleted example does not
+   * come back on the next start. Gated by `enabled` (SHADER_SEED).
+   */
+  async installExamples(source: PayloadSource, enabled: boolean): Promise<void> {
+    if (!enabled) return;
+    const stored = Number((await this.repo.getMeta('seed_version')) ?? -1);
+    if (stored >= SEED_VERSION) return;
+
+    let examples: ShaderPayload[];
+    try {
+      const ids = await source.listIds();
+      examples = [];
+      for (const id of ids) {
+        try {
+          examples.push(await source.exportOne(id));
+        } catch (error) {
+          console.warn(`[storage] skipping example "${id}": ${String(error)}`);
+        }
+      }
+    } catch (error) {
+      console.warn(`[storage] no examples available: ${String(error)}`);
+      examples = [];
+    }
+
+    await this.repo.transaction(async (tx) => {
+      const existing = new Set(await tx.listIds());
+      for (const payload of examples) {
+        if (existing.has(payload.id)) continue;
+        await this.insertPayload(tx, payload);
+        existing.add(payload.id);
+      }
+      await tx.setMeta('seed_version', String(SEED_VERSION));
+    });
+  }
+
+  /** Marks seeding as complete without inserting anything — used after a legacy import. */
+  async markSeeded(): Promise<void> {
+    await this.repo.setMeta('seed_version', String(SEED_VERSION));
+  }
+
+  /**
+   * Imports an entire legacy file library in one transaction, then verifies the
+   * import (shader count, ids, preset counts, texture and thumbnail presence)
+   * before the transaction is allowed to commit. Never deletes the source.
+   */
+  async migrateLegacy(source: PayloadSource): Promise<LegacyMigrationSummary> {
+    const ids = await source.listIds();
+    const payloads: ShaderPayload[] = [];
+    let skipped = 0;
+    for (const id of ids) {
+      try {
+        payloads.push(await source.exportOne(id));
+      } catch (error) {
+        skipped += 1;
+        console.warn(`[migration] skipping unreadable shader "${id}": ${String(error)}`);
+      }
+    }
+
+    await this.repo.transaction(async (tx) => {
+      const existing = new Set(await tx.listIds());
+      for (const payload of payloads) {
+        const id = existing.has(payload.id) ? uniqueId(payload.id, existing) : payload.id;
+        await this.insertPayload(tx, { ...payload, id });
+        existing.add(id);
+        await this.verifyImported(tx, payload, id);
+      }
+      await tx.setMeta('seed_version', String(SEED_VERSION));
+    });
+
+    return { imported: payloads.length, skipped };
+  }
+
+  getMeta(key: string): Promise<string | null> {
+    return this.repo.getMeta(key);
+  }
+
+  setMeta(key: string, value: string): Promise<void> {
+    return this.repo.setMeta(key, value);
+  }
+
+  // --- Internals -----------------------------------------------------------
+
+  private async ids(): Promise<string[]> {
+    return (await this.repo.listShaders()).map((row) => row.id);
+  }
+
+  private validId(id: string): string {
+    return expect(validateId(id), `Invalid shader id "${id}"`);
+  }
+
+  private async touch(tx: ShaderTx, current: ShaderRecord): Promise<void> {
+    await tx.updateShader(current.id, this.fields(current, new Date().toISOString()));
+  }
+
+  /** The current record's mutable columns, with a fresh `updatedAt`. */
+  private fields(current: ShaderRecord, updatedAt: string): ShaderMutableFields {
+    return {
+      name: current.name,
+      description: current.description,
+      author: current.author ?? null,
+      updatedAt,
+      projectJson: JSON.stringify(current.project),
+      controlsJson: JSON.stringify(current.controls),
+      renderJson: JSON.stringify(current.render),
+      channelsJson: JSON.stringify(current.channels),
+    };
+  }
+
+  private fieldsWithChannels(
+    current: ShaderRecord,
+    channels: TextureChannels,
+    updatedAt: string,
+  ): ShaderMutableFields {
+    return { ...this.fields(current, updatedAt), channelsJson: JSON.stringify(channels) };
+  }
+
+  /** Writes a full payload (shader row, presets and asset bytes) inside a transaction. */
+  private async insertPayload(tx: ShaderTx, payload: ShaderPayload): Promise<void> {
+    const project = sanitizeProject(payload.project, payload.fragment, payload.vertex);
+    const controls = expect(
+      validateControls(payload.controls),
+      `Shader "${payload.id}" has an invalid control schema`,
+    );
+    const now = new Date().toISOString();
+
+    const channels = CHANNEL_INDICES.map((channel) => {
+      const entry = payload.channels[channel];
+      return {
+        ext: entry.ext,
+        width: entry.width,
+        height: entry.height,
+        wrap: entry.wrap,
+        filter: entry.filter,
+        flipY: entry.flipY,
+      } satisfies TextureChannel;
+    }) as unknown as TextureChannels;
+
+    const row: ShaderRow = {
+      id: payload.id,
+      name: payload.name,
+      description: payload.description,
+      author: payload.author ?? null,
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+      projectJson: JSON.stringify(project),
+      controlsJson: JSON.stringify(controls),
+      renderJson: JSON.stringify(validateRender(payload.render)),
+      channelsJson: JSON.stringify(validateChannels(channels)),
+    };
+
+    await tx.insertShader(row);
+    await tx.replacePresets(payload.id, payload.presets.map(presetToRow));
+
+    for (const channel of CHANNEL_INDICES) {
+      const entry = payload.channels[channel];
+      if (entry.ext === null || entry.data === null) continue;
+      await tx.putAsset(payload.id, {
+        key: textureAssetKey(channel),
+        extension: entry.ext,
+        width: entry.width,
+        height: entry.height,
+        updatedAt: now,
+        data: fromBase64(entry.data),
+      });
+    }
+
+    if (payload.thumbnail) {
+      await tx.putAsset(payload.id, {
+        key: THUMBNAIL_ASSET_KEY,
+        extension: payload.thumbnail.ext,
+        width: null,
+        height: null,
+        updatedAt: payload.thumbnail.updatedAt,
+        data: fromBase64(payload.thumbnail.data),
+      });
+    }
+  }
+
+  private async verifyImported(tx: ShaderTx, payload: ShaderPayload, id: string): Promise<void> {
+    const stored = await tx.loadShader(id);
+    if (!stored) {
+      throw new StorageError('io', `Migration verification failed: shader "${id}" is missing`);
+    }
+    if (stored.presets.length !== payload.presets.length) {
+      throw new StorageError(
+        'io',
+        `Migration verification failed: shader "${id}" preset count ${stored.presets.length} != ${payload.presets.length}`,
+      );
+    }
+    const assetKeys = new Set(stored.assets.map((asset) => asset.key));
+    for (const channel of CHANNEL_INDICES) {
+      const entry = payload.channels[channel];
+      if (entry.ext !== null && entry.data !== null && !assetKeys.has(textureAssetKey(channel))) {
+        throw new StorageError(
+          'io',
+          `Migration verification failed: texture ${channel} of "${id}" is missing`,
+        );
+      }
+    }
+    if (payload.thumbnail && !assetKeys.has(THUMBNAIL_ASSET_KEY)) {
+      throw new StorageError(
+        'io',
+        `Migration verification failed: thumbnail of "${id}" is missing`,
+      );
+    }
+  }
+
+  /** Rebuilds the public record from stored rows, deriving fragment/vertex from the project. */
+  private mapRecord(stored: StoredShader): ShaderRecord {
+    const { row, presets, assets } = stored;
+    const project = this.parseProject(row);
+    const image = imagePass(project);
+
+    const controls = expect(
+      validateControls(safeParse(row.controlsJson) ?? []),
+      `Shader "${row.id}" has an invalid control schema`,
+    );
+    const render = validateRender(safeParse(row.renderJson));
+    const channels = validateChannels(safeParse(row.channelsJson));
+    const thumbnail = this.thumbnailMeta(assets);
+
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      ...(row.author ? { author: row.author } : {}),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      revision: row.revision,
+      controls,
+      render,
+      channels,
+      thumbnail,
+      fragment: image.source,
+      vertex: project.vertex,
+      presets: this.mapPresets(presets, controls),
+      project,
+    };
+  }
+
+  private parseProject(row: ShaderRow): ShaderProject {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(row.projectJson);
+    } catch {
+      throw new StorageError('io', `Shader "${row.id}" has a corrupt project`);
+    }
+    return sanitizeProject(raw, TEMPLATE_FRAGMENT, DEFAULT_VERTEX);
+  }
+
+  private thumbnailMeta(assets: AssetMeta[]): ThumbnailMeta | null {
+    const asset = assets.find((entry) => entry.key === THUMBNAIL_ASSET_KEY);
+    if (!asset) return null;
+    return validateThumbnailMeta({ ext: asset.extension, updatedAt: asset.updatedAt });
+  }
+
+  private mapPresets(rows: PresetRow[], controls: ShaderControl[]): Preset[] {
+    const presets: Preset[] = [];
+    for (const row of rows) {
+      const values = safeParse(row.valuesJson) ?? {};
+      const render = row.renderJson ? safeParse(row.renderJson) : undefined;
+      const raw = {
+        id: row.id,
+        name: row.name,
+        createdAt: row.createdAt,
+        values,
+        ...(render === undefined ? {} : { render }),
+      };
+      const result = validatePreset(raw, controls, row.id);
+      if (result.ok) presets.push(result.value);
+    }
+    return presets;
+  }
+}
+
+function mergeChannelSettings(
+  current: TextureChannels,
+  patch: TextureChannelSettingsPatch[],
+): TextureChannels {
+  return CHANNEL_INDICES.map((channel) => ({
+    ...current[channel],
+    ...patch[channel],
+  })) as unknown as TextureChannels;
+}
+
+function presetToRow(preset: Preset): PresetRow {
+  return {
+    id: preset.id,
+    name: preset.name,
+    createdAt: preset.createdAt,
+    valuesJson: JSON.stringify(preset.values),
+    renderJson: preset.render === undefined ? null : JSON.stringify(preset.render),
+  };
+}
+
+function cloneDefaultChannels(): TextureChannels {
+  return DEFAULT_CHANNELS.map((channel) => ({ ...channel })) as unknown as TextureChannels;
+}
+
+function parseExpectedRevision(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  const revision = Number(value);
+  if (!Number.isInteger(revision) || revision < 1) {
+    throw new StorageError('invalid', 'Invalid expected revision');
+  }
+  return revision;
+}
+
+function safeParse(raw: string | null): unknown {
+  if (raw === null) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+function toBase64(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString('base64');
+}
+
+function fromBase64(data: string): Uint8Array {
+  return Buffer.from(data, 'base64');
+}

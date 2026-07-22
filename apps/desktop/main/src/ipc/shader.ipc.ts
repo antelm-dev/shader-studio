@@ -2,7 +2,7 @@ import { defineIpcModule, handle } from 'electron-ipc-module';
 
 import { importShadertoyShader } from '@shader-studio/shared/shadertoy-api';
 import type { UpdateShaderPatch } from '@shader-studio/shared/api';
-import { ShaderStorage, StorageError } from '@shader-studio/backend/storage';
+import { ShaderLibrary, StorageError } from '@shader-studio/backend/library';
 import type { ImportMode, RenderSettings, ShaderParams } from '@shader-studio/shared/model';
 import {
   buildCollectionBundle,
@@ -23,7 +23,7 @@ function objectArg(value: unknown, name: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-export function createShaderIpc(storage: ShaderStorage) {
+export function createShaderIpc(storage: ShaderLibrary) {
   return defineIpcModule('shader', {
     list: handle(() => storage.list()),
     read: handle((_event, id: string) => storage.read(stringArg(id, 'id'))),

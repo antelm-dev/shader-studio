@@ -52,6 +52,7 @@ function makeRecord(overrides: Partial<ShaderRecord> = {}): ShaderRecord {
     description: '',
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
+    revision: 1,
     controls: structuredClone(CONTROLS),
     render: structuredClone(DEFAULT_RENDER),
     channels: structuredClone(DEFAULT_CHANNELS),

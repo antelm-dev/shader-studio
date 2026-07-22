@@ -34,6 +34,13 @@ export interface ShaderMeta {
   author?: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Optimistic-concurrency counter. Starts at 1 on create and increments on
+   * every edit; a save may pass the revision it read as `expectedRevision` to
+   * be told (409) when someone else has written since. Not part of an exported
+   * bundle — an imported shader always starts fresh at 1.
+   */
+  revision: number;
   controls: ShaderControl[];
   render: RenderSettings;
   channels: TextureChannels;

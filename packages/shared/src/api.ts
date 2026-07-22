@@ -11,4 +11,10 @@ export interface UpdateShaderPatch {
   vertex?: string;
   project?: ShaderProject;
   channels?: readonly TextureChannelSettingsPatch[];
+  /**
+   * The `revision` the client last read. When present, the write is rejected
+   * with a `conflict` if the stored revision has moved on since — optimistic
+   * concurrency. Omit it for last-writer-wins (the historical behaviour).
+   */
+  expectedRevision?: number;
 }

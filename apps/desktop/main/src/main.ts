@@ -1,10 +1,13 @@
 import { app, BrowserWindow, Menu, screen, shell } from 'electron';
-import { readFile, writeFile } from 'node:fs/promises';
-import { extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { createIpcContainer } from 'electron-ipc-module';
 
 import { resolveI18nDir } from '@shader-studio/backend/i18n';
-import { ShaderStorage } from '@shader-studio/backend/storage';
+import { ShaderLibrary } from '@shader-studio/backend/library';
+import { createLegacyReader, legacyLibraryExists } from '@shader-studio/backend/persistence/legacy';
+import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
 import { prepare } from './core/bootstrap';
 import { createCustomScheme } from './core/electron';
 import { UpdateController } from './core/updater';
@@ -96,6 +99,47 @@ async function readWindowState(path: string): Promise<WindowState> {
   }
 }
 
+/**
+ * On the first launch after the SQLite switch, import the old file library at
+ * `<userData>/library/shaders` into the database — once, transactionally, and
+ * verified — then leave the files untouched. Records a marker in
+ * `storage_metadata` so it never runs again (and a fresh install never sees a
+ * migration at all).
+ */
+async function migrateLegacyLibrary(library: ShaderLibrary, libraryDir: string): Promise<void> {
+  if (await library.getMeta('legacy_migration')) return;
+  if (!(await legacyLibraryExists(libraryDir))) {
+    await library.setMeta('legacy_migration', 'none');
+    return;
+  }
+  try {
+    const summary = await library.migrateLegacy(createLegacyReader(libraryDir));
+    await library.setMeta(
+      'legacy_migration',
+      JSON.stringify({ at: new Date().toISOString(), ...summary }),
+    );
+    console.log(`[migration] imported ${summary.imported} shader(s) from the legacy file library`);
+  } catch (error) {
+    // Roll-forward next launch: leave the marker unset, keep the files intact.
+    console.error(
+      '[migration] importing the legacy file library failed; the original files were left ' +
+        'untouched and the import will be retried on the next launch.',
+      error,
+    );
+  }
+}
+
+/** Walks up from the cwd to the workspace `examples/` folder (development only). */
+function resolveDevExamplesDir(): string | undefined {
+  let current = process.cwd();
+  while (true) {
+    if (existsSync(join(current, 'examples', 'shaders'))) return join(current, 'examples');
+    const parent = dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
 let outputWindow: BrowserWindow | null = null;
 const closeController: CloseController = {
   approved: new WeakSet(),
@@ -121,23 +165,35 @@ prepare({
     const migrationPath = join(userData, 'migration.json');
     const saved = await readWindowState(statePath);
     const bounds = validBounds(saved.bounds);
-    const examplesDir = env.production ? join(process.resourcesPath, 'examples') : undefined;
     const i18nDir = env.production ? join(process.resourcesPath, 'i18n') : await resolveI18nDir();
-    const storage = new ShaderStorage({
-      dataDir: join(userData, 'library'),
-      ...(examplesDir ? { examplesDir } : {}),
-    });
-    await storage.init();
+
+    // SQLite lives in the main process only; the renderer reaches it via IPC.
+    const libraryDir = join(userData, 'library');
+    await mkdir(libraryDir, { recursive: true });
+    const library = new ShaderLibrary(
+      new SqliteRepository({ location: join(libraryDir, 'shader-studio.sqlite') }),
+    );
+    await library.init();
+    await migrateLegacyLibrary(library, libraryDir);
+    const examplesDir = env.production
+      ? join(process.resourcesPath, 'examples')
+      : resolveDevExamplesDir();
+    if (examplesDir) {
+      await library.installExamples(
+        createLegacyReader(examplesDir),
+        process.env['SHADER_SEED'] !== '0',
+      );
+    }
 
     const ipc = createIpcContainer();
     const updates = new UpdateController(() => {
       for (const window of BrowserWindow.getAllWindows()) closeController.approved.add(window);
     });
     await ipc.loadAll({
-      shader: createShaderIpc(storage),
+      shader: createShaderIpc(library),
       files: createFilesIpc(),
       i18n: createI18nIpc(i18nDir),
-      migration: createMigrationIpc(storage, migrationPath),
+      migration: createMigrationIpc(library, migrationPath),
       window: createWindowIpc(closeController),
       update: createUpdateIpc(updates),
     });

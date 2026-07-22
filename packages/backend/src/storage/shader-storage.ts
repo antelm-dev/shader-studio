@@ -85,7 +85,14 @@ import {
   TEMPLATE_FRAGMENT,
 } from '@shader-studio/shared/templates';
 import type { StorageOptions } from './types';
-import { KeyedLock, pathExists, readJson, readOptionalJson, resolveScoped, writeFileAtomic } from './file-store';
+import {
+  KeyedLock,
+  pathExists,
+  readJson,
+  readOptionalJson,
+  resolveScoped,
+  writeFileAtomic,
+} from './file-store';
 import {
   CHANNEL_INDICES,
   copyTextures,
@@ -219,6 +226,7 @@ export class ShaderStorage {
       ...(typeof record['author'] === 'string' ? { author: record['author'] } : {}),
       createdAt: typeof record['createdAt'] === 'string' ? record['createdAt'] : now,
       updatedAt: typeof record['updatedAt'] === 'string' ? record['updatedAt'] : now,
+      revision: typeof record['revision'] === 'number' ? record['revision'] : 1,
       controls,
       render: validateRender(record['render']),
       channels: validateChannels(record['channels']),
@@ -285,6 +293,7 @@ export class ShaderStorage {
       ...(payload.author ? { author: payload.author } : {}),
       createdAt: now,
       updatedAt: now,
+      revision: 1,
       controls: payload.controls,
       render: payload.render,
       channels,

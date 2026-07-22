@@ -1099,7 +1099,13 @@ export class ShaderStore {
       // Keep the live params and the open preset across a save: the user was
       // editing the source, not resetting the knobs.
       const presetId = this.activePresetId();
-      const result = await this.persistence.save(record.id, draft, controls, this.params());
+      const result = await this.persistence.save(
+        record.id,
+        draft,
+        controls,
+        this.params(),
+        record.revision,
+      );
 
       this.record.set(result.record);
       this.savedProject.set(structuredClone(result.draft.project));

@@ -12,7 +12,7 @@ import express, { type NextFunction, type Request, type Response, type Router } 
 
 import type { ApiErrorBody } from '@shader-studio/shared/model';
 import { I18N_LOCALES, loadI18nCatalog } from '@shader-studio/backend/i18n';
-import { ShaderStorage, StorageError } from '@shader-studio/backend/storage';
+import { ShaderLibrary, StorageError } from '@shader-studio/backend/library';
 import {
   buildCollectionBundle,
   buildShaderBundle,
@@ -33,7 +33,7 @@ import {
   THUMBNAIL_BODY_LIMIT,
 } from './helpers';
 
-export function createApiRouter(storage: ShaderStorage, i18nDir?: string): Router {
+export function createApiRouter(storage: ShaderLibrary, i18nDir?: string): Router {
   const api = express.Router();
 
   api.use(express.json({ limit: BODY_LIMIT }));
@@ -100,6 +100,7 @@ export function createApiRouter(storage: ShaderStorage, i18nDir?: string): Route
         ...('vertex' in body ? { vertex: body['vertex'] } : {}),
         ...('project' in body ? { project: body['project'] } : {}),
         ...('channels' in body ? { channels: body['channels'] } : {}),
+        ...('expectedRevision' in body ? { expectedRevision: body['expectedRevision'] } : {}),
       });
       res.json({ shader: updated });
     }),
@@ -187,7 +188,7 @@ export function createApiRouter(storage: ShaderStorage, i18nDir?: string): Route
       res
         .setHeader('Content-Type', mimeFromExt(texture.ext))
         .setHeader('Cache-Control', 'private, max-age=31536000, immutable')
-        .send(texture.bytes);
+        .send(Buffer.from(texture.bytes));
     }),
   );
 
@@ -218,7 +219,7 @@ export function createApiRouter(storage: ShaderStorage, i18nDir?: string): Route
       res
         .setHeader('Content-Type', mimeFromExt(thumbnail.ext))
         .setHeader('Cache-Control', 'private, max-age=31536000, immutable')
-        .send(thumbnail.bytes);
+        .send(Buffer.from(thumbnail.bytes));
     }),
   );
 

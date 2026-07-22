@@ -17,11 +17,11 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
-import express from 'express';
+import express, { type Router } from 'express';
 import { join } from 'node:path';
 
 import { createApiRouter } from './api/router';
-import { ShaderStorage } from '@shader-studio/backend/storage';
+import { createLibrary } from './create-library';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
@@ -33,17 +33,29 @@ const allowedHosts = (process.env['NG_ALLOWED_HOSTS'] ?? 'localhost,127.0.0.1,[:
 const app = express();
 const angularApp = new AngularNodeAppEngine({ allowedHosts });
 
-const storage = new ShaderStorage();
+// Storage is initialised lazily, on the first /api request. Doing it here rather
+// than at module load keeps it out of Angular's build-time route extraction
+// (which imports this module but never calls /api), and lets a transient
+// database outage at startup recover on a later request instead of wedging.
+let routerPromise: Promise<Router> | null = null;
+function ensureRouter(): Promise<Router> {
+  if (!routerPromise) {
+    routerPromise = createLibrary()
+      .then((library) => createApiRouter(library))
+      .catch((error: unknown) => {
+        console.error('[server] failed to initialise shader storage', error);
+        routerPromise = null; // let the next request retry
+        throw error;
+      });
+  }
+  return routerPromise;
+}
 
-const ready = storage.init().catch((error: unknown) => {
-  console.error('[server] failed to initialise shader storage', error);
-  throw error;
+app.use('/api', (req, res, next) => {
+  ensureRouter()
+    .then((router) => router(req, res, next))
+    .catch(next);
 });
-
-app.use('/api', (_req, _res, next) => {
-  ready.then(() => next()).catch(next);
-});
-app.use('/api', createApiRouter(storage));
 
 app.use(
   express.static(browserDistFolder, {

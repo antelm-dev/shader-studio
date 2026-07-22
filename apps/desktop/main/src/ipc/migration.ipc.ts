@@ -3,7 +3,8 @@ import { access, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
-import { ShaderStorage } from '@shader-studio/backend/storage';
+import { ShaderLibrary } from '@shader-studio/backend/library';
+import { createLegacyReader } from '@shader-studio/backend/persistence/legacy';
 import type { MigrationResult } from '@shader-studio/desktop-api/contracts';
 
 async function exists(path: string): Promise<boolean> {
@@ -15,7 +16,13 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-export function createMigrationIpc(storage: ShaderStorage, markerPath: string) {
+/**
+ * The user-initiated "import an existing Shader Studio data folder" flow. This is
+ * separate from the automatic first-launch import of `<userData>/library`: it
+ * lets the user point at any older data directory. It reads the folder read-only
+ * and imports into the SQL library; it never deletes the source.
+ */
+export function createMigrationIpc(library: ShaderLibrary, markerPath: string) {
   return defineIpcModule('migration', {
     pending: handle(async () => !(await exists(markerPath))),
     decline: handle(async () => {
@@ -42,23 +49,19 @@ export function createMigrationIpc(storage: ShaderStorage, markerPath: string) {
             message: 'The selected folder does not contain a shaders directory',
           };
         }
-        const source = new ShaderStorage({
-          dataDir,
-          examplesDir: join(dataDir, '__no_examples__'),
-          seed: false,
-        });
-        await source.init();
-        const ids = await source.listIds();
+
+        const reader = createLegacyReader(dataDir);
+        const ids = await reader.listIds();
         const payloads = [];
         let skipped = 0;
         for (const id of ids) {
           try {
-            payloads.push(await source.exportOne(id));
+            payloads.push(await reader.exportOne(id));
           } catch {
             skipped += 1;
           }
         }
-        const result = await storage.importPayloads(payloads, 'overwrite');
+        const result = await library.importPayloads(payloads, 'overwrite');
         await writeFile(
           markerPath,
           JSON.stringify({ importedAt: new Date().toISOString(), source: dataDir }),

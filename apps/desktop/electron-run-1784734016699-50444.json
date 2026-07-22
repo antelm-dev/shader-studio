@@ -1,0 +1,9 @@
+{
+  "pid": 52320,
+  "startedAt": "2026-07-22T15:26:56.829Z",
+  "entry": "E:\\Adel\\Documents\\Orgs\\shader-studio\\dist-main\\main.cjs",
+  "args": [
+    "--inspect"
+  ],
+  "cwd": "E:\\Adel\\Documents\\Orgs\\shader-studio\\apps\\desktop"
+}

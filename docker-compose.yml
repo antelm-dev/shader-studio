@@ -1,22 +1,62 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shader-studio-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-shader_studio}
+      POSTGRES_USER: ${POSTGRES_USER:-shader_studio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (see .env.example)}
+    # No host port is published: only the app container reaches PostgreSQL, on
+    # the internal Compose network. Add a `ports:` mapping yourself if you need
+    # to connect from the host for maintenance.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-shader_studio} -d ${POSTGRES_DB:-shader_studio}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
   shader-studio:
     build: .
     image: shader-studio:latest
     container_name: shader-studio
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - '${SHADER_PORT:-4000}:4000'
     environment:
-      # Hosts the SSR engine will answer for. Requests arriving under any other
-      # hostname are rejected, so add your machine name or domain here when you
-      # reach the app as something other than localhost:
+      # Selects PostgreSQL. The credentials never reach the browser.
+      DATABASE_URL: postgres://${POSTGRES_USER:-shader_studio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-shader_studio}
+      # Hosts the SSR engine will answer for. Add your machine name or domain when
+      # you reach the app as something other than localhost:
       #   SHADER_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],nas.local,shaders.example.com
       NG_ALLOWED_HOSTS: ${SHADER_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}
       # Set to 0 to start with an empty store instead of seeding it from examples/.
       SHADER_SEED: ${SHADER_SEED:-1}
+    # A legacy file library can be mounted read-only to import it once via the
+    # `migrate` profile below. It is NOT the primary store anymore.
+    # volumes:
+    #   - ./legacy-data:/legacy-data:ro
+
+  # One-shot legacy import. Run explicitly, never on normal startup:
+  #   docker compose --profile migrate run --rm migrate --source=/legacy-data
+  migrate:
+    profiles: ['migrate']
+    image: shader-studio:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-shader_studio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-shader_studio}
     volumes:
-      # Shaders you create and edit. Everything else in the image is disposable.
-      - shader-data:/data
+      - ./legacy-data:/legacy-data:ro
+    entrypoint: ['node', 'dist/shader-studio/cli.mjs', 'migrate-files']
+    command: ['--source=/legacy-data']
 
 volumes:
-  shader-data:
+  postgres-data:

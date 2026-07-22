@@ -29,7 +29,16 @@ COPY . .
 COPY docker/electron.d.ts apps/renderer/src/electron.d.ts
 COPY docker/tsconfig.app.json apps/renderer/tsconfig.app.json
 
-RUN pnpm build
+# The SSR server bundle (keeps `pg` external, see angular.json) plus the
+# standalone migrate-files CLI.
+RUN pnpm build && pnpm --filter @shader-studio/server build:cli
+
+# The runtime needs the PostgreSQL driver at runtime (it is deliberately not
+# bundled into the SSR output). Install just `pg` and its deps into an isolated
+# tree so the runtime image stays minimal.
+RUN mkdir -p /runtime-deps && cd /runtime-deps \
+    && npm init -y >/dev/null 2>&1 \
+    && npm install --omit=dev --no-package-lock pg@8.13.1
 
 # ---- runtime ----------------------------------------------------------------
 FROM node:24-alpine AS runtime
@@ -41,17 +50,21 @@ ENV NODE_ENV=production \
     SHADER_DATA_DIR=/data \
     SHADER_EXAMPLES_DIR=/app/examples
 
-# The SSR bundle inlines Express and Angular and imports nothing but Node
-# builtins, so the runtime image needs no node_modules at all.
+# SSR bundle + examples + the CLI, plus the pg driver the server imports at
+# runtime. Everything else (Express, Angular) is inlined into the bundle.
 COPY --from=build /app/dist/shader-studio ./dist/shader-studio
 COPY --from=build /app/examples ./examples
+COPY --from=build /runtime-deps/node_modules ./node_modules
 
+# A local SQLite file is only used when DATABASE_URL is unset (Compose always
+# sets it, selecting PostgreSQL). /data stays available for that fallback and as
+# a mount point for a legacy library to import.
 RUN mkdir -p /data && chown node:node /data
 
 USER node
 EXPOSE 4000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 4000) + '/api/shaders').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 CMD ["node", "dist/shader-studio/server/server.mjs"]
