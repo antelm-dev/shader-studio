@@ -39,7 +39,7 @@ RUN pnpm gen:ipc \
 # tree so the runtime image stays minimal.
 RUN mkdir -p /runtime-deps && cd /runtime-deps \
     && npm init -y >/dev/null 2>&1 \
-    && npm install --omit=dev --no-package-lock pg@8.13.1
+    && npm install --omit=dev --no-package-lock pg@8.22.0
 
 # ---- runtime ----------------------------------------------------------------
 FROM node:24-alpine AS runtime
@@ -51,10 +51,12 @@ ENV NODE_ENV=production \
     SHADER_DATA_DIR=/data \
     SHADER_EXAMPLES_DIR=/app/examples
 
-# SSR bundle + examples + the CLI, plus the pg driver the server imports at
-# runtime. Everything else (Express, Angular) is inlined into the bundle.
+# SSR bundle + examples + i18n catalogs + the CLI, plus the pg driver the
+# server imports at runtime. Everything else (Express, Angular) is inlined
+# into the bundle.
 COPY --from=build /app/dist/shader-studio ./dist/shader-studio
 COPY --from=build /app/examples ./examples
+COPY --from=build /app/i18n ./i18n
 COPY --from=build /runtime-deps/node_modules ./node_modules
 
 # A local SQLite file is only used when DATABASE_URL is unset (Compose always

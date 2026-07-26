@@ -47,5 +47,10 @@
     "@types/pg": "^8.11.10",
     "typescript": "~6.0.2",
     "vitest": "^4.0.8"
-  }
+  },
+  "description": "",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
