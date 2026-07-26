@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  actions: read
+  contents: read
+
 # A new push to a branch makes the run already in flight pointless.
 concurrency:
   group: ci-${{ github.ref }}
@@ -19,6 +23,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       # Installs the exact pnpm from package.json's `packageManager` field.
       - uses: pnpm/action-setup@v6
@@ -32,6 +38,8 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - uses: nrwl/nx-set-shas@v5
+
       - name: Lint
         run: pnpm lint
 
@@ -42,13 +50,14 @@ jobs:
         run: pnpm check
 
       - name: Typecheck
-        run: pnpm typecheck
+        run: pnpm gen:ipc && pnpm typecheck:scripts && pnpm nx affected -t typecheck --exclude shader-studio
 
       - name: Test
-        run: pnpm test
+        run: pnpm nx affected -t test --exclude shader-studio
 
       - name: Build
-        run: pnpm build
+        # Desktop packaging has its own Windows job below.
+        run: pnpm nx affected -t build --exclude shader-studio,@shader-studio/desktop
 
   smoke:
     name: UI smoke

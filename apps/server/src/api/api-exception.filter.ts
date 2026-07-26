@@ -31,6 +31,14 @@ export class ApiExceptionFilter implements ExceptionFilter {
       return;
     }
 
+    if (error instanceof HttpException && error.getStatus() === 400) {
+      const body: ApiErrorBody = {
+        error: { code: 'invalid', message: 'Request body is not valid JSON' },
+      };
+      response.status(400).json(body);
+      return;
+    }
+
     if (error instanceof HttpException && error.getStatus() === 404) {
       const body: ApiErrorBody = {
         error: { code: 'not_found', message: 'No such API route' },

@@ -108,6 +108,18 @@ describe('shader REST API', () => {
     });
   });
 
+  it('returns the standard invalid envelope for malformed JSON', async () => {
+    const response = await fetch(`${base}/api/shaders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{',
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: 'invalid', message: 'Request body is not valid JSON' },
+    });
+  });
+
   it('stores and serves a texture, then clears it', async () => {
     const { shader } = (await (
       await fetch(`${base}/api/shaders`, {

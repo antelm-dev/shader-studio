@@ -56,15 +56,16 @@ export class ApiController {
   }
 
   @Post('shaders')
-  async create(@Body() body: JsonBody, @Res() response: Response): Promise<void> {
+  async create(@Body() body: JsonBody | undefined, @Res() response: Response): Promise<void> {
+    const input = body ?? {};
     const created = await this.storage.create({
-      name: body['name'],
-      description: body['description'],
-      controls: body['controls'],
-      render: body['render'],
-      fragment: body['fragment'],
-      vertex: body['vertex'],
-      ...('project' in body ? { project: body['project'] } : {}),
+      name: input['name'],
+      description: input['description'],
+      controls: input['controls'],
+      render: input['render'],
+      fragment: input['fragment'],
+      vertex: input['vertex'],
+      ...('project' in input ? { project: input['project'] } : {}),
     });
     response.status(201).json({ shader: created });
   }
@@ -75,17 +76,18 @@ export class ApiController {
   }
 
   @Put('shaders/:id')
-  async update(@Param('id') id: string, @Body() body: JsonBody): Promise<unknown> {
+  async update(@Param('id') id: string, @Body() body: JsonBody | undefined): Promise<unknown> {
+    const input = body ?? {};
     const updated = await this.storage.update(id, {
-      ...('name' in body ? { name: body['name'] } : {}),
-      ...('description' in body ? { description: body['description'] } : {}),
-      ...('controls' in body ? { controls: body['controls'] } : {}),
-      ...('render' in body ? { render: body['render'] } : {}),
-      ...('fragment' in body ? { fragment: body['fragment'] } : {}),
-      ...('vertex' in body ? { vertex: body['vertex'] } : {}),
-      ...('project' in body ? { project: body['project'] } : {}),
-      ...('channels' in body ? { channels: body['channels'] } : {}),
-      ...('expectedRevision' in body ? { expectedRevision: body['expectedRevision'] } : {}),
+      ...('name' in input ? { name: input['name'] } : {}),
+      ...('description' in input ? { description: input['description'] } : {}),
+      ...('controls' in input ? { controls: input['controls'] } : {}),
+      ...('render' in input ? { render: input['render'] } : {}),
+      ...('fragment' in input ? { fragment: input['fragment'] } : {}),
+      ...('vertex' in input ? { vertex: input['vertex'] } : {}),
+      ...('project' in input ? { project: input['project'] } : {}),
+      ...('channels' in input ? { channels: input['channels'] } : {}),
+      ...('expectedRevision' in input ? { expectedRevision: input['expectedRevision'] } : {}),
     });
     return { shader: updated };
   }
@@ -99,10 +101,10 @@ export class ApiController {
   @Post('shaders/:id/duplicate')
   async duplicate(
     @Param('id') id: string,
-    @Body() body: JsonBody,
+    @Body() body: JsonBody | undefined,
     @Res() response: Response,
   ): Promise<void> {
-    const copy = await this.storage.duplicate(id, body['name']);
+    const copy = await this.storage.duplicate(id, body?.['name']);
     response.status(201).json({ shader: copy });
   }
 
@@ -114,13 +116,14 @@ export class ApiController {
   @Post('shaders/:id/presets')
   async savePreset(
     @Param('id') id: string,
-    @Body() body: JsonBody,
+    @Body() body: JsonBody | undefined,
     @Res() response: Response,
   ): Promise<void> {
+    const input = body ?? {};
     const preset = await this.storage.savePreset(id, {
-      name: body['name'],
-      values: body['values'],
-      render: body['render'],
+      name: input['name'],
+      values: input['values'],
+      render: input['render'],
     });
     response.status(201).json({ preset });
   }
@@ -219,9 +222,10 @@ export class ApiController {
   }
 
   @Post('import')
-  async import(@Body() body: JsonBody, @Res() response: Response): Promise<void> {
-    const raw = 'bundle' in body ? body['bundle'] : body;
-    const mode = validateImportMode(body['mode']);
+  async import(@Body() body: JsonBody | undefined, @Res() response: Response): Promise<void> {
+    const input = body ?? {};
+    const raw = 'bundle' in input ? input['bundle'] : input;
+    const mode = validateImportMode(input['mode']);
     if (!mode.ok) throw new StorageError('invalid', 'Invalid import mode', mode.errors);
 
     const parsed = parseBundle(raw);
@@ -233,9 +237,13 @@ export class ApiController {
   }
 
   @Post('import/shadertoy')
-  async importShadertoy(@Body() body: JsonBody, @Res() response: Response): Promise<void> {
-    const idOrUrl = requiredString(body, 'idOrUrl');
-    const apiKey = requiredString(body, 'apiKey');
+  async importShadertoy(
+    @Body() body: JsonBody | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    const input = body ?? {};
+    const idOrUrl = requiredString(input, 'idOrUrl');
+    const apiKey = requiredString(input, 'apiKey');
 
     let result: { payload: ShaderPayload; warnings: string[] };
     try {
