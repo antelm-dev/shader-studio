@@ -17,10 +17,10 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
-import express, { type Router } from 'express';
+import express, { type Application } from 'express';
 import { join } from 'node:path';
 
-import { createApiRouter } from './api/router';
+import { createNestApi } from './api/bootstrap';
 import { createLibrary } from './create-library';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
@@ -37,17 +37,15 @@ const angularApp = new AngularNodeAppEngine({ allowedHosts });
 // than at module load keeps it out of Angular's build-time route extraction
 // (which imports this module but never calls /api), and lets a transient
 // database outage at startup recover on a later request instead of wedging.
-let routerPromise: Promise<Router> | null = null;
-function ensureRouter(): Promise<Router> {
-  if (!routerPromise) {
-    routerPromise = createLibrary()
-      .then((library) => createApiRouter(library))
+let routerPromise: Promise<Application> | null = null;
+function ensureRouter(): Promise<Application> {
+  routerPromise ??= createLibrary()
+      .then(async (library) => (await createNestApi(library)).handler)
       .catch((error: unknown) => {
         console.error('[server] failed to initialise shader storage', error);
         routerPromise = null; // let the next request retry
         throw error;
       });
-  }
   return routerPromise;
 }
 

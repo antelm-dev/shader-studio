@@ -1,5 +1,5 @@
 /**
- * REST tests for the shader API, driven against a real `ShaderLibrary` backed by
+ * REST tests for the NestJS shader API, driven against a real `ShaderLibrary` backed by
  * an in-memory SQLite database. The router is mounted on a live express server
  * and exercised over HTTP, so the request parsing, status-code mapping and error
  * envelope are all covered end-to-end without a filesystem or Postgres.
@@ -12,17 +12,19 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { ShaderLibrary } from '@shader-studio/backend/library';
 import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
-import { createApiRouter } from './router';
+import { createNestApi, type NestApi } from './bootstrap';
 
 let library: ShaderLibrary;
 let server: Server;
 let base: string;
+let nestApi: NestApi;
 
 beforeAll(async () => {
   library = new ShaderLibrary(new SqliteRepository({ location: ':memory:' }));
   await library.init();
+  nestApi = await createNestApi(library);
   const app = express();
-  app.use('/api', createApiRouter(library));
+  app.use('/api', nestApi.handler);
   server = app.listen(0);
   const { port } = server.address() as AddressInfo;
   base = `http://127.0.0.1:${port}`;
@@ -30,6 +32,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  await nestApi.app.close();
   await library.close();
 });
 
