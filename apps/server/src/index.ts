@@ -40,12 +40,12 @@ const angularApp = new AngularNodeAppEngine({ allowedHosts });
 let routerPromise: Promise<Application> | null = null;
 function ensureRouter(): Promise<Application> {
   routerPromise ??= createLibrary()
-      .then(async (library) => (await createNestApi(library)).handler)
-      .catch((error: unknown) => {
-        console.error('[server] failed to initialise shader storage', error);
-        routerPromise = null; // let the next request retry
-        throw error;
-      });
+    .then(async (library) => (await createNestApi(library)).handler)
+    .catch((error: unknown) => {
+      console.error('[server] failed to initialise shader storage', error);
+      routerPromise = null; // let the next request retry
+      throw error;
+    });
   return routerPromise;
 }
 

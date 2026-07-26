@@ -36,7 +36,16 @@
             },
             "server": "src/main.server.ts",
             "outputMode": "server",
-            "externalDependencies": ["pg", "pg-native", "cloudflare:sockets"],
+            "externalDependencies": [
+              "pg",
+              "pg-native",
+              "cloudflare:sockets",
+              "class-validator",
+              "class-transformer",
+              "@nestjs/websockets/socket-module",
+              "@nestjs/microservices",
+              "@nestjs/microservices/microservices-module"
+            ],
             "security": {
               "allowedHosts": []
             },

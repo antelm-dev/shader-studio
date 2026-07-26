@@ -127,10 +127,7 @@ export class ApiController {
 
   @Delete('shaders/:id/presets/:presetId')
   @HttpCode(204)
-  async deletePreset(
-    @Param('id') id: string,
-    @Param('presetId') presetId: string,
-  ): Promise<void> {
+  async deletePreset(@Param('id') id: string, @Param('presetId') presetId: string): Promise<void> {
     await this.storage.deletePreset(id, presetId);
   }
 
@@ -181,10 +178,7 @@ export class ApiController {
   }
 
   @Put('shaders/:id/thumbnail')
-  async setThumbnail(
-    @Param('id') id: string,
-    @Req() request: Request,
-  ): Promise<unknown> {
+  async setThumbnail(@Param('id') id: string, @Req() request: Request): Promise<unknown> {
     const body = request.body as unknown;
     if (!Buffer.isBuffer(body)) {
       throw new StorageError('invalid', 'Expected a raw image body with an image/* Content-Type');
@@ -219,10 +213,7 @@ export class ApiController {
   }
 
   @Get('export')
-  @Header(
-    'Content-Disposition',
-    'attachment; filename="shader-studio-collection.shader.json"',
-  )
+  @Header('Content-Disposition', 'attachment; filename="shader-studio-collection.shader.json"')
   async exportAll(): Promise<unknown> {
     return buildCollectionBundle(await this.storage.exportAll());
   }
