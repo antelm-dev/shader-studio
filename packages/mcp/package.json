@@ -38,23 +38,6 @@
     "pack:tarball": "pnpm run build && node -e \"require('node:fs').mkdirSync('dist-pack',{recursive:true})\" && npm pack --pack-destination ./dist-pack",
     "verify": "tsx scripts/verify-bridge.ts"
   },
-  "nx": {
-    "targets": {
-      "build": {
-        "outputs": ["{projectRoot}/dist"]
-      },
-      "dev": {
-        "cache": false,
-        "persistent": true
-      },
-      "pack:tarball": {
-        "outputs": ["{projectRoot}/dist-pack"]
-      },
-      "verify": {
-        "cache": false
-      }
-    }
-  },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@rollup/plugin-commonjs": "^28.0.2",
@@ -73,5 +56,26 @@
   },
   "engines": {
     "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "outputs": [
+          "{projectRoot}/dist"
+        ]
+      },
+      "dev": {
+        "cache": false,
+        "persistent": true
+      },
+      "pack:tarball": {
+        "outputs": [
+          "{projectRoot}/dist-pack"
+        ]
+      },
+      "verify": {
+        "cache": false
+      }
+    }
   }
 }
