@@ -11,7 +11,11 @@ services:
     # the internal Compose network. Add a `ports:` mapping yourself if you need
     # to connect from the host for maintenance.
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-shader_studio} -d ${POSTGRES_DB:-shader_studio}']
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-shader_studio} -d ${POSTGRES_DB:-shader_studio}',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5

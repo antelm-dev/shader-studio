@@ -13,10 +13,7 @@ interface CatalogueEntry {
 }
 
 const log = createLogger('fonts');
-const source = readFileSync(
-  resolve(root, 'apps/web/src/app/editor/font-catalogue.ts'),
-  'utf8',
-);
+const source = readFileSync(resolve(root, 'apps/web/src/app/editor/font-catalogue.ts'), 'utf8');
 
 const entryPattern =
   /\{\s*family:\s*(SYSTEM_FONT|'[^']*'|"[^"]*")\s*,\s*weights:\s*\[([^\]]*)\]\s*,\s*ligatures:\s*(true|false)\s*,\s*note:\s*('(?:\\'|[^'])*'|"(?:\\"|[^"])*")\s*,?\s*\}/gs;
@@ -34,9 +31,7 @@ const catalogue: CatalogueEntry[] = [...source.matchAll(entryPattern)].map((matc
 });
 
 if (catalogue.length === 0) {
-  fail(
-    'Could not parse FONT_CATALOGUE entries from apps/web/src/app/editor/font-catalogue.ts',
-  );
+  fail('Could not parse FONT_CATALOGUE entries from apps/web/src/app/editor/font-catalogue.ts');
 }
 
 const expected: (FontOverlayEntry | typeof SYSTEM_FONT_ENTRY)[] = [

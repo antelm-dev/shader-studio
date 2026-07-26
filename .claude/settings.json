@@ -1,14 +1,6 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(pnpm *)",
-      "Bash(git *)",
-      "Bash(node *)",
-      "Bash(tsx *)",
-      "Read",
-      "Glob",
-      "Grep"
-    ],
+    "allow": ["Bash(pnpm *)", "Bash(git *)", "Bash(node *)", "Bash(tsx *)", "Read", "Glob", "Grep"],
     "ask": [
       "Bash(pnpm add *)",
       "Bash(pnpm remove *)",
