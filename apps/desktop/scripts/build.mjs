@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
+import { cp, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import { Arch, Platform, build as buildInstaller } from 'electron-builder';
 
@@ -8,6 +10,7 @@ import { createLogger } from './_lib/logger.mjs';
 
 const log = createLogger('desktop');
 const root = resolve(import.meta.dirname, '../../..');
+const releaseDir = resolve(root, 'release');
 const require = createRequire(import.meta.url);
 const electronVersion = require('electron/package.json').version;
 
@@ -42,21 +45,36 @@ async function packageDesktop() {
   const platform = options.platform ?? Platform.current();
   const target = options.mode === 'pack' ? 'dir' : null;
   const arch = options.arch ? [options.arch] : [];
+  const useStaging = process.platform === 'win32';
+  const stagingDir = join(tmpdir(), 'shader-studio-electron-out');
 
   log.info(`package: ${platform.name}${target ? ` (${target})` : ''}`);
+  if (useStaging) {
+    log.info(`windows staging output: ${stagingDir}`);
+    await rm(stagingDir, { recursive: true, force: true });
+  }
 
   const artifacts = await buildInstaller({
     projectDir: root,
     config: {
       extends: 'apps/desktop/electron-builder.yml',
       electronVersion,
+      ...(useStaging ? { directories: { output: stagingDir, buildResources: 'public' } } : {}),
     },
     targets: platform.createTarget(target, ...arch),
     publish: process.env.ELECTRON_BUILDER_PUBLISH ?? 'never',
   });
 
+  if (useStaging) {
+    await rm(releaseDir, { recursive: true, force: true });
+    await cp(stagingDir, releaseDir, { recursive: true });
+    await rm(stagingDir, { recursive: true, force: true });
+    log.info(`copied packaging output to ${releaseDir}`);
+  }
+
   for (const artifact of artifacts) {
-    log.info(`Created ${artifact}`);
+    const path = useStaging ? String(artifact).replaceAll(stagingDir, releaseDir) : artifact;
+    log.info(`Created ${path}`);
   }
 }
 

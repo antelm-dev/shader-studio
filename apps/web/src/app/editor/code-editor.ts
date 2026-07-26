@@ -310,7 +310,7 @@ export class CodeEditor {
 
   private flushPendingReveal(docId: string): void {
     const pending = this.pendingReveal;
-    if (!pending || pending.docId !== docId) return;
+    if (pending?.docId !== docId) return;
 
     this.pendingReveal = null;
     this.revealLine(pending.line);
