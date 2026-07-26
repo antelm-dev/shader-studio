@@ -10,8 +10,8 @@
     "src/**/*.ts",
     "scripts/**/*.ts",
     "test/**/*.ts",
-    "../shared/src/mcp/**/*.ts",
-    "../shared/src/validate/**/*.ts",
-    "../shared/src/model/**/*.ts"
+    "../../libs/shared/src/mcp/**/*.ts",
+    "../../libs/shared/src/validate/**/*.ts",
+    "../../libs/shared/src/model/**/*.ts"
   ]
 }

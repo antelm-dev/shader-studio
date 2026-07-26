@@ -2,12 +2,12 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { createLogger } from '../_lib/logger.js';
-import { root } from '../_lib/paths.js';
+import { createLogger } from '../lib/logger.js';
+import { root } from '../lib/paths.js';
 
 const log = createLogger('ipc');
 const ipcDir = resolve(root, 'apps/desktop/main/src/ipc');
-const outFile = resolve(root, 'packages/desktop-api/src/ipc-bridge.ts');
+const outFile = resolve(root, 'libs/desktop-api/src/ipc-bridge.ts');
 
 const moduleNames = readdirSync(ipcDir)
   .filter((name) => name.endsWith('.ipc.ts'))

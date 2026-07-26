@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 /**
  * Reads this package's own `version` field. Resolved relative to this file
  * rather than imported as JSON so the same code works both from `src/`
- * during development (`../package.json` = `packages/mcp/package.json`) and
+ * during development (`../package.json` = `tools/mcp/package.json`) and
  * from the bundled `dist/server.mjs` once published (npm always ships
  * `package.json` next to `dist/`, so the relative path still lands on it).
  *

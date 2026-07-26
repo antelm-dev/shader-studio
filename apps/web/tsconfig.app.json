@@ -15,9 +15,9 @@
   "include": [
     "src/**/*.ts",
     "../server/src/**/*.ts",
-    "../../packages/backend/src/**/*.ts",
-    "../../packages/desktop-api/src/**/*.ts",
-    "../../packages/shared/src/**/*.ts"
+    "../../libs/backend/src/**/*.ts",
+    "../../libs/desktop-api/src/**/*.ts",
+    "../../libs/shared/src/**/*.ts"
   ],
   "exclude": ["src/**/*.spec.ts"]
 }

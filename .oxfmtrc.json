@@ -9,7 +9,7 @@
     "dist-web/**",
     "release/**",
     "data/**",
-    "packages/desktop-api/src/ipc-bridge.ts",
+    "libs/desktop-api/src/ipc-bridge.ts",
     ".angular/**"
   ]
 }

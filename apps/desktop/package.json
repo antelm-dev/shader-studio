@@ -57,7 +57,7 @@
           "sharedGlobals"
         ],
         "outputs": [
-          "{workspaceRoot}/packages/desktop-api/src/ipc-bridge.ts"
+          "{workspaceRoot}/libs/desktop-api/src/ipc-bridge.ts"
         ]
       },
       "dev": {

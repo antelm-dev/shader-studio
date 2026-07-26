@@ -12,13 +12,14 @@ A self-hosted WebGL shader viewer/editor. pnpm monorepo (`pnpm@10`, Node `^22.22
 - `apps/web` — Angular 22 app (`@shader-studio/web`), the editor/viewer UI.
 - `apps/desktop` — Electron shell (`@shader-studio/desktop`), wraps the web app for desktop distribution.
 - `apps/server` — Express/Angular SSR server (`@shader-studio/server`).
-- `packages/backend` — shared backend logic (file storage, project model) used by web/server/desktop.
-- `packages/desktop-api` — typed IPC surface between web and Electron main (`gen:ipc` generates the bridge).
-- `packages/mcp` — MCP server exposing Shader Studio to AI tools (bridges to the running app via `SHADER_STUDIO_MCP_PORT`/`SHADER_STUDIO_MCP_TOKEN`, default port 4310).
-- `packages/shared` — types/utilities shared across all packages.
+- `libs/backend` — shared backend logic (file storage, project model) used by web/server/desktop.
+- `libs/desktop-api` — typed IPC surface between web and Electron main (`gen:ipc` generates the bridge).
+- `tools/mcp` — MCP server exposing Shader Studio to AI tools (bridges to the running app via `SHADER_STUDIO_MCP_PORT`/`SHADER_STUDIO_MCP_TOKEN`, default port 4310).
+- `libs/shared` — types/utilities shared across all packages.
+- `tools/workspace` — repository checks, generators, smoke tests, and automation.
 - `examples/shaders/*` — example GLSL shaders (`fragment.glsl` / `vertex.glsl` pairs), not app code.
 
-Never edit generated output directly: `dist/`, `dist-main/`, `dist-web/`, `release/`, and `packages/desktop-api/src/ipc-bridge.ts` (regenerate via `pnpm gen:ipc` instead).
+Never edit generated output directly: `dist/`, `dist-main/`, `dist-web/`, `release/`, and `libs/desktop-api/src/ipc-bridge.ts` (regenerate via `pnpm gen:ipc` instead).
 
 ## Commands (always run from repo root with pnpm, never npm/yarn)
 
@@ -42,4 +43,4 @@ Use `pnpm --filter <package-name> <script>` to target a single workspace package
 
 ## Testing
 
-Vitest is the test runner everywhere (Angular's `test` target uses `@angular/build:unit-test` with the vitest runner, not Karma). `packages/mcp` and `packages/shared` have standalone `vitest.config.ts` files.
+Vitest is the test runner everywhere (Angular's `test` target uses `@angular/build:unit-test` with the vitest runner, not Karma). `tools/mcp` and `libs/shared` have standalone `vitest.config.ts` files.

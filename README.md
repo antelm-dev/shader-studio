@@ -94,6 +94,11 @@ docker compose up -d --build
 Shader Studio is then available at [http://localhost:4000](http://localhost:4000),
 with the five example shaders already seeded.
 
+Keep `.env` local: it is ignored by both Git and the Docker build context.
+Only `.env.example`, which contains no usable credential, belongs in version
+control. If `.env` was already tracked, adding it to `.gitignore` is not enough:
+remove it from the index and rotate any password that may have been shared.
+
 Your shaders live in **PostgreSQL**, persisted in the named `postgres-data`
 volume; everything else in the image is disposable. The database is not published
 on a host port — only the app container reaches it, over Compose's internal
@@ -158,9 +163,9 @@ with the standard tools, e.g. against the bundled Compose service:
 
 ```bash
 # Backup
-docker compose exec -T postgres pg_dump -U shader_studio shader_studio > backup.sql
+docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > backup.sql
 # Restore (into an empty database)
-docker compose exec -T postgres psql -U shader_studio -d shader_studio < backup.sql
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backup.sql
 ```
 
 **SQLite (Desktop / dev)** lives at one file. On the desktop app it is
@@ -279,7 +284,7 @@ with them is up to it.
 
 ## Architecture
 
-Four concerns, kept apart on purpose. Nothing below the line knows about Angular.
+Five concerns, kept apart on purpose. Nothing below the line knows about Angular.
 
 ```
 apps/
@@ -296,14 +301,17 @@ apps/
     preload/src/         sandboxed context bridge
     package.json         desktop build, development, packaging, and type checks
 
-packages/
+libs/
   shared/                model, validation, GLSL, capture, and MCP contracts
   backend/               Node-only storage and i18n shared by server and desktop
     src/library/         ShaderLibrary — engine-agnostic shader domain logic
     src/persistence/     ShaderRepository + SQLite / Postgres / legacy adapters
     src/storage/         the legacy file store, now a read-only import source
   desktop-api/           generated, typed IPC bridge contract
+
+tools/
   mcp/                   standalone `@shader-studio/mcp` server
+  workspace/             checks, generators, smoke tests, and repo automation
 ```
 
 ### Storage
@@ -652,7 +660,7 @@ never carry a value for a control that does not exist.
 
 ## MCP server
 
-`packages/mcp` publishes [`@shader-studio/mcp`](https://www.npmjs.com/package/@shader-studio/mcp)
+`tools/mcp` publishes [`@shader-studio/mcp`](https://www.npmjs.com/package/@shader-studio/mcp)
 on npm: an [MCP](https://modelcontextprotocol.io) server that lets Claude Code,
 Codex, Cursor, and other MCP clients drive a **locally-open Shader Studio
 tab** — list shaders, edit GLSL live, tune uniforms, apply presets, and
@@ -668,7 +676,7 @@ claude mcp add shader-studio -- npx -y @shader-studio/mcp
 
 Pairing the browser tab, the security model, environment variables, and
 per-client config (Codex, Cursor, Windows) are documented in
-[`packages/mcp/README.md`](packages/mcp/README.md).
+[`tools/mcp/README.md`](tools/mcp/README.md).
 
 ---
 
@@ -709,7 +717,7 @@ pnpm test
   library: status codes, the `{ error: { code, message } }` envelope, a `409` on
   a stale `expectedRevision`, and texture upload/serve/clear.
 
-- **`packages/shared/validate.spec.ts`** — ids (every traversal and reserved-name case),
+- **`libs/shared/src/validate/validate.spec.ts`** — ids (every traversal and reserved-name case),
   the control schema, preset sanitization and clamping, and bundle round-trips —
   including a `shader-studio/v1` bundle (no `project` field) synthesizing one via
   `migrateLegacyProject`, and a malformed `project` being sanitized rather than
@@ -748,16 +756,19 @@ pnpm test
 
 ## Known limitations
 
-- **One WebGL context.** Only the selected shader renders; there are no thumbnails
-  in the browser list.
-- **No auth, no multi-user.** The API writes to the local filesystem and assumes a
-  single trusted user. It is a studio, not a service.
-- **Bloom is the only post effect**, and it is a shader-level setting rather than
-  something a preset can capture.
+- **One active shader.** The browser list displays saved thumbnails, but it does
+  not continuously render every shader in the library. The selected shader and
+  the optional output window are the live render surfaces.
+- **No auth, no multi-user.** The web API uses PostgreSQL or SQLite and assumes a
+  single trusted user. It is a studio, not a public service; expose it only
+  behind an authenticated proxy or private access layer.
+- **Bloom is the only built-in post effect.** A preset can optionally capture
+  the complete render settings, including bloom, but there is no configurable
+  post-processing chain yet.
 - **Monaco's stylesheet is global** (~88 kB gzipped), not lazy: the CSS its ESM
   modules import lands in a chunk nothing links, so the editor comes out
   structurally unstyled if you rely on it. The editor's _code_ is still lazy.
-- **`renderer.compile` uses a real draw call** to a 1×1 target to force a compile.
+- **Shader compilation uses a real draw call** to a 1×1 target to force a compile.
   It is the only reliable way to make three.js compile eagerly, but it does mean a
   recompile costs one hidden frame.
 - GLSL diagnostics come from the driver, so their exact wording varies by

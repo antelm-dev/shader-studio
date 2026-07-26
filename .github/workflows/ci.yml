@@ -82,6 +82,16 @@ jobs:
       - name: Smoke
         run: pnpm smoke
 
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build production image
+        run: docker build --tag shader-studio:ci .
+
   desktop:
     name: Windows desktop package
     runs-on: windows-latest

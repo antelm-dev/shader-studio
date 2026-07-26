@@ -62,7 +62,8 @@ Thumbs.db
 *.sqlite-wal
 *.log
 *.tsbuildinfo
-/packages/desktop-api/src/ipc-bridge.ts
+/libs/desktop-api/src/ipc-bridge.ts
 /electron-run-*.json
 **/electron-run-*.json
 
+.env

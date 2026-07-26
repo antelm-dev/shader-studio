@@ -9,14 +9,14 @@
     "shader-studio",
     "shaders"
   ],
-  "homepage": "https://github.com/antelm-dev/shader-studio/tree/master/packages/mcp",
+  "homepage": "https://github.com/antelm-dev/shader-studio/tree/master/tools/mcp",
   "bugs": "https://github.com/antelm-dev/shader-studio/issues",
   "license": "Apache-2.0",
   "author": "Adel Terki",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/antelm-dev/shader-studio.git",
-    "directory": "packages/mcp"
+    "directory": "tools/mcp"
   },
   "bin": {
     "shader-studio-mcp": "./dist/server.mjs"

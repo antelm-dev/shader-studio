@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { createLogger } from '../_lib/logger.js';
-import { root } from '../_lib/paths.js';
+import { createLogger } from '../lib/logger.js';
+import { root } from '../lib/paths.js';
 
 type Catalog = Record<string, string>;
 

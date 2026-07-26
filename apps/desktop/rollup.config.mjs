@@ -20,7 +20,7 @@ export default defineConfig([
     plugins: [
       ipcBridge({
         ipcDir: './main/src/ipc',
-        outFile: '../../packages/desktop-api/src/ipc-bridge.ts',
+        outFile: '../../libs/desktop-api/src/ipc-bridge.ts',
         tsconfig: './tsconfig.main.json',
       }),
       json(),

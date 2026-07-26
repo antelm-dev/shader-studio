@@ -172,14 +172,14 @@ terminal does. If your client can't launch the server, wrap it:
 ## Development
 
 This package lives inside the [Shader Studio](https://github.com/antelm-dev/shader-studio)
-monorepo at `packages/mcp`. From the repo root:
+monorepo at `tools/mcp`. From the repo root:
 
 ```sh
 pnpm dev:mcp        # run the server directly from source (tsx, no build step)
 pnpm build:mcp       # bundle to dist/server.mjs
 pnpm typecheck:mcp
 pnpm test:mcp        # builds, then runs unit + integration tests
-pnpm pack:mcp        # produces an installable tarball in packages/mcp/dist-pack/
+pnpm pack:mcp        # produces an installable tarball in tools/mcp/dist-pack/
 ```
 
 `pnpm verify:mcp` runs a scripted round-trip against a fake "app" WebSocket

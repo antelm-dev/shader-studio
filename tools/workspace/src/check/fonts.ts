@@ -1,9 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { createLogger } from '../_lib/logger.js';
-import { root } from '../_lib/paths.js';
-import { FONT_OVERLAY, SYSTEM_FONT_ENTRY, type FontOverlayEntry } from '../gen/font-overlay.js';
+import { createLogger } from '../lib/logger.js';
+import { root } from '../lib/paths.js';
+import {
+  FONT_OVERLAY,
+  SYSTEM_FONT_ENTRY,
+  type FontOverlayEntry,
+} from '../generate/font-overlay.js';
 
 interface CatalogueEntry {
   family: string;
@@ -81,7 +85,7 @@ if (errors.length > 0) {
 }
 
 log.info(
-  `fonts ok — ${catalogue.length} entries match scripts/gen/font-overlay.ts (offline drift check)`,
+  `fonts ok — ${catalogue.length} entries match tools/workspace/src/generate/font-overlay.ts (offline drift check)`,
 );
 
 function unquote(raw: string): string {
