@@ -22,7 +22,7 @@ COPY tools/mcp/package.json ./tools/mcp/
 COPY tools/workspace/package.json ./tools/workspace/
 
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --ignore-scripts
+    pnpm install --frozen-lockfile
 
 COPY . .
 
