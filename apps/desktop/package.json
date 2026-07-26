@@ -14,6 +14,44 @@
     "dist:win": "node scripts/build.mjs dist --win",
     "typecheck": "pnpm gen:ipc && tsc --noEmit -p tsconfig.main.json && tsc --noEmit -p tsconfig.preload.json"
   },
+  "nx": {
+    "targets": {
+      "build": {
+        "outputs": [
+          "{workspaceRoot}/dist-main",
+          "{workspaceRoot}/dist-renderer"
+        ]
+      },
+      "build:main": {
+        "outputs": ["{workspaceRoot}/dist-main"]
+      },
+      "gen:ipc": {
+        "cache": true,
+        "inputs": [
+          "{projectRoot}/main/src/ipc/**/*.ts",
+          "{projectRoot}/scripts/gen-ipc.mjs",
+          "{projectRoot}/tsconfig.main.json",
+          "sharedGlobals"
+        ],
+        "outputs": [
+          "{workspaceRoot}/packages/desktop-api/src/ipc-bridge.ts"
+        ]
+      },
+      "dev": {
+        "cache": false,
+        "persistent": true
+      },
+      "pack:dir": {
+        "cache": false
+      },
+      "pack:win": {
+        "cache": false
+      },
+      "dist:win": {
+        "cache": false
+      }
+    }
+  },
   "dependencies": {
     "@shader-studio/backend": "workspace:*",
     "@shader-studio/desktop-api": "workspace:*",

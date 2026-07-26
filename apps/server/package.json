@@ -10,6 +10,19 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "nx": {
+    "targets": {
+      "build:cli": {
+        "outputs": [
+          "{workspaceRoot}/dist/shader-studio/cli.mjs"
+        ]
+      },
+      "dev": {
+        "cache": false,
+        "persistent": true
+      }
+    }
+  },
   "dependencies": {
     "@angular/ssr": "^22.0.6",
     "@nestjs/common": "^11.1.28",

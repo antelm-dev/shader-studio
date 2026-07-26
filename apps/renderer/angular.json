@@ -39,6 +39,7 @@
             "externalDependencies": [
               "pg",
               "pg-native",
+              "node:sqlite",
               "cloudflare:sockets",
               "class-validator",
               "class-transformer",

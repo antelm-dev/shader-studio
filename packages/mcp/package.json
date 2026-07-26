@@ -32,9 +32,28 @@
   },
   "scripts": {
     "build": "rollup -c",
+    "dev": "tsx src/server.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm build && vitest run",
-    "pack:tarball": "pnpm run build && node -e \"require('node:fs').mkdirSync('dist-pack',{recursive:true})\" && npm pack --pack-destination ./dist-pack"
+    "pack:tarball": "pnpm run build && node -e \"require('node:fs').mkdirSync('dist-pack',{recursive:true})\" && npm pack --pack-destination ./dist-pack",
+    "verify": "tsx scripts/verify-bridge.ts"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "outputs": ["{projectRoot}/dist"]
+      },
+      "dev": {
+        "cache": false,
+        "persistent": true
+      },
+      "pack:tarball": {
+        "outputs": ["{projectRoot}/dist-pack"]
+      },
+      "verify": {
+        "cache": false
+      }
+    }
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

@@ -9,29 +9,29 @@
   "type": "module",
   "main": "dist-main/main.cjs",
   "scripts": {
-    "dev": "pnpm --filter @shader-studio/renderer dev",
-    "dev:server": "pnpm --filter @shader-studio/server dev",
-    "build": "pnpm --filter @shader-studio/renderer build",
-    "clean:desktop": "pnpm --filter @shader-studio/desktop clean",
-    "gen:ipc": "pnpm --filter @shader-studio/desktop gen:ipc",
+    "dev": "nx run @shader-studio/renderer:dev",
+    "dev:server": "nx run @shader-studio/server:dev",
+    "build": "nx run @shader-studio/renderer:build",
+    "clean:desktop": "nx run @shader-studio/desktop:clean",
+    "gen:ipc": "nx run @shader-studio/desktop:gen:ipc",
     "gen:fonts": "tsx scripts/gen/fonts.ts",
-    "build:renderer": "pnpm --filter @shader-studio/renderer build:desktop",
-    "build:main": "pnpm --filter @shader-studio/desktop build:main",
-    "build:desktop": "pnpm --filter @shader-studio/desktop build",
-    "dev:desktop": "pnpm --filter @shader-studio/desktop dev",
+    "build:renderer": "nx run @shader-studio/renderer:build:desktop",
+    "build:main": "nx run @shader-studio/desktop:build:main",
+    "build:desktop": "nx run @shader-studio/desktop:build",
+    "dev:desktop": "nx run @shader-studio/desktop:dev",
     "typecheck:main": "pnpm --filter @shader-studio/desktop exec tsc --noEmit -p tsconfig.main.json",
     "typecheck:preload": "pnpm --filter @shader-studio/desktop exec tsc --noEmit -p tsconfig.preload.json",
-    "pack:dir": "pnpm --filter @shader-studio/desktop pack:dir",
-    "pack:win": "pnpm --filter @shader-studio/desktop pack:win",
-    "dist:win": "pnpm --filter @shader-studio/desktop dist:win",
+    "pack:dir": "nx run @shader-studio/desktop:pack:dir",
+    "pack:win": "nx run @shader-studio/desktop:pack:win",
+    "dist:win": "nx run @shader-studio/desktop:dist:win",
     "serve:ssr": "node dist/shader-studio/server/server.mjs",
-    "test": "pnpm -r --if-present test",
-    "test:watch": "pnpm --filter @shader-studio/renderer test:watch",
-    "build:mcp": "pnpm --filter @shader-studio/mcp build",
-    "test:mcp": "pnpm --filter @shader-studio/mcp build && pnpm --filter @shader-studio/mcp test",
-    "pack:mcp": "pnpm --filter @shader-studio/mcp run pack:tarball",
-    "typecheck": "pnpm gen:ipc && pnpm typecheck:scripts && pnpm -r --if-present typecheck",
-    "typecheck:mcp": "pnpm --filter @shader-studio/mcp typecheck",
+    "test": "nx run-many -t test --projects \"@shader-studio/*\"",
+    "test:watch": "nx run @shader-studio/renderer:test:watch",
+    "build:mcp": "nx run @shader-studio/mcp:build",
+    "test:mcp": "nx run @shader-studio/mcp:test",
+    "pack:mcp": "nx run @shader-studio/mcp:pack:tarball",
+    "typecheck": "pnpm gen:ipc && pnpm typecheck:scripts && nx run-many -t typecheck --projects \"@shader-studio/*\"",
+    "typecheck:mcp": "nx run @shader-studio/mcp:typecheck",
     "typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json",
     "check:i18n": "tsx scripts/check/i18n.ts",
     "check:fonts": "tsx scripts/check/fonts.ts",
@@ -42,8 +42,8 @@
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "dev:mcp": "pnpm --filter @shader-studio/mcp exec tsx src/server.ts",
-    "verify:mcp": "pnpm --filter @shader-studio/mcp exec tsx scripts/verify-bridge.ts"
+    "dev:mcp": "nx run @shader-studio/mcp:dev",
+    "verify:mcp": "nx run @shader-studio/mcp:verify"
   },
   "devDependencies": {
     "@types/node": "^20.17.19",
@@ -55,28 +55,7 @@
     "typescript": "~6.0.2"
   },
   "engines": {
-    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
-  },
-  "volta": {
-    "node": "26.5.0"
-  },
-  "packageManager": "pnpm@10.28.2",
-  "pnpm": {
-    "packageExtensions": {
-      "electron-ipc-module@*": {
-        "dependencies": {
-          "typescript": "~6.0.2"
-        }
-      }
-    },
-    "onlyBuiltDependencies": [
-      "@parcel/watcher",
-      "electron",
-      "electron-ipc-module",
-      "electron-run",
-      "electron-winstaller",
-      "esbuild",
-      "rollup-plugin-electron-run"
-    ]
+    "node": "^22.22.3 || ^24.15.0 || >=26.0.0",
+    "pnpm": ">=10.28.2"
   }
 }

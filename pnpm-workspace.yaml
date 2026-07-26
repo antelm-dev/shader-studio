@@ -2,3 +2,18 @@ packages:
   - '.'
   - 'apps/*'
   - 'packages/*'
+
+packageExtensions:
+  electron-ipc-module@*:
+    dependencies:
+      typescript: ~6.0.2
+
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - electron
+  - electron-ipc-module
+  - electron-run
+  - electron-winstaller
+  - esbuild
+  - nx
+  - rollup-plugin-electron-run

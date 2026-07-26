@@ -12,6 +12,28 @@
     "test:watch": "ng test --watch",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit"
   },
+  "nx": {
+    "targets": {
+      "build": {
+        "outputs": ["{workspaceRoot}/dist/shader-studio"]
+      },
+      "build:desktop": {
+        "outputs": ["{workspaceRoot}/dist-renderer"]
+      },
+      "dev": {
+        "cache": false,
+        "persistent": true
+      },
+      "dev:desktop": {
+        "cache": false,
+        "persistent": true
+      },
+      "test:watch": {
+        "cache": false,
+        "persistent": true
+      }
+    }
+  },
   "dependencies": {
     "@angular/cdk": "22.0.4",
     "@angular/common": "^22.0.0",
