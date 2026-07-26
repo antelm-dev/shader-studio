@@ -6,7 +6,7 @@
   },
   "oxc.fmt.configPath": ".oxfmtrc.json",
 
-  "typescript.tsdk": "apps/renderer/node_modules/typescript/lib",
+  "typescript.tsdk": "apps/web/node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "typescript.preferences.autoImportFileExcludePatterns": ["**/dist/**", "**/dist-*/**"],
 
@@ -21,14 +21,14 @@
     "**/.git": true,
     "**/dist": true,
     "**/dist-main": true,
-    "**/dist-renderer": true,
+    "**/dist-web": true,
     "**/release": true
   },
   "search.exclude": {
     "**/node_modules": true,
     "**/dist": true,
     "**/dist-main": true,
-    "**/dist-renderer": true,
+    "**/dist-web": true,
     "**/release": true,
     "**/pnpm-lock.yaml": true,
     "data/**": true
@@ -37,7 +37,7 @@
     "**/node_modules/**": true,
     "**/dist/**": true,
     "**/dist-main/**": true,
-    "**/dist-renderer/**": true,
+    "**/dist-web/**": true,
     "**/release/**": true,
     "**/.angular/**": true
   },

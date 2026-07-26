@@ -167,7 +167,7 @@ prepare({
     const bounds = validBounds(saved.bounds);
     const i18nDir = env.production ? join(process.resourcesPath, 'i18n') : await resolveI18nDir();
 
-    // SQLite lives in the main process only; the renderer reaches it via IPC.
+    // SQLite lives in the main process only; the web app reaches it via IPC.
     const libraryDir = join(userData, 'library');
     await mkdir(libraryDir, { recursive: true });
     const library = new ShaderLibrary(
@@ -255,7 +255,7 @@ prepare({
         if (!allowed) event.preventDefault();
       });
       const outputUrl = env.production
-        ? new URL('/output', env.urls.renderer).toString()
+        ? new URL('/output', env.urls.web).toString()
         : new URL('/output', env.devServerUrl).toString();
       void output.loadURL(outputUrl);
       win.webContents.send('output-state-changed', true);
@@ -305,7 +305,7 @@ prepare({
         : url.startsWith(env.devServerUrl);
       if (!allowed) event.preventDefault();
     });
-    if (env.production) await win.loadURL(env.urls.renderer);
+    if (env.production) await win.loadURL(env.urls.web);
     else {
       const load = () => void win.loadURL(env.devServerUrl);
       win.webContents.on('did-fail-load', () => setTimeout(load, 300));

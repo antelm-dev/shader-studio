@@ -14,11 +14,11 @@ const electronVersion = require('electron/package.json').version;
 const commands = {
   clean: ['pnpm', 'run', 'clean'],
   ipc: ['pnpm', 'run', 'gen:ipc'],
-  rendererTypes: ['pnpm', '--filter', '@shader-studio/renderer', 'typecheck'],
+  webTypes: ['pnpm', '--filter', '@shader-studio/web', 'typecheck'],
   backendTypes: ['pnpm', '--filter', '@shader-studio/backend', 'typecheck'],
   mainTypes: ['pnpm', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.main.json'],
   preloadTypes: ['pnpm', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.preload.json'],
-  renderer: ['pnpm', '--filter', '@shader-studio/renderer', 'build:desktop'],
+  web: ['pnpm', '--filter', '@shader-studio/web', 'build:desktop'],
   main: ['pnpm', 'run', 'build:main'],
 };
 

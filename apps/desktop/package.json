@@ -19,7 +19,7 @@
       "build": {
         "outputs": [
           "{workspaceRoot}/dist-main",
-          "{workspaceRoot}/dist-renderer"
+          "{workspaceRoot}/dist-web"
         ]
       },
       "build:main": {

@@ -6,7 +6,7 @@ const commands = [
   {
     name: 'angular',
     entry: process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-    args: ['--filter', '@shader-studio/renderer', 'dev:desktop'],
+    args: ['--filter', '@shader-studio/web', 'dev:desktop'],
     stdin: 'ignore',
   },
   {

@@ -5,7 +5,7 @@
     {
       "type": "npm",
       "script": "dev",
-      "label": "renderer: dev (ng serve)",
+      "label": "web: dev (ng serve)",
       "isBackground": true,
       "problemMatcher": {
         "owner": "typescript",
@@ -67,7 +67,7 @@
     {
       "type": "npm",
       "script": "build",
-      "label": "renderer: build",
+      "label": "web: build",
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": ["$tsc"]
     }

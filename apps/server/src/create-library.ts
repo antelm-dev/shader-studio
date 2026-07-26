@@ -2,7 +2,7 @@
  * Builds the shader storage the server runs on. PostgreSQL is selected whenever
  * `DATABASE_URL` is set (always the case under Docker Compose); without it, a
  * local SQLite file is used so `pnpm dev:server` and `ng serve` work with no
- * database to stand up. Either way the renderer only ever sees the REST API —
+ * database to stand up. Either way the web app only ever sees the REST API —
  * the connection string never leaves this process.
  */
 

@@ -8,6 +8,7 @@
     "dist/**",
     "dist-main/**",
     "dist-renderer/**",
+    "dist-web/**",
     "release/**",
     "data/**",
     "packages/desktop-api/src/ipc-bridge.ts"

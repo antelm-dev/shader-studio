@@ -7,12 +7,19 @@ packageExtensions:
   electron-ipc-module@*:
     dependencies:
       typescript: ~6.0.2
+  rollup-plugin-electron-run@*:
+    dependencies:
+      typescript: ~6.0.2
+
+# Git-hosted dependencies run their own temporary `pnpm install` during
+# preparation. That nested project cannot inherit this workspace's allowlist,
+# so keep its unreviewed dev-dependency builds skipped instead of failing.
+strictDepBuilds: false
 
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - electron
   - electron-ipc-module
-  - electron-run
   - electron-winstaller
   - esbuild
   - nx

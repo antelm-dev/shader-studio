@@ -283,8 +283,8 @@ Four concerns, kept apart on purpose. Nothing below the line knows about Angular
 
 ```
 apps/
-  renderer/
-    src/                 Angular browser, SSR, and desktop-renderer entry points
+  web/
+    src/                 Angular browser, SSR, and desktop entry points
       app/               workspace state, rendering, editor, and UI
   server/
     src/                 Express SSR host and REST API
@@ -313,7 +313,7 @@ the Electron app (via Node's built-in `node:sqlite`, so there is no native modul
 to rebuild), PostgreSQL on the Web/Docker server (via `pg`). Both sit behind one
 `ShaderRepository` contract, and all the domain logic — validation, id
 generation, deriving `fragment`/`vertex` from the project, presets, import/export,
-seeding — lives once in `ShaderLibrary`, above the contract. The renderer knows
+seeding — lives once in `ShaderLibrary`, above the contract. The web app knows
 none of this: it still talks only to `ShaderApi` (`HttpShaderApi` over REST,
 `DesktopShaderApi` over IPC), so SQLite stays in the Electron main process and the
 PostgreSQL connection string never reaches the browser.

@@ -9,8 +9,8 @@ import { createLogger } from './_lib/logger.js';
 import { root } from './_lib/paths.js';
 
 const log = createLogger('smoke');
-const rendererDir = resolve(root, 'apps/renderer');
-const require = createRequire(resolve(rendererDir, 'package.json'));
+const webDir = resolve(root, 'apps/web');
+const require = createRequire(resolve(webDir, 'package.json'));
 const ngCli = require.resolve('@angular/cli/bin/ng.js');
 const PORT = Number(process.env['SMOKE_PORT'] ?? 4321);
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -28,7 +28,7 @@ if (ipc.status !== 0) {
 }
 
 const server = spawn(process.execPath, [ngCli, 'serve', `--port=${PORT}`, '--host=127.0.0.1'], {
-  cwd: rendererDir,
+  cwd: webDir,
   env: { ...process.env, FORCE_COLOR: '0' },
   stdio: ['ignore', 'pipe', 'pipe'],
   windowsHide: true,

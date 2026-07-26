@@ -4,6 +4,7 @@
 /dist
 /dist-main
 /dist-renderer
+/dist-web
 /release
 /tmp
 /out-tsc

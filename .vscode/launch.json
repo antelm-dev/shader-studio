@@ -3,12 +3,12 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Launch renderer (chrome)",
+      "name": "Launch web (chrome)",
       "type": "chrome",
       "request": "launch",
-      "preLaunchTask": "renderer: dev (ng serve)",
+      "preLaunchTask": "web: dev (ng serve)",
       "url": "http://localhost:4200/",
-      "webRoot": "${workspaceFolder}/apps/renderer"
+      "webRoot": "${workspaceFolder}/apps/web"
     },
     {
       "name": "Debug server (tsx)",

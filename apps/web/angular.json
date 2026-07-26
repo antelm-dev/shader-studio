@@ -97,7 +97,7 @@
           "builder": "@angular/build:application",
           "options": {
             "browser": "src/main.desktop.ts",
-            "outputPath": { "base": "../../dist-renderer", "browser": "" },
+            "outputPath": { "base": "../../dist-web", "browser": "" },
             "outputMode": "static",
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",

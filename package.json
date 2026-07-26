@@ -9,43 +9,44 @@
   "type": "module",
   "main": "dist-main/main.cjs",
   "scripts": {
-    "dev": "nx run @shader-studio/renderer:dev",
+    "dev": "nx run @shader-studio/web:dev",
     "dev:server": "nx run @shader-studio/server:dev",
-    "build": "nx run @shader-studio/renderer:build",
-    "clean:desktop": "nx run @shader-studio/desktop:clean",
-    "gen:ipc": "nx run @shader-studio/desktop:gen:ipc",
-    "gen:fonts": "tsx scripts/gen/fonts.ts",
-    "build:renderer": "nx run @shader-studio/renderer:build:desktop",
-    "build:main": "nx run @shader-studio/desktop:build:main",
-    "build:desktop": "nx run @shader-studio/desktop:build",
     "dev:desktop": "nx run @shader-studio/desktop:dev",
-    "typecheck:main": "pnpm --filter @shader-studio/desktop exec tsc --noEmit -p tsconfig.main.json",
-    "typecheck:preload": "pnpm --filter @shader-studio/desktop exec tsc --noEmit -p tsconfig.preload.json",
-    "pack:dir": "nx run @shader-studio/desktop:pack:dir",
-    "pack:win": "nx run @shader-studio/desktop:pack:win",
-    "dist:win": "nx run @shader-studio/desktop:dist:win",
+    "dev:mcp": "nx run @shader-studio/mcp:dev",
+    "build": "nx run @shader-studio/web:build",
+    "build:all": "nx run-many -t build --projects \"@shader-studio/web,@shader-studio/mcp\" && nx run @shader-studio/server:build:cli",
+    "build:desktop": "nx run @shader-studio/desktop:build",
+    "build:mcp": "nx run @shader-studio/mcp:build",
     "serve:ssr": "node dist/shader-studio/server/server.mjs",
     "test": "nx run-many -t test --projects \"@shader-studio/*\"",
-    "test:watch": "nx run @shader-studio/renderer:test:watch",
-    "build:mcp": "nx run @shader-studio/mcp:build",
+    "test:watch": "nx run @shader-studio/web:test:watch",
     "test:mcp": "nx run @shader-studio/mcp:test",
-    "pack:mcp": "nx run @shader-studio/mcp:pack:tarball",
     "typecheck": "pnpm gen:ipc && pnpm typecheck:scripts && nx run-many -t typecheck --projects \"@shader-studio/*\"",
     "typecheck:mcp": "nx run @shader-studio/mcp:typecheck",
     "typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json",
+    "check": "pnpm check:i18n && pnpm check:fonts && pnpm check:ipc",
     "check:i18n": "tsx scripts/check/i18n.ts",
     "check:fonts": "tsx scripts/check/fonts.ts",
     "check:ipc": "tsx scripts/check/ipc.ts",
-    "check": "pnpm check:i18n && pnpm check:fonts && pnpm check:ipc",
-    "smoke": "tsx scripts/smoke.ts",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "dev:mcp": "nx run @shader-studio/mcp:dev",
-    "verify:mcp": "nx run @shader-studio/mcp:verify"
+    "smoke": "tsx scripts/smoke.ts",
+    "gen:ipc": "nx run @shader-studio/desktop:gen:ipc",
+    "gen:fonts": "tsx scripts/gen/fonts.ts",
+    "pack:desktop": "nx run @shader-studio/desktop:pack:dir",
+    "pack:win": "nx run @shader-studio/desktop:pack:win",
+    "dist:win": "nx run @shader-studio/desktop:dist:win",
+    "pack:mcp": "nx run @shader-studio/mcp:pack:tarball",
+    "verify:mcp": "nx run @shader-studio/mcp:verify",
+    "affected": "nx affected",
+    "graph": "nx graph",
+    "ci": "pnpm lint && pnpm format:check && pnpm check && pnpm typecheck && pnpm test && pnpm build:all"
   },
   "devDependencies": {
+    "@nx/angular": "23.1.0",
+    "@nx/nest": "23.1.0",
     "@types/node": "^20.17.19",
     "nx": "23.1.0",
     "oxfmt": "^0.58.0",
@@ -55,7 +56,10 @@
     "typescript": "~6.0.2"
   },
   "engines": {
-    "node": "^22.22.3 || ^24.15.0 || >=26.0.0",
-    "pnpm": ">=10.28.2"
-  }
+    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
+  },
+  "volta": {
+    "node": "26.5.0"
+  },
+  "packageManager": "pnpm@10.28.2"
 }

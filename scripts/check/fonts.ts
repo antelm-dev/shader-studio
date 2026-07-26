@@ -14,7 +14,7 @@ interface CatalogueEntry {
 
 const log = createLogger('fonts');
 const source = readFileSync(
-  resolve(root, 'apps/renderer/src/app/editor/font-catalogue.ts'),
+  resolve(root, 'apps/web/src/app/editor/font-catalogue.ts'),
   'utf8',
 );
 
@@ -35,7 +35,7 @@ const catalogue: CatalogueEntry[] = [...source.matchAll(entryPattern)].map((matc
 
 if (catalogue.length === 0) {
   fail(
-    'Could not parse FONT_CATALOGUE entries from apps/renderer/src/app/editor/font-catalogue.ts',
+    'Could not parse FONT_CATALOGUE entries from apps/web/src/app/editor/font-catalogue.ts',
   );
 }
 

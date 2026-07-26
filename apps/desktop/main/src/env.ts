@@ -10,7 +10,7 @@ export const env = Object.freeze({
   devServerUrl: 'http://localhost:4201',
   paths: {
     preload: join(rootDir, 'preload.cjs'),
-    clientDir: join(rootDir, '../dist-renderer'),
+    clientDir: join(rootDir, '../dist-web'),
   },
-  urls: { renderer: 'shader-studio://bundle/' },
+  urls: { web: 'shader-studio://bundle/' },
 });

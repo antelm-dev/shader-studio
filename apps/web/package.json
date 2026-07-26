@@ -1,5 +1,5 @@
 {
-  "name": "@shader-studio/renderer",
+  "name": "@shader-studio/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -18,7 +18,7 @@
         "outputs": ["{workspaceRoot}/dist/shader-studio"]
       },
       "build:desktop": {
-        "outputs": ["{workspaceRoot}/dist-renderer"]
+        "outputs": ["{workspaceRoot}/dist-web"]
       },
       "dev": {
         "cache": false,

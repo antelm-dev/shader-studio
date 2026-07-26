@@ -27,10 +27,10 @@
   "files": [],
   "references": [
     {
-      "path": "./apps/renderer/tsconfig.app.json"
+      "path": "./apps/web/tsconfig.app.json"
     },
     {
-      "path": "./apps/renderer/tsconfig.spec.json"
+      "path": "./apps/web/tsconfig.spec.json"
     }
   ]
 }
