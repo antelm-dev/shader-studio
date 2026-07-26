@@ -318,7 +318,8 @@ tools/
 
 Shaders, projects, presets, textures and thumbnails live in **SQL**: SQLite in
 the Electron app (via Node's built-in `node:sqlite`, so there is no native module
-to rebuild), PostgreSQL on the Web/Docker server (via `pg`). Both sit behind one
+to rebuild), PostgreSQL on the Web/Docker server (via Drizzle ORM's
+`node-postgres` adapter). Both sit behind one
 `ShaderRepository` contract, and all the domain logic — validation, id
 generation, deriving `fragment`/`vertex` from the project, presets, import/export,
 seeding — lives once in `ShaderLibrary`, above the contract. The web app knows
@@ -334,6 +335,14 @@ with a per-shader `revision`: a save may send the revision it read as
 write (absent, it stays last-writer-wins). The old per-shader file library is no
 longer the primary store but is kept as a read-only import source — imported once
 on the desktop, or on demand via `migrate-files` under Docker, and never deleted.
+
+The typed PostgreSQL model is in
+`libs/backend/src/persistence/postgres/schema.ts`. Add future server relations
+(users, sessions, memberships, invitations) there, and add the corresponding
+ordered migration in `postgres/migrations.ts`. Migrations deliberately continue
+to use the existing `storage_metadata.schema_version` ledger: deployed databases
+already have that history, so introducing the ORM does not create a second
+baseline or attempt to recreate live tables.
 
 Each directory above is a pnpm workspace package with its own dependency manifest and
 runtime-specific scripts/configuration. The root package only orchestrates workspace commands and

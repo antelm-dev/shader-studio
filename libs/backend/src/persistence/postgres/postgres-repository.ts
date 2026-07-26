@@ -1,13 +1,17 @@
 /**
- * PostgreSQL persistence via `pg`. Used by the Web/Docker server; the connection
- * string comes from `DATABASE_URL` and never leaves the backend. JSON columns
- * are `jsonb` (selected back `::text` so the library keeps its uniform
- * string-shaped rows), assets are `bytea`. Every shader mutation runs on a
- * dedicated pooled client inside a transaction; migrations run once under an
- * advisory lock so concurrent app instances cannot race the schema.
+ * PostgreSQL persistence via Drizzle's node-postgres adapter. The connection
+ * string stays server-side, reads use the pool, and every shader mutation uses
+ * one Drizzle transaction.
+ *
+ * Schema migrations intentionally still use the repository's original ledger:
+ * existing installations already track `schema_version` there. Keeping that
+ * history avoids a second migration tool treating live tables as uninitialized.
  */
 
-import { Pool, type PoolClient } from 'pg';
+import { and, asc, count, eq, sql } from 'drizzle-orm';
+import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { alias } from 'drizzle-orm/pg-core';
+import { Pool } from 'pg';
 
 import { StorageError } from '../../library/storage-error';
 import { runMigrations } from '../migration-runner';
@@ -24,12 +28,13 @@ import {
   type StoredShader,
 } from '../shader-repository';
 import { POSTGRES_MIGRATIONS } from './migrations';
+import { assets, postgresSchema, presets, shaders, storageMetadata } from './schema';
 
 /** Arbitrary but stable key for the migration advisory lock. */
-const MIGRATION_LOCK_KEY = 0x5_4d1_9a70; // "shader" mnemonic
+const MIGRATION_LOCK_KEY = 0x5_4d1_9a70;
 
-type Queryable = Pick<PoolClient, 'query'>;
-type Row = Record<string, unknown>;
+type PostgresDb = NodePgDatabase<typeof postgresSchema>;
+type PostgresExecutor = Pick<PostgresDb, 'delete' | 'insert' | 'select' | 'update'>;
 
 export interface PostgresRepositoryOptions {
   connectionString: string;
@@ -40,16 +45,18 @@ export interface PostgresRepositoryOptions {
 
 export class PostgresRepository implements ShaderRepository {
   private pool: Pool | null = null;
+  private db: PostgresDb | null = null;
 
   constructor(private readonly options: PostgresRepositoryOptions) {}
 
   async init(): Promise<void> {
+    await this.close();
+
     const pool = new Pool({
       connectionString: this.options.connectionString,
       max: this.options.maxPoolSize ?? 10,
       connectionTimeoutMillis: this.options.connectionTimeoutMs ?? 10_000,
     });
-    // Surface pool-level errors instead of crashing the process on an idle drop.
     pool.on('error', (error) => console.error('[postgres] idle client error', error));
     this.pool = pool;
 
@@ -76,146 +83,185 @@ export class PostgresRepository implements ShaderRepository {
             [String(version)],
           );
         },
-        exec: async (sql) => {
-          await client.query(sql);
+        exec: async (statement) => {
+          await client.query(statement);
         },
       });
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
+      this.pool = null;
+      void pool.end().catch(() => undefined);
       throw asStorageError(error, 'Failed to migrate the PostgreSQL database');
     } finally {
       client.release();
     }
+
+    this.db = drizzle({ client: pool, schema: postgresSchema });
   }
 
   async close(): Promise<void> {
-    await this.pool?.end();
+    const pool = this.pool;
+    this.db = null;
     this.pool = null;
+    await pool?.end();
   }
 
   async transaction<T>(work: (tx: ShaderTx) => Promise<T>): Promise<T> {
-    const client = await this.poolOrThrow()
-      .connect()
-      .catch((error: unknown) => {
-        throw asStorageError(error, 'Cannot reach the database');
-      });
     try {
-      await client.query('BEGIN');
-      const result = await work(new PgOps(client));
-      await client.query('COMMIT');
-      return result;
+      return await this.database().transaction((tx) => work(new PgOps(tx)));
     } catch (error) {
-      await client.query('ROLLBACK').catch(() => undefined);
       throw asStorageError(error, 'Database transaction failed');
-    } finally {
-      client.release();
     }
   }
 
   listShaders(): Promise<ShaderSummaryRow[]> {
-    return new PgOps(this.poolOrThrow()).listShaders();
+    return new PgOps(this.database()).listShaders();
   }
 
   loadShader(id: string): Promise<StoredShader | null> {
-    return new PgOps(this.poolOrThrow()).loadShader(id);
+    return new PgOps(this.database()).loadShader(id);
   }
 
   loadAsset(id: string, key: AssetKey): Promise<StoredAsset | null> {
-    return new PgOps(this.poolOrThrow()).loadAsset(id, key);
+    return new PgOps(this.database()).loadAsset(id, key);
   }
 
   getMeta(key: string): Promise<string | null> {
-    return new PgOps(this.poolOrThrow()).getMeta(key);
+    return new PgOps(this.database()).getMeta(key);
   }
 
   setMeta(key: string, value: string): Promise<void> {
-    return new PgOps(this.poolOrThrow()).setMeta(key, value);
+    return new PgOps(this.database()).setMeta(key, value);
   }
 
-  private poolOrThrow(): Pool {
-    if (!this.pool) throw new StorageError('io', 'The database pool is not open');
-    return this.pool;
+  private database(): PostgresDb {
+    if (!this.db) throw new StorageError('io', 'The database pool is not open');
+    return this.db;
   }
 }
 
-/** Every query, parameterized. Runs on whatever `Queryable` it is given — pool for reads, client in a transaction. */
 class PgOps implements ShaderTx {
-  constructor(private readonly q: Queryable) {}
+  constructor(private readonly db: PostgresExecutor) {}
 
   async listShaders(): Promise<ShaderSummaryRow[]> {
-    const result = await this.q.query(
-      `SELECT s.id, s.name, s.description, s.updated_at,
-              s.controls_json::text AS controls_json,
-              (SELECT COUNT(*) FROM presets p WHERE p.shader_id = s.id) AS preset_count,
-              t.extension AS thumb_ext, t.updated_at AS thumb_updated
-       FROM shaders s
-       LEFT JOIN assets t ON t.shader_id = s.id AND t.asset_key = 'thumbnail'`,
-    );
-    return result.rows.map(toSummaryRow);
+    const thumbnails = alias(assets, 'thumbnail_asset');
+    const rows = await this.db
+      .select({
+        id: shaders.id,
+        name: shaders.name,
+        description: shaders.description,
+        updatedAt: shaders.updatedAt,
+        controlsJson: shaders.controlsJson,
+        presetCount: count(presets.id),
+        thumbExt: thumbnails.extension,
+        thumbUpdated: thumbnails.updatedAt,
+      })
+      .from(shaders)
+      .leftJoin(presets, eq(presets.shaderId, shaders.id))
+      .leftJoin(
+        thumbnails,
+        and(eq(thumbnails.shaderId, shaders.id), eq(thumbnails.assetKey, 'thumbnail')),
+      )
+      .groupBy(
+        shaders.id,
+        shaders.name,
+        shaders.description,
+        shaders.updatedAt,
+        shaders.controlsJson,
+        thumbnails.extension,
+        thumbnails.updatedAt,
+      );
+
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      updatedAt: row.updatedAt,
+      controlCount: Array.isArray(row.controlsJson) ? row.controlsJson.length : 0,
+      presetCount: row.presetCount,
+      thumbnail:
+        row.thumbExt === null
+          ? null
+          : { extension: row.thumbExt, updatedAt: required(row.thumbUpdated, 'thumbnail date') },
+    }));
   }
 
   async listIds(): Promise<string[]> {
-    const result = await this.q.query('SELECT id FROM shaders ORDER BY id');
-    return result.rows.map((row) => String(row['id']));
+    const rows = await this.db.select({ id: shaders.id }).from(shaders).orderBy(asc(shaders.id));
+    return rows.map((row) => row.id);
   }
 
   async loadShader(id: string): Promise<StoredShader | null> {
-    const result = await this.q.query(
-      `SELECT id, name, description, author, created_at, updated_at, revision,
-              project_json::text AS project_json, controls_json::text AS controls_json,
-              render_json::text AS render_json, channels_json::text AS channels_json
-       FROM shaders WHERE id = $1`,
-      [id],
-    );
-    if (!result.rows.length) return null;
+    const [row] = await this.db.select().from(shaders).where(eq(shaders.id, id)).limit(1);
+    if (!row) return null;
 
-    const presets = await this.q.query(
-      `SELECT id, name, created_at, values_json::text AS values_json, render_json::text AS render_json
-       FROM presets WHERE shader_id = $1 ORDER BY created_at, id`,
-      [id],
-    );
-    const assets = await this.q.query(
-      'SELECT asset_key, extension, width, height, updated_at FROM assets WHERE shader_id = $1',
-      [id],
-    );
+    const presetRows = await this.db
+      .select()
+      .from(presets)
+      .where(eq(presets.shaderId, id))
+      .orderBy(asc(presets.createdAt), asc(presets.id));
+    const assetRows = await this.db
+      .select({
+        assetKey: assets.assetKey,
+        extension: assets.extension,
+        width: assets.width,
+        height: assets.height,
+        updatedAt: assets.updatedAt,
+      })
+      .from(assets)
+      .where(eq(assets.shaderId, id));
 
     return {
-      row: toShaderRow(result.rows[0]),
-      presets: presets.rows.map(toPresetRow),
-      assets: assets.rows.map(toAssetMeta),
+      row: {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        author: row.author,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        revision: row.revision,
+        projectJson: stringifyJson(row.projectJson),
+        controlsJson: stringifyJson(row.controlsJson),
+        renderJson: stringifyJson(row.renderJson),
+        channelsJson: stringifyJson(row.channelsJson),
+      },
+      presets: presetRows.map((preset) => ({
+        id: preset.id,
+        name: preset.name,
+        createdAt: preset.createdAt,
+        valuesJson: stringifyJson(preset.valuesJson),
+        renderJson: preset.renderJson === null ? null : stringifyJson(preset.renderJson),
+      })),
+      assets: assetRows.map(toAssetMeta),
     };
   }
 
   async loadAsset(id: string, key: AssetKey): Promise<StoredAsset | null> {
-    const result = await this.q.query(
-      'SELECT asset_key, extension, width, height, updated_at, data FROM assets WHERE shader_id = $1 AND asset_key = $2',
-      [id, key],
-    );
-    if (!result.rows.length) return null;
-    return { ...toAssetMeta(result.rows[0]), data: toBytes(result.rows[0]['data']) };
+    const [row] = await this.db
+      .select()
+      .from(assets)
+      .where(and(eq(assets.shaderId, id), eq(assets.assetKey, key)))
+      .limit(1);
+    if (!row) return null;
+    return { ...toAssetMeta(row), data: row.data };
   }
 
   async insertShader(row: ShaderRow): Promise<void> {
     try {
-      await this.q.query(
-        `INSERT INTO shaders (id, name, description, author, created_at, updated_at, revision,
-                              project_json, controls_json, render_json, channels_json)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb)`,
-        [
-          row.id,
-          row.name,
-          row.description,
-          row.author,
-          row.createdAt,
-          row.updatedAt,
-          row.revision,
-          row.projectJson,
-          row.controlsJson,
-          row.renderJson,
-          row.channelsJson,
-        ],
-      );
+      await this.db.insert(shaders).values({
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        author: row.author,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        revision: row.revision,
+        projectJson: parseJson(row.projectJson),
+        controlsJson: parseJson(row.controlsJson),
+        renderJson: parseJson(row.renderJson),
+        channelsJson: parseJson(row.channelsJson),
+      });
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new StorageError('conflict', `A shader with id "${row.id}" already exists`);
@@ -229,170 +275,149 @@ class PgOps implements ShaderTx {
     fields: ShaderMutableFields,
     expectedRevision?: number,
   ): Promise<number> {
-    const expected = expectedRevision ?? null;
-    const result = await this.q.query(
-      `UPDATE shaders SET
-         name = $1, description = $2, author = $3, updated_at = $4,
-         project_json = $5::jsonb, controls_json = $6::jsonb,
-         render_json = $7::jsonb, channels_json = $8::jsonb,
-         revision = revision + 1
-       WHERE id = $9 AND ($10::int IS NULL OR revision = $10::int)
-       RETURNING revision`,
-      [
-        fields.name,
-        fields.description,
-        fields.author,
-        fields.updatedAt,
-        fields.projectJson,
-        fields.controlsJson,
-        fields.renderJson,
-        fields.channelsJson,
-        id,
-        expected,
-      ],
-    );
+    const predicate =
+      expectedRevision === undefined
+        ? eq(shaders.id, id)
+        : and(eq(shaders.id, id), eq(shaders.revision, expectedRevision));
+    const [updated] = await this.db
+      .update(shaders)
+      .set({
+        name: fields.name,
+        description: fields.description,
+        author: fields.author,
+        updatedAt: fields.updatedAt,
+        projectJson: parseJson(fields.projectJson),
+        controlsJson: parseJson(fields.controlsJson),
+        renderJson: parseJson(fields.renderJson),
+        channelsJson: parseJson(fields.channelsJson),
+        revision: sql`${shaders.revision} + 1`,
+      })
+      .where(predicate)
+      .returning({ revision: shaders.revision });
 
-    if (!result.rows.length) {
-      const existing = await this.q.query('SELECT 1 FROM shaders WHERE id = $1', [id]);
-      if (!existing.rows.length)
-        throw new StorageError('not_found', `Shader "${id}" was not found`);
+    if (!updated) {
+      const [existing] = await this.db
+        .select({ revision: shaders.revision })
+        .from(shaders)
+        .where(eq(shaders.id, id))
+        .limit(1);
+      if (!existing) throw new StorageError('not_found', `Shader "${id}" was not found`);
       throw new StorageError(
         'conflict',
         `Shader "${id}" was modified by another write (expected revision ${expectedRevision})`,
       );
     }
-    return Number(result.rows[0]['revision']);
+    return updated.revision;
   }
 
   async deleteShader(id: string): Promise<boolean> {
-    const result = await this.q.query('DELETE FROM shaders WHERE id = $1', [id]);
-    return (result.rowCount ?? 0) > 0;
+    const rows = await this.db
+      .delete(shaders)
+      .where(eq(shaders.id, id))
+      .returning({ id: shaders.id });
+    return rows.length > 0;
   }
 
-  async replacePresets(shaderId: string, presets: PresetRow[]): Promise<void> {
-    await this.q.query('DELETE FROM presets WHERE shader_id = $1', [shaderId]);
-    for (const preset of presets) {
-      await this.q.query(
-        `INSERT INTO presets (shader_id, id, name, created_at, values_json, render_json)
-         VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
-        [shaderId, preset.id, preset.name, preset.createdAt, preset.valuesJson, preset.renderJson],
-      );
-    }
+  async replacePresets(shaderId: string, rows: PresetRow[]): Promise<void> {
+    await this.db.delete(presets).where(eq(presets.shaderId, shaderId));
+    if (rows.length === 0) return;
+    await this.db.insert(presets).values(
+      rows.map((row) => ({
+        shaderId,
+        id: row.id,
+        name: row.name,
+        createdAt: row.createdAt,
+        valuesJson: parseJson(row.valuesJson),
+        renderJson: row.renderJson === null ? null : parseJson(row.renderJson),
+      })),
+    );
   }
 
   async putAsset(shaderId: string, asset: StoredAsset): Promise<void> {
-    await this.q.query(
-      `INSERT INTO assets (shader_id, asset_key, extension, width, height, updated_at, data)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (shader_id, asset_key) DO UPDATE SET
-         extension = EXCLUDED.extension, width = EXCLUDED.width, height = EXCLUDED.height,
-         updated_at = EXCLUDED.updated_at, data = EXCLUDED.data`,
-      [
+    await this.db
+      .insert(assets)
+      .values({
         shaderId,
-        asset.key,
-        asset.extension,
-        asset.width,
-        asset.height,
-        asset.updatedAt,
-        Buffer.from(asset.data),
-      ],
-    );
+        assetKey: asset.key,
+        extension: asset.extension,
+        width: asset.width,
+        height: asset.height,
+        updatedAt: asset.updatedAt,
+        data: asset.data,
+      })
+      .onConflictDoUpdate({
+        target: [assets.shaderId, assets.assetKey],
+        set: {
+          extension: asset.extension,
+          width: asset.width,
+          height: asset.height,
+          updatedAt: asset.updatedAt,
+          data: asset.data,
+        },
+      });
   }
 
   async deleteAsset(shaderId: string, key: AssetKey): Promise<void> {
-    await this.q.query('DELETE FROM assets WHERE shader_id = $1 AND asset_key = $2', [
-      shaderId,
-      key,
-    ]);
+    await this.db
+      .delete(assets)
+      .where(and(eq(assets.shaderId, shaderId), eq(assets.assetKey, key)));
   }
 
   async getMeta(key: string): Promise<string | null> {
-    const result = await this.q.query('SELECT value FROM storage_metadata WHERE key = $1', [key]);
-    return result.rows.length ? String(result.rows[0]['value']) : null;
+    const [row] = await this.db
+      .select({ value: storageMetadata.value })
+      .from(storageMetadata)
+      .where(eq(storageMetadata.key, key))
+      .limit(1);
+    return row?.value ?? null;
   }
 
   async setMeta(key: string, value: string): Promise<void> {
-    await this.q.query(
-      `INSERT INTO storage_metadata (key, value) VALUES ($1, $2)
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-      [key, value],
-    );
+    await this.db
+      .insert(storageMetadata)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: storageMetadata.key, set: { value } });
   }
 }
 
-function toShaderRow(row: Row): ShaderRow {
+function toAssetMeta(row: {
+  assetKey: string;
+  extension: string;
+  width: number | null;
+  height: number | null;
+  updatedAt: string;
+}): AssetMeta {
   return {
-    id: String(row['id']),
-    name: String(row['name']),
-    description: String(row['description']),
-    author: row['author'] === null ? null : String(row['author']),
-    createdAt: String(row['created_at']),
-    updatedAt: String(row['updated_at']),
-    revision: Number(row['revision']),
-    projectJson: String(row['project_json']),
-    controlsJson: String(row['controls_json']),
-    renderJson: String(row['render_json']),
-    channelsJson: String(row['channels_json']),
+    key: row.assetKey as AssetKey,
+    extension: row.extension,
+    width: row.width,
+    height: row.height,
+    updatedAt: row.updatedAt,
   };
 }
 
-function toPresetRow(row: Row): PresetRow {
-  return {
-    id: String(row['id']),
-    name: String(row['name']),
-    createdAt: String(row['created_at']),
-    valuesJson: String(row['values_json']),
-    renderJson: row['render_json'] === null ? null : String(row['render_json']),
-  };
+function parseJson(value: string): unknown {
+  return JSON.parse(value) as unknown;
 }
 
-function toAssetMeta(row: Row): AssetMeta {
-  return {
-    key: String(row['asset_key']) as AssetKey,
-    extension: String(row['extension']),
-    width: row['width'] === null ? null : Number(row['width']),
-    height: row['height'] === null ? null : Number(row['height']),
-    updatedAt: String(row['updated_at']),
-  };
+function stringifyJson(value: unknown): string {
+  return JSON.stringify(value);
 }
 
-function toSummaryRow(row: Row): ShaderSummaryRow {
-  return {
-    id: String(row['id']),
-    name: String(row['name']),
-    description: String(row['description']),
-    updatedAt: String(row['updated_at']),
-    controlCount: countArray(row['controls_json']),
-    presetCount: Number(row['preset_count'] ?? 0),
-    thumbnail:
-      row['thumb_ext'] === null || row['thumb_ext'] === undefined
-        ? null
-        : { extension: String(row['thumb_ext']), updatedAt: String(row['thumb_updated']) },
-  };
-}
-
-function toBytes(value: unknown): Uint8Array {
-  if (value instanceof Uint8Array) return value;
-  throw new StorageError('io', 'Stored asset is not binary');
-}
-
-function countArray(value: unknown): number {
-  if (typeof value !== 'string') return 0;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.length : 0;
-  } catch {
-    return 0;
-  }
+function required<T>(value: T | null, label: string): T {
+  if (value === null) throw new StorageError('io', `Stored ${label} is missing`);
+  return value;
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  return (error as { code?: string })?.code === '23505';
+  return (
+    (error as { cause?: { code?: string }; code?: string })?.code === '23505' ||
+    (error as { cause?: { code?: string } })?.cause?.code === '23505'
+  );
 }
 
 function asStorageError(error: unknown, fallback: string): StorageError {
   if (error instanceof StorageError) return error;
-  // Never leak the SQL text, connection string, or driver detail to the client.
   console.error('[postgres]', error);
   return new StorageError('io', fallback);
 }

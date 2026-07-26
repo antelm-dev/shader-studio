@@ -67,3 +67,4 @@ Thumbs.db
 **/electron-run-*.json
 
 .env
+./apps/web/documentation
