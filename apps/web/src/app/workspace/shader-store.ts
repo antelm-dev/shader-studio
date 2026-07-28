@@ -1,38 +1,25 @@
-import { isPlatformServer } from '@angular/common';
-import {
-  Injectable,
-  PLATFORM_ID,
-  TransferState,
-  effect,
-  inject,
-  makeStateKey,
-} from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 
 import {
   type ImportMode,
   type ParamValue,
   type RenderSettings,
-  type ShaderRecord,
-  type ShaderSummary,
   type TextureChannelSettingsPatch,
 } from '@shader-studio/shared/model';
 import {
-  imagePass,
-  setPassSource,
-  setVertexSource,
   type ChannelBinding,
   type ChannelIndex,
   type PassResolution,
   type RenderPass,
-  type ShaderProject,
 } from '@shader-studio/shared/project';
 import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
-import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { CompilationService } from './compilation.service';
 import { PersistenceService } from './persistence.service';
 import { PresetService } from './preset.service';
-import { ProjectPersistence } from './project-persistence';
 import { TextureService } from './texture.service';
+import { RecoveryFacade } from './lifecycle/recovery-facade';
+import { SelectionLifecycle } from './lifecycle/selection-lifecycle';
+import { reportWorkspaceError } from './lifecycle/report';
 import { DocumentState } from './state/document-state';
 import {
   ProjectMutations,
@@ -41,23 +28,26 @@ import {
   type SetParamsOutcome,
 } from './state/project-mutations';
 import { parseControls } from './state/controls-schema';
-import { ApiError, ShaderApi } from '../api/shader-api';
-import { Preferences } from '../prefs/preferences';
+import { ShaderApi } from '../api/shader-api';
 import { OutputLog } from '../ui/bottom-panel/output-log';
 
 /**
  * The workspace, as the rest of the application sees it.
  *
- * Everything below is one of three things: a lifecycle or persistence workflow
- * the store still owns — selecting, saving, importing, presets, textures — or an
- * alias onto the signal that `DocumentState` owns, or a delegation to the
- * collaborator that owns the behaviour:
+ * Everything below is one of three things: a persistence workflow the store
+ * still owns — saving, importing, presets, textures — or an alias onto the
+ * signal that `DocumentState` owns, or a delegation to the collaborator that
+ * owns the behaviour:
  *
  *  - `DocumentState`      — the four layers of document data (record, saved,
  *                           draft, params) and every projection off them.
  *  - `ProjectMutations`   — every edit to the open document, including the
  *                           atomic MCP patch path.
  *  - `CompilationService` — the draft revision and the compile waiters.
+ *  - `SelectionLifecycle` — which shader is open: startup, hydration, reading a
+ *                           record and adopting it, and clearing it again.
+ *  - `RecoveryFacade`     — the browser's own copies: the unsaved draft, and the
+ *                           pre-upgrade local project on its way to the server.
  *
  * The aliases are aliases and not copies: `store.record` *is*
  * `DocumentState.record`, so there is exactly one instance of every signal and
@@ -78,29 +68,9 @@ export type ApplyPatchResult =
   | { ok: true; revision: number; diagnostics: readonly CompileDiagnostic[] }
   | PatchFailure;
 
-/**
- * What the server rendered, handed to the client inside the HTML.
- *
- * Without this the client's first render would start from an empty store while
- * the SSR markup already showed a shader, and hydration would throw the whole
- * subtree away. Reading it synchronously in the constructor means the first
- * client render is identical to the server's.
- */
-interface StoreSnapshot {
-  shaders: readonly ShaderSummary[];
-  record: ShaderRecord | null;
-}
-
-const SNAPSHOT_KEY = makeStateKey<StoreSnapshot>('shader-studio.snapshot');
-
 @Injectable({ providedIn: 'root' })
 export class ShaderStore {
   private readonly api = inject(ShaderApi);
-  private readonly preferences = inject(Preferences);
-  private readonly transferState = inject(TransferState);
-  private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
-  private readonly recovery = inject(DraftRecovery);
-  private readonly projects = inject(ProjectPersistence);
   private readonly textureService = inject(TextureService);
   private readonly presetService = inject(PresetService);
   private readonly compilation = inject(CompilationService);
@@ -109,44 +79,14 @@ export class ShaderStore {
   private readonly documentState = inject(DocumentState);
   private readonly mutations = inject(ProjectMutations);
 
-  /** True once the client has taken over the server's snapshot. */
-  private hydrated = false;
-
-  constructor() {
-    this.recovery.onWarning = () =>
-      this.documentState.notify(
-        'Local draft recovery is unavailable in this browser session',
-        true,
-      );
-
-    this.projects.onWarning = () =>
-      this.documentState.notify(
-        'Local storage is full, so buffers and files may not survive a reload',
-        true,
-      );
-
-    effect((onCleanup) => {
-      const record = this.record();
-      const draft = this.draft();
-      const dirty = this.dirty();
-      if (!record || !draft) return;
-      const timer = setTimeout(() => {
-        if (dirty) this.recovery.put(record.id, record.updatedAt, draft);
-        else this.recovery.remove(record.id);
-      }, 350);
-      onCleanup(() => clearTimeout(timer));
-    });
-
-    if (this.isServer || !this.transferState.hasKey(SNAPSHOT_KEY)) return;
-
-    const snapshot = this.transferState.get(SNAPSHOT_KEY, null);
-    this.transferState.remove(SNAPSHOT_KEY);
-    if (!snapshot) return;
-
-    this.shaders.set(snapshot.shaders);
-    if (snapshot.record) this.adopt(snapshot.record);
-    this.hydrated = true;
-  }
+  /**
+   * Injected rather than merely delegated to: both are self-starting. Reaching
+   * for `SelectionLifecycle` is what reads the SSR snapshot back out of the
+   * transfer state, and constructing it is what installs `RecoveryFacade`'s
+   * draft-mirroring effect — the same two things this constructor used to do.
+   */
+  private readonly selection = inject(SelectionLifecycle);
+  private readonly recovery = inject(RecoveryFacade);
 
   // --- Document state (owned by `DocumentState`) ----------------------------
 
@@ -236,195 +176,46 @@ export class ShaderStore {
     this.compilation.recompile();
   }
 
-  // --- Loading ------------------------------------------------------------
+  // --- Loading (owned by `SelectionLifecycle`) ------------------------------
 
   /**
    * Load the collection and open the first shader, then publish the result for
    * the client to pick up. Runs during SSR, against the same Express process's
    * own `/api`.
-   *
-   * The server deliberately does *not* honour `lastShaderId`: it has no access
-   * to the browser's storage, and rendering a different shader than the client
-   * would then hydrate is exactly the mismatch this snapshot exists to avoid.
-   * The client switches to the remembered shader once it takes over.
    */
-  async initialize(routeShaderId?: string | null): Promise<void> {
-    await this.refreshList();
-
-    const shaders = this.shaders();
-    const requested =
-      routeShaderId && shaders.some((shader) => shader.id === routeShaderId)
-        ? routeShaderId
-        : shaders[0]?.id;
-    if (requested) await this.select(requested);
-
-    if (this.isServer) {
-      this.transferState.set(SNAPSHOT_KEY, {
-        shaders: this.shaders(),
-        record: this.record(),
-      });
-    }
+  initialize(routeShaderId?: string | null): Promise<void> {
+    return this.selection.initialize(routeShaderId);
   }
 
-  /**
-   * Called once the browser has taken over. If the server already sent a
-   * snapshot there is nothing to fetch — we only need to honour the shader the
-   * user last had open.
-   */
-  async initializeClient(routeShaderId?: string | null): Promise<void> {
-    // Read before `initialize`, not after: opening the first shader writes it
-    // to `lastShaderId`, which would leave nothing left to honour.
-    const preferred = routeShaderId ?? this.preferences.value().lastShaderId;
-
-    if (!this.hydrated) {
-      await this.initialize(routeShaderId);
-    }
-
-    if (preferred && preferred !== this.selectedId()) {
-      if (this.shaders().some((shader) => shader.id === preferred)) {
-        await this.select(preferred);
-      }
-    }
+  /** Called once the browser has taken over the server's snapshot. */
+  initializeClient(routeShaderId?: string | null): Promise<void> {
+    return this.selection.initializeClient(routeShaderId);
   }
 
-  async refreshList(): Promise<void> {
-    try {
-      this.shaders.set(await this.api.list());
-    } catch (error) {
-      this.report(error);
-    }
+  refreshList(): Promise<void> {
+    return this.selection.refreshList();
   }
 
-  async select(id: string): Promise<void> {
-    if (this.selectedId() === id && this.record() !== null) return;
-
-    this.loading.set(true);
-    try {
-      this.adopt(await this.api.read(id));
-      this.preferences.patch({ lastShaderId: id });
-    } catch (error) {
-      this.report(error);
-    } finally {
-      this.loading.set(false);
-    }
+  select(id: string): Promise<void> {
+    return this.selection.select(id);
   }
 
-  /** Take a server record as the new truth and reset the draft and params onto it. */
-  private adopt(record: ShaderRecord): void {
-    const { project, migrate } = this.projectFor(record);
-
-    this.documentState.adopt(record, project);
-    this.compilation.reset();
-
-    const recovered = this.isServer ? null : this.recovery.get(record.id);
-    if (recovered?.baselineUpdatedAt === record.updatedAt) this.applyRecoveredDraft(recovered);
-    else this.staleRecovery.set(recovered);
-
-    // A pre-upgrade `localStorage` project sitting on top of this record: push
-    // it to the server now that the server can hold it, then clear it. Fired
-    // after the synchronous state above so the UI never waits on it.
-    if (migrate) void this.migrateStoredProject(record.id, project);
-  }
-
-  /**
-   * The project behind a record.
-   *
-   * The server now always returns one — `record.project`, real or synthesized
-   * via `migrateLegacyProject` for a shader that predates projects — so the
-   * plain case is simply reading it off the record. The one wrinkle is a
-   * browser that still has a *pre-upgrade* `localStorage` entry for this
-   * shader (`ProjectPersistence`, back when the project lived only there):
-   * that entry is reconciled onto the record the same way it always was — the
-   * record wins for the Image source and vertex shader when its `updatedAt`
-   * has moved on since the entry was last saved, and the passes/files are kept
-   * either way — and `migrate` tells `adopt` to push the result to the server
-   * and clear the local copy, which is what makes this a one-time migration
-   * rather than an ongoing second source of truth.
-   */
-  private projectFor(record: ShaderRecord): { project: ShaderProject; migrate: boolean } {
-    if (this.isServer) return { project: record.project, migrate: false };
-
-    const stored = this.projects.load(record.id, record.fragment, record.vertex);
-    if (!stored) return { project: record.project, migrate: false };
-
-    if (stored.baselineUpdatedAt === record.updatedAt) {
-      return { project: stored.project, migrate: true };
-    }
-
-    const image = imagePass(stored.project);
-    const project = setVertexSource(
-      setPassSource(stored.project, image.id, record.fragment),
-      record.vertex,
-    );
-    return { project, migrate: true };
-  }
-
-  /** Ids currently being pushed to the server, so a second `adopt` before the
-   * first push resolves cannot fire a duplicate write. */
-  private readonly migratingProjects = new Set<string>();
-
-  /**
-   * Push a pre-upgrade `localStorage` project to the server, once, and only
-   * clear the local copy once the server has confirmed it holds it — losing
-   * nothing if the write fails partway (offline, a full disk): the next time
-   * this shader loads, `projectFor` finds the same entry and tries again.
-   *
-   * Best-effort and silent on failure: this is background reconciliation, not
-   * a user action, and the shader keeps working from the local copy either way.
-   */
-  private async migrateStoredProject(shaderId: string, project: ShaderProject): Promise<void> {
-    if (this.migratingProjects.has(shaderId)) return;
-    this.migratingProjects.add(shaderId);
-    try {
-      const updated = await this.api.update(shaderId, { project });
-      if (this.selectedId() === shaderId) {
-        this.documentState.commitMigratedProject(updated, project);
-      }
-      this.projects.remove(shaderId);
-    } catch (error) {
-      const message = `Could not migrate the local project for "${shaderId}": ${String(error)}`;
-      console.warn(`[store] could not migrate the local project for "${shaderId}"`, error);
-      this.outputLog.warning('workspace', message);
-    } finally {
-      this.migratingProjects.delete(shaderId);
-    }
-  }
+  // --- Recovery (owned by `RecoveryFacade`) ---------------------------------
 
   resolveRecovery(restore: boolean): void {
-    const recovered = this.staleRecovery();
-    if (!recovered) return;
-    if (restore && recovered.shaderId === this.selectedId()) this.applyRecoveredDraft(recovered);
-    else this.recovery.remove(recovered.shaderId);
-    this.staleRecovery.set(null);
+    this.recovery.resolve(restore);
   }
 
   discardCurrentDraft(): void {
-    const record = this.record();
-    if (!record) return;
-    this.recovery.remove(record.id);
-    this.adopt(record);
+    this.selection.discardDraft();
   }
 
   /**
-   * A reload is not always something the user chose, so the draft — the *whole*
-   * project, buffers and files and wiring included — is mirrored to storage
-   * while it is dirty, and `adopt` puts it straight back.
-   *
-   * This is why nothing else needs to write the project to storage as it is
-   * edited. `ProjectPersistence` holds what was *saved*, so that `dirty` has
-   * something to measure against; `DraftRecovery` holds what was not. Blurring
-   * the two — persisting the live project as though it were saved — would make
-   * every unsaved edit look saved the moment the page was reloaded.
+   * Write the dirty draft out now rather than on the next debounce tick — what
+   * the page does on its way out, when there may be no next tick.
    */
   flushRecovery(): void {
-    const record = this.record();
-    const draft = this.draft();
-    if (record && draft && this.dirty()) this.recovery.put(record.id, record.updatedAt, draft);
-  }
-
-  private applyRecoveredDraft(recovered: RecoveredDraft): void {
-    this.documentState.restoreDraft(recovered);
-    this.setControlsText(recovered.controlsText);
+    this.recovery.flush();
   }
 
   // --- Editing (owned by `ProjectMutations`) --------------------------------
@@ -637,7 +428,7 @@ export class ShaderStore {
 
       await this.refreshList();
       this.documentState.notify(`Saved “${result.record.name}”`, false);
-      this.recovery.remove(result.record.id);
+      this.recovery.forget(result.record.id);
       void this.capturePreview(result.record.id);
       return true;
     } catch (error) {
@@ -694,8 +485,7 @@ export class ShaderStore {
     try {
       const created = await this.persistence.create(name);
       await this.refreshList();
-      this.adopt(created);
-      this.preferences.patch({ lastShaderId: created.id });
+      this.selection.adoptCreated(created);
       this.documentState.notify(`Created “${created.name}”`, false);
     } catch (error) {
       this.report(error);
@@ -706,8 +496,7 @@ export class ShaderStore {
     try {
       const copy = await this.persistence.duplicate(id, name);
       await this.refreshList();
-      this.adopt(copy);
-      this.preferences.patch({ lastShaderId: copy.id });
+      this.selection.adoptCreated(copy);
       this.documentState.notify(`Duplicated as “${copy.name}”`, false);
     } catch (error) {
       this.report(error);
@@ -733,12 +522,8 @@ export class ShaderStore {
       await this.refreshList();
 
       if (this.selectedId() === id) {
-        this.documentState.clearWorkspace();
-        this.preferences.patch({ lastShaderId: null });
-        this.compilation.reset();
-
-        const next = this.shaders()[0];
-        if (next) await this.select(next.id);
+        this.selection.clearCurrent();
+        await this.selection.selectFallback();
       }
       this.documentState.notify('Shader deleted', false);
     } catch (error) {
@@ -912,17 +697,13 @@ export class ShaderStore {
   }
 
   /** `select`, but reloads even if the id is already the open one. */
-  private async forceSelect(id: string): Promise<void> {
-    this.record.set(null);
-    await this.select(id);
+  private forceSelect(id: string): Promise<void> {
+    return this.selection.forceSelect(id);
   }
 
   // --- Misc ---------------------------------------------------------------
 
   private report(error: unknown): void {
-    const message = error instanceof ApiError ? error.summary : String(error);
-    console.error('[shader-store]', error);
-    this.documentState.notify(message, true);
-    this.outputLog.error('workspace', message);
+    reportWorkspaceError(error, this.documentState, this.outputLog);
   }
 }
