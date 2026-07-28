@@ -92,3 +92,36 @@ export function clampBottomPanelHeight(
     Math.min(Math.max(value, BOTTOM_PANEL_HEIGHT_LIMITS.min), BOTTOM_PANEL_HEIGHT_LIMITS.max),
   );
 }
+
+// ---------------------------------------------------------------------------
+// File explorer (editor-local)
+// ---------------------------------------------------------------------------
+
+/** Which tree the editor-local explorer is showing. */
+export type FileExplorerView = 'files' | 'pipeline';
+
+export const FILE_EXPLORER_VIEW_MODES: readonly FileExplorerView[] = ['files', 'pipeline'];
+
+export const FILE_EXPLORER_LIMITS = {
+  width: { min: 180, max: 400 },
+} as const;
+
+export const DEFAULT_FILE_EXPLORER_WIDTH = 240;
+export const DEFAULT_FILE_EXPLORER_OPEN = true;
+export const DEFAULT_FILE_EXPLORER_VIEW: FileExplorerView = 'files';
+
+/** Editor panel width at which the explorer switches to an overlay drawer. */
+export const FILE_EXPLORER_OVERLAY_BREAKPOINT = 480;
+
+export function sanitizeFileExplorerView(value: unknown): FileExplorerView {
+  return FILE_EXPLORER_VIEW_MODES.includes(value as FileExplorerView)
+    ? (value as FileExplorerView)
+    : DEFAULT_FILE_EXPLORER_VIEW;
+}
+
+export function clampFileExplorerWidth(
+  value: unknown,
+  fallback: number = DEFAULT_FILE_EXPLORER_WIDTH,
+): number {
+  return clampPanelWidth(value, FILE_EXPLORER_LIMITS.width, fallback);
+}

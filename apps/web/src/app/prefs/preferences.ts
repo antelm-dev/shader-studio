@@ -15,13 +15,19 @@ import {
   DEFAULT_BOTTOM_PANEL_HEIGHT,
   DEFAULT_BOTTOM_PANEL_OPEN,
   DEFAULT_BOTTOM_PANEL_TAB,
+  DEFAULT_FILE_EXPLORER_OPEN,
+  DEFAULT_FILE_EXPLORER_VIEW,
+  DEFAULT_FILE_EXPLORER_WIDTH,
   DEFAULT_PANEL_WIDTHS,
   PANEL_LIMITS,
   clampBottomPanelHeight,
+  clampFileExplorerWidth,
   clampPanelWidth,
   sanitizeBottomPanelTab,
+  sanitizeFileExplorerView,
   sanitizeInspectorTab,
   type BottomPanelTab,
+  type FileExplorerView,
   type InspectorTab,
 } from '@shader-studio/shared/panel-prefs';
 import {
@@ -79,6 +85,12 @@ export interface WorkspacePreferences {
   bottomPanelHeight: number;
   /** Which bottom panel tab was last open. */
   bottomPanelTab: BottomPanelTab;
+  /** Whether the editor-local file explorer column is showing. */
+  fileExplorerOpen: boolean;
+  /** Files or Pipeline view in the editor-local explorer. */
+  fileExplorerView: FileExplorerView;
+  /** Width of the editor-local explorer, in pixels. */
+  fileExplorerWidth: number;
   resolutionScale: number;
   paused: boolean;
   autoRipples: boolean;
@@ -110,6 +122,9 @@ const DEFAULTS: WorkspacePreferences = {
   bottomPanelOpen: DEFAULT_BOTTOM_PANEL_OPEN,
   bottomPanelHeight: DEFAULT_BOTTOM_PANEL_HEIGHT,
   bottomPanelTab: DEFAULT_BOTTOM_PANEL_TAB,
+  fileExplorerOpen: DEFAULT_FILE_EXPLORER_OPEN,
+  fileExplorerView: DEFAULT_FILE_EXPLORER_VIEW,
+  fileExplorerWidth: DEFAULT_FILE_EXPLORER_WIDTH,
   resolutionScale: 1,
   paused: false,
   autoRipples: false,
@@ -223,6 +238,15 @@ export class Preferences {
           DEFAULTS.bottomPanelHeight,
         ),
         bottomPanelTab: sanitizeBottomPanelTab(parsed.bottomPanelTab),
+        fileExplorerOpen:
+          typeof parsed.fileExplorerOpen === 'boolean'
+            ? parsed.fileExplorerOpen
+            : DEFAULTS.fileExplorerOpen,
+        fileExplorerView: sanitizeFileExplorerView(parsed.fileExplorerView),
+        fileExplorerWidth: clampFileExplorerWidth(
+          parsed.fileExplorerWidth,
+          DEFAULTS.fileExplorerWidth,
+        ),
         resolutionScale:
           typeof parsed.resolutionScale === 'number' &&
           parsed.resolutionScale >= 0.25 &&

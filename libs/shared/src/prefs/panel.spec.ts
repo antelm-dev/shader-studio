@@ -7,7 +7,11 @@ import {
   PANEL_LIMITS,
   clampBottomPanelHeight,
   clampPanelWidth,
+  clampFileExplorerWidth,
+  DEFAULT_FILE_EXPLORER_WIDTH,
+  FILE_EXPLORER_LIMITS,
   sanitizeBottomPanelTab,
+  sanitizeFileExplorerView,
   sanitizeInspectorTab,
 } from './panel';
 
@@ -115,5 +119,45 @@ describe('clampBottomPanelHeight', () => {
 
   it('falls back to a caller-supplied default', () => {
     expect(clampBottomPanelHeight('nonsense', 340)).toBe(340);
+  });
+});
+
+describe('sanitizeFileExplorerView', () => {
+  it('keeps a known view', () => {
+    expect(sanitizeFileExplorerView('files')).toBe('files');
+    expect(sanitizeFileExplorerView('pipeline')).toBe('pipeline');
+  });
+
+  it.each([['tabs'], [''], [null], [undefined], [1]])('falls back to files for %s', (value) => {
+    expect(sanitizeFileExplorerView(value)).toBe('files');
+  });
+});
+
+describe('clampFileExplorerWidth', () => {
+  const fallback = DEFAULT_FILE_EXPLORER_WIDTH;
+
+  it('keeps a width that is already in range', () => {
+    expect(clampFileExplorerWidth(300)).toBe(300);
+  });
+
+  it('clamps a width above the maximum', () => {
+    expect(clampFileExplorerWidth(900)).toBe(FILE_EXPLORER_LIMITS.width.max);
+  });
+
+  it('clamps a width below the minimum', () => {
+    expect(clampFileExplorerWidth(40)).toBe(FILE_EXPLORER_LIMITS.width.min);
+  });
+
+  it.each([
+    ['a string', '240'],
+    ['NaN', Number.NaN],
+    ['null', null],
+    ['undefined', undefined],
+  ])('falls back to the default for %s', (_label, value) => {
+    expect(clampFileExplorerWidth(value)).toBe(fallback);
+  });
+
+  it('falls back to a caller-supplied default', () => {
+    expect(clampFileExplorerWidth('wide', 280)).toBe(280);
   });
 });
