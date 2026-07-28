@@ -20,6 +20,7 @@ import {
   assertSafeSurfacePath,
   createSecureBrowserWindow,
   type NavigationPolicyOptions,
+  type SecureWindowOptions,
 } from './browser-window-factory';
 import { authorizeSurfaceAction } from './surface-ipc-auth';
 import { SurfaceWindowRegistry, type SurfaceWindowEntry } from './surface-window-registry';
@@ -64,6 +65,7 @@ export type SurfaceContext =
   | { role: 'satellite'; surfaceId: string; kind: SurfaceKind; path: string }
   | { role: 'unknown' };
 
+/** Controllable seams for unit tests — production leaves these undefined. */
 export interface SurfaceWindowManagerOptions {
   registry: SurfaceWindowRegistry;
   stateStore: SurfaceWindowStateStore;
@@ -75,9 +77,15 @@ export interface SurfaceWindowManagerOptions {
     snapshot: NativeSurfaceSnapshot | { surfaceId: string; open: false },
   ) => void;
   onReturnedToWorkspace: (surfaceId: SurfaceId, kind: SurfaceKind) => void;
+  /** Override BrowserWindow construction (tests). */
+  createWindow?: (options: SecureWindowOptions) => BrowserWindow;
+  /** Override navigation load (tests). Defaults to `window.loadURL(url)`. */
+  loadURL?: (window: BrowserWindow, url: string) => Promise<void>;
+  /** Override display enumeration (tests). */
+  listDisplays?: () => DisplayWorkArea[];
 }
 
-function currentDisplays(): DisplayWorkArea[] {
+function defaultDisplays(): DisplayWorkArea[] {
   return screen.getAllDisplays().map((d) => ({
     id: String(d.id),
     workArea: {
@@ -123,6 +131,17 @@ function snapshotOf(entry: SurfaceWindowEntry, displayId?: string): NativeSurfac
 export class SurfaceWindowManager {
   private quitting = false;
   private readonly persistTimers = new Map<SurfaceId, NodeJS.Timeout>();
+  /**
+   * Surfaces whose open snapshot has been published. Failed opens that never
+   * published suppress the closed `open: false` event so callers see a single
+   * rejected/closed outcome.
+   */
+  private readonly publishedOpen = new Set<SurfaceId>();
+  /** In-flight open settlement — prevents double reject from loadURL + did-fail-load. */
+  private readonly opening = new Map<
+    SurfaceId,
+    { settle: (result: SurfaceManagerResult) => void }
+  >();
 
   constructor(private readonly options: SurfaceWindowManagerOptions) {}
 
@@ -132,6 +151,11 @@ export class SurfaceWindowManager {
 
   isOpen(surfaceId: SurfaceId | string): boolean {
     return this.options.registry.isOpen(asSurfaceId(String(surfaceId)));
+  }
+
+  /** True while a transactional open awaits loadURL / did-fail-load. */
+  isOpening(surfaceId: SurfaceId | string): boolean {
+    return this.opening.has(asSurfaceId(String(surfaceId)));
   }
 
   list(): NativeSurfaceSnapshot[] {
@@ -174,15 +198,15 @@ export class SurfaceWindowManager {
     return authorizeSurfaceAction(this, sender, action, targetId);
   }
 
-  open(request: OpenSurfaceRequest): SurfaceManagerResult {
+  open(request: OpenSurfaceRequest): Promise<SurfaceManagerResult> {
     let path: string;
     try {
       path = assertSafeSurfacePath(request.path);
     } catch (error) {
-      return {
+      return Promise.resolve({
         status: 'rejected',
         reason: error instanceof Error ? error.message : 'invalid-path',
-      };
+      });
     }
 
     const surfaceId = asSurfaceId(request.surfaceId);
@@ -191,19 +215,21 @@ export class SurfaceWindowManager {
       const existing = decision.existing;
       existing.window.show();
       existing.window.focus();
-      return { status: 'focused', surface: snapshotOf(existing) };
+      return Promise.resolve({ status: 'focused', surface: snapshotOf(existing) });
     }
 
+    const displays = this.options.listDisplays?.() ?? defaultDisplays();
     const remembered = this.mergeRemembered(surfaceId, request);
     const resolved = resolveSurfaceBounds({
       remembered,
       kind: request.kind,
-      displays: currentDisplays(),
+      displays,
       fallback: request.bounds ?? fallbackBoundsFor(request.kind),
     });
     const min = minSizeForKind(request.kind);
 
-    const window = createSecureBrowserWindow({
+    const createWindow = this.options.createWindow ?? createSecureBrowserWindow;
+    const window = createWindow({
       width: resolved.bounds.width,
       height: resolved.bounds.height,
       x: resolved.bounds.x,
@@ -233,10 +259,7 @@ export class SurfaceWindowManager {
       window.focus();
     });
 
-    void window.loadURL(this.options.resolveUrl(path));
-    const snap = snapshotOf(entry, resolved.displayId);
-    this.options.onSatelliteChanged(snap);
-    return { status: 'ok', surface: snap };
+    return this.awaitSuccessfulLoad(entry, this.options.resolveUrl(path), resolved.displayId);
   }
 
   focus(surfaceId: string): SurfaceManagerResult {
@@ -292,7 +315,7 @@ export class SurfaceWindowManager {
   }
 
   /** Live-preview-output adapter for Agent 07 / existing open-output IPC. */
-  openLivePreviewOutput(): SurfaceManagerResult {
+  openLivePreviewOutput(): Promise<SurfaceManagerResult> {
     return this.open({
       surfaceId: WELL_KNOWN_SURFACE_IDS.livePreviewOutput,
       kind: 'live-preview-output',
@@ -306,6 +329,91 @@ export class SurfaceWindowManager {
 
   isLivePreviewOutputOpen(): boolean {
     return this.isOpen(WELL_KNOWN_SURFACE_IDS.livePreviewOutput);
+  }
+
+  private awaitSuccessfulLoad(
+    entry: SurfaceWindowEntry,
+    url: string,
+    displayId?: string,
+  ): Promise<SurfaceManagerResult> {
+    const { surfaceId, window } = entry;
+
+    return new Promise<SurfaceManagerResult>((resolve) => {
+      let settled = false;
+
+      const settle = (result: SurfaceManagerResult) => {
+        if (settled) return;
+        settled = true;
+        this.opening.delete(surfaceId);
+        window.webContents.removeListener('did-fail-load', onFailLoad);
+        resolve(result);
+      };
+
+      this.opening.set(surfaceId, { settle });
+
+      const onFailLoad = (
+        _event: Electron.Event,
+        _errorCode: number,
+        errorDescription: string,
+        _validatedURL: string,
+        isMainFrame: boolean,
+      ) => {
+        if (!isMainFrame || settled) return;
+        const reason = `load-failed:${errorDescription || 'unknown'}`;
+        // Settle before destroy so the closed handler does not overwrite the reason.
+        settle({ status: 'rejected', reason });
+        this.abortFailedOpen(entry);
+      };
+
+      window.webContents.on('did-fail-load', onFailLoad);
+
+      const load = this.options.loadURL ?? ((win, target) => win.loadURL(target));
+      void load(window, url).then(
+        () => {
+          if (settled) return;
+          if (window.isDestroyed() || this.options.registry.get(surfaceId) !== entry) {
+            settle({ status: 'rejected', reason: 'open-aborted' });
+            return;
+          }
+          const snap = snapshotOf(entry, displayId);
+          this.publishedOpen.add(surfaceId);
+          this.options.onSatelliteChanged(snap);
+          settle({ status: 'ok', surface: snap });
+        },
+        (error: unknown) => {
+          if (settled) return;
+          const detail = error instanceof Error ? error.message : 'load-rejected';
+          const reason = `load-rejected:${detail}`;
+          settle({ status: 'rejected', reason });
+          this.abortFailedOpen(entry);
+        },
+      );
+    });
+  }
+
+  /**
+   * Destroy a satellite that never successfully loaded. Unregisters the id,
+   * clears timers, and suppresses a duplicate closed event when open was never
+   * published.
+   */
+  private abortFailedOpen(entry: SurfaceWindowEntry): void {
+    const { surfaceId, window } = entry;
+    this.clearPersistTimer(surfaceId);
+    // Ensure closed-handler skip of open:false — never published.
+    this.publishedOpen.delete(surfaceId);
+
+    if (!window.isDestroyed()) {
+      try {
+        window.destroy();
+      } catch {
+        // Fall through to explicit unregister.
+      }
+    }
+
+    const still = this.options.registry.get(surfaceId);
+    if (still === entry) {
+      this.options.registry.unregister(surfaceId);
+    }
   }
 
   private mergeRemembered(
@@ -353,7 +461,15 @@ export class SurfaceWindowManager {
       const still = this.options.registry.get(surfaceId);
       if (still === entry) this.options.registry.unregister(surfaceId);
       this.clearPersistTimer(surfaceId);
-      if (!this.quitting) {
+
+      // If an open is still awaiting load, settle it as rejected/closed once.
+      const pending = this.opening.get(surfaceId);
+      if (pending) {
+        pending.settle({ status: 'rejected', reason: 'closed-before-load' });
+      }
+
+      const wasPublished = this.publishedOpen.delete(surfaceId);
+      if (!this.quitting && wasPublished) {
         this.options.onSatelliteChanged({ surfaceId, open: false });
       }
     });
@@ -376,7 +492,9 @@ export class SurfaceWindowManager {
   private handleChildFailure(entry: SurfaceWindowEntry, reason: 'crash' | 'unresponsive'): void {
     if (entry.window.isDestroyed()) {
       this.options.registry.unregister(entry.surfaceId);
-      this.options.onSatelliteChanged({ surfaceId: entry.surfaceId, open: false });
+      if (this.publishedOpen.delete(entry.surfaceId)) {
+        this.options.onSatelliteChanged({ surfaceId: entry.surfaceId, open: false });
+      }
       return;
     }
     console.warn(
@@ -387,7 +505,9 @@ export class SurfaceWindowManager {
       entry.window.destroy();
     } catch {
       this.options.registry.unregister(entry.surfaceId);
-      this.options.onSatelliteChanged({ surfaceId: entry.surfaceId, open: false });
+      if (this.publishedOpen.delete(entry.surfaceId)) {
+        this.options.onSatelliteChanged({ surfaceId: entry.surfaceId, open: false });
+      }
     }
   }
 

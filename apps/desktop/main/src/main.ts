@@ -243,7 +243,7 @@ prepare({
     closeController.surfaces = surfaceManager;
     closeController.getMainWindow = () => mainWindow;
     closeController.openOutput = () => {
-      surfaceManager?.openLivePreviewOutput();
+      void surfaceManager?.openLivePreviewOutput();
     };
     closeController.closeOutput = () => {
       surfaceManager?.closeLivePreviewOutput();

@@ -78,14 +78,16 @@ export function createWindowIpc(controller: CloseController) {
      * Open or focus a native surface. Main workspace only.
      * Closing never discards drafts — only the BrowserWindow.
      */
-    'surface-open': handle((event, request: NativeSurfaceOpenRequest): NativeSurfaceResult => {
-      const surfaces = requireSurfaces(controller);
-      const sender = senderWindow(event);
-      if (!surfaces || !sender) return reject('unavailable');
-      const auth = surfaces.authorize(sender, 'open');
-      if (!auth.allowed) return reject(auth.reason);
-      return surfaces.open(request);
-    }),
+    'surface-open': handle(
+      async (event, request: NativeSurfaceOpenRequest): Promise<NativeSurfaceResult> => {
+        const surfaces = requireSurfaces(controller);
+        const sender = senderWindow(event);
+        if (!surfaces || !sender) return reject('unavailable');
+        const auth = surfaces.authorize(sender, 'open');
+        if (!auth.allowed) return reject(auth.reason);
+        return surfaces.open(request);
+      },
+    ),
 
     'surface-focus': handle((event, surfaceId: string): NativeSurfaceResult => {
       const surfaces = requireSurfaces(controller);
