@@ -84,6 +84,24 @@ const sampleTree = (): ExplorerTree => ({
   ],
 });
 
+function dispatchDragEvent(
+  target: HTMLElement,
+  type: 'dragstart' | 'dragover' | 'drop',
+  dataTransfer: Pick<DataTransfer, 'setData' | 'getData' | 'dropEffect' | 'effectAllowed'> = {
+    dropEffect: 'none',
+    effectAllowed: 'all',
+    getData: () => '',
+    setData: () => undefined,
+  },
+): void {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', {
+    configurable: true,
+    value: dataTransfer,
+  });
+  target.dispatchEvent(event);
+}
+
 describe('ExplorerPanel', () => {
   const language = signal({ language: 'en' as 'en' | 'fr' });
   const tree = signal<ExplorerTree>(sampleTree());
@@ -124,7 +142,7 @@ describe('ExplorerPanel', () => {
   it('renders nested hierarchy with group and document rows', () => {
     const fixture = mount();
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.querySelectorAll('[role="treeitem"]').length).toBe(6);
+    expect(element.querySelectorAll('[role="treeitem"]')).toHaveLength(6);
     expect(element.textContent).toContain('Image');
     expect(element.textContent).toContain('Buffer A');
   });
@@ -247,12 +265,14 @@ describe('ExplorerPanel', () => {
     const source = fixture.nativeElement.querySelector('[data-node-id="buf-a"]') as HTMLElement;
     const target = fixture.nativeElement.querySelector('[data-node-id="buf-b"]') as HTMLElement;
 
-    source.dispatchEvent(
-      new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() }),
-    );
-    target.dispatchEvent(
-      new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }),
-    );
+    const dataTransfer: Pick<DataTransfer, 'setData' | 'getData' | 'dropEffect' | 'effectAllowed'> = {
+      dropEffect: 'none',
+      effectAllowed: 'all',
+      getData: () => '',
+      setData: () => undefined,
+    };
+    dispatchDragEvent(source, 'dragstart', dataTransfer);
+    dispatchDragEvent(target, 'drop', dataTransfer);
     fixture.detectChanges();
 
     expect(reorder).toHaveBeenCalledWith({
@@ -262,7 +282,7 @@ describe('ExplorerPanel', () => {
     });
   });
 
-  it('activates rows on Enter via keyboard handler', () => {
+  it('activates rows on Enter via keyboard handler', async () => {
     const fixture = mount();
     const select = vi.fn();
     fixture.componentInstance.select.subscribe(select);
@@ -272,7 +292,20 @@ describe('ExplorerPanel', () => {
     treeRoot.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
     );
-    treeRoot.dispatchEvent(
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const groupRow = fixture.nativeElement.querySelector(
+      '[data-node-id="explorer:files:group:passes"]',
+    ) as HTMLElement;
+    groupRow.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+    );
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const focusedRow = fixture.nativeElement.querySelector('[data-node-id="image"]') as HTMLElement;
+    focusedRow.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
     );
     fixture.detectChanges();

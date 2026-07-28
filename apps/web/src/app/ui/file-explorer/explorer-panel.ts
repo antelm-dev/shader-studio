@@ -138,7 +138,6 @@ import { buildReorderIntent } from './explorer-reorder';
         role="tree"
         [attr.aria-label]="ex('ariaTree')"
         (keydown)="onTreeKeydown($event)"
-        (focusin)="onTreeFocusIn($event)"
       >
         <ul class="tree" role="presentation">
           @for (row of rows(); track row.node.id) {
@@ -158,12 +157,11 @@ import { buildReorderIntent } from './explorer-reorder';
                 [class.disabled]="row.node.status.disabled"
                 [class.selectable]="row.node.capabilities.selectable"
                 [class.informational]="!row.node.capabilities.selectable"
-                [class.focused]="focusedId() === row.node.id"
                 [style.--explorer-depth]="row.node.depth"
                 [attr.draggable]="row.node.capabilities.reorder || null"
                 [matContextMenuTriggerFor]="rowMenu"
                 [matContextMenuTriggerData]="{ node: row.node }"
-                [tabindex]="focusedId() === row.node.id ? 0 : -1"
+                tabindex="-1"
                 (click)="onRowClick($event, row.node)"
                 (dblclick)="onRowDblClick(row.node)"
                 (dragstart)="onDragStart($event, row.node)"
@@ -372,7 +370,7 @@ import { buildReorderIntent } from './explorer-reorder';
     }
 
     .row.selectable:hover,
-    .row.focused {
+    .row:focus-within {
       background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
     }
 
@@ -501,7 +499,7 @@ import { buildReorderIntent } from './explorer-reorder';
     }
 
     .row:hover .row-menu,
-    .row.focused .row-menu {
+    .row:focus-within .row-menu {
       opacity: 1;
     }
 
@@ -546,7 +544,6 @@ export class ExplorerPanel {
 
   private readonly treeRoot = viewChild<ElementRef<HTMLElement>>('treeRoot');
   private readonly expansion = signal<ExplorerExpansionState>(new Map());
-  protected readonly focusedId = signal<string | null>(null);
   private dragging: ExplorerNode | null = null;
 
   protected readonly rows = computed(() =>
@@ -555,15 +552,7 @@ export class ExplorerPanel {
 
   constructor() {
     effect(() => {
-      const nodes = this.tree().nodes;
-      this.expansion.update((current) => mergeExpansionState(nodes, current));
-      const visible = visibleExplorerRows(nodes, this.expansion());
-      const focused = this.focusedId();
-      if (visible.length === 0) {
-        this.focusedId.set(null);
-      } else if (!focused || !visible.some((row) => row.node.id === focused)) {
-        this.focusedId.set(visible[0]?.node.id ?? null);
-      }
+      this.expansion.update((current) => mergeExpansionState(this.tree().nodes, current));
     });
   }
 
@@ -620,7 +609,7 @@ export class ExplorerPanel {
   }
 
   protected onRowClick(event: MouseEvent, node: ExplorerNode): void {
-    this.focusedId.set(node.id);
+    this.focusRow(node.id);
     if (!node.capabilities.selectable || !node.docId) return;
     if (event.detail > 1) return;
     this.select.emit({ docId: node.docId });
@@ -641,7 +630,7 @@ export class ExplorerPanel {
   }
 
   protected onTreeKeydown(event: KeyboardEvent): void {
-    const action = resolveExplorerKeyboardAction(event, this.rows(), this.focusedId());
+    const action = resolveExplorerKeyboardAction(event, this.rows(), this.currentFocusedNodeId());
     if (!action) return;
 
     switch (action.type) {
@@ -663,12 +652,6 @@ export class ExplorerPanel {
         this.openRowMenu(action.nodeId);
         break;
     }
-  }
-
-  protected onTreeFocusIn(event: FocusEvent): void {
-    const target = event.target as HTMLElement | null;
-    const nodeId = target?.closest<HTMLElement>('[data-node-id]')?.dataset['nodeId'];
-    if (nodeId) this.focusedId.set(nodeId);
   }
 
   protected onDragStart(event: DragEvent, node: ExplorerNode): void {
@@ -703,7 +686,9 @@ export class ExplorerPanel {
   }
 
   focusNode(nodeId?: string | null): void {
-    const targetId = nodeId && this.rows().some((row) => row.node.id === nodeId) ? nodeId : this.focusedId();
+    const currentFocusedId = this.currentFocusedNodeId();
+    const targetId =
+      nodeId && this.rows().some((row) => row.node.id === nodeId) ? nodeId : currentFocusedId;
     if (targetId) {
       this.focusRow(targetId);
       return;
@@ -714,11 +699,17 @@ export class ExplorerPanel {
   }
 
   private focusRow(nodeId: string): void {
-    this.focusedId.set(nodeId);
-    const element = this.treeRoot()?.nativeElement.querySelector<HTMLElement>(
-      `[data-node-id="${nodeId}"]`,
-    );
-    element?.focus();
+    queueMicrotask(() => {
+      const element = this.treeRoot()?.nativeElement.querySelector<HTMLElement>(
+        `[data-node-id="${nodeId}"]`,
+      );
+      element?.focus();
+    });
+  }
+
+  private currentFocusedNodeId(): string | null {
+    const activeElement = this.treeRoot()?.nativeElement.ownerDocument.activeElement as HTMLElement | null;
+    return activeElement?.closest<HTMLElement>('[data-node-id]')?.dataset['nodeId'] ?? null;
   }
 
   private openRowMenu(nodeId: string): void {
