@@ -89,6 +89,10 @@
       "types": "./src/surfaces/index.ts",
       "default": "./src/surfaces/index.ts"
     },
+    "./session": {
+      "types": "./src/session/index.ts",
+      "default": "./src/session/index.ts"
+    },
     "./templates": {
       "types": "./src/templates.ts",
       "default": "./src/templates.ts"
