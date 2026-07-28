@@ -23,16 +23,10 @@ import { GlContext, type GlContextOptions, type ThreeModule } from './gl-context
 import { parseInfoLog, prefixLineCount } from '@shader-studio/shared/glsl-diagnostics';
 import { expandMacros } from '@shader-studio/shared/glsl-export';
 import { BufferTargets, type TargetSpec } from './pass-targets';
+import { CHANNEL_COUNT, TextureManager, type ChannelSource } from './engine/texture-manager';
 
-/** A channel resolved to something `THREE.TextureLoader` can actually load. */
-export interface ChannelSource {
-  url: string;
-  wrap: TextureWrapMode;
-  filter: TextureFilterMode;
-  flipY: boolean;
-}
+export type { ChannelSource } from './engine/texture-manager';
 
-const CHANNEL_COUNT = 4;
 const CHANNEL_UNIFORMS = ['iChannel0', 'iChannel1', 'iChannel2', 'iChannel3'] as const;
 
 /**
@@ -211,17 +205,14 @@ export class ShaderEngine {
   /** The bindings the Image pass' channels were last set from. */
   private imageChannels: ChannelBindings = legacyTextureBindings();
 
-  /** iChannel0…3 of the *shader record*: what a `texture` binding points into. */
-  private textureSlots: readonly (ChannelSource | null)[] = [null, null, null, null];
+  /**
+   * iChannel0…3 of the *shader record* — what a `texture` binding points into —
+   * and every `THREE.Texture` behind them.
+   */
+  private readonly textures: TextureManager;
 
   /** What the buffers need from `BufferTargets`, kept so a resize can re-sync. */
   private targetSpecs: TargetSpec[] = [];
-
-  /** Keyed by `url|wrap|filter|flipY`, so swapping settings on the same image gets its own entry. */
-  private readonly textureCache = new Map<string, THREE.Texture>();
-  /** Decode state for cached image textures; a transition waits until none are still loading. */
-  private readonly textureStatus = new Map<string, 'loading' | 'settled'>();
-  private readonly placeholderTexture: THREE.Texture;
 
   private render: RenderSettings = {
     bloom: { enabled: false, strength: 0.3, radius: 0.5, threshold: 0.85 },
@@ -317,13 +308,12 @@ export class ShaderEngine {
 
     this.targets = new BufferTargets(context);
 
-    // A fully transparent 1×1 pixel: what an unassigned iChannel samples, so a
-    // shader that declares `uniform sampler2D iChannelN` always compiles and
-    // renders sensibly, with or without an image behind it.
-    this.placeholderTexture = context.own(
-      new T.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1, T.RGBAFormat),
-    );
-    this.placeholderTexture.needsUpdate = true;
+    this.textures = new TextureManager(context, {
+      warn: (message) => this.logOutput('warning', 'renderer', message),
+    });
+    // The public callback stays the engine's: this forwards to whatever it is
+    // set to at the moment a decode finishes, including `null`.
+    this.textures.onSettled = () => this.onTextureSettled?.();
 
     this.unsubscribe.push(
       context.onLost(() => this.handleContextLost()),
@@ -414,7 +404,7 @@ export class ShaderEngine {
     // Before anything is compiled: `buildUniforms` resolves a `texture` binding
     // through these, and a pass built against stale slots would come out of the
     // compiler bound to the placeholder.
-    this.setTextureSlots(spec.textures);
+    this.textures.setSlots(spec.textures);
 
     const vertex = expandMacros(spec.vertex);
     const diagnostics: CompileDiagnostic[] = [];
@@ -720,7 +710,7 @@ export class ShaderEngine {
     // them in for real, every frame, just before the pass is drawn.
     for (let index = 0; index < CHANNEL_COUNT; index++) {
       uniforms[CHANNEL_UNIFORMS[index]] = {
-        value: this.resolveBinding(channels[index]) ?? this.placeholderTexture,
+        value: this.resolveBinding(channels[index]) ?? this.textures.placeholder,
       };
     }
 
@@ -765,7 +755,7 @@ export class ShaderEngine {
   private resolveBinding(binding: ChannelBindings[number]): THREE.Texture | null {
     switch (binding.kind) {
       case 'texture':
-        return this.resolveTexture(this.textureSlots[binding.slot] ?? null);
+        return this.textures.resolveSlot(binding.slot);
       case 'buffer':
         return binding.feedback
           ? this.targets.previous(binding.passId)
@@ -789,7 +779,7 @@ export class ShaderEngine {
     for (let index = 0; index < CHANNEL_COUNT; index++) {
       const uniform = pass.uniforms[CHANNEL_UNIFORMS[index]];
       if (!uniform) continue;
-      uniform.value = this.resolveBinding(pass.channels[index]) ?? this.placeholderTexture;
+      uniform.value = this.resolveBinding(pass.channels[index]) ?? this.textures.placeholder;
     }
   }
 
@@ -807,102 +797,6 @@ export class ShaderEngine {
             height: height * this.resolutionScale,
           },
     );
-  }
-
-  // -------------------------------------------------------------------------
-  // Texture channels (iChannel0…3)
-  // -------------------------------------------------------------------------
-
-  private static cacheKey(spec: ChannelSource): string {
-    return `${spec.url}|${spec.wrap}|${spec.filter}|${spec.flipY}`;
-  }
-
-  private wrapModeFor(wrap: TextureWrapMode): THREE.Wrapping {
-    const T = this.three;
-    switch (wrap) {
-      case 'repeat':
-        return T.RepeatWrapping;
-      case 'mirror':
-        return T.MirroredRepeatWrapping;
-      case 'clamp':
-      default:
-        return T.ClampToEdgeWrapping;
-    }
-  }
-
-  /**
-   * Gets or creates the `THREE.Texture` for a resolved channel. `load()`
-   * returns synchronously — an empty texture that fills itself in once the
-   * image decodes — so binding a channel never blocks a compile on the
-   * network or disk, matching the contract the rest of the engine keeps.
-   */
-  private resolveTexture(spec: ChannelSource | null): THREE.Texture {
-    if (!spec) return this.placeholderTexture;
-
-    const key = ShaderEngine.cacheKey(spec);
-    const cached = this.textureCache.get(key);
-    if (cached) return cached;
-
-    this.textureStatus.set(key, 'loading');
-    const texture = this.context.own(
-      new this.three.TextureLoader().load(
-        spec.url,
-        () => this.settleTexture(key),
-        undefined,
-        (error) => {
-          console.warn(`[shader-engine] failed to load texture "${spec.url}":`, error);
-          this.logOutput(
-            'warning',
-            'renderer',
-            `Failed to load texture "${spec.url}": ${String(error)}`,
-          );
-          this.settleTexture(key);
-        },
-      ),
-    );
-
-    const wrap = this.wrapModeFor(spec.wrap);
-    texture.wrapS = wrap;
-    texture.wrapT = wrap;
-    texture.magFilter =
-      spec.filter === 'nearest' ? this.three.NearestFilter : this.three.LinearFilter;
-    texture.minFilter = texture.magFilter;
-    texture.generateMipmaps = false;
-    texture.flipY = spec.flipY;
-
-    this.textureCache.set(key, texture);
-    return texture;
-  }
-
-  private settleTexture(key: string): void {
-    // A late callback from a texture pruned during a rapid shader switch no
-    // longer belongs to the live project and must not release its transition.
-    if (!this.textureStatus.has(key)) return;
-    this.textureStatus.set(key, 'settled');
-    this.onTextureSettled?.();
-  }
-
-  /** True once every image texture used by the current project has decoded or failed. */
-  get channelsReady(): boolean {
-    return this.textureSlots.every((source) => {
-      if (!source) return true;
-      return this.textureStatus.get(ShaderEngine.cacheKey(source)) !== 'loading';
-    });
-  }
-
-  /** Disposes any cached texture no longer referenced by the current channels. */
-  private pruneTextureCache(channels: readonly (ChannelSource | null)[]): void {
-    const used = new Set(
-      channels
-        .filter((channel): channel is ChannelSource => channel !== null)
-        .map(ShaderEngine.cacheKey),
-    );
-    for (const [key, texture] of this.textureCache) {
-      if (used.has(key)) continue;
-      texture.dispose();
-      this.textureCache.delete(key);
-      this.textureStatus.delete(key);
-    }
   }
 
   // -------------------------------------------------------------------------
@@ -970,7 +864,7 @@ export class ShaderEngine {
   setChannels(channels: readonly (ChannelSource | null)[]): void {
     if (this.disposed) return;
 
-    this.setTextureSlots(channels);
+    this.textures.setSlots(channels);
 
     // The Image pass in a single-pass shader has no `bindChannels` before it —
     // the buffer loop is what normally does the rebinding — so do it here, which
@@ -980,26 +874,22 @@ export class ShaderEngine {
       for (let index = 0; index < CHANNEL_COUNT; index++) {
         const uniform = this.uniforms[CHANNEL_UNIFORMS[index]];
         if (uniform) {
-          uniform.value = this.resolveBinding(this.imageChannels[index]) ?? this.placeholderTexture;
+          uniform.value =
+            this.resolveBinding(this.imageChannels[index]) ?? this.textures.placeholder;
         }
       }
     }
-  }
-
-  private setTextureSlots(channels: readonly (ChannelSource | null)[]): void {
-    this.textureSlots = [
-      channels[0] ?? null,
-      channels[1] ?? null,
-      channels[2] ?? null,
-      channels[3] ?? null,
-    ];
-    this.pruneTextureCache(this.textureSlots);
   }
 
   /** The texture a channel currently samples, placeholder included. */
   channelTexture(index: number): THREE.Texture | null {
     const uniform = this.uniforms[CHANNEL_UNIFORMS[index]];
     return (uniform?.value as THREE.Texture | undefined) ?? null;
+  }
+
+  /** True once every image texture used by the current project has decoded or failed. */
+  get channelsReady(): boolean {
+    return this.textures.ready;
   }
 
   /**
@@ -1386,8 +1276,7 @@ export class ShaderEngine {
 
     // three re-uploads a texture on the next draw, but only if it is told the
     // pixels it holds are new. Nothing survived on the GPU, so they all are.
-    for (const texture of this.textureCache.values()) texture.needsUpdate = true;
-    this.placeholderTexture.needsUpdate = true;
+    this.textures.invalidate();
 
     // The render targets are husks: the textures behind them died with the
     // context. Rebuilt at the size they had — empty, because their contents are
@@ -1562,10 +1451,7 @@ export class ShaderEngine {
 
     this.material.dispose();
     this.mesh.geometry.dispose();
-    for (const texture of this.textureCache.values()) texture.dispose();
-    this.textureCache.clear();
-    this.textureStatus.clear();
-    this.placeholderTexture.dispose();
+    this.textures.dispose();
 
     this.onFrameRendered = null;
     this.onTextureSettled = null;
