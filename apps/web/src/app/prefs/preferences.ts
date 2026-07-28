@@ -35,6 +35,12 @@ import {
   sanitizePreviewWindow,
   type PreviewWindowState,
 } from '@shader-studio/shared/preview-prefs';
+import {
+  DEFAULT_EDITOR_GROUP_ID,
+  editorSurfaceId,
+  migrateLayoutFromPreferences,
+  type LayoutPreferences,
+} from '@shader-studio/shared/surfaces';
 import type { AppLocale } from '../i18n/i18n';
 
 /**
@@ -99,8 +105,10 @@ export interface WorkspacePreferences {
   editorAppearance: EditorAppearance;
   /** Where the editor sits: docked, floating, maximized or collapsed. */
   editorWindow: EditorWindowState;
-  /** Where the preview sits: the stage, or a window over it. */
+  /** Where the preview sits: the stage, or a window over it. @deprecated use surfacesLayout */
   previewWindow: PreviewWindowState;
+  /** Versioned contained/native surface layout (Agent 06). */
+  surfacesLayout: LayoutPreferences;
   /**
    * What the last export was set to. A capture is a form with eight fields, and
    * nobody fills it in twice — an export is almost always a re-export at a
@@ -132,6 +140,17 @@ const DEFAULTS: WorkspacePreferences = {
   editorAppearance: DEFAULT_EDITOR_APPEARANCE,
   editorWindow: DEFAULT_EDITOR_WINDOW,
   previewWindow: DEFAULT_PREVIEW_WINDOW,
+  surfacesLayout: migrateLayoutFromPreferences({
+    editorOpen: false,
+    editorWindow: DEFAULT_EDITOR_WINDOW,
+    previewWindow: DEFAULT_PREVIEW_WINDOW,
+    browserOpen: true,
+    guiVisible: true,
+    browserWidth: DEFAULT_PANEL_WIDTHS.browser,
+    inspectorWidth: DEFAULT_PANEL_WIDTHS.inspector,
+    bottomPanelOpen: DEFAULT_BOTTOM_PANEL_OPEN,
+    bottomPanelHeight: DEFAULT_BOTTOM_PANEL_HEIGHT,
+  }),
   capture: DEFAULT_CAPTURE,
 };
 
@@ -139,6 +158,10 @@ function sanitizeColorScheme(value: unknown): ColorScheme {
   return COLOR_SCHEME_OPTIONS.some((option) => option.value === value)
     ? (value as ColorScheme)
     : DEFAULTS.colorScheme;
+}
+
+export function createDefaultWorkspacePreferences(): WorkspacePreferences {
+  return { ...DEFAULTS };
 }
 
 function sanitizeLanguage(value: unknown): AppLocale {
@@ -204,6 +227,50 @@ export class Preferences {
       if (!raw) return DEFAULTS;
 
       const parsed = JSON.parse(raw) as Partial<WorkspacePreferences>;
+      const editorWindow = sanitizeWindowState(parsed.editorWindow);
+      const previewWindow = sanitizePreviewWindow(parsed.previewWindow);
+      const browserOpen = parsed.browserOpen ?? DEFAULTS.browserOpen;
+      const editorOpenLegacy = parsed.editorOpen ?? DEFAULTS.editorOpen;
+      const guiVisible = parsed.guiVisible ?? DEFAULTS.guiVisible;
+      const browserWidth = clampPanelWidth(
+        parsed.browserWidth,
+        PANEL_LIMITS.browserWidth,
+        DEFAULTS.browserWidth,
+      );
+      const inspectorWidth = clampPanelWidth(
+        parsed.inspectorWidth,
+        PANEL_LIMITS.inspectorWidth,
+        DEFAULTS.inspectorWidth,
+      );
+      const bottomPanelOpen =
+        typeof parsed.bottomPanelOpen === 'boolean'
+          ? parsed.bottomPanelOpen
+          : DEFAULTS.bottomPanelOpen;
+      const bottomPanelHeight = clampBottomPanelHeight(
+        parsed.bottomPanelHeight,
+        DEFAULTS.bottomPanelHeight,
+      );
+
+      const surfacesLayout = migrateLayoutFromPreferences({
+        ...parsed,
+        editorOpen: editorOpenLegacy,
+        editorWindow,
+        previewWindow,
+        browserOpen,
+        guiVisible,
+        browserWidth,
+        inspectorWidth,
+        bottomPanelOpen,
+        bottomPanelHeight,
+        bottomPanelTab: parsed.bottomPanelTab,
+        inspectorTab: parsed.inspectorTab,
+      });
+
+      const editorSurface = surfacesLayout.surfaces.find(
+        (surface) => surface.id === editorSurfaceId(DEFAULT_EDITOR_GROUP_ID),
+      );
+      const editorOpen = editorSurface?.open ?? editorOpenLegacy;
+
       return {
         language: sanitizeLanguage(parsed.language),
         lastShaderId:
@@ -212,31 +279,14 @@ export class Preferences {
           typeof parsed.shadertoyApiKey === 'string'
             ? parsed.shadertoyApiKey
             : DEFAULTS.shadertoyApiKey,
-        browserOpen: parsed.browserOpen ?? DEFAULTS.browserOpen,
-        editorOpen: parsed.editorOpen ?? DEFAULTS.editorOpen,
-        guiVisible: parsed.guiVisible ?? DEFAULTS.guiVisible,
-        // Both widths reach the layout as a CSS length. A value from an older
-        // build, a wider monitor or a hand-edited store is clamped back into a
-        // range that always leaves the preview the larger half of the window.
-        browserWidth: clampPanelWidth(
-          parsed.browserWidth,
-          PANEL_LIMITS.browserWidth,
-          DEFAULTS.browserWidth,
-        ),
-        inspectorWidth: clampPanelWidth(
-          parsed.inspectorWidth,
-          PANEL_LIMITS.inspectorWidth,
-          DEFAULTS.inspectorWidth,
-        ),
+        browserOpen,
+        editorOpen,
+        guiVisible,
+        browserWidth,
+        inspectorWidth,
         inspectorTab: sanitizeInspectorTab(parsed.inspectorTab),
-        bottomPanelOpen:
-          typeof parsed.bottomPanelOpen === 'boolean'
-            ? parsed.bottomPanelOpen
-            : DEFAULTS.bottomPanelOpen,
-        bottomPanelHeight: clampBottomPanelHeight(
-          parsed.bottomPanelHeight,
-          DEFAULTS.bottomPanelHeight,
-        ),
+        bottomPanelOpen,
+        bottomPanelHeight,
         bottomPanelTab: sanitizeBottomPanelTab(parsed.bottomPanelTab),
         fileExplorerOpen:
           typeof parsed.fileExplorerOpen === 'boolean'
@@ -256,16 +306,10 @@ export class Preferences {
         paused: parsed.paused ?? DEFAULTS.paused,
         autoRipples: parsed.autoRipples ?? DEFAULTS.autoRipples,
         colorScheme: sanitizeColorScheme(parsed.colorScheme),
-        // These two are structures rather than scalars, and everything inside
-        // them ends up in a Monaco option or a CSS length. They get sanitized
-        // field by field, and a value that cannot be salvaged falls back to its
-        // default rather than to whatever was in storage.
         editorAppearance: sanitizeAppearance(parsed.editorAppearance),
-        editorWindow: sanitizeWindowState(parsed.editorWindow),
-        previewWindow: sanitizePreviewWindow(parsed.previewWindow),
-        // Every field of a capture ends up as a render target size, a frame
-        // count or a divisor. `normalizeCapture` is the same clamp the planner
-        // applies, so storage can hold nothing the planner would refuse.
+        editorWindow,
+        previewWindow,
+        surfacesLayout,
         capture: normalizeCapture(parsed.capture),
       };
     } catch {
