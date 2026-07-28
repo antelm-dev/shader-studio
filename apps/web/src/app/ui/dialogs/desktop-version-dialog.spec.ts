@@ -97,6 +97,74 @@ describe('DesktopVersionDialog', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('shows unavailable status text and a disabled primary action', async () => {
+    updateState.set({
+      status: 'unavailable',
+      currentVersion: '1.2.3',
+      message: 'Updates are managed by your package manager.',
+    });
+    const fixture = await mount('en');
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.textContent).toContain('Updates are managed by your package manager.');
+    const action = [...root.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Unavailable'),
+    );
+    expect(action?.disabled).toBe(true);
+  });
+
+  it('shows checking status and keeps the primary action disabled', async () => {
+    updateState.set({ status: 'checking', currentVersion: '1.2.3' });
+    const fixture = await mount('en');
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.textContent).toContain('Checking for an update…');
+    const action = [...root.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Checking…'),
+    );
+    expect(action?.disabled).toBe(true);
+  });
+
+  it('offers Update when a new version is available and preserves install via updater.update', async () => {
+    updateState.set({
+      status: 'available',
+      currentVersion: '1.2.3',
+      availableVersion: '1.3.0',
+    });
+    const fixture = await mount('en');
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.textContent).toContain('Version 1.3.0 is available.');
+    const action = [...root.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Update'),
+    );
+    expect(action?.disabled).toBe(false);
+    action?.click();
+    fixture.detectChanges();
+    expect(update).toHaveBeenCalledOnce();
+    expect(check).not.toHaveBeenCalled();
+  });
+
+  it('offers Restart and update when a download is ready', async () => {
+    updateState.set({
+      status: 'downloaded',
+      currentVersion: '1.2.3',
+      availableVersion: '1.3.0',
+    });
+    const fixture = await mount('en');
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.textContent).toContain('Version 1.3.0 is ready to install.');
+    const action = [...root.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Restart and update'),
+    );
+    expect(action?.disabled).toBe(false);
+    action?.click();
+    fixture.detectChanges();
+    expect(update).toHaveBeenCalledOnce();
+    expect(check).not.toHaveBeenCalled();
+  });
+
   it('shows download progress and keeps the primary action disabled while busy', async () => {
     updateState.set({
       status: 'downloading',
