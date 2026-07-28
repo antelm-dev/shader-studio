@@ -13,6 +13,7 @@ const root = resolve(import.meta.dirname, '../../..');
 const releaseDir = resolve(root, 'release');
 const require = createRequire(import.meta.url);
 const electronVersion = require('electron/package.json').version;
+const updateChannel = process.env['ELECTRON_UPDATE_CHANNEL'];
 
 const commands = {
   clean: ['pnpm', 'run', 'clean'],
@@ -59,6 +60,17 @@ async function packageDesktop() {
     config: {
       extends: 'apps/desktop/electron-builder.yml',
       electronVersion,
+      ...(updateChannel
+        ? {
+            publish: {
+              provider: 'github',
+              owner: 'antelm-dev',
+              repo: 'shader-studio',
+              channel: updateChannel,
+              releaseType: updateChannel === 'latest' ? 'release' : 'prerelease',
+            },
+          }
+        : {}),
       ...(useStaging ? { directories: { output: stagingDir, buildResources: 'public' } } : {}),
     },
     targets: platform.createTarget(target, ...arch),
