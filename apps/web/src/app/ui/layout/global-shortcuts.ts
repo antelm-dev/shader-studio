@@ -100,6 +100,14 @@ export class GlobalShortcuts {
         this.commands.toggle('bottomPanelOpen');
         return true;
 
+      // Desktop DevTools — full Ctrl/Meta+Shift+I chord only. Plain Ctrl+I or
+      // Shift+I must not reach here as handled (they fall through).
+      case 'i':
+        if (!event.shiftKey || !this.desktop.available) return false;
+        event.preventDefault();
+        this.desktop.toggleDevTools();
+        return true;
+
       case 'pageup':
         event.preventDefault();
         this.openDocs.cycle(-1);

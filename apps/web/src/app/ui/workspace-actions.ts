@@ -6,6 +6,7 @@ import type { ImportMode, ShaderBundle } from '@shader-studio/shared/model';
 import { composePass } from '@shader-studio/shared/pass-source';
 import { imagePass } from '@shader-studio/shared/project';
 import { DesktopPlatform } from '../desktop/desktop-platform';
+import { DesktopUpdater } from '../desktop/desktop-updater';
 import { ShaderStore, type EditorDocument } from '../workspace/shader-store';
 import { I18n } from '../i18n/i18n';
 import { buildFullGlsl } from '@shader-studio/shared/glsl-export';
@@ -18,6 +19,9 @@ import type { UnsavedChoice } from './dialogs/unsaved-changes-dialog';
 import type { ExplorerContextCommand, ExplorerReorderIntent } from './file-explorer/contract';
 import { OpenDocuments } from './editor/open-documents';
 import { buildWallpaperDocument } from '../rendering/wallpaper-export';
+
+const ABOUT_DIALOG_ID = 'about-shader-studio';
+const SHORTCUTS_DIALOG_ID = 'keyboard-shortcuts';
 
 /**
  * The user-facing verbs of the app: the flows that need a dialog or a file
@@ -32,6 +36,7 @@ export class WorkspaceActions {
   private readonly dialog = inject(MatDialog);
   private readonly store = inject(ShaderStore);
   private readonly desktop = inject(DesktopPlatform);
+  private readonly updater = inject(DesktopUpdater);
   private readonly i18n = inject(I18n);
   private readonly openDocs = inject(OpenDocuments);
   private transitionInFlight: Promise<boolean> | null = null;
@@ -94,11 +99,46 @@ export class WorkspaceActions {
     this.dialog.open(ExportDialog, { maxWidth: '92vw', disableClose: true });
   }
 
+  /** Opens the Keyboard Shortcuts catalog dialog (desktop Help menu). */
+  async openKeyboardShortcuts(): Promise<void> {
+    if (this.dialog.getDialogById(SHORTCUTS_DIALOG_ID)) return;
+    const { KeyboardShortcutsDialog } = await import('./help/keyboard-shortcuts-dialog');
+    this.dialog.open(KeyboardShortcutsDialog, {
+      id: SHORTCUTS_DIALOG_ID,
+      width: '520px',
+      maxWidth: '92vw',
+    });
+  }
+
+  /**
+   * About Shader Studio… — same dialog as Check for Updates, without forcing a
+   * network check. Alias kept as `openDesktopVersion` for the web overflow menu.
+   */
+  async openAboutShaderStudio(): Promise<void> {
+    if (!this.desktop.available) return;
+    if (this.dialog.getDialogById(ABOUT_DIALOG_ID)) return;
+    const { AboutShaderStudioDialog } = await import('./dialogs/desktop-version-dialog');
+    this.dialog.open(AboutShaderStudioDialog, {
+      id: ABOUT_DIALOG_ID,
+      width: '480px',
+      maxWidth: '92vw',
+    });
+  }
+
+  /** Web overflow menu entry — same as Help → About Shader Studio…. */
   async openDesktopVersion(): Promise<void> {
-    if (this.desktop.available) {
-      const { DesktopVersionDialog } = await import('./dialogs/desktop-version-dialog');
-      this.dialog.open(DesktopVersionDialog, { width: '480px', maxWidth: '92vw' });
-    }
+    await this.openAboutShaderStudio();
+  }
+
+  /**
+   * Check for Updates… — forces `DesktopUpdater.check()`, then shows the About
+   * dialog. Errors from the check propagate; an already-open About instance is
+   * reused rather than stacked.
+   */
+  async checkForUpdates(): Promise<void> {
+    if (!this.desktop.available) return;
+    await this.updater.check();
+    await this.openAboutShaderStudio();
   }
 
   private async promptFor(data: PromptDialogData): Promise<PromptDialogResult | undefined> {

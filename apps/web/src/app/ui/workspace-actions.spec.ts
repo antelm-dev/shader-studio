@@ -13,6 +13,7 @@ import {
 import { migrateLegacyProject } from '@shader-studio/shared/project';
 import { ShaderApi } from '../api/shader-api';
 import { DesktopPlatform } from '../desktop/desktop-platform';
+import { DesktopUpdater } from '../desktop/desktop-updater';
 import { I18n } from '../i18n/i18n';
 import { Preferences, type WorkspacePreferences } from '../prefs/preferences';
 import {
@@ -27,6 +28,7 @@ import {
 } from '@shader-studio/shared/panel-prefs';
 import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
 import { ShaderStore } from '../workspace/shader-store';
+import { OpenDocuments } from './editor/open-documents';
 import { WorkspaceActions } from './workspace-actions';
 
 const FRAGMENT = 'void main() { gl_FragColor = vec4(1.0); }';
@@ -120,12 +122,22 @@ describe('WorkspaceActions explorer adapters', () => {
         { provide: Preferences, useValue: new FakePreferences() },
         { provide: DesktopPlatform, useValue: { available: false } },
         {
+          provide: DesktopUpdater,
+          useValue: {
+            check: vi.fn(),
+            state: signal({ status: 'unavailable', currentVersion: '' }),
+          },
+        },
+        {
           provide: I18n,
           useValue: { locale: () => 'en', t: (key: string) => key },
         },
         {
           provide: MatDialog,
-          useValue: { open: () => ({ afterClosed: () => of(undefined) }) },
+          useValue: {
+            open: () => ({ afterClosed: () => of(undefined) }),
+            getDialogById: () => undefined,
+          },
         },
       ],
     });
@@ -170,5 +182,91 @@ describe('WorkspaceActions explorer adapters', () => {
     expect(file).toBeDefined();
     actions.duplicateDocument(file!);
     expect(store.project()!.files.length).toBe(2);
+  });
+});
+
+describe('WorkspaceActions Help flows', () => {
+  const check = vi.fn(async () => undefined);
+  const open = vi.fn();
+  const getDialogById = vi.fn((_id?: string) => undefined as { id: string } | undefined);
+  let actions: WorkspaceActions;
+
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    check.mockReset();
+    open.mockReset();
+    getDialogById.mockReset();
+    getDialogById.mockReturnValue(undefined);
+
+    TestBed.configureTestingModule({
+      providers: [
+        WorkspaceActions,
+        { provide: ShaderStore, useValue: {} },
+        { provide: Preferences, useValue: new FakePreferences() },
+        { provide: DesktopPlatform, useValue: { available: true } },
+        {
+          provide: DesktopUpdater,
+          useValue: { check, state: signal({ status: 'idle', currentVersion: '1.0.0' }) },
+        },
+        {
+          provide: I18n,
+          useValue: { locale: () => 'en', t: (key: string) => key },
+        },
+        {
+          provide: MatDialog,
+          useValue: { open, getDialogById },
+        },
+        { provide: ShaderApi, useValue: new FakeApi() },
+        { provide: OpenDocuments, useValue: { openIds: () => [], activate: () => undefined } },
+      ],
+    });
+
+    actions = TestBed.inject(WorkspaceActions);
+  });
+
+  it('openKeyboardShortcuts dynamically opens the shortcuts dialog once', async () => {
+    await actions.openKeyboardShortcuts();
+    expect(open).toHaveBeenCalledOnce();
+    const [component, config] = open.mock.calls[0]!;
+    expect(String(component.name)).toContain('KeyboardShortcutsDialog');
+    expect(config).toMatchObject({ id: 'keyboard-shortcuts', width: '520px' });
+
+    getDialogById.mockReturnValue({ id: 'keyboard-shortcuts' });
+    await actions.openKeyboardShortcuts();
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it('openAboutShaderStudio opens About without checking for updates', async () => {
+    await actions.openAboutShaderStudio();
+    expect(check).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledOnce();
+    const [component, config] = open.mock.calls[0]!;
+    expect(String(component.name)).toMatch(/DesktopVersionDialog|AboutShaderStudioDialog/);
+    expect(config).toMatchObject({ id: 'about-shader-studio', width: '480px' });
+  });
+
+  it('checkForUpdates forces a check then opens About without stacking', async () => {
+    await actions.checkForUpdates();
+    expect(check).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledOnce();
+
+    getDialogById.mockImplementation((id?: string) =>
+      id === 'about-shader-studio' ? { id } : undefined,
+    );
+    await actions.checkForUpdates();
+    expect(check).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it('checkForUpdates propagates updater errors without opening a dialog', async () => {
+    check.mockRejectedValueOnce(new Error('network down'));
+    await expect(actions.checkForUpdates()).rejects.toThrow('network down');
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('openDesktopVersion aliases About without a forced check', async () => {
+    await actions.openDesktopVersion();
+    expect(check).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledOnce();
   });
 });
