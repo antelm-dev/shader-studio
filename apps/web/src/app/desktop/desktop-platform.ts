@@ -18,10 +18,12 @@ export class DesktopPlatform {
 
   constructor() {
     if (!this.available) return;
-    void window.electron.bridge.window.state().then((state) => this.windowStateSignal.set(state));
-    window.electron.bridge.window.onStateChanged((state) => this.windowStateSignal.set(state));
-    void window.electron.bridge.window.outputOpen().then((open) => this.outputOpen.set(open));
-    window.electron.bridge.window.onOutputStateChanged((open) => this.outputOpen.set(open));
+    void window.electron.bridge.window
+      .state()
+      .then((state: WindowState) => this.windowStateSignal.set(state));
+    window.electron.bridge.window.onStateChanged((state: WindowState) => this.windowStateSignal.set(state));
+    void window.electron.bridge.window.outputOpen().then((open: boolean) => this.outputOpen.set(open));
+    window.electron.bridge.window.onOutputStateChanged((open: boolean) => this.outputOpen.set(open));
   }
 
   async openBundle(): Promise<{ name: string; bundle: unknown } | null> {

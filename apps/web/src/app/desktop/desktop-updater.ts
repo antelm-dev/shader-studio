@@ -15,8 +15,8 @@ export class DesktopUpdater {
 
   constructor() {
     if (!this.available) return;
-    void window.electron.bridge.update.state().then((state) => this.state.set(state));
-    window.electron.bridge.update.onUpdateStateChanged((state) => this.state.set(state));
+    void window.electron.bridge.update.state().then((state: UpdateState) => this.state.set(state));
+    window.electron.bridge.update.onUpdateStateChanged((state: UpdateState) => this.state.set(state));
   }
 
   async check(): Promise<void> {

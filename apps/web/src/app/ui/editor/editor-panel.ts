@@ -50,6 +50,8 @@ import {
   type ExplorerViewMode,
 } from '../file-explorer';
 
+type EditorSurface = Pick<CodeEditor, 'focus' | 'format' | 'layout' | 'revealIn'>;
+
 @Component({
   selector: 'app-editor-panel',
   imports: [
@@ -183,7 +185,7 @@ import {
         <button
           type="button"
           class="explorer-reopen"
-          [matButton]="explorerOverlayAvailable() ? 'filled-tonal' : 'text'"
+          [matButton]="explorerOverlayAvailable() ? 'tonal' : 'text'"
           [matTooltip]="(explorerPreferredOpen() ? 'explorer.expand' : 'explorer.title') | translate"
           [attr.aria-label]="
             (explorerOverlayAvailable() ? 'explorer.expand' : 'explorer.title') | translate
@@ -224,6 +226,7 @@ import {
       <div class="editor-main">
         @if (editorDoc(); as doc) {
           <app-code-editor
+            #editorSurface
             class="editor"
             [doc]="doc"
             [liveIds]="liveIds()"
@@ -252,7 +255,7 @@ import {
           (click)="closeExplorerOverlay()"
         ></button>
 
-        <div class="explorer-overlay" (keydown.escape)="onOverlayEscape($event)">
+        <div class="explorer-overlay" (keydown.escape)="onOverlayEscape()">
           <app-explorer-panel
             class="explorer overlay-panel"
             [style.width.px]="explorerWidth()"
@@ -450,7 +453,7 @@ export class EditorPanel {
   private readonly destroyRef = inject(DestroyRef);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
-  private readonly editor = viewChild(CodeEditor);
+  private readonly editor = viewChild<EditorSurface>('editorSurface');
   private readonly explorerPanel = viewChild(ExplorerPanel);
 
   protected readonly configOpen = signal(false);
@@ -613,8 +616,7 @@ export class EditorPanel {
     queueMicrotask(() => this.focusEditor());
   }
 
-  protected onOverlayEscape(event: KeyboardEvent): void {
-    event.preventDefault();
+  protected onOverlayEscape(): void {
     this.closeExplorerOverlay();
   }
 
