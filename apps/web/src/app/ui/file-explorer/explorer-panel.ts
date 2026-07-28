@@ -169,7 +169,6 @@ const EXPLORER_ICON_VIEW_TABS_MAX = 259;
                 [attr.aria-level]="row.node.depth + 1"
                 [attr.aria-expanded]="row.hasChildren ? row.expanded : null"
                 [attr.aria-selected]="row.node.capabilities.selectable && row.node.status.active"
-                [attr.aria-disabled]="row.node.status.disabled || null"
                 [attr.aria-busy]="row.node.status.compiling || null"
                 [attr.aria-label]="rowAriaLabel(row.node)"
                 [class.active]="row.node.status.active"

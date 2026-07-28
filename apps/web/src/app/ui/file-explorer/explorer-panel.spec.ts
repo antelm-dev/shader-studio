@@ -559,4 +559,80 @@ describe('ExplorerPanel', () => {
       expect(host.querySelector('.view-tab-label')?.textContent).toContain('Files');
     });
   });
+
+  describe('render-disabled buffers', () => {
+    const disabledTree = (): ExplorerTree => ({
+      view: 'files',
+      nodes: [
+        group('explorer:files:group:passes', 'explorer.group.passes', [
+          doc('buf-disabled', {
+            name: 'Buffer C',
+            status: { ...INACTIVE_STATUS, disabled: true },
+          }),
+        ]),
+      ],
+    });
+
+    it('does not set aria-disabled on render-disabled buffers', () => {
+      tree.set(disabledTree());
+      const fixture = mount();
+      const row = fixture.nativeElement.querySelector('[data-node-id="buf-disabled"]') as HTMLElement;
+
+      expect(row.getAttribute('aria-disabled')).toBeNull();
+      expect(row.getAttribute('aria-label')).toContain('Disabled');
+      expect(row.classList.contains('disabled')).toBe(true);
+    });
+
+    it('keeps render-disabled buffers keyboard-selectable', async () => {
+      tree.set(disabledTree());
+      const fixture = mount();
+      const select = vi.fn();
+      fixture.componentInstance.select.subscribe(select);
+
+      const treeRoot = fixture.nativeElement.querySelector('#explorer-tree') as HTMLElement;
+      treeRoot.focus();
+      treeRoot.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+      );
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      const row = fixture.nativeElement.querySelector('[data-node-id="buf-disabled"]') as HTMLElement;
+      row.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+      );
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      row.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+      fixture.detectChanges();
+
+      expect(select).toHaveBeenCalledWith({ docId: 'buf-disabled' });
+    });
+
+    it('exposes Enable for render-disabled buffers via row actions', () => {
+      tree.set(disabledTree());
+      const fixture = mount();
+      const command = vi.fn();
+      fixture.componentInstance.command.subscribe(command);
+
+      const row = fixture.nativeElement.querySelector('[data-node-id="buf-disabled"]') as HTMLElement;
+      const menuBtn = row.querySelector('.row-menu') as HTMLButtonElement;
+      expect(menuBtn).not.toBeNull();
+
+      menuBtn.click();
+      fixture.detectChanges();
+
+      const enableItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
+        item.textContent?.includes('Enable'),
+      ) as HTMLButtonElement | undefined;
+      expect(enableItem).toBeDefined();
+      enableItem?.click();
+      fixture.detectChanges();
+
+      expect(command).toHaveBeenCalledWith({ command: 'enable', docId: 'buf-disabled' });
+    });
+  });
 });
