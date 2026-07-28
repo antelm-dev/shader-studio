@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Preferences, type WorkspacePreferences } from '../../prefs/preferences';
 import { I18nCatalog, type I18nCatalogMap } from '../../i18n/catalog';
 import { I18n } from '../../i18n/i18n';
+import type { TranslationKey } from '../../i18n/keys';
 import {
   INFORMATIONAL_CAPABILITIES,
   INACTIVE_STATUS,
@@ -47,7 +48,7 @@ const doc = (id: string, patch: Partial<ExplorerNode> = {}, depth = 1): Explorer
   ...patch,
 });
 
-const group = (id: string, labelKey: string, children: ExplorerNode[]): ExplorerNode => ({
+const group = (id: string, labelKey: TranslationKey, children: ExplorerNode[]): ExplorerNode => ({
   id,
   kind: 'group',
   labelKey,
@@ -57,6 +58,17 @@ const group = (id: string, labelKey: string, children: ExplorerNode[]): Explorer
   status: INACTIVE_STATUS,
   icon: 'folder',
   defaultExpanded: true,
+});
+
+const info = (id: string, patch: Partial<ExplorerNode> = {}, depth = 1): ExplorerNode => ({
+  id,
+  kind: 'channel-texture',
+  depth,
+  children: [],
+  capabilities: INFORMATIONAL_CAPABILITIES,
+  status: INACTIVE_STATUS,
+  icon: 'image',
+  ...patch,
 });
 
 const sampleTree = (): ExplorerTree => ({
@@ -84,6 +96,69 @@ const sampleTree = (): ExplorerTree => ({
   ],
 });
 
+const pipelineTree = (overrides: Partial<Record<string, ExplorerNode>> = {}): ExplorerTree => {
+  const binding = (id: string, patch: Partial<ExplorerNode>): ExplorerNode => info(id, patch, 3);
+  const channel = (id: string, channelIndex: 0 | 1 | 2 | 3, child: ExplorerNode): ExplorerNode =>
+    info(
+      id,
+      {
+        kind: 'channel',
+        labelKey: `explorer.channel.${channelIndex}` as const,
+        children: [child],
+        icon: 'input',
+      },
+      2,
+    );
+
+  const texture = binding('binding-texture', {
+    kind: 'channel-texture',
+    labelKey: 'explorer.binding.texture',
+    labelParams: { slot: 0 },
+    textureSlot: 0,
+  });
+  const buffer = binding('binding-buffer', {
+    kind: 'channel-buffer',
+    labelKey: 'explorer.binding.buffer',
+    labelParams: { name: 'Buffer A' },
+    channelTargetPassId: 'buf-a',
+    icon: 'layers',
+  });
+  const feedback = binding('binding-feedback', {
+    kind: 'channel-feedback',
+    labelKey: 'explorer.binding.feedback',
+    labelParams: { name: 'Buffer B' },
+    channelTargetPassId: 'buf-b',
+    icon: 'replay',
+  });
+  const dangling = binding('binding-dangling', {
+    kind: 'channel-buffer',
+    labelKey: 'explorer.binding.buffer',
+    labelParams: { name: { kind: 'translation', key: 'explorer.binding.missingTarget' } },
+    channelTargetPassId: 'missing-buffer',
+    icon: 'layers',
+  });
+
+  return {
+    view: 'pipeline',
+    nodes: [
+      group('explorer:pipeline:group:execution', 'explorer.group.execution', [
+        doc('image', {
+          kind: 'image-pass',
+          name: 'Image',
+          children: [
+            group('explorer:pipeline:image:channels', 'explorer.group.channels', [
+              channel('channel-0', 0, overrides['texture'] ?? texture),
+              channel('channel-1', 1, overrides['buffer'] ?? buffer),
+              channel('channel-2', 2, overrides['feedback'] ?? feedback),
+              channel('channel-3', 3, overrides['dangling'] ?? dangling),
+            ]),
+          ],
+        }),
+      ]),
+    ],
+  };
+};
+
 function dispatchDragEvent(
   target: HTMLElement,
   type: 'dragstart' | 'dragover' | 'drop',
@@ -108,6 +183,7 @@ describe('ExplorerPanel', () => {
 
   beforeEach(async () => {
     tree.set(sampleTree());
+    language.set({ language: 'en' });
     TestBed.configureTestingModule({
       imports: [ExplorerPanel],
       providers: [
@@ -311,5 +387,97 @@ describe('ExplorerPanel', () => {
     fixture.detectChanges();
 
     expect(select).toHaveBeenCalledWith({ docId: 'image' });
+  });
+
+  it('renders texture binding labels with resolved English and French slots', async () => {
+    tree.set(pipelineTree());
+    const fixture = mount();
+    let row = fixture.nativeElement.querySelector('[data-node-id="binding-texture"] .label') as HTMLElement;
+    expect(row.textContent?.trim()).toBe('Texture slot 0');
+    expect(row.textContent).not.toContain('{slot}');
+
+    language.set({ language: 'fr' });
+    await TestBed.inject(I18n).ensureLoaded('fr');
+    fixture.detectChanges();
+
+    row = fixture.nativeElement.querySelector('[data-node-id="binding-texture"] .label') as HTMLElement;
+    expect(row.textContent?.trim()).toBe('Emplacement texture 0');
+    expect(row.textContent).not.toContain('{slot}');
+  });
+
+  it('renders resolved buffer and feedback binding labels and distinct kinds', () => {
+    tree.set(pipelineTree());
+    const fixture = mount();
+    const bufferRow = fixture.nativeElement.querySelector(
+      '[data-node-id="binding-buffer"]',
+    ) as HTMLElement;
+    const feedbackRow = fixture.nativeElement.querySelector(
+      '[data-node-id="binding-feedback"]',
+    ) as HTMLElement;
+
+    expect(bufferRow.querySelector('.label')?.textContent?.trim()).toBe('Buffer “Buffer A”');
+    expect(feedbackRow.querySelector('.label')?.textContent?.trim()).toBe('Feedback from “Buffer B”');
+    expect(bufferRow.dataset['nodeId']).toBe('binding-buffer');
+    expect(feedbackRow.dataset['nodeId']).toBe('binding-feedback');
+  });
+
+  it('updates rendered binding labels when the target name changes', () => {
+    tree.set(pipelineTree());
+    const fixture = mount();
+
+    tree.set(
+      pipelineTree({
+        buffer: info(
+          'binding-buffer',
+          {
+            kind: 'channel-buffer',
+            labelKey: 'explorer.binding.buffer',
+            labelParams: { name: 'Velocity Buffer' },
+            channelTargetPassId: 'buf-a',
+            icon: 'layers',
+          },
+          3,
+        ),
+      }),
+    );
+    fixture.componentRef.setInput('tree', tree());
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('[data-node-id="binding-buffer"] .label') as HTMLElement;
+    expect(row.textContent?.trim()).toBe('Buffer “Velocity Buffer”');
+  });
+
+  it('renders localized fallback labels for dangling targets without placeholders', async () => {
+    tree.set(pipelineTree());
+    const fixture = mount();
+    let row = fixture.nativeElement.querySelector('[data-node-id="binding-dangling"] .label') as HTMLElement;
+    expect(row.textContent?.trim()).toBe('Buffer “missing target”');
+    expect(row.textContent).not.toContain('{name}');
+
+    language.set({ language: 'fr' });
+    await TestBed.inject(I18n).ensureLoaded('fr');
+    fixture.detectChanges();
+
+    row = fixture.nativeElement.querySelector('[data-node-id="binding-dangling"] .label') as HTMLElement;
+    expect(row.textContent?.trim()).toBe('Buffer « cible manquante »');
+    expect(row.textContent).not.toContain('{name}');
+  });
+
+  it('uses resolved labels in accessible names', () => {
+    tree.set(pipelineTree());
+    const fixture = mount();
+    const texture = fixture.nativeElement.querySelector('[data-node-id="binding-texture"]') as HTMLElement;
+    const buffer = fixture.nativeElement.querySelector('[data-node-id="binding-buffer"]') as HTMLElement;
+    const feedback = fixture.nativeElement.querySelector('[data-node-id="binding-feedback"]') as HTMLElement;
+    const dangling = fixture.nativeElement.querySelector('[data-node-id="binding-dangling"]') as HTMLElement;
+
+    expect(texture.getAttribute('aria-label')).toContain('Texture slot 0');
+    expect(buffer.getAttribute('aria-label')).toContain('Buffer “Buffer A”');
+    expect(feedback.getAttribute('aria-label')).toContain('Feedback from “Buffer B”');
+    expect(dangling.getAttribute('aria-label')).toContain('Buffer “missing target”');
+    expect(texture.getAttribute('aria-label')).not.toContain('{slot}');
+    expect(buffer.getAttribute('aria-label')).not.toContain('{name}');
+    expect(feedback.getAttribute('aria-label')).not.toContain('{name}');
+    expect(dangling.getAttribute('aria-label')).not.toContain('{name}');
   });
 });

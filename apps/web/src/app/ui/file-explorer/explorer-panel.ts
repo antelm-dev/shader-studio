@@ -21,6 +21,7 @@ import type { TranslationKey } from '../../i18n/keys';
 import type {
   ExplorerCommandEvent,
   ExplorerContextCommand,
+  ExplorerLabelToken,
   ExplorerNode,
   ExplorerReorderIntent,
   ExplorerSelectEvent,
@@ -189,7 +190,7 @@ import { buildReorderIntent } from './explorer-reorder';
 
                 <span class="label" [class.struck]="row.node.status.disabled">
                   @if (row.node.labelKey; as labelKey) {
-                    {{ label(labelKey) }}
+                    {{ label(row.node) }}
                   } @else {
                     {{ row.node.name }}
                   }
@@ -560,8 +561,11 @@ export class ExplorerPanel {
     return this.i18n.t(explorerTranslationKey(key), params);
   }
 
-  protected label(key: string): string {
-    return this.i18n.t(key as TranslationKey);
+  protected label(node: ExplorerNode): string {
+    if (node.labelKey) {
+      return this.i18n.t(node.labelKey, this.resolveLabelParams(node));
+    }
+    return node.name ?? '';
   }
 
   protected rowDomId(nodeId: string): string {
@@ -571,7 +575,7 @@ export class ExplorerPanel {
   protected rowAriaLabel(node: ExplorerNode): string | null {
     const parts: string[] = [];
     if (node.labelKey) {
-      parts.push(this.i18n.t(node.labelKey as never));
+      parts.push(this.label(node));
     } else if (node.name) {
       parts.push(node.name);
     }
@@ -717,5 +721,19 @@ export class ExplorerPanel {
       `[data-node-id="${nodeId}"] .row-menu`,
     );
     element?.click();
+  }
+
+  private resolveLabelParams(node: ExplorerNode): TranslationParams {
+    const params = node.labelParams;
+    if (!params) return {};
+
+    return {
+      ...(params.slot === undefined ? {} : { slot: params.slot }),
+      ...(params.name === undefined ? {} : { name: this.resolveLabelValue(params.name) }),
+    };
+  }
+
+  private resolveLabelValue(value: string | ExplorerLabelToken): string {
+    return typeof value === 'string' ? value : this.i18n.t(value.key as TranslationKey);
   }
 }
