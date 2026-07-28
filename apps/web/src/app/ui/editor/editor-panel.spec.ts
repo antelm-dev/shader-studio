@@ -1,0 +1,405 @@
+import { Component, computed, input, output, provideZonelessChangeDetection, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { DEFAULT_EDITOR_APPEARANCE, DEFAULT_EDITOR_WINDOW } from '@shader-studio/shared/editor-prefs';
+import { DEFAULT_CAPTURE } from '@shader-studio/shared/model';
+import {
+  DEFAULT_FILE_EXPLORER_OPEN,
+  DEFAULT_FILE_EXPLORER_VIEW,
+  DEFAULT_FILE_EXPLORER_WIDTH,
+  FILE_EXPLORER_LIMITS,
+} from '@shader-studio/shared/panel-prefs';
+import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
+import {
+  addBuffer,
+  addFile,
+  displayPasses,
+  imagePass,
+  migrateLegacyProject,
+  resolvePassOrder,
+  type ShaderProject,
+} from '@shader-studio/shared/project';
+import { Preferences, type WorkspacePreferences } from '../../prefs/preferences';
+import { I18n } from '../../i18n/i18n';
+import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
+import { WorkspaceActions } from '../workspace-actions';
+import { EditorNavigation } from '../../editor/editor-navigation';
+import { CodeEditor, type EditorDoc } from '../../editor/code-editor';
+import { EditorSettings } from '../../editor/editor-settings';
+import { DocumentStatus } from './document-status';
+import { EditorPanel } from './editor-panel';
+import { EditorTabs } from './editor-tabs';
+import { EditorWindowControls } from './editor-window-controls';
+import { PassConfigPanel } from '../inspector/pass-config-panel';
+
+const FRAGMENT = 'void main() { gl_FragColor = vec4(1.0); }';
+const VERTEX = 'void main() { gl_Position = vec4(position, 1.0); }';
+
+@Component({
+  selector: 'app-code-editor',
+  standalone: true,
+  template: '',
+})
+class CodeEditorStub {
+  readonly doc = input.required<EditorDoc>();
+  readonly liveIds = input<readonly string[] | null>(null);
+  readonly diagnostics = input<readonly unknown[]>([]);
+  readonly colorScheme = input<'light' | 'dark'>('dark');
+  readonly appearance = input(DEFAULT_EDITOR_APPEARANCE);
+  readonly valueChange = output<{ id: string; value: string }>();
+
+  layoutCalls = 0;
+  focusCalls = 0;
+
+  layout(): void {
+    this.layoutCalls += 1;
+  }
+
+  focus(): void {
+    this.focusCalls += 1;
+  }
+
+  revealIn(): void {}
+
+  async format(): Promise<void> {}
+}
+
+@Component({
+  selector: 'app-editor-tabs',
+  standalone: true,
+  template: '',
+})
+class EditorTabsStub {
+  readonly activeId = input<string | null>(null);
+  readonly select = output<string>();
+  readonly rename = output<EditorDocument>();
+  readonly remove = output<EditorDocument>();
+  readonly newFile = output<void>();
+}
+
+@Component({
+  selector: 'app-editor-window-controls',
+  standalone: true,
+  template: '',
+})
+class EditorWindowControlsStub {}
+
+@Component({
+  selector: 'app-pass-config-panel',
+  standalone: true,
+  template: '',
+})
+class PassConfigPanelStub {
+  readonly pass = input.required<unknown>();
+}
+
+function makeProject(): ShaderProject {
+  let project = migrateLegacyProject(FRAGMENT, VERTEX);
+  project = addBuffer(project);
+  project = addFile(project, 'lib.glsl');
+  return project;
+}
+
+function toDocuments(project: ShaderProject): EditorDocument[] {
+  return [
+    ...displayPasses(project).map(
+      (pass): EditorDocument => ({
+        id: pass.id,
+        kind: 'pass',
+        name: pass.name,
+        language: 'glsl',
+        source: pass.source,
+        passKind: pass.kind,
+        slot: pass.slot,
+        enabled: pass.enabled,
+      }),
+    ),
+    ...project.files.map(
+      (file): EditorDocument => ({
+        id: file.id,
+        kind: 'file',
+        name: file.name,
+        language: 'glsl',
+        source: file.source,
+      }),
+    ),
+    { id: '@vertex', kind: 'vertex', name: 'Vertex', language: 'glsl', source: project.vertex },
+    { id: '@config', kind: 'config', name: 'Config', language: 'json', source: '[]' },
+  ];
+}
+
+class FakePreferences implements Partial<Preferences> {
+  private readonly state = signal<WorkspacePreferences>({
+    language: 'en',
+    lastShaderId: null,
+    shadertoyApiKey: null,
+    browserOpen: true,
+    editorOpen: true,
+    guiVisible: true,
+    browserWidth: 300,
+    inspectorWidth: 300,
+    inspectorTab: 'controls',
+    bottomPanelOpen: false,
+    bottomPanelHeight: 220,
+    bottomPanelTab: 'problems',
+    fileExplorerOpen: DEFAULT_FILE_EXPLORER_OPEN,
+    fileExplorerView: DEFAULT_FILE_EXPLORER_VIEW,
+    fileExplorerWidth: DEFAULT_FILE_EXPLORER_WIDTH,
+    resolutionScale: 1,
+    paused: false,
+    autoRipples: false,
+    colorScheme: 'dark',
+    editorAppearance: DEFAULT_EDITOR_APPEARANCE,
+    editorWindow: { ...DEFAULT_EDITOR_WINDOW, dockSide: 'right' },
+    previewWindow: DEFAULT_PREVIEW_WINDOW,
+    capture: DEFAULT_CAPTURE,
+  });
+
+  readonly value = this.state.asReadonly();
+  readonly resolved = signal<'dark'>('dark').asReadonly();
+
+  patch(patch: Partial<WorkspacePreferences>): void {
+    this.state.update((current) => ({ ...current, ...patch }));
+  }
+}
+
+class FakeStore implements Partial<ShaderStore> {
+  private readonly projectState = signal<ShaderProject | null>(makeProject());
+  private readonly documentsState = signal<readonly EditorDocument[]>(toDocuments(this.projectState()!));
+  private readonly activeId = signal<string | null>(imagePass(this.projectState()!).id);
+  private readonly renderOrderState = signal(resolvePassOrder(this.projectState()!).order);
+  readonly loading = signal(false) as ShaderStore['loading'];
+  readonly dirty = signal(false) as ShaderStore['dirty'];
+  readonly saving = signal(false) as ShaderStore['saving'];
+  readonly draft = signal({}) as unknown as ShaderStore['draft'];
+  readonly compiling = signal<ReadonlySet<string>>(new Set()) as ShaderStore['compiling'];
+  readonly canAddBuffer = signal(true) as unknown as ShaderStore['canAddBuffer'];
+  readonly renderOrder = computed(() => this.renderOrderState()) as ShaderStore['renderOrder'];
+
+  readonly project = computed(() => this.projectState()) as ShaderStore['project'];
+  readonly documents = computed(() => this.documentsState()) as ShaderStore['documents'];
+  readonly activeDoc = computed(
+    () => this.documentsState().find((doc) => doc.id === this.activeId()) ?? null,
+  ) as ShaderStore['activeDoc'];
+
+  selectDoc(id: string): void {
+    this.activeId.set(id);
+  }
+
+  diagnosticsFor(): never[] {
+    return [];
+  }
+
+  errorCountFor(): number {
+    return 0;
+  }
+
+  setDocSource(): void {}
+
+  setProject(project: ShaderProject | null): void {
+    this.projectState.set(project);
+    this.documentsState.set(project ? toDocuments(project) : []);
+    this.renderOrderState.set(project ? resolvePassOrder(project).order : []);
+    if (project) {
+      const active = this.activeId();
+      if (!this.documentsState().some((doc) => doc.id === active)) {
+        this.activeId.set(imagePass(project).id);
+      }
+    } else {
+      this.activeId.set(null);
+    }
+  }
+}
+
+class FakeSettings implements Partial<EditorSettings> {
+  readonly effective = signal(DEFAULT_EDITOR_APPEARANCE).asReadonly();
+}
+
+class FakeStatus implements Partial<DocumentStatus> {
+  readonly state = signal<'none' | 'unsaved' | 'saving' | 'saved'>('none');
+  readonly label = signal('');
+  readonly canSave = signal(true);
+  readonly saveHint = signal('');
+}
+
+describe('EditorPanel file explorer integration', () => {
+  let store: FakeStore;
+  let preferences: FakePreferences;
+  let workspace: {
+    renameDocument: ReturnType<typeof vi.fn>;
+    deleteDocument: ReturnType<typeof vi.fn>;
+    createFile: ReturnType<typeof vi.fn>;
+    copyFullGlsl: ReturnType<typeof vi.fn>;
+    openEditorSettings: ReturnType<typeof vi.fn>;
+    reorderExplorer: ReturnType<typeof vi.fn>;
+    runExplorerCommand: ReturnType<typeof vi.fn>;
+  };
+  let resizeObserverCallback: ((entries: Array<{ contentRect: { width: number } }>) => void) | null;
+  let requestAnimationFrameSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    resizeObserverCallback = null;
+    requestAnimationFrameSpy = vi.fn((callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('requestAnimationFrame', requestAnimationFrameSpy);
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: typeof resizeObserverCallback) {
+          resizeObserverCallback = callback as typeof resizeObserverCallback;
+        }
+        observe(): void {}
+        disconnect(): void {}
+      },
+    );
+
+    store = new FakeStore();
+    preferences = new FakePreferences();
+    workspace = {
+      renameDocument: vi.fn(),
+      deleteDocument: vi.fn(),
+      createFile: vi.fn(),
+      copyFullGlsl: vi.fn(),
+      openEditorSettings: vi.fn(),
+      reorderExplorer: vi.fn(),
+      runExplorerCommand: vi.fn().mockResolvedValue(undefined),
+    };
+
+    TestBed.resetTestingModule();
+    TestBed.overrideComponent(EditorPanel, {
+      remove: {
+        imports: [CodeEditor, EditorTabs, EditorWindowControls, PassConfigPanel],
+      },
+      add: {
+        imports: [CodeEditorStub, EditorTabsStub, EditorWindowControlsStub, PassConfigPanelStub],
+      },
+    });
+    TestBed.configureTestingModule({
+      imports: [EditorPanel],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ShaderStore, useValue: store },
+        { provide: Preferences, useValue: preferences },
+        { provide: WorkspaceActions, useValue: workspace },
+        { provide: EditorSettings, useValue: new FakeSettings() },
+        { provide: DocumentStatus, useValue: new FakeStatus() },
+        { provide: EditorNavigation, useValue: { request: signal(null).asReadonly() } },
+        { provide: I18n, useValue: { t: (key: string) => key } },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    TestBed.resetTestingModule();
+  });
+
+  function mount() {
+    const fixture = TestBed.createComponent(EditorPanel);
+    fixture.detectChanges();
+    resizeObserverCallback?.([{ contentRect: { width: 900 } }]);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  function codeEditor(fixture: ReturnType<typeof mount>): CodeEditorStub {
+    return fixture.debugElement.query(By.directive(CodeEditorStub)).componentInstance as CodeEditorStub;
+  }
+
+  function tabs(fixture: ReturnType<typeof mount>): EditorTabsStub {
+    return fixture.debugElement.query(By.directive(EditorTabsStub)).componentInstance as EditorTabsStub;
+  }
+
+  it('syncs explorer selection with the active tab', () => {
+    const fixture = mount();
+    const buffer = store.documents().find((doc) => doc.passKind === 'buffer');
+    expect(buffer).toBeDefined();
+
+    const row = fixture.nativeElement.querySelector(`[data-node-id="${buffer!.id}"]`) as HTMLElement;
+    row.click();
+    fixture.detectChanges();
+
+    expect(store.activeDoc()?.id).toBe(buffer!.id);
+    expect(tabs(fixture).activeId()).toBe(buffer!.id);
+  });
+
+  it('persists view and open state across collapse and reopen', () => {
+    const fixture = mount();
+    const component = fixture.componentInstance;
+
+    component['setExplorerView']('pipeline');
+    preferences.patch({ fileExplorerWidth: 312 });
+    fixture.detectChanges();
+
+    component['collapseExplorer']();
+    fixture.detectChanges();
+    expect(preferences.value().fileExplorerOpen).toBe(false);
+
+    component['reopenExplorer']();
+    fixture.detectChanges();
+
+    expect(preferences.value().fileExplorerOpen).toBe(true);
+    expect(preferences.value().fileExplorerView).toBe('pipeline');
+    expect(preferences.value().fileExplorerWidth).toBe(312);
+  });
+
+  it('clamps keyboard resize and relayouts Monaco', () => {
+    const fixture = mount();
+    const editor = codeEditor(fixture);
+    const resizer = fixture.nativeElement.querySelector('.explorer-resizer') as HTMLElement;
+
+    resizer.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+
+    expect(preferences.value().fileExplorerWidth).toBe(FILE_EXPLORER_LIMITS.width.max);
+    expect(editor.layoutCalls).toBeGreaterThan(0);
+  });
+
+  it('switches to an overlay at narrow widths and reopens after scrim close', () => {
+    const fixture = mount();
+
+    resizeObserverCallback?.([{ contentRect: { width: 420 } }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.explorer-overlay')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.explorer-resizer')).toBeNull();
+
+    (fixture.nativeElement.querySelector('.explorer-scrim') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.explorer-overlay')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.explorer-reopen')).not.toBeNull();
+
+    fixture.componentInstance['reopenExplorer']();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.explorer-overlay')).not.toBeNull();
+  });
+
+  it('routes explorer commands through workspace actions and restores explorer focus', async () => {
+    const fixture = mount();
+    const buffer = store.documents().find((doc) => doc.passKind === 'buffer');
+    expect(buffer).toBeDefined();
+
+    await fixture.componentInstance['onExplorerCommand']({ command: 'rename', docId: buffer!.id });
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(workspace.runExplorerCommand).toHaveBeenCalledWith('rename', buffer!.id);
+    expect((document.activeElement as HTMLElement | null)?.dataset['nodeId']).toBe(buffer!.id);
+  });
+
+  it('shows loading and no-project explorer states', () => {
+    const fixture = mount();
+
+    store.loading.set(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('explorer.state.loading');
+
+    store.loading.set(false);
+    store.setProject(null);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('explorer.state.noProject');
+  });
+});
