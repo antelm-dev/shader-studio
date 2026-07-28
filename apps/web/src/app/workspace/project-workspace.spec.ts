@@ -24,7 +24,12 @@ import {
   DEFAULT_EDITOR_WINDOW,
 } from '@shader-studio/shared/editor-prefs';
 import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
-import { DEFAULT_PANEL_WIDTHS } from '@shader-studio/shared/panel-prefs';
+import {
+  DEFAULT_FILE_EXPLORER_OPEN,
+  DEFAULT_FILE_EXPLORER_VIEW,
+  DEFAULT_FILE_EXPLORER_WIDTH,
+  DEFAULT_PANEL_WIDTHS,
+} from '@shader-studio/shared/panel-prefs';
 import { Preferences, type WorkspacePreferences } from '../prefs/preferences';
 import { ProjectPersistence } from './project-persistence';
 import { ShaderApi, type UpdateShaderPatch } from '../api/shader-api';
@@ -180,6 +185,9 @@ class FakePreferences implements Partial<Preferences> {
     bottomPanelOpen: false,
     bottomPanelHeight: 220,
     bottomPanelTab: 'problems',
+    fileExplorerOpen: DEFAULT_FILE_EXPLORER_OPEN,
+    fileExplorerView: DEFAULT_FILE_EXPLORER_VIEW,
+    fileExplorerWidth: DEFAULT_FILE_EXPLORER_WIDTH,
     resolutionScale: 1,
     paused: false,
     autoRipples: false,

@@ -15,6 +15,7 @@ import type { NewShaderDialogResult } from './dialogs/new-shader-dialog';
 import type { PromptDialogData, PromptDialogResult } from './dialogs/prompt-dialog';
 import type { ShadertoyImportDialogResult } from './dialogs/shadertoy-import-dialog';
 import type { UnsavedChoice } from './dialogs/unsaved-changes-dialog';
+import type { ExplorerContextCommand, ExplorerReorderIntent } from './file-explorer/contract';
 import { buildWallpaperDocument } from '../rendering/wallpaper-export';
 
 /**
@@ -254,6 +255,85 @@ export class WorkspaceActions {
       destructive: true,
     });
     if (confirmed) this.store.removeBufferPass(doc.id);
+  }
+
+  // --- File explorer ------------------------------------------------------
+
+  /** Activate an editor document tab — same as a tab click, no shader switch. */
+  selectDocument(docId: string): void {
+    this.store.selectDoc(docId);
+  }
+
+  createBufferPass(): void {
+    this.store.addBufferPass();
+  }
+
+  duplicateDocument(doc: EditorDocument): void {
+    if (doc.kind === 'file') this.store.duplicateSourceFile(doc.id);
+    else if (doc.passKind === 'buffer') this.store.duplicateBufferPass(doc.id);
+  }
+
+  setBufferEnabled(docId: string, enabled: boolean): void {
+    this.store.setPassEnabledById(docId, enabled);
+  }
+
+  /**
+   * Reorder within buffer or file lists — same rules as `EditorTabs.onDrop`.
+   * Cross-list drops are ignored.
+   */
+  reorderExplorer(intent: ExplorerReorderIntent): void {
+    const project = this.store.project();
+    if (!project) return;
+
+    if (intent.list === 'file') {
+      const index = project.files.findIndex((file) => file.id === intent.targetDocId);
+      if (index >= 0) this.store.moveSourceFile(intent.sourceDocId, index);
+      return;
+    }
+
+    const index = this.store.buffers().findIndex((pass) => pass.id === intent.targetDocId);
+    if (index >= 0) this.store.movePassTo(intent.sourceDocId, index);
+  }
+
+  /**
+   * Dispatch explorer context-menu or header commands through the same flows
+   * as editor tabs — confirmations and dialogs included.
+   */
+  async runExplorerCommand(command: ExplorerContextCommand, docId?: string): Promise<void> {
+    switch (command) {
+      case 'create-file':
+        await this.createFile();
+        return;
+      case 'create-buffer':
+        this.createBufferPass();
+        return;
+      case 'rename':
+      case 'duplicate':
+      case 'delete':
+      case 'enable':
+      case 'disable': {
+        if (!docId) return;
+        const doc = this.store.documents().find((entry) => entry.id === docId);
+        if (!doc) return;
+        switch (command) {
+          case 'rename':
+            await this.renameDocument(doc);
+            break;
+          case 'duplicate':
+            this.duplicateDocument(doc);
+            break;
+          case 'delete':
+            await this.deleteDocument(doc);
+            break;
+          case 'enable':
+            this.setBufferEnabled(docId, true);
+            break;
+          case 'disable':
+            this.setBufferEnabled(docId, false);
+            break;
+        }
+      }
+    }
   }
 
   // --- Source ---------------------------------------------------------------
