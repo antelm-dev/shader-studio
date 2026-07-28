@@ -1,9 +1,19 @@
-import { Component, computed, input, output, provideZonelessChangeDetection, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  input,
+  output,
+  provideZonelessChangeDetection,
+  signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_EDITOR_APPEARANCE, DEFAULT_EDITOR_WINDOW } from '@shader-studio/shared/editor-prefs';
+import {
+  DEFAULT_EDITOR_APPEARANCE,
+  DEFAULT_EDITOR_WINDOW,
+} from '@shader-studio/shared/editor-prefs';
 import { DEFAULT_CAPTURE } from '@shader-studio/shared/model';
 import {
   DEFAULT_FILE_EXPLORER_OPEN,
@@ -168,7 +178,9 @@ class FakePreferences implements Partial<Preferences> {
 
 class FakeStore implements Partial<ShaderStore> {
   private readonly projectState = signal<ShaderProject | null>(makeProject());
-  private readonly documentsState = signal<readonly EditorDocument[]>(toDocuments(this.projectState()!));
+  private readonly documentsState = signal<readonly EditorDocument[]>(
+    toDocuments(this.projectState()!),
+  );
   private readonly activeId = signal<string | null>(imagePass(this.projectState()!).id);
   private readonly renderOrderState = signal(resolvePassOrder(this.projectState()!).order);
   readonly selectedId = signal('waves').asReadonly() as ShaderStore['selectedId'];
@@ -310,11 +322,13 @@ describe('EditorPanel file explorer integration', () => {
   }
 
   function codeEditor(fixture: ReturnType<typeof mount>): CodeEditorStub {
-    return fixture.debugElement.query(By.directive(CodeEditorStub)).componentInstance as CodeEditorStub;
+    return fixture.debugElement.query(By.directive(CodeEditorStub))
+      .componentInstance as CodeEditorStub;
   }
 
   function tabs(fixture: ReturnType<typeof mount>): EditorTabsStub {
-    return fixture.debugElement.query(By.directive(EditorTabsStub)).componentInstance as EditorTabsStub;
+    return fixture.debugElement.query(By.directive(EditorTabsStub))
+      .componentInstance as EditorTabsStub;
   }
 
   it('syncs explorer selection with the active tab', () => {
@@ -322,7 +336,9 @@ describe('EditorPanel file explorer integration', () => {
     const buffer = store.documents().find((doc) => doc.passKind === 'buffer');
     expect(buffer).toBeDefined();
 
-    const row = fixture.nativeElement.querySelector(`[data-node-id="${buffer!.id}"]`) as HTMLElement;
+    const row = fixture.nativeElement.querySelector(
+      `[data-node-id="${buffer!.id}"]`,
+    ) as HTMLElement;
     row.click();
     fixture.detectChanges();
 
@@ -355,7 +371,9 @@ describe('EditorPanel file explorer integration', () => {
     const editor = codeEditor(fixture);
     const resizer = fixture.nativeElement.querySelector('.explorer-resizer') as HTMLElement;
 
-    resizer.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
+    resizer.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }),
+    );
     fixture.detectChanges();
 
     expect(preferences.value().fileExplorerWidth).toBe(FILE_EXPLORER_LIMITS.width.max);

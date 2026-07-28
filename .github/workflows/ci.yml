@@ -78,7 +78,7 @@ jobs:
       - name: Generate IPC bridge
         run: pnpm gen:ipc
       - name: Install Chromium
-        run: pnpm exec playwright install chromium --with-deps
+        run: pnpm --filter @shader-studio/workspace-tools exec playwright install chromium --with-deps
       - name: Smoke
         run: pnpm smoke
 

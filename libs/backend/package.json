@@ -2,8 +2,13 @@
   "name": "@shader-studio/backend",
   "version": "0.0.0",
   "private": true,
+  "description": "",
+  "keywords": [],
+  "license": "ISC",
+  "author": "",
   "type": "module",
   "sideEffects": false,
+  "main": "index.js",
   "exports": {
     "./library": {
       "types": "./src/library/index.ts",
@@ -48,10 +53,5 @@
     "@types/pg": "^8.11.10",
     "typescript": "~6.0.2",
     "vitest": "^4.0.8"
-  },
-  "description": "",
-  "main": "index.js",
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  }
 }

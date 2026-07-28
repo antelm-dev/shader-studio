@@ -185,7 +185,9 @@ type EditorSurface = Pick<CodeEditor, 'focus' | 'format' | 'layout' | 'revealIn'
           type="button"
           class="explorer-reopen"
           [matButton]="explorerOverlayAvailable() ? 'tonal' : 'text'"
-          [matTooltip]="(explorerPreferredOpen() ? 'explorer.expand' : 'explorer.title') | translate"
+          [matTooltip]="
+            (explorerPreferredOpen() ? 'explorer.expand' : 'explorer.title') | translate
+          "
           [attr.aria-label]="
             (explorerOverlayAvailable() ? 'explorer.expand' : 'explorer.title') | translate
           "
@@ -464,7 +466,9 @@ export class EditorPanel {
   private stopExplorerResize: (() => void) | null = null;
 
   protected readonly activeDoc = computed(() => this.store.activeDoc());
-  protected readonly explorerPreferredOpen = computed(() => this.preferences.value().fileExplorerOpen);
+  protected readonly explorerPreferredOpen = computed(
+    () => this.preferences.value().fileExplorerOpen,
+  );
   protected readonly explorerWidth = computed(
     () => this.liveExplorerWidth() ?? this.preferences.value().fileExplorerWidth,
   );
@@ -494,7 +498,8 @@ export class EditorPanel {
   protected readonly showExplorerReopen = computed(
     () =>
       !this.collapsed() &&
-      (!this.explorerPreferredOpen() || (this.explorerOverlayAvailable() && !this.explorerOverlayOpen())),
+      (!this.explorerPreferredOpen() ||
+        (this.explorerOverlayAvailable() && !this.explorerOverlayOpen())),
   );
 
   /** The open document, in the shape the editor wants. */
@@ -642,7 +647,9 @@ export class EditorPanel {
     target?.setPointerCapture?.(event.pointerId);
 
     const move = (moveEvent: PointerEvent) => {
-      this.liveExplorerWidth.set(clampFileExplorerWidth(startWidth + moveEvent.clientX - startX, startWidth));
+      this.liveExplorerWidth.set(
+        clampFileExplorerWidth(startWidth + moveEvent.clientX - startX, startWidth),
+      );
       this.relayout();
     };
     const finish = (finishEvent: PointerEvent) => {
