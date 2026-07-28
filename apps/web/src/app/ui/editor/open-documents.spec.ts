@@ -219,4 +219,27 @@ describe('OpenDocuments service', () => {
     expect(openDocs.openIds()).toEqual([VERTEX_DOC]);
     expect(tabs.activeId()).toBe(VERTEX_DOC);
   });
+
+  it('cycles among open tabs only', () => {
+    const imageId = tabs.activeId()!;
+    openDocs.activate(VERTEX_DOC);
+    TestBed.tick();
+    expect(tabs.activeId()).toBe(VERTEX_DOC);
+
+    openDocs.cycle(1);
+    expect(tabs.activeId()).toBe(imageId);
+    openDocs.cycle(1);
+    expect(tabs.activeId()).toBe(VERTEX_DOC);
+    openDocs.cycle(-1);
+    expect(tabs.activeId()).toBe(imageId);
+  });
+
+  it('treats navigation-style activation like explorer selection', () => {
+    const imageId = tabs.activeId()!;
+    // Same path Problems / EditorNavigation use once the panel resolves a target.
+    openDocs.activate(CONFIG_DOC);
+    TestBed.tick();
+    expect(openDocs.openIds()).toEqual([imageId, CONFIG_DOC]);
+    expect(tabs.activeId()).toBe(CONFIG_DOC);
+  });
 });
