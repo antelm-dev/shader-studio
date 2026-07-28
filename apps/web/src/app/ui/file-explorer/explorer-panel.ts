@@ -1,6 +1,8 @@
 import {
+  afterNextRender,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -38,6 +40,11 @@ import { explorerTranslationKey, type ExplorerI18nKey } from './explorer-i18n-ke
 import { resolveExplorerKeyboardAction } from './explorer-keyboard';
 import { buildReorderIntent } from './explorer-reorder';
 
+/** Hide the title below this width to preserve header controls. */
+const EXPLORER_HEADER_COMPACT_MAX = 319;
+/** Use icon-only view tabs below this width. */
+const EXPLORER_ICON_VIEW_TABS_MAX = 259;
+
 /**
  * Standalone editor-local file explorer panel.
  *
@@ -58,6 +65,8 @@ import { buildReorderIntent } from './explorer-reorder';
     role: 'complementary',
     '[attr.aria-label]': 'ex("ariaPanel")',
     class: 'explorer-panel',
+    '[class.explorer-header-compact]': 'headerCompact()',
+    '[class.explorer-icon-view-tabs]': 'iconViewTabs()',
   },
   template: `
     <header class="header">
@@ -72,36 +81,45 @@ import { buildReorderIntent } from './explorer-reorder';
             [class.active]="tree().view === mode"
             [attr.aria-selected]="tree().view === mode"
             [attr.aria-controls]="'explorer-tree'"
+            [attr.aria-label]="ex(mode === 'files' ? 'viewFiles' : 'viewPipeline')"
+            [matTooltip]="ex(mode === 'files' ? 'viewFiles' : 'viewPipeline')"
             (click)="onViewChange(mode)"
           >
-            {{ ex(mode === 'files' ? 'viewFiles' : 'viewPipeline') }}
+            <mat-icon class="view-tab-icon" aria-hidden="true">
+              {{ mode === 'files' ? 'folder' : 'account_tree' }}
+            </mat-icon>
+            <span class="view-tab-label">
+              {{ ex(mode === 'files' ? 'viewFiles' : 'viewPipeline') }}
+            </span>
           </button>
         }
       </div>
 
-      <span class="spacer"></span>
+      <span class="header-spacer"></span>
 
-      <button
-        matIconButton
-        type="button"
-        class="icon-action"
-        [matTooltip]="ex('createMenu')"
-        [attr.aria-label]="ex('createMenu')"
-        [matMenuTriggerFor]="createMenu"
-      >
-        <mat-icon>add</mat-icon>
-      </button>
+      <div class="header-actions">
+        <button
+          matIconButton
+          type="button"
+          class="icon-action create"
+          [matTooltip]="ex('createMenu')"
+          [attr.aria-label]="ex('createMenu')"
+          [matMenuTriggerFor]="createMenu"
+        >
+          <mat-icon>add</mat-icon>
+        </button>
 
-      <button
-        matIconButton
-        type="button"
-        class="icon-action collapse"
-        [matTooltip]="ex('collapse')"
-        [attr.aria-label]="ex('collapseAria')"
-        (click)="collapse.emit()"
-      >
-        <mat-icon>chevron_left</mat-icon>
-      </button>
+        <button
+          matIconButton
+          type="button"
+          class="icon-action collapse"
+          [matTooltip]="ex('collapse')"
+          [attr.aria-label]="ex('collapseAria')"
+          (click)="collapse.emit()"
+        >
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+      </div>
     </header>
 
     <mat-menu #createMenu="matMenu">
@@ -281,7 +299,9 @@ import { buildReorderIntent } from './explorer-reorder';
       display: flex;
       flex-direction: column;
       min-height: 0;
+      min-width: 0;
       height: 100%;
+      overflow: visible;
       background: color-mix(in srgb, var(--mat-sys-surface) 88%, transparent);
       border-inline-end: 1px solid
         color-mix(in srgb, var(--mat-sys-outline-variant) 55%, transparent);
@@ -290,35 +310,72 @@ import { buildReorderIntent } from './explorer-reorder';
     .header {
       display: flex;
       align-items: center;
+      flex-wrap: nowrap;
       gap: 4px;
       flex: 0 0 auto;
-      padding: 4px 4px 4px 8px;
+      min-width: 0;
+      padding: 4px;
+      overflow: visible;
       border-bottom: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 45%, transparent);
     }
 
     .title {
       margin: 0;
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
       font: var(--mat-sys-title-small);
       white-space: nowrap;
     }
 
+    :host(.explorer-header-compact) .title {
+      display: none;
+    }
+
     .view-switch {
       display: inline-flex;
+      flex: 0 1 auto;
+      min-width: 0;
       gap: 2px;
-      margin-inline: 4px;
       padding: 2px;
       border-radius: var(--mat-sys-corner-small, 6px);
       background: color-mix(in srgb, var(--mat-sys-on-surface) 6%, transparent);
     }
 
     .view-tab {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
       border: 0;
       border-radius: calc(var(--mat-sys-corner-small, 6px) - 2px);
+      min-width: 32px;
+      min-height: 32px;
       padding: 2px 8px;
       background: transparent;
       color: var(--mat-sys-on-surface-variant);
       font: var(--mat-sys-label-medium);
       cursor: pointer;
+    }
+
+    .view-tab-icon {
+      display: none;
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    :host(.explorer-icon-view-tabs) .view-tab {
+      padding: 2px 6px;
+    }
+
+    :host(.explorer-icon-view-tabs) .view-tab-label {
+      display: none;
+    }
+
+    :host(.explorer-icon-view-tabs) .view-tab-icon {
+      display: inline-flex;
     }
 
     .view-tab.active {
@@ -331,8 +388,16 @@ import { buildReorderIntent } from './explorer-reorder';
       outline-offset: 1px;
     }
 
-    .spacer {
-      flex: 1;
+    .header-spacer {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .header-actions {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 0;
     }
 
     .icon-action {
@@ -543,9 +608,14 @@ export class ExplorerPanel {
   readonly reorder = output<ExplorerReorderIntent>();
   readonly collapse = output<void>();
 
+  private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly treeRoot = viewChild<ElementRef<HTMLElement>>('treeRoot');
   private readonly expansion = signal<ExplorerExpansionState>(new Map());
   private dragging: ExplorerNode | null = null;
+
+  protected readonly headerCompact = signal(false);
+  protected readonly iconViewTabs = signal(false);
 
   protected readonly rows = computed(() =>
     visibleExplorerRows(this.tree().nodes, this.expansion()),
@@ -554,6 +624,22 @@ export class ExplorerPanel {
   constructor() {
     effect(() => {
       this.expansion.update((current) => mergeExpansionState(this.tree().nodes, current));
+    });
+
+    afterNextRender(() => {
+      const element = this.host.nativeElement;
+      const measure = (width: number): void => {
+        this.headerCompact.set(width <= EXPLORER_HEADER_COMPACT_MAX);
+        this.iconViewTabs.set(width <= EXPLORER_ICON_VIEW_TABS_MAX);
+      };
+
+      measure(element.getBoundingClientRect().width);
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (entry) measure(entry.contentRect.width);
+      });
+      observer.observe(element);
+      this.destroyRef.onDestroy(() => observer.disconnect());
     });
   }
 

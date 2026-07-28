@@ -180,8 +180,21 @@ function dispatchDragEvent(
 describe('ExplorerPanel', () => {
   const language = signal({ language: 'en' as 'en' | 'fr' });
   const tree = signal<ExplorerTree>(sampleTree());
+  let resizeObserverCallback: ((entries: Array<{ contentRect: { width: number } }>) => void) | null;
 
   beforeEach(async () => {
+    resizeObserverCallback = null;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: typeof resizeObserverCallback) {
+          resizeObserverCallback = callback as typeof resizeObserverCallback;
+        }
+        observe(): void {}
+        disconnect(): void {}
+      },
+    );
+
     tree.set(sampleTree());
     language.set({ language: 'en' });
     TestBed.configureTestingModule({
@@ -205,12 +218,26 @@ describe('ExplorerPanel', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     TestBed.resetTestingModule();
   });
+
+  const setPanelWidth = (fixture: ReturnType<typeof mount>, width: number): void => {
+    const host = fixture.nativeElement as HTMLElement;
+    host.style.width = `${width}px`;
+    resizeObserverCallback?.([{ contentRect: { width } }]);
+    fixture.detectChanges();
+  };
+
+  const headerControl = (fixture: ReturnType<typeof mount>, selector: string): HTMLElement => {
+    return fixture.nativeElement.querySelector(selector) as HTMLElement;
+  };
 
   const mount = () => {
     const fixture = TestBed.createComponent(ExplorerPanel);
     fixture.componentRef.setInput('tree', tree());
+    fixture.detectChanges();
+    resizeObserverCallback?.([{ contentRect: { width: 240 } }]);
     fixture.detectChanges();
     return fixture;
   };
@@ -479,5 +506,57 @@ describe('ExplorerPanel', () => {
     expect(buffer.getAttribute('aria-label')).not.toContain('{name}');
     expect(feedback.getAttribute('aria-label')).not.toContain('{name}');
     expect(dangling.getAttribute('aria-label')).not.toContain('{name}');
+  });
+
+  describe('responsive header', () => {
+    it.each([
+      { width: 180, iconTabs: true, compact: true },
+      { width: 240, iconTabs: true, compact: true },
+      { width: 400, iconTabs: false, compact: false },
+    ])(
+      'keeps header controls reachable at ${width}px',
+      ({ width, iconTabs, compact }) => {
+        const fixture = mount();
+        setPanelWidth(fixture, width);
+        const host = fixture.nativeElement as HTMLElement;
+
+        expect(host.classList.contains('explorer-icon-view-tabs')).toBe(iconTabs);
+        expect(host.classList.contains('explorer-header-compact')).toBe(compact);
+
+        const tabs = host.querySelectorAll('[role="tab"]');
+        expect(tabs).toHaveLength(2);
+        expect(headerControl(fixture, '.create')).not.toBeNull();
+        expect(headerControl(fixture, '.collapse')).not.toBeNull();
+
+        for (const tab of tabs) {
+          expect(tab.getAttribute('aria-selected')).toMatch(/true|false/);
+          expect(tab.getAttribute('aria-label')).toBeTruthy();
+        }
+      },
+    );
+
+    it('emits viewChange from compact icon tabs at 180px', () => {
+      const fixture = mount();
+      setPanelWidth(fixture, 180);
+      const viewChange = vi.fn();
+      fixture.componentInstance.viewChange.subscribe(viewChange);
+
+      const pipelineTab = fixture.nativeElement.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement;
+      pipelineTab.click();
+      fixture.detectChanges();
+
+      expect(viewChange).toHaveBeenCalledWith('pipeline');
+      expect(pipelineTab.getAttribute('aria-label')).toContain('Pipeline');
+    });
+
+    it('shows text view tabs and title at 400px', () => {
+      const fixture = mount();
+      setPanelWidth(fixture, 400);
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(host.classList.contains('explorer-icon-view-tabs')).toBe(false);
+      expect(host.querySelector('.title')?.textContent).toContain('Project explorer');
+      expect(host.querySelector('.view-tab-label')?.textContent).toContain('Files');
+    });
   });
 });
