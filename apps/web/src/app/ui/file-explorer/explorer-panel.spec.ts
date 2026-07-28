@@ -634,5 +634,33 @@ describe('ExplorerPanel', () => {
 
       expect(command).toHaveBeenCalledWith({ command: 'enable', docId: 'buf-disabled' });
     });
+
+    it('exposes Enable for render-disabled buffers via the ContextMenu key', async () => {
+      tree.set(disabledTree());
+      const fixture = mount();
+      const command = vi.fn();
+      fixture.componentInstance.command.subscribe(command);
+
+      const treeRoot = fixture.nativeElement.querySelector('#explorer-tree') as HTMLElement;
+      const row = fixture.nativeElement.querySelector('[data-node-id="buf-disabled"]') as HTMLElement;
+      treeRoot.focus();
+      row.focus();
+      fixture.detectChanges();
+
+      row.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true, cancelable: true }),
+      );
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      const enableItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
+        item.textContent?.includes('Enable'),
+      ) as HTMLButtonElement | undefined;
+      expect(enableItem).toBeDefined();
+      enableItem?.click();
+      fixture.detectChanges();
+
+      expect(command).toHaveBeenCalledWith({ command: 'enable', docId: 'buf-disabled' });
+    });
   });
 });

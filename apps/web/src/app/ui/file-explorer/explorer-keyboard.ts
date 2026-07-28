@@ -8,7 +8,7 @@ export type ExplorerKeyboardAction =
   | { type: 'open-menu'; nodeId: string };
 
 export function resolveExplorerKeyboardAction(
-  event: Pick<KeyboardEvent, 'key'>,
+  event: Pick<KeyboardEvent, 'key'> & Partial<Pick<KeyboardEvent, 'shiftKey'>>,
   rows: readonly VisibleExplorerRow[],
   focusedId: string | null,
 ): ExplorerKeyboardAction | null {
@@ -51,9 +51,12 @@ export function resolveExplorerKeyboardAction(
       return { type: 'activate', docId: current.node.docId };
     }
     case 'ContextMenu':
-    case 'F10':
-      if (event.key === 'F10') return null;
       if (!current) return null;
+      return { type: 'open-menu', nodeId: current.node.id };
+    case 'F10':
+      // Shift+F10 is the Windows context-menu shortcut; plain F10 is ignored.
+      // MatContextMenuTrigger also handles the native `contextmenu` event.
+      if (!event.shiftKey || !current) return null;
       return { type: 'open-menu', nodeId: current.node.id };
     default:
       return null;

@@ -100,4 +100,16 @@ describe('explorer keyboard', () => {
     });
     expect(resolveExplorerKeyboardAction({ key: 'Enter' }, [informational], 'info')).toBeNull();
   });
+
+  it('opens the row menu from ContextMenu and Shift+F10', () => {
+    expect(resolveExplorerKeyboardAction({ key: 'ContextMenu' }, rows, 'a')).toEqual({
+      type: 'open-menu',
+      nodeId: 'a',
+    });
+    expect(resolveExplorerKeyboardAction({ key: 'F10', shiftKey: true }, rows, 'a')).toEqual({
+      type: 'open-menu',
+      nodeId: 'a',
+    });
+    expect(resolveExplorerKeyboardAction({ key: 'F10' }, rows, 'a')).toBeNull();
+  });
 });
