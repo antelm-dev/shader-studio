@@ -299,9 +299,7 @@ export function sanitizeSurfaceRecord(
   options: { viewport?: Size; workArea?: Size; fallbackKind?: SurfaceKind } = {},
 ): SurfaceRecord | null {
   const input = asRecord(value);
-  const kind = isSurfaceKind(input['kind'])
-    ? input['kind']
-    : (options.fallbackKind ?? null);
+  const kind = isSurfaceKind(input['kind']) ? input['kind'] : (options.fallbackKind ?? null);
   if (!kind) return null;
 
   const chrome = sanitizeChrome(input['chrome'] ?? input, kind);
@@ -309,16 +307,16 @@ export function sanitizeSurfaceRecord(
     typeof input['id'] === 'string' && input['id'].length > 0
       ? asSurfaceId(input['id'])
       : asSurfaceId(
-          defaultSurfaceId(
-            kind,
-            chrome.kind === 'editor' ? chrome.editorGroupId : undefined,
-          ),
+          defaultSurfaceId(kind, chrome.kind === 'editor' ? chrome.editorGroupId : undefined),
         );
 
   const placement = sanitizePlacement(input['placement'], kind, options);
   const returnPoint =
     input['returnPoint'] !== undefined
-      ? sanitizeRestorePoint(input['returnPoint'], kind === 'live-preview-output' ? 'preview' : kind)
+      ? sanitizeRestorePoint(
+          input['returnPoint'],
+          kind === 'live-preview-output' ? 'preview' : kind,
+        )
       : undefined;
 
   return {
@@ -333,7 +331,9 @@ export function sanitizeSurfaceRecord(
 
 export function createDefaultSurface(
   kind: SurfaceKind,
-  overrides: Partial<Pick<SurfaceRecord, 'open' | 'placement' | 'chrome' | 'id'>> = {},
+  overrides: Partial<
+    Pick<SurfaceRecord, 'open' | 'placement' | 'chrome' | 'id' | 'returnPoint'>
+  > = {},
 ): SurfaceRecord {
   const chrome = overrides.chrome ?? defaultChrome(kind);
   const id =
@@ -341,12 +341,21 @@ export function createDefaultSurface(
     asSurfaceId(
       defaultSurfaceId(kind, chrome.kind === 'editor' ? chrome.editorGroupId : undefined),
     );
+  const placement =
+    overrides.placement ??
+    (kind === 'live-preview-output'
+      ? {
+          host: 'native' as const,
+          bounds: defaultFloatingRectFor(kind),
+        }
+      : defaultContainedPlacement(kind));
   return {
     id,
     kind,
     open: overrides.open ?? true,
-    placement: overrides.placement ?? defaultContainedPlacement(kind),
+    placement,
     chrome,
+    ...(overrides.returnPoint ? { returnPoint: overrides.returnPoint } : {}),
   };
 }
 

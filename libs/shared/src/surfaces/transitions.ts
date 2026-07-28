@@ -90,7 +90,15 @@ function succeed(
 
 function requireCapability(
   kind: SurfaceKind,
-  capability: 'stage' | 'dock' | 'float' | 'maximize' | 'minimize' | 'externalize' | 'return' | 'close',
+  capability:
+    | 'stage'
+    | 'dock'
+    | 'float'
+    | 'maximize'
+    | 'minimize'
+    | 'externalize'
+    | 'return'
+    | 'close',
 ): TransitionFailure | null {
   if (!capabilitiesFor(kind)[capability]) {
     return deny('capability-denied', `${kind} cannot ${capability}`);
@@ -133,7 +141,9 @@ export function dock(
   const dockSize = clampDockSize(
     surface.kind,
     size ??
-      (surface.placement.mode === 'docked' ? surface.placement.size : defaultDockSize(surface.kind)),
+      (surface.placement.mode === 'docked'
+        ? surface.placement.size
+        : defaultDockSize(surface.kind)),
   );
 
   return succeed({
@@ -176,7 +186,10 @@ export function floatSurface(
  * Maximize. Records restore from a durable mode; preserves restore when already
  * transient (maximize ↔ minimize).
  */
-export function maximize(surface: SurfaceRecord, context: TransitionContext = {}): TransitionResult {
+export function maximize(
+  surface: SurfaceRecord,
+  context: TransitionContext = {},
+): TransitionResult {
   const denied = requireCapability(surface.kind, 'maximize');
   if (denied) return denied;
 
@@ -250,7 +263,9 @@ export function minimize(
 
   const restore = restorePointFromPlacement(surface.placement);
   const nextPoint =
-    point !== undefined ? clampSurfaceMinimizedPoint(surface.kind, point, context.viewport) : undefined;
+    point !== undefined
+      ? clampSurfaceMinimizedPoint(surface.kind, point, context.viewport)
+      : undefined;
 
   return succeed({
     ...surface,

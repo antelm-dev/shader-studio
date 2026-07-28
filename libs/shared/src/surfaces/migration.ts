@@ -25,11 +25,7 @@ import {
   sanitizePreviewWindow,
   type PreviewWindowState,
 } from '../prefs/preview';
-import {
-  createDefaultSurface,
-  sanitizeLayoutPreferences,
-  sanitizeSurfaceRecord,
-} from './sanitize';
+import { createDefaultSurface, sanitizeLayoutPreferences, sanitizeSurfaceRecord } from './sanitize';
 import {
   asSurfaceId,
   DEFAULT_EDITOR_GROUP_ID,
@@ -312,10 +308,7 @@ export function applyLiveOutputReturnToPreview(
 }
 
 /** Find a surface by id after migration/sanitize. */
-export function findSurface(
-  layout: LayoutPreferences,
-  id: string,
-): SurfaceRecord | undefined {
+export function findSurface(layout: LayoutPreferences, id: string): SurfaceRecord | undefined {
   const target = asSurfaceId(id);
   return layout.surfaces.find((s) => s.id === target);
 }

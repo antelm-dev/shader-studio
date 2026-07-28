@@ -3,13 +3,7 @@
  * policy. Accepts viewport/work-area as pure input — never measures DOM/Electron.
  */
 
-import {
-  containPoint,
-  containRect,
-  type Point,
-  type Rect,
-  type Size,
-} from '../geometry';
+import { containPoint, containRect, type Point, type Rect, type Size } from '../geometry';
 import {
   BOTTOM_PANEL_HEIGHT_LIMITS,
   DEFAULT_BOTTOM_PANEL_HEIGHT,
