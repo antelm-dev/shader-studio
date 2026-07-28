@@ -34,15 +34,19 @@ function spec(): ShaderSpec {
   };
 }
 
+/** The Image pass's uniforms — what the registry holds as its primary map. */
+function uniforms(engine: ShaderEngine): Record<string, { value: unknown }> {
+  return (engine as unknown as { registry: { primary: Record<string, { value: unknown }> } })
+    .registry.primary;
+}
+
 /** The `iTime` the engine last drew with — the only thing a captured frame may depend on. */
 function drawnTime(engine: ShaderEngine): number {
-  const uniforms = (engine as unknown as { uniforms: Record<string, { value: unknown }> }).uniforms;
-  return uniforms['iTime'].value as number;
+  return uniforms(engine)['iTime'].value as number;
 }
 
 function uniformVector(engine: ShaderEngine, name: string): { x: number; y: number; z: number } {
-  const uniforms = (engine as unknown as { uniforms: Record<string, { value: unknown }> }).uniforms;
-  return uniforms[name].value as { x: number; y: number; z: number };
+  return uniforms(engine)[name].value as { x: number; y: number; z: number };
 }
 
 describe('offline capture', () => {
