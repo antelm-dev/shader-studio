@@ -93,6 +93,10 @@
       "types": "./src/session/index.ts",
       "default": "./src/session/index.ts"
     },
+    "./editor-groups": {
+      "types": "./src/editor-groups/index.ts",
+      "default": "./src/editor-groups/index.ts"
+    },
     "./templates": {
       "types": "./src/templates.ts",
       "default": "./src/templates.ts"
