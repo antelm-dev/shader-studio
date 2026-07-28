@@ -12,6 +12,7 @@
     "pack:dir": "node scripts/build.mjs pack",
     "pack:win": "node scripts/build.mjs pack --win",
     "dist:win": "node scripts/build.mjs dist --win",
+    "test": "vitest run",
     "typecheck": "pnpm gen:ipc && tsc --noEmit -p tsconfig.main.json && tsc --noEmit -p tsconfig.preload.json"
   },
   "dependencies": {
@@ -33,7 +34,8 @@
     "electron-builder": "^26.0.12",
     "electron-run": "github:antelm-dev/electron-run#master",
     "rollup": "^4.30.1",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "vitest": "^4.0.8"
   },
   "nx": {
     "targets": {
