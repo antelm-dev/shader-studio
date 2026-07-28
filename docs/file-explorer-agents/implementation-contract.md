@@ -46,21 +46,21 @@ decisions here as fixed unless the coordinator explicitly revises the contract.
 
 ## Source-of-truth mapping
 
-| Concept | Repository source |
-| --- | --- |
-| Openable documents | `ShaderStore.documents()` → `EditorDocument[]` |
-| Active document | `ShaderStore.activeDoc()` / `activeDocId` |
-| Select document | `ShaderStore.selectDoc(id)` |
-| Project structure | `ShaderStore.project()` → `ShaderProject` |
+| Concept                    | Repository source                                             |
+| -------------------------- | ------------------------------------------------------------- |
+| Openable documents         | `ShaderStore.documents()` → `EditorDocument[]`                |
+| Active document            | `ShaderStore.activeDoc()` / `activeDocId`                     |
+| Select document            | `ShaderStore.selectDoc(id)`                                   |
+| Project structure          | `ShaderStore.project()` → `ShaderProject`                     |
 | Pass display order (Files) | `displayPasses(project)` from `@shader-studio/shared/project` |
-| Render execution order | `ShaderStore.renderOrder()` (topological, image last) |
-| Graph errors | `ShaderStore.projectErrors()` |
-| Per-doc diagnostics | `ShaderStore.diagnosticsFor(docId)` / `errorCountFor(docId)` |
-| Compiling passes | `ShaderStore.compiling(): ReadonlySet<string>` |
-| Dirty | `ShaderStore.dirty()` (project-level) |
-| Buffer enable/disable | `ShaderStore.setPassEnabledById` |
-| File/buffer CRUD + reorder | `ShaderStore` mutations + `WorkspaceActions` dialogs |
-| Vertex / config ids | `VERTEX_DOC` (`@vertex`), `CONFIG_DOC` (`@config`) |
+| Render execution order     | `ShaderStore.renderOrder()` (topological, image last)         |
+| Graph errors               | `ShaderStore.projectErrors()`                                 |
+| Per-doc diagnostics        | `ShaderStore.diagnosticsFor(docId)` / `errorCountFor(docId)`  |
+| Compiling passes           | `ShaderStore.compiling(): ReadonlySet<string>`                |
+| Dirty                      | `ShaderStore.dirty()` (project-level)                         |
+| Buffer enable/disable      | `ShaderStore.setPassEnabledById`                              |
+| File/buffer CRUD + reorder | `ShaderStore` mutations + `WorkspaceActions` dialogs          |
+| Vertex / config ids        | `VERTEX_DOC` (`@vertex`), `CONFIG_DOC` (`@config`)            |
 
 `EditorDocument` shape (from `shader-store.ts`):
 
@@ -84,11 +84,11 @@ interface EditorDocument {
 Top-level **groups** (always present when a project is loaded; omit empty
 groups):
 
-| Group id | i18n label key | Children (in order) |
-| --- | --- | --- |
-| `explorer:files:group:passes` | `explorer.group.passes` | Image pass, Common pass (if present), buffer passes in `displayPasses` buffer order |
-| `explorer:files:group:includes` | `explorer.group.includes` | Include files in `project.files` array order |
-| `explorer:files:group:project` | `explorer.group.project` | Vertex (`@vertex`), Config (`@config`) |
+| Group id                        | i18n label key            | Children (in order)                                                                 |
+| ------------------------------- | ------------------------- | ----------------------------------------------------------------------------------- |
+| `explorer:files:group:passes`   | `explorer.group.passes`   | Image pass, Common pass (if present), buffer passes in `displayPasses` buffer order |
+| `explorer:files:group:includes` | `explorer.group.includes` | Include files in `project.files` array order                                        |
+| `explorer:files:group:project`  | `explorer.group.project`  | Vertex (`@vertex`), Config (`@config`)                                              |
 
 **Ordering rules**
 
@@ -99,28 +99,28 @@ groups):
 
 ### Pipeline view hierarchy
 
-| Group id | i18n label key | Children (in order) |
-| --- | --- | --- |
-| `explorer:pipeline:group:common` | `explorer.group.common` | Common pass node (selectable) when present |
-| `explorer:pipeline:group:execution` | `explorer.group.execution` | Enabled buffers in `renderOrder()` (excluding Image), then Image pass |
-| `explorer:pipeline:group:disabled` | `explorer.group.disabledBuffers` | Disabled buffer passes in slot order A → D (omit group when empty) |
+| Group id                            | i18n label key                   | Children (in order)                                                   |
+| ----------------------------------- | -------------------------------- | --------------------------------------------------------------------- |
+| `explorer:pipeline:group:common`    | `explorer.group.common`          | Common pass node (selectable) when present                            |
+| `explorer:pipeline:group:execution` | `explorer.group.execution`       | Enabled buffers in `renderOrder()` (excluding Image), then Image pass |
+| `explorer:pipeline:group:disabled`  | `explorer.group.disabledBuffers` | Disabled buffer passes in slot order A → D (omit group when empty)    |
 
 Under **each pass node** (Image, Common, enabled buffers, disabled buffers):
 
-| Child id pattern | Kind | Selectable |
-| --- | --- | --- |
-| `explorer:pipeline:pass:{passId}:channels` | `group` | no |
-| `explorer:pipeline:pass:{passId}:channel:{0\|1\|2\|3}` | `channel` | no |
-| binding child (see below) | informational | no |
+| Child id pattern                                       | Kind          | Selectable |
+| ------------------------------------------------------ | ------------- | ---------- |
+| `explorer:pipeline:pass:{passId}:channels`             | `group`       | no         |
+| `explorer:pipeline:pass:{passId}:channel:{0\|1\|2\|3}` | `channel`     | no         |
+| binding child (see below)                              | informational | no         |
 
 **Channel binding children** (one per channel, deterministic id):
 
-| Binding | Node kind | Child id suffix | Dependency edge? |
-| --- | --- | --- | --- |
-| `{ kind: 'none' }` | `channel-none` | `:binding:none` | no |
-| `{ kind: 'texture', slot: n }` | `channel-texture` | `:binding:texture:{n}` | no |
-| `{ kind: 'buffer', passId, feedback: false }` | `channel-buffer` | `:binding:buffer:{passId}` | **yes** (display only) |
-| `{ kind: 'buffer', passId, feedback: true }` | `channel-feedback` | `:binding:feedback:{passId}` | **no** — feedback is shown but must not be drawn as a dependency edge |
+| Binding                                       | Node kind          | Child id suffix              | Dependency edge?                                                      |
+| --------------------------------------------- | ------------------ | ---------------------------- | --------------------------------------------------------------------- |
+| `{ kind: 'none' }`                            | `channel-none`     | `:binding:none`              | no                                                                    |
+| `{ kind: 'texture', slot: n }`                | `channel-texture`  | `:binding:texture:{n}`       | no                                                                    |
+| `{ kind: 'buffer', passId, feedback: false }` | `channel-buffer`   | `:binding:buffer:{passId}`   | **yes** (display only)                                                |
+| `{ kind: 'buffer', passId, feedback: true }`  | `channel-feedback` | `:binding:feedback:{passId}` | **no** — feedback is shown but must not be drawn as a dependency edge |
 
 Channel rows use fixed order **iChannel0 → iChannel3** regardless of binding
 state.
@@ -138,14 +138,14 @@ state.
 
 A row is **selectable** when it maps to an existing `EditorDocument.id`:
 
-| `ExplorerSelectableKind` | `EditorDocument.id` | `EditorDocument.kind` |
-| --- | --- | --- |
-| `image-pass` | pass id | `pass` / `passKind: 'image'` |
-| `common-pass` | pass id | `pass` / `passKind: 'common'` |
-| `buffer-pass` | pass id | `pass` / `passKind: 'buffer'` |
-| `source-file` | file id | `file` |
-| `vertex` | `@vertex` | `vertex` |
-| `config` | `@config` | `config` |
+| `ExplorerSelectableKind` | `EditorDocument.id` | `EditorDocument.kind`         |
+| ------------------------ | ------------------- | ----------------------------- |
+| `image-pass`             | pass id             | `pass` / `passKind: 'image'`  |
+| `common-pass`            | pass id             | `pass` / `passKind: 'common'` |
+| `buffer-pass`            | pass id             | `pass` / `passKind: 'buffer'` |
+| `source-file`            | file id             | `file`                        |
+| `vertex`                 | `@vertex`           | `vertex`                      |
+| `config`                 | `@config`           | `config`                      |
 
 For selectable nodes **`node.id === node.docId`**. The projection must never
 emit a selectable `docId` that is absent from `documents()`.
@@ -160,13 +160,13 @@ them (click, Enter) does nothing; focus may land on them for keyboard traversal.
 
 Status is computed in the projection (agent 02) from store signals:
 
-| Field | Rule |
-| --- | --- |
-| `active` | `docId === activeDoc()?.id` |
-| `disabled` | `passKind === 'buffer' && enabled === false` |
-| `dirty` | `store.dirty()` for `image-pass`, `common-pass`, `buffer-pass`, `vertex`, `config`; always `false` for `source-file` and informational nodes |
-| `compiling` | `store.compiling().has(docId)` for compilable selectable kinds |
-| `errorCount` | `store.errorCountFor(docId)` for `image-pass`, `common-pass`, `buffer-pass`, `vertex`, `config`; `0` for files and informational nodes |
+| Field        | Rule                                                                                                                                         |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `active`     | `docId === activeDoc()?.id`                                                                                                                  |
+| `disabled`   | `passKind === 'buffer' && enabled === false`                                                                                                 |
+| `dirty`      | `store.dirty()` for `image-pass`, `common-pass`, `buffer-pass`, `vertex`, `config`; always `false` for `source-file` and informational nodes |
+| `compiling`  | `store.compiling().has(docId)` for compilable selectable kinds                                                                               |
+| `errorCount` | `store.errorCountFor(docId)` for `image-pass`, `common-pass`, `buffer-pass`, `vertex`, `config`; `0` for files and informational nodes       |
 
 Match `EditorTabs` presentation rules:
 
@@ -179,14 +179,14 @@ Match `EditorTabs` presentation rules:
 Capabilities mirror `editor-tabs.ts` permission logic — the projection exposes
 them so templates do not duplicate rules:
 
-| Capability | Rule (same as tabs) |
-| --- | --- |
-| `rename` | `passKind === 'buffer'` or `kind === 'file'` |
-| `duplicate` | (`passKind === 'buffer' && canAddBuffer()`) or `kind === 'file'` |
-| `delete` | `passKind === 'buffer'` or `kind === 'file'` |
-| `reorder` | same as `rename` |
-| `toggleEnabled` | `passKind === 'buffer'` |
-| `selectable` | selectable kinds only |
+| Capability      | Rule (same as tabs)                                              |
+| --------------- | ---------------------------------------------------------------- |
+| `rename`        | `passKind === 'buffer'` or `kind === 'file'`                     |
+| `duplicate`     | (`passKind === 'buffer' && canAddBuffer()`) or `kind === 'file'` |
+| `delete`        | `passKind === 'buffer'` or `kind === 'file'`                     |
+| `reorder`       | same as `rename`                                                 |
+| `toggleEnabled` | `passKind === 'buffer'`                                          |
+| `selectable`    | selectable kinds only                                            |
 
 Header-level commands (not per-node):
 
@@ -197,13 +197,13 @@ Header-level commands (not per-node):
 
 Per-node commands call existing APIs:
 
-| Command | Action |
-| --- | --- |
-| Rename | `workspace.renameDocument(doc)` |
-| Duplicate | `store.duplicateSourceFile` / `store.duplicateBufferPass` |
-| Delete | `workspace.deleteDocument(doc)` |
-| Enable / Disable | `store.setPassEnabledById(id, enabled)` |
-| Reorder | `store.moveSourceFile` / `store.movePassTo` (see reorder intent) |
+| Command          | Action                                                           |
+| ---------------- | ---------------------------------------------------------------- |
+| Rename           | `workspace.renameDocument(doc)`                                  |
+| Duplicate        | `store.duplicateSourceFile` / `store.duplicateBufferPass`        |
+| Delete           | `workspace.deleteDocument(doc)`                                  |
+| Enable / Disable | `store.setPassEnabledById(id, enabled)`                          |
+| Reorder          | `store.moveSourceFile` / `store.movePassTo` (see reorder intent) |
 
 ## Reorder (drag-and-drop)
 
@@ -265,11 +265,11 @@ Focus returns to the editor on Escape when the overlay is open (agent 05).
 
 Add to `WorkspacePreferences` and sanitize via `libs/shared/src/prefs/panel.ts`:
 
-| Field | Type | Default | Sanitization |
-| --- | --- | --- | --- |
-| `fileExplorerOpen` | `boolean` | `true` | boolean coercion |
-| `fileExplorerView` | `'files' \| 'pipeline'` | `'files'` | enum fallback |
-| `fileExplorerWidth` | `number` | `240` | clamp `FILE_EXPLORER_LIMITS.width` |
+| Field               | Type                    | Default   | Sanitization                       |
+| ------------------- | ----------------------- | --------- | ---------------------------------- |
+| `fileExplorerOpen`  | `boolean`               | `true`    | boolean coercion                   |
+| `fileExplorerView`  | `'files' \| 'pipeline'` | `'files'` | enum fallback                      |
+| `fileExplorerWidth` | `number`                | `240`     | clamp `FILE_EXPLORER_LIMITS.width` |
 
 ```typescript
 export const FILE_EXPLORER_LIMITS = {
@@ -302,13 +302,13 @@ persisted in MVP).
 
 ## Loading, empty, and missing states
 
-| Condition | `ExplorerTree.emptyReason` | UI |
-| --- | --- | --- |
-| `store.loading()` | `loading` | Spinner/disabled tree, `explorer.state.loading` |
-| `!store.project()` | `no-project` | `explorer.state.noProject` (same spirit as `editor.empty`) |
-| Project loaded, zero documents (should not happen) | `no-documents` | `explorer.state.noDocuments` |
-| Files view, no include files | — | Omit includes **group** (not an empty-state) |
-| Pipeline view, no disabled buffers | — | Omit disabled **group** |
+| Condition                                          | `ExplorerTree.emptyReason` | UI                                                         |
+| -------------------------------------------------- | -------------------------- | ---------------------------------------------------------- |
+| `store.loading()`                                  | `loading`                  | Spinner/disabled tree, `explorer.state.loading`            |
+| `!store.project()`                                 | `no-project`               | `explorer.state.noProject` (same spirit as `editor.empty`) |
+| Project loaded, zero documents (should not happen) | `no-documents`             | `explorer.state.noDocuments`                               |
+| Files view, no include files                       | —                          | Omit includes **group** (not an empty-state)               |
+| Pipeline view, no disabled buffers                 | —                          | Omit disabled **group**                                    |
 
 ## TypeScript contract surface
 
@@ -328,13 +328,13 @@ integrates.
 
 ## File ownership
 
-| Agent | Primary files |
-| --- | --- |
+| Agent         | Primary files                                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **01** (this) | `docs/file-explorer-agents/implementation-contract.md`, `file-explorer/contract.ts`, `file-explorer/node-id.ts`, `file-explorer/node-id.spec.ts` |
-| **02** | `file-explorer/project-explorer.ts` (or similar), projection unit tests |
-| **03** | `file-explorer/explorer-panel.ts`, component tests |
-| **04** | `libs/shared/src/prefs/panel.ts`, `preferences.ts`, `workspace-actions.ts`, `i18n/en.json`, `i18n/fr.json` |
-| **05** | `editor-panel.ts`, layout/overlay wiring, integration tests |
+| **02**        | `file-explorer/project-explorer.ts` (or similar), projection unit tests                                                                          |
+| **03**        | `file-explorer/explorer-panel.ts`, component tests                                                                                               |
+| **04**        | `libs/shared/src/prefs/panel.ts`, `preferences.ts`, `workspace-actions.ts`, `i18n/en.json`, `i18n/fr.json`                                       |
+| **05**        | `editor-panel.ts`, layout/overlay wiring, integration tests                                                                                      |
 
 ## Acceptance-test scenarios
 
