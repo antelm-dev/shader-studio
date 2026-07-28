@@ -13,4 +13,5 @@ export * from './geometry';
 export * from './prefs/editor';
 export * from './prefs/preview';
 export * from './prefs/panel';
+export * from './surfaces';
 export { TEMPLATE_CONTROLS, TEMPLATE_FRAGMENT } from './templates';

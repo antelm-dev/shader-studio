@@ -85,6 +85,10 @@
       "types": "./src/prefs/panel.ts",
       "default": "./src/prefs/panel.ts"
     },
+    "./surfaces": {
+      "types": "./src/surfaces/index.ts",
+      "default": "./src/surfaces/index.ts"
+    },
     "./templates": {
       "types": "./src/templates.ts",
       "default": "./src/templates.ts"
