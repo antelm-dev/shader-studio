@@ -1,57 +1,53 @@
-import { Component, computed, inject, input, output } from '@angular/core';
-import { MatDividerModule } from '@angular/material/divider';
+import { Component, ElementRef, inject, input, output, viewChildren } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
+import { I18n } from '../../i18n/i18n';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
+import { OpenDocuments } from './open-documents';
 
 /** What a tab is doing, which is what its dot is coloured for. */
 export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
 
 /**
- * The tab bar.
+ * Open-document tab strip.
  *
- * Two things it has to get right, both of them about *telling things apart*.
- *
- * The first is passes versus files. A render pass is a stage of the pipeline; a
- * file is text that gets `#include`d into one. They are edited the same way and
- * they are emphatically not the same kind of object, so they are separated by a
- * rule, given different icons, and only passes get a state dot — a file does not
- * compile, so a file cannot be compiling.
- *
- * The second is the state of each pass, which is the thing you actually watch
- * while you work: modified, compiling, compiled, failed. That has to be legible
- * at a glance and out of the corner of your eye, so it is a dot and a colour
- * rather than a word.
+ * Shows only documents currently opened for editing. Structural project actions
+ * (create, rename, duplicate, delete, enable/disable, project reorder) live in
+ * the explorer. Tabs open/activate/close, show compile/dirty/error/disabled
+ * status, and may reorder the *session* open set — never the project.
  */
 @Component({
   selector: 'app-editor-tabs',
-  imports: [MatDividerModule, MatIconModule, MatMenuModule, MatTooltipModule],
+  imports: [MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
   template: `
-    <div class="tabs" role="tablist" aria-label="Shader documents">
-      @for (group of groups(); track group.kind) {
-        @if (group.divider) {
-          <mat-divider class="group-divider" vertical />
-        }
-
-        @for (doc of group.docs; track doc.id) {
+    <div class="tabs" role="tablist" [attr.aria-label]="'editor.documents' | translate">
+      @for (doc of openDocs.openDocs(); track doc.id) {
+        <div
+          class="tab-wrap"
+          [class.active]="doc.id === activeId()"
+          [class.disabled-pass]="doc.enabled === false"
+        >
           <button
+            #tabButton
             type="button"
             role="tab"
             class="tab"
-            [class.active]="doc.id === activeId()"
-            [class.disabled-pass]="doc.enabled === false"
+            [attr.data-doc-id]="doc.id"
             [attr.aria-selected]="doc.id === activeId()"
-            [attr.draggable]="reorderable(doc)"
+            [attr.tabindex]="doc.id === activeId() ? 0 : -1"
+            [attr.draggable]="true"
             [matTooltip]="tooltip(doc)"
             [matContextMenuTriggerFor]="tabMenu"
             [matContextMenuTriggerData]="{ doc }"
-            (click)="select.emit(doc.id)"
-            (dblclick)="onRename(doc)"
+            (click)="onSelect(doc.id)"
+            (keydown)="onTabKeydown($event, doc)"
             (dragstart)="onDragStart($event, doc)"
             (dragover)="onDragOver($event, doc)"
             (drop)="onDrop($event, doc)"
+            (auxclick)="onAuxClick($event, doc)"
           >
             <mat-icon class="tab-icon" aria-hidden="true">{{ icon(doc) }}</mat-icon>
             <span class="tab-name">{{ doc.name }}</span>
@@ -64,72 +60,42 @@ export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
               }
             }
           </button>
-        }
+
+          @if (openDocs.canClose()) {
+            <button
+              type="button"
+              class="tab-close"
+              [attr.aria-label]="'editor.closeTab' | translate: { name: doc.name }"
+              [matTooltip]="'editor.closeTab' | translate: { name: doc.name }"
+              (click)="onClose($event, doc)"
+            >
+              <mat-icon aria-hidden="true">close</mat-icon>
+            </button>
+          }
+        </div>
       }
-
-      <button
-        type="button"
-        class="tab add"
-        matTooltip="Add a buffer or a file"
-        aria-label="Add a buffer or a file"
-        [matMenuTriggerFor]="addMenu"
-      >
-        <mat-icon aria-hidden="true">add</mat-icon>
-      </button>
     </div>
-
-    <mat-menu #addMenu="matMenu">
-      <button
-        mat-menu-item
-        type="button"
-        [disabled]="!store.canAddBuffer()"
-        [matTooltip]="store.canAddBuffer() ? '' : 'All four buffer slots (A–D) are already in use'"
-        (click)="store.addBufferPass()"
-      >
-        <mat-icon>layers</mat-icon>
-        <span>New buffer pass</span>
-      </button>
-      <button mat-menu-item type="button" (click)="newFile.emit()">
-        <mat-icon>description</mat-icon>
-        <span>New file…</span>
-        <span class="menu-hint">Ctrl+N</span>
-      </button>
-    </mat-menu>
 
     <mat-menu #tabMenu="matMenu">
       <ng-template matMenuContent let-doc="doc">
-        <button mat-menu-item type="button" [disabled]="!renameable(doc)" (click)="onRename(doc)">
-          <mat-icon>edit</mat-icon>
-          <span>Rename…</span>
+        <button
+          mat-menu-item
+          type="button"
+          [disabled]="!openDocs.canClose()"
+          (click)="onCloseMenu(doc)"
+        >
+          <mat-icon>close</mat-icon>
+          <span>{{ 'editor.closeTabMenu' | translate }}</span>
         </button>
         <button
           mat-menu-item
           type="button"
-          [disabled]="!duplicable(doc)"
-          (click)="onDuplicate(doc)"
+          [disabled]="!openDocs.canClose()"
+          (click)="openDocs.closeOthers(doc.id)"
         >
-          <mat-icon>content_copy</mat-icon>
-          <span>Duplicate</span>
+          <mat-icon>tab_close</mat-icon>
+          <span>{{ 'editor.closeOtherTabs' | translate }}</span>
         </button>
-
-        @if (doc.passKind === 'buffer') {
-          <button
-            mat-menu-item
-            type="button"
-            (click)="store.setPassEnabledById(doc.id, doc.enabled === false)"
-          >
-            <mat-icon>{{ doc.enabled === false ? 'visibility' : 'visibility_off' }}</mat-icon>
-            <span>{{ doc.enabled === false ? 'Enable' : 'Disable' }}</span>
-          </button>
-        }
-
-        @if (deletable(doc)) {
-          <mat-divider />
-          <button mat-menu-item type="button" class="destructive" (click)="remove.emit(doc)">
-            <mat-icon>delete</mat-icon>
-            <span>Delete…</span>
-          </button>
-        }
       </ng-template>
     </mat-menu>
   `,
@@ -148,40 +114,47 @@ export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
       min-width: min-content;
     }
 
-    .group-divider {
-      height: 18px;
-      margin-inline: 5px;
+    .tab-wrap {
+      display: flex;
+      align-items: center;
+      flex: 0 0 auto;
+      max-width: 196px;
+      border-radius: var(--mat-sys-corner-small, 6px);
+    }
+
+    .tab-wrap:hover {
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+    }
+
+    .tab-wrap.active {
+      background: var(--mat-sys-secondary-container);
+      color: var(--mat-sys-on-secondary-container);
     }
 
     .tab {
       display: flex;
       align-items: center;
       gap: 6px;
-      flex: 0 0 auto;
+      flex: 1 1 auto;
+      min-width: 0;
       height: 28px;
-      max-width: 168px;
-      padding-inline: 9px;
+      padding-inline: 9px 4px;
       border: 0;
       border-radius: var(--mat-sys-corner-small, 6px);
       background: transparent;
-      color: var(--mat-sys-on-surface-variant);
+      color: inherit;
       font: var(--mat-sys-label-medium);
       white-space: nowrap;
       cursor: pointer;
     }
 
-    .tab:hover {
-      background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
-    }
-
-    .tab.active {
-      background: var(--mat-sys-secondary-container);
-      color: var(--mat-sys-on-secondary-container);
+    .tab-wrap:not(.active) .tab {
+      color: var(--mat-sys-on-surface-variant);
     }
 
     /* A disabled buffer is still editable — it just is not in the picture. */
-    .tab.disabled-pass .tab-name,
-    .tab.disabled-pass .tab-icon {
+    .tab-wrap.disabled-pass .tab-name,
+    .tab-wrap.disabled-pass .tab-icon {
       opacity: 0.5;
       text-decoration: line-through;
     }
@@ -198,9 +171,32 @@ export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
       text-overflow: ellipsis;
     }
 
-    .tab.add {
-      color: var(--mat-sys-on-surface-variant);
-      padding-inline: 6px;
+    .tab-close {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 22px;
+      height: 22px;
+      margin-inline-end: 4px;
+      padding: 0;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      opacity: 0.7;
+    }
+
+    .tab-close:hover,
+    .tab-close:focus-visible {
+      opacity: 1;
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 12%, transparent);
+    }
+
+    .tab-close mat-icon {
+      width: 14px;
+      height: 14px;
+      font-size: 14px;
     }
 
     .badge {
@@ -246,52 +242,24 @@ export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
       }
     }
 
-    /* Someone who asked their OS for less motion means it here too. */
     @media (prefers-reduced-motion: reduce) {
       .dot.compiling {
         animation: none;
       }
     }
-
-    .destructive {
-      color: var(--mat-sys-error);
-    }
-
-    .menu-hint {
-      margin-left: auto;
-      padding-left: 24px;
-      color: var(--mat-sys-on-surface-variant);
-    }
   `,
 })
 export class EditorTabs {
   protected readonly store = inject(ShaderStore);
+  protected readonly openDocs = inject(OpenDocuments);
+  private readonly i18n = inject(I18n);
+  private readonly tabButtons = viewChildren<ElementRef<HTMLButtonElement>>('tabButton');
 
   readonly activeId = input<string | null>(null);
 
   readonly select = output<string>();
-  readonly rename = output<EditorDocument>();
-  readonly remove = output<EditorDocument>();
-  readonly newFile = output<void>();
-
-  /**
-   * Passes, then files, then the two that belong to neither. Rendered as three
-   * groups with a rule between them, because "this is a stage of the pipeline"
-   * and "this is a file the pipeline includes" is the distinction the whole tab
-   * bar exists to make.
-   */
-  protected readonly groups = computed(() => {
-    const documents = this.store.documents();
-
-    const of = (...kinds: EditorDocument['kind'][]): EditorDocument[] =>
-      documents.filter((document) => kinds.includes(document.kind));
-
-    return [
-      { kind: 'pass' as const, divider: false, docs: of('pass') },
-      { kind: 'file' as const, divider: true, docs: of('file') },
-      { kind: 'other' as const, divider: true, docs: of('vertex', 'config') },
-    ].filter((group) => group.docs.length > 0);
-  });
+  /** Emitted after a close so the panel can restore focus. */
+  readonly closed = output<string | null>();
 
   protected icon(doc: EditorDocument): string {
     if (doc.kind === 'file') return 'description';
@@ -311,20 +279,20 @@ export class EditorTabs {
   protected tooltip(doc: EditorDocument): string {
     switch (doc.passKind) {
       case 'image':
-        return 'The Image pass — what ends up on screen';
+        return this.i18n.t('explorer.tooltip.imagePass');
       case 'common':
-        return 'Shared GLSL, included in every pass automatically';
+        return this.i18n.t('explorer.tooltip.commonPass');
       case 'buffer':
         return doc.enabled === false
-          ? `Buffer ${doc.slot} — disabled, so it does not render`
-          : `Buffer ${doc.slot} — renders to a texture other passes can sample`;
+          ? this.i18n.t('explorer.tooltip.bufferDisabled', { slot: doc.slot ?? '' })
+          : this.i18n.t('explorer.tooltip.bufferPass', { slot: doc.slot ?? '' });
       default:
         break;
     }
 
-    if (doc.kind === 'file') return `A source file. Include it with #include "${doc.name}"`;
-    if (doc.kind === 'vertex') return 'The vertex shader, shared by every pass';
-    return 'The control schema that drives the inspector';
+    if (doc.kind === 'file') return this.i18n.t('explorer.tooltip.sourceFile', { name: doc.name });
+    if (doc.kind === 'vertex') return this.i18n.t('explorer.tooltip.vertex');
+    return this.i18n.t('explorer.tooltip.config');
   }
 
   protected errorCount(id: string): number {
@@ -333,8 +301,7 @@ export class EditorTabs {
 
   /**
    * A tab's state is only ever about *this* pass. A project where Buffer B fails
-   * to compile shows an error on Buffer B and a healthy Image pass, which is the
-   * truth: the Image pass is still rendering, with the last Buffer B that worked.
+   * to compile shows an error on Buffer B and a healthy Image pass.
    */
   protected state(doc: EditorDocument): TabState {
     if (this.store.compiling().has(doc.id)) return 'compiling';
@@ -342,55 +309,96 @@ export class EditorTabs {
     return this.store.dirty() ? 'idle' : 'ok';
   }
 
-  // The Image and Common passes are fixtures of the pipeline: there is always
-  // exactly one of each, so they cannot be renamed, copied, moved or deleted.
-  protected renameable(doc: EditorDocument): boolean {
-    return doc.passKind === 'buffer' || doc.kind === 'file';
+  protected onSelect(id: string): void {
+    this.select.emit(id);
   }
 
-  protected duplicable(doc: EditorDocument): boolean {
-    return (doc.passKind === 'buffer' && this.store.canAddBuffer()) || doc.kind === 'file';
+  protected onClose(event: Event, doc: EditorDocument): void {
+    event.stopPropagation();
+    event.preventDefault();
+    this.closeTab(doc.id);
   }
 
-  protected deletable(doc: EditorDocument): boolean {
-    return doc.passKind === 'buffer' || doc.kind === 'file';
+  protected onCloseMenu(doc: EditorDocument): void {
+    this.closeTab(doc.id);
   }
 
-  protected reorderable(doc: EditorDocument): boolean {
-    return this.renameable(doc);
+  protected onAuxClick(event: MouseEvent, doc: EditorDocument): void {
+    // Middle-click closes when more than one tab is open.
+    if (event.button !== 1 || !this.openDocs.canClose()) return;
+    event.preventDefault();
+    this.closeTab(doc.id);
   }
 
-  protected onRename(doc: EditorDocument): void {
-    if (this.renameable(doc)) this.rename.emit(doc);
+  protected onTabKeydown(event: KeyboardEvent, doc: EditorDocument): void {
+    const ids = this.openDocs.openIds();
+    const index = ids.indexOf(doc.id);
+    if (index < 0) return;
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      const step = event.key === 'ArrowRight' ? 1 : -1;
+      const next = ids[(index + step + ids.length) % ids.length];
+      if (!next) return;
+      this.select.emit(next);
+      queueMicrotask(() => this.focusTab(next));
+      return;
+    }
+
+    if (event.key === 'Home') {
+      event.preventDefault();
+      const first = ids[0];
+      if (!first) return;
+      this.select.emit(first);
+      queueMicrotask(() => this.focusTab(first));
+      return;
+    }
+
+    if (event.key === 'End') {
+      event.preventDefault();
+      const last = ids[ids.length - 1];
+      if (!last) return;
+      this.select.emit(last);
+      queueMicrotask(() => this.focusTab(last));
+      return;
+    }
+
+    if ((event.key === 'Delete' || event.key === 'Backspace') && this.openDocs.canClose()) {
+      event.preventDefault();
+      this.closeTab(doc.id);
+    }
   }
 
-  protected onDuplicate(doc: EditorDocument): void {
-    if (doc.kind === 'file') this.store.duplicateSourceFile(doc.id);
-    else this.store.duplicateBufferPass(doc.id);
+  private closeTab(docId: string): void {
+    const closed = this.openDocs.close(docId);
+    if (!closed) return;
+
+    const nextActive = this.store.activeDoc()?.id ?? null;
+    this.closed.emit(nextActive);
+    queueMicrotask(() => {
+      if (nextActive) this.focusTab(nextActive);
+    });
   }
 
-  // --- Reordering ---------------------------------------------------------
-  //
-  // Buffers reorder among buffers and files among files; a buffer dragged onto a
-  // file goes nowhere. The two lists mean different things, and an order that
-  // mixed them would not be an order of anything.
+  focusTab(docId: string): void {
+    const button = this.tabButtons().find(
+      (ref) => ref.nativeElement.getAttribute('data-doc-id') === docId,
+    );
+    button?.nativeElement.focus();
+  }
+
+  // --- Session-only reorder -----------------------------------------------
 
   private dragging: EditorDocument | null = null;
 
   protected onDragStart(event: DragEvent, doc: EditorDocument): void {
-    if (!this.reorderable(doc)) {
-      event.preventDefault();
-      return;
-    }
     this.dragging = doc;
     event.dataTransfer?.setData('text/plain', doc.id);
     if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
   }
 
   protected onDragOver(event: DragEvent, doc: EditorDocument): void {
-    const source = this.dragging;
-    if (!source || !this.sameList(source, doc)) return;
-
+    if (!this.dragging || this.dragging.id === doc.id) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
   }
@@ -398,22 +406,9 @@ export class EditorTabs {
   protected onDrop(event: DragEvent, doc: EditorDocument): void {
     const source = this.dragging;
     this.dragging = null;
-    if (!source || source.id === doc.id || !this.sameList(source, doc)) return;
+    if (!source || source.id === doc.id) return;
 
     event.preventDefault();
-
-    if (source.kind === 'file') {
-      const index = this.store.project()?.files.findIndex((file) => file.id === doc.id) ?? -1;
-      if (index >= 0) this.store.moveSourceFile(source.id, index);
-      return;
-    }
-
-    const index = this.store.buffers().findIndex((pass) => pass.id === doc.id);
-    if (index >= 0) this.store.movePassTo(source.id, index);
-  }
-
-  private sameList(a: EditorDocument, b: EditorDocument): boolean {
-    if (a.kind === 'file') return b.kind === 'file';
-    return a.passKind === 'buffer' && b.passKind === 'buffer';
+    this.openDocs.reorder(source.id, doc.id);
   }
 }

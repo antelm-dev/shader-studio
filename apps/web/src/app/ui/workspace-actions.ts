@@ -16,6 +16,7 @@ import type { PromptDialogData, PromptDialogResult } from './dialogs/prompt-dial
 import type { ShadertoyImportDialogResult } from './dialogs/shadertoy-import-dialog';
 import type { UnsavedChoice } from './dialogs/unsaved-changes-dialog';
 import type { ExplorerContextCommand, ExplorerReorderIntent } from './file-explorer/contract';
+import { OpenDocuments } from './editor/open-documents';
 import { buildWallpaperDocument } from '../rendering/wallpaper-export';
 
 /**
@@ -32,6 +33,7 @@ export class WorkspaceActions {
   private readonly store = inject(ShaderStore);
   private readonly desktop = inject(DesktopPlatform);
   private readonly i18n = inject(I18n);
+  private readonly openDocs = inject(OpenDocuments);
   private transitionInFlight: Promise<boolean> | null = null;
 
   guardedTransition(action: () => void | Promise<void>): Promise<boolean> {
@@ -259,9 +261,9 @@ export class WorkspaceActions {
 
   // --- File explorer ------------------------------------------------------
 
-  /** Activate an editor document tab — same as a tab click, no shader switch. */
+  /** Activate an editor document tab — opens it if needed, no shader switch. */
   selectDocument(docId: string): void {
-    this.store.selectDoc(docId);
+    this.openDocs.activate(docId);
   }
 
   createBufferPass(): void {
@@ -278,7 +280,7 @@ export class WorkspaceActions {
   }
 
   /**
-   * Reorder within buffer or file lists — same rules as `EditorTabs.onDrop`.
+   * Reorder within buffer or file lists — same rules as explorer drag/drop.
    * Cross-list drops are ignored.
    */
   reorderExplorer(intent: ExplorerReorderIntent): void {

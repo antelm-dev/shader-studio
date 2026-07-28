@@ -32,6 +32,7 @@ import { DocumentStatus } from './document-status';
 import { EditorPanel } from './editor-panel';
 import { EditorTabs } from './editor-tabs';
 import { EditorWindowControls } from './editor-window-controls';
+import { OpenDocuments } from './open-documents';
 import { PassConfigPanel } from '../inspector/pass-config-panel';
 
 const FRAGMENT = 'void main() { gl_FragColor = vec4(1.0); }';
@@ -74,9 +75,9 @@ class CodeEditorStub {
 class EditorTabsStub {
   readonly activeId = input<string | null>(null);
   readonly select = output<string>();
-  readonly rename = output<EditorDocument>();
-  readonly remove = output<EditorDocument>();
-  readonly newFile = output<void>();
+  readonly closed = output<string | null>();
+
+  focusTab(): void {}
 }
 
 @Component({
@@ -170,6 +171,7 @@ class FakeStore implements Partial<ShaderStore> {
   private readonly documentsState = signal<readonly EditorDocument[]>(toDocuments(this.projectState()!));
   private readonly activeId = signal<string | null>(imagePass(this.projectState()!).id);
   private readonly renderOrderState = signal(resolvePassOrder(this.projectState()!).order);
+  readonly selectedId = signal('waves').asReadonly() as ShaderStore['selectedId'];
   readonly loading = signal(false) as ShaderStore['loading'];
   readonly dirty = signal(false) as ShaderStore['dirty'];
   readonly saving = signal(false) as ShaderStore['saving'];
@@ -289,6 +291,7 @@ describe('EditorPanel file explorer integration', () => {
         { provide: DocumentStatus, useValue: new FakeStatus() },
         { provide: EditorNavigation, useValue: { request: signal(null).asReadonly() } },
         { provide: I18n, useValue: { t: (key: string) => key } },
+        OpenDocuments,
       ],
     });
   });

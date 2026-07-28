@@ -38,6 +38,7 @@ import { ShaderStore } from '../../workspace/shader-store';
 import { DocumentStatus } from './document-status';
 import { EditorTabs } from './editor-tabs';
 import { EditorWindowControls } from './editor-window-controls';
+import { OpenDocuments } from './open-documents';
 import { PassConfigPanel } from '../inspector/pass-config-panel';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { WorkspaceActions } from '../workspace-actions';
@@ -78,9 +79,7 @@ type EditorSurface = Pick<CodeEditor, 'focus' | 'format' | 'layout' | 'revealIn'
         class="tabs"
         [activeId]="store.activeDoc()?.id ?? null"
         (select)="selectDoc($event)"
-        (rename)="workspace.renameDocument($event)"
-        (remove)="workspace.deleteDocument($event)"
-        (newFile)="workspace.createFile()"
+        (closed)="onTabClosed($event)"
       />
 
       <div class="spacer"></div>
@@ -443,6 +442,7 @@ export class EditorPanel {
   protected readonly settings = inject(EditorSettings);
   protected readonly workspace = inject(WorkspaceActions);
   protected readonly status = inject(DocumentStatus);
+  protected readonly openDocs = inject(OpenDocuments);
   protected readonly fileExplorerLimits = FILE_EXPLORER_LIMITS;
 
   readonly collapsed = input(false);
@@ -455,6 +455,7 @@ export class EditorPanel {
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly editor = viewChild<EditorSurface>('editorSurface');
   private readonly explorerPanel = viewChild(ExplorerPanel);
+  private readonly tabs = viewChild(EditorTabs);
 
   protected readonly configOpen = signal(false);
   private readonly narrow = signal(false);
@@ -563,8 +564,19 @@ export class EditorPanel {
   }
 
   protected selectDoc(id: string): void {
-    this.store.selectDoc(id);
+    this.openDocs.activate(id);
     queueMicrotask(() => this.relayout());
+  }
+
+  protected onTabClosed(nextActiveId: string | null): void {
+    if (nextActiveId) {
+      queueMicrotask(() => {
+        this.tabs()?.focusTab(nextActiveId);
+        this.relayout();
+      });
+      return;
+    }
+    queueMicrotask(() => this.focusEditor());
   }
 
   protected setExplorerView(view: ExplorerViewMode): void {
@@ -682,7 +694,7 @@ export class EditorPanel {
     );
     if (!resolved) return;
 
-    this.store.selectDoc(resolved.docId);
+    this.openDocs.activate(resolved.docId);
 
     if (resolved.reveal) this.editor()?.revealIn(resolved.docId, resolved.line);
     else this.focusEditor();

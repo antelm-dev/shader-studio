@@ -5,6 +5,7 @@ import { MenuCommands } from '../menu-commands';
 import { Preferences } from '../../prefs/preferences';
 import { ShaderStore } from '../../workspace/shader-store';
 import { WorkspaceActions } from '../workspace-actions';
+import { OpenDocuments } from '../editor/open-documents';
 
 /**
  * The window-level keyboard shortcuts and the unsaved-changes prompt on tab
@@ -30,6 +31,7 @@ export class GlobalShortcuts {
   private readonly desktop = inject(DesktopPlatform);
   private readonly commands = inject(MenuCommands);
   private readonly workspace = inject(WorkspaceActions);
+  private readonly openDocs = inject(OpenDocuments);
 
   protected onKeydown(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
@@ -84,10 +86,12 @@ export class GlobalShortcuts {
         this.store.recompile();
         return true;
 
-      case 'w':
+      case 'w': {
         event.preventDefault();
-        void this.closeActiveDoc();
+        const activeId = this.store.activeDoc()?.id;
+        if (activeId) this.openDocs.close(activeId);
         return true;
+      }
 
       // The classic editor convention for a bottom panel. Handled here, ahead
       // of `isTyping`, so it also works while Monaco has focus.
@@ -98,42 +102,30 @@ export class GlobalShortcuts {
 
       case 'pageup':
         event.preventDefault();
-        this.store.cycleDoc(-1);
+        this.openDocs.cycle(-1);
         return true;
 
       case 'pagedown':
         event.preventDefault();
-        this.store.cycleDoc(1);
+        this.openDocs.cycle(1);
         return true;
 
       default:
         break;
     }
 
-    // Ctrl+1…9 opens the nth tab, the way every editor with tabs does.
+    // Ctrl+1…9 opens the nth *open* tab, the way every editor with tabs does.
     const digit = Number(key);
     if (Number.isInteger(digit) && digit >= 1 && digit <= 9) {
-      const doc = this.store.documents()[digit - 1];
-      if (doc) {
+      const docId = this.openDocs.openIds()[digit - 1];
+      if (docId) {
         event.preventDefault();
-        this.store.selectDoc(doc.id);
+        this.openDocs.activate(docId);
         return true;
       }
     }
 
     return false;
-  }
-
-  /** Ctrl+W closes the open tab — when it is one that can be closed. */
-  private async closeActiveDoc(): Promise<void> {
-    const doc = this.store.activeDoc();
-    if (!doc) return;
-
-    // The Image pass, Common, Vertex and Config are fixtures: there is exactly
-    // one of each and the shader is not a shader without them.
-    if (doc.passKind === 'buffer' || doc.kind === 'file') {
-      await this.workspace.deleteDocument(doc);
-    }
   }
 
   protected onBeforeUnload(event: BeforeUnloadEvent): void {
