@@ -14,14 +14,7 @@ import {
   DEFAULT_EDITOR_APPEARANCE,
   DEFAULT_EDITOR_WINDOW,
 } from '@shader-studio/shared/editor-prefs';
-import { DEFAULT_CAPTURE } from '@shader-studio/shared/model';
-import {
-  DEFAULT_FILE_EXPLORER_OPEN,
-  DEFAULT_FILE_EXPLORER_VIEW,
-  DEFAULT_FILE_EXPLORER_WIDTH,
-  FILE_EXPLORER_LIMITS,
-} from '@shader-studio/shared/panel-prefs';
-import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
+import { FILE_EXPLORER_LIMITS } from '@shader-studio/shared/panel-prefs';
 import {
   addBuffer,
   addFile,
