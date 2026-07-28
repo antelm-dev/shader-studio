@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, screen, shell } from 'electron';
+import { app, BrowserWindow, Menu, screen } from 'electron';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -8,6 +8,7 @@ import { resolveI18nDir } from '@shader-studio/backend/i18n';
 import { ShaderLibrary } from '@shader-studio/backend/library';
 import { createLegacyReader, legacyLibraryExists } from '@shader-studio/backend/persistence/legacy';
 import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
+import { WELL_KNOWN_SURFACE_IDS } from '@shader-studio/shared/surfaces';
 import { prepare } from './core/bootstrap';
 import { createCustomScheme } from './core/electron';
 import { UpdateController } from './core/updater';
@@ -18,6 +19,14 @@ import { createMigrationIpc } from './ipc/migration.ipc';
 import { createShaderIpc } from './ipc/shader.ipc';
 import { createUpdateIpc } from './ipc/update.ipc';
 import { createWindowIpc, type CloseController } from './ipc/window.ipc';
+import {
+  applyNavigationPolicy,
+  createAppUrlChecker,
+  createSecureBrowserWindow,
+  SurfaceWindowManager,
+  SurfaceWindowRegistry,
+  SurfaceWindowStateStore,
+} from './windows';
 
 const scheme = createCustomScheme(env.scheme, {
   standard: true,
@@ -140,14 +149,14 @@ function resolveDevExamplesDir(): string | undefined {
   }
 }
 
-let outputWindow: BrowserWindow | null = null;
 const closeController: CloseController = {
   approved: new WeakSet(),
   openOutput: () => undefined,
-  closeOutput: () => outputWindow?.close(),
-  outputOpen: () => outputWindow !== null,
+  closeOutput: () => undefined,
+  outputOpen: () => false,
 };
 let mainWindow: BrowserWindow | null = null;
+let surfaceManager: SurfaceWindowManager | null = null;
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else
@@ -162,6 +171,7 @@ prepare({
     if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
     const userData = app.getPath('userData');
     const statePath = join(userData, 'window-state.json');
+    const surfaceStatePath = join(userData, 'surface-window-state.json');
     const migrationPath = join(userData, 'migration.json');
     const saved = await readWindowState(statePath);
     const bounds = validBounds(saved.bounds);
@@ -185,6 +195,61 @@ prepare({
       );
     }
 
+    const isAppUrl = createAppUrlChecker({
+      production: env.production,
+      scheme: env.scheme,
+      devServerUrl: env.devServerUrl,
+    });
+    const resolveSurfaceUrl = (path: string) => {
+      const base = env.production ? env.urls.web : env.devServerUrl;
+      return new URL(path, base).toString();
+    };
+
+    const registry = new SurfaceWindowRegistry();
+    const stateStore = new SurfaceWindowStateStore(surfaceStatePath);
+    await stateStore.load();
+
+    surfaceManager = new SurfaceWindowManager({
+      registry,
+      stateStore,
+      preload: env.paths.preload,
+      resolveUrl: resolveSurfaceUrl,
+      navigationFor: (role) => ({
+        isAppUrl,
+        openExternalHttp: role === 'main',
+      }),
+      getMainWindow: () => mainWindow,
+      onSatelliteChanged: (event) => {
+        const win = mainWindow;
+        if (!win || win.isDestroyed()) return;
+        if ('open' in event && event.open === false) {
+          win.webContents.send('surface-changed', event);
+          if (event.surfaceId === WELL_KNOWN_SURFACE_IDS.livePreviewOutput) {
+            win.webContents.send('output-state-changed', false);
+          }
+          return;
+        }
+        const openEvent = { ...event, open: true as const };
+        win.webContents.send('surface-changed', openEvent);
+        if (event.surfaceId === WELL_KNOWN_SURFACE_IDS.livePreviewOutput) {
+          win.webContents.send('output-state-changed', true);
+        }
+      },
+      onReturnedToWorkspace: (surfaceId, kind) => {
+        mainWindow?.webContents.send('surface-returned', { surfaceId, kind });
+      },
+    });
+
+    closeController.surfaces = surfaceManager;
+    closeController.getMainWindow = () => mainWindow;
+    closeController.openOutput = () => {
+      surfaceManager?.openLivePreviewOutput();
+    };
+    closeController.closeOutput = () => {
+      surfaceManager?.closeLivePreviewOutput();
+    };
+    closeController.outputOpen = () => surfaceManager?.isLivePreviewOutputOpen() ?? false;
+
     const ipc = createIpcContainer();
     const updates = new UpdateController(() => {
       for (const window of BrowserWindow.getAllWindows()) closeController.approved.add(window);
@@ -198,7 +263,7 @@ prepare({
       update: createUpdateIpc(updates),
     });
 
-    const win = new BrowserWindow({
+    const win = createSecureBrowserWindow({
       width: bounds?.width ?? 1440,
       height: bounds?.height ?? 900,
       x: bounds?.x,
@@ -208,58 +273,10 @@ prepare({
       show: false,
       frame: false,
       backgroundColor: '#090b10',
-      webPreferences: {
-        preload: env.paths.preload,
-        sandbox: true,
-        contextIsolation: true,
-        nodeIntegration: false,
-      },
+      webPreferences: { preload: env.paths.preload },
     });
     mainWindow = win;
-    closeController.openOutput = () => {
-      if (outputWindow) {
-        outputWindow.show();
-        outputWindow.focus();
-        return;
-      }
 
-      const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-      const output = new BrowserWindow({
-        width: Math.min(1280, display.workArea.width),
-        height: Math.min(720, display.workArea.height),
-        x: display.workArea.x + Math.max(0, Math.round((display.workArea.width - 1280) / 2)),
-        y: display.workArea.y + Math.max(0, Math.round((display.workArea.height - 720) / 2)),
-        minWidth: 480,
-        minHeight: 270,
-        show: false,
-        autoHideMenuBar: true,
-        backgroundColor: '#090b10',
-        webPreferences: {
-          preload: env.paths.preload,
-          sandbox: true,
-          contextIsolation: true,
-          nodeIntegration: false,
-        },
-      });
-      outputWindow = output;
-      output.once('ready-to-show', () => output.show());
-      output.on('closed', () => {
-        outputWindow = null;
-        win.webContents.send('output-state-changed', false);
-      });
-      output.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-      output.webContents.on('will-navigate', (event, url) => {
-        const allowed = env.production
-          ? url.startsWith(`${env.scheme}://`)
-          : url.startsWith(env.devServerUrl);
-        if (!allowed) event.preventDefault();
-      });
-      const outputUrl = env.production
-        ? new URL('/output', env.urls.web).toString()
-        : new URL('/output', env.devServerUrl).toString();
-      void output.loadURL(outputUrl);
-      win.webContents.send('output-state-changed', true);
-    };
     if (saved.maximized) win.maximize();
     win.once('ready-to-show', () => win.show());
     win.on('close', (event) => {
@@ -268,7 +285,7 @@ prepare({
       win.webContents.send('close-requested');
     });
     win.on('closed', () => {
-      outputWindow?.close();
+      surfaceManager?.closeAllSatellites();
       mainWindow = null;
     });
     const pushWindowState = () => {
@@ -295,16 +312,9 @@ prepare({
     });
     win.on('enter-full-screen', pushWindowState);
     win.on('leave-full-screen', pushWindowState);
-    win.webContents.setWindowOpenHandler(({ url }) => {
-      if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
-      return { action: 'deny' };
-    });
-    win.webContents.on('will-navigate', (event, url) => {
-      const allowed = env.production
-        ? url.startsWith(`${env.scheme}://`)
-        : url.startsWith(env.devServerUrl);
-      if (!allowed) event.preventDefault();
-    });
+
+    applyNavigationPolicy(win, { isAppUrl, openExternalHttp: true });
+
     if (env.production) await win.loadURL(env.urls.web);
     else {
       const load = () => void win.loadURL(env.devServerUrl);
@@ -313,6 +323,10 @@ prepare({
     }
     void updates.check();
   },
+});
+
+app.on('before-quit', () => {
+  surfaceManager?.beginQuit();
 });
 
 app.on('window-all-closed', () => {

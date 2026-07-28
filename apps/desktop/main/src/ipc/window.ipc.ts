@@ -1,18 +1,47 @@
 import { BrowserWindow } from 'electron';
 import { defineIpcEvents, defineIpcModule, handle, listen } from 'electron-ipc-module';
 
+import type {
+  NativeSurfaceChangedEvent,
+  NativeSurfaceContext,
+  NativeSurfaceOpenRequest,
+  NativeSurfaceResult,
+  NativeSurfaceSnapshot,
+} from '@shader-studio/desktop-api/contracts';
+
+import type { SurfaceWindowManager } from '../windows/surface-window-manager';
+
 type WindowEvents = {
   'close-requested': [];
   'state-changed': [state: { maximized: boolean; fullscreen: boolean }];
+  /** @deprecated Prefer surface-changed; kept for live-preview-output adapter. */
   'output-state-changed': [open: boolean];
+  'surface-changed': [event: NativeSurfaceChangedEvent];
+  'surface-returned': [payload: { surfaceId: string; kind: string }];
 };
 export const windowEvents = defineIpcEvents<WindowEvents>();
 
 export interface CloseController {
   approved: WeakSet<BrowserWindow>;
+  /** Legacy open-output adapter — delegates to SurfaceWindowManager. */
   openOutput: (sender: BrowserWindow) => void;
   closeOutput: () => void;
   outputOpen: () => boolean;
+  /** Generic surface manager (Agent 04). Required once main wires it. */
+  surfaces?: SurfaceWindowManager;
+  getMainWindow?: () => BrowserWindow | null;
+}
+
+function requireSurfaces(controller: CloseController): SurfaceWindowManager | null {
+  return controller.surfaces ?? null;
+}
+
+function senderWindow(event: { sender: Electron.WebContents }): BrowserWindow | null {
+  return BrowserWindow.fromWebContents(event.sender);
+}
+
+function reject(reason: string): NativeSurfaceResult {
+  return { status: 'rejected', reason };
 }
 
 export function createWindowIpc(controller: CloseController) {
@@ -43,6 +72,80 @@ export function createWindowIpc(controller: CloseController) {
       if (!win || !approved) return;
       controller.approved.add(win);
       win.close();
+    }),
+
+    /**
+     * Open or focus a native surface. Main workspace only.
+     * Closing never discards drafts — only the BrowserWindow.
+     */
+    'surface-open': handle((event, request: NativeSurfaceOpenRequest): NativeSurfaceResult => {
+      const surfaces = requireSurfaces(controller);
+      const sender = senderWindow(event);
+      if (!surfaces || !sender) return reject('unavailable');
+      const auth = surfaces.authorize(sender, 'open');
+      if (!auth.allowed) return reject(auth.reason);
+      return surfaces.open(request);
+    }),
+
+    'surface-focus': handle((event, surfaceId: string): NativeSurfaceResult => {
+      const surfaces = requireSurfaces(controller);
+      const sender = senderWindow(event);
+      if (!surfaces || !sender) return reject('unavailable');
+      const auth = surfaces.authorize(sender, 'focus', surfaceId);
+      if (!auth.allowed) return reject(auth.reason);
+      return surfaces.focus(surfaceId);
+    }),
+
+    'surface-close': handle((event, surfaceId?: string): NativeSurfaceResult => {
+      const surfaces = requireSurfaces(controller);
+      const sender = senderWindow(event);
+      if (!surfaces || !sender) return reject('unavailable');
+      const auth = surfaces.authorize(sender, 'close', surfaceId);
+      if (!auth.allowed) return reject(auth.reason);
+      const ctx = surfaces.getContextForSender(sender);
+      const target = surfaceId || (ctx.role === 'satellite' ? ctx.surfaceId : '');
+      if (!target) return reject('missing-surface-id');
+      return surfaces.close(target);
+    }),
+
+    'surface-return': handle((event, surfaceId?: string): NativeSurfaceResult => {
+      const surfaces = requireSurfaces(controller);
+      const sender = senderWindow(event);
+      if (!surfaces || !sender) return reject('unavailable');
+      const auth = surfaces.authorize(sender, 'return', surfaceId);
+      if (!auth.allowed) return reject(auth.reason);
+      const ctx = surfaces.getContextForSender(sender);
+      const target = surfaceId || (ctx.role === 'satellite' ? ctx.surfaceId : '');
+      if (!target) return reject('missing-surface-id');
+      return surfaces.returnToWorkspace(target);
+    }),
+
+    'surface-list': handle((event): NativeSurfaceSnapshot[] => {
+      const surfaces = requireSurfaces(controller);
+      const sender = senderWindow(event);
+      if (!surfaces || !sender) return [];
+      const auth = surfaces.authorize(sender, 'list');
+      if (!auth.allowed) return [];
+      return surfaces.list();
+    }),
+
+    'surface-state': handle((event, surfaceId?: string): NativeSurfaceSnapshot | null => {
+      const surfaces = requireSurfaces(controller);
+      const sender = senderWindow(event);
+      if (!surfaces || !sender) return null;
+      const auth = surfaces.authorize(sender, 'state', surfaceId);
+      if (!auth.allowed) return null;
+      if (surfaceId) return surfaces.getState(surfaceId);
+      const ctx = surfaces.getContextForSender(sender);
+      if (ctx.role === 'satellite') return surfaces.getState(ctx.surfaceId);
+      return null;
+    }),
+
+    'surface-context': handle((event): NativeSurfaceContext => {
+      const surfaces = requireSurfaces(controller);
+      const sender = senderWindow(event);
+      if (!surfaces || !sender) return { role: 'unknown' };
+      return surfaces.getContextForSender(sender);
     }),
   });
 }
