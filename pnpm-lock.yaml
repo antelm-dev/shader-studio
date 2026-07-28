@@ -41,7 +41,7 @@ importers:
         specifier: workspace:*
         version: link:../../libs/shared
       electron-ipc-module:
-        specifier: github:antelm-dev/electron-ipc-module#main
+        specifier: github:antelm-dev/electron-ipc-module#d9539352d3872c9d1924fbb370edcd2072225b61
         version: https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/d9539352d3872c9d1924fbb370edcd2072225b61(electron@40.10.6)
       electron-updater:
         specifier: 6.8.9

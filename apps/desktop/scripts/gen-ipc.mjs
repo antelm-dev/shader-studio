@@ -1,15 +1,13 @@
-import ipcBridge from 'electron-ipc-module/rollup-plugin';
+import { runIpcBridgeGeneration } from 'electron-ipc-module/generator';
 
 import { createLogger } from './_lib/logger.mjs';
 
 const log = createLogger('gen:ipc');
-const outFile = '../../libs/desktop-api/src/ipc-bridge.ts';
 
-const plugin = ipcBridge({
+const result = runIpcBridgeGeneration({
   ipcDir: './main/src/ipc',
-  outFile,
+  outFile: '../../libs/desktop-api/src/ipc-bridge.ts',
   tsconfig: './tsconfig.main.json',
 });
 
-await plugin.buildStart();
-log.info(`Wrote ${outFile}`);
+log.info(`Wrote ${result.outFile}`);
