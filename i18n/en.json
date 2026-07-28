@@ -369,6 +369,7 @@
   "help.shortcuts.section.navigation": "Navigation",
   "help.shortcuts.saveShader": "Save shader",
   "help.shortcuts.fullScreen": "Full screen",
+  "help.shortcuts.toggleDevTools": "Toggle developer tools",
   "help.shortcuts.newSourceFile": "New source file",
   "help.shortcuts.compileNow": "Compile now",
   "help.shortcuts.closeActiveDocument": "Close active document",

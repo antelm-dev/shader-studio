@@ -58,6 +58,12 @@ export const SHORTCUT_CATALOG: readonly ShortcutSection[] = [
         chord: chord(['F11']),
         source: 'app',
       },
+      {
+        id: 'toggle-devtools',
+        labelKey: 'help.shortcuts.toggleDevTools',
+        chord: chord(['Ctrl', 'Shift', 'I']),
+        source: 'app',
+      },
     ],
   },
   {

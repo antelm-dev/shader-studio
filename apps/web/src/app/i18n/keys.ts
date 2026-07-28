@@ -372,6 +372,7 @@ export const TRANSLATION_KEYS = [
   'help.shortcuts.section.navigation',
   'help.shortcuts.saveShader',
   'help.shortcuts.fullScreen',
+  'help.shortcuts.toggleDevTools',
   'help.shortcuts.newSourceFile',
   'help.shortcuts.compileNow',
   'help.shortcuts.closeActiveDocument',

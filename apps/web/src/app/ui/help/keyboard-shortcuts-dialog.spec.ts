@@ -70,6 +70,7 @@ describe('KeyboardShortcutsDialog', () => {
     expect(labels).toEqual([
       'Save shader',
       'Full screen',
+      'Toggle developer tools',
       'New source file',
       'Compile now',
       'Close active document',
@@ -110,6 +111,7 @@ describe('KeyboardShortcutsDialog', () => {
     expect(root.textContent).toContain('Navigation');
     expect(root.textContent).toContain('Formater le GLSL');
     expect(root.textContent).toContain('Capturer en PNG');
+    expect(root.textContent).toContain('Basculer les outils de développement');
   });
 
   it('exposes semantic headings for each section', async () => {

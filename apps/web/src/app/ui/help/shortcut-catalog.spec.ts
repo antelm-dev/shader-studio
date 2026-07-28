@@ -11,6 +11,7 @@ import {
 const EXPECTED_DISPLAY_ORDER = [
   'save-shader',
   'full-screen',
+  'toggle-devtools',
   'new-source-file',
   'compile-now',
   'close-active-document',
@@ -59,6 +60,7 @@ describe('SHORTCUT_CATALOG', () => {
     expect(byId['activate-tab']?.chord.keys).toEqual(['Ctrl', '1…9']);
     expect(byId['activate-tab']?.chord.ariaLabel).toBe('Ctrl+1 through Ctrl+9');
     expect(byId['full-screen']?.chord.keys).toEqual(['F11']);
+    expect(byId['toggle-devtools']?.chord.keys).toEqual(['Ctrl', 'Shift', 'I']);
     expect(byId['pause-resume']?.chord.keys).toEqual(['Space']);
     expect(byId['toggle-controls']?.chord.keys).toEqual(['H']);
     expect(byId['capture-png']?.chord.keys).toEqual(['S']);
@@ -83,5 +85,6 @@ describe('SHORTCUT_CATALOG', () => {
     expect(sectionOf('activate-tab')).toBe('navigation');
     expect(sectionOf('save-shader')).toBe('general');
     expect(sectionOf('full-screen')).toBe('general');
+    expect(sectionOf('toggle-devtools')).toBe('general');
   });
 });
