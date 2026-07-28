@@ -1,5 +1,9 @@
 import {
   Component,
+  DestroyRef,
+  ElementRef,
+  PLATFORM_ID,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -9,12 +13,18 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
+import {
+  FILE_EXPLORER_LIMITS,
+  FILE_EXPLORER_OVERLAY_BREAKPOINT,
+  clampFileExplorerWidth,
+} from '@shader-studio/shared/panel-prefs';
 import { findPass } from '@shader-studio/shared/project';
 import { CodeEditor, type EditorDoc } from '../../editor/code-editor';
 import { EditorSettings } from '../../editor/editor-settings';
@@ -31,6 +41,14 @@ import { EditorWindowControls } from './editor-window-controls';
 import { PassConfigPanel } from '../inspector/pass-config-panel';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { WorkspaceActions } from '../workspace-actions';
+import {
+  ExplorerPanel,
+  buildExplorerTree,
+  type ExplorerCommandEvent,
+  type ExplorerReorderIntent,
+  type ExplorerSelectEvent,
+  type ExplorerViewMode,
+} from '../file-explorer';
 
 @Component({
   selector: 'app-editor-panel',
@@ -38,6 +56,7 @@ import { WorkspaceActions } from '../workspace-actions';
     CodeEditor,
     EditorTabs,
     EditorWindowControls,
+    ExplorerPanel,
     MatButtonModule,
     MatDividerModule,
     MatIconModule,
@@ -153,25 +172,99 @@ import { WorkspaceActions } from '../workspace-actions';
       </button>
     </mat-menu>
 
-    <div class="editor-body" [class.collapsed]="collapsed()" [attr.inert]="collapsed() || null">
-      @if (editorDoc(); as doc) {
-        <app-code-editor
-          class="editor"
-          [doc]="doc"
-          [liveIds]="liveIds()"
-          [colorScheme]="preferences.resolved()"
-          [appearance]="settings.effective()"
-          [diagnostics]="activeDiagnostics()"
-          (valueChange)="store.setDocSource($event.id, $event.value)"
+    <div
+      #editorBody
+      class="editor-body"
+      [class.collapsed]="collapsed()"
+      [class.overlay-open]="explorerOverlayOpen()"
+      [attr.inert]="collapsed() || null"
+    >
+      @if (showExplorerReopen()) {
+        <button
+          type="button"
+          class="explorer-reopen"
+          [matButton]="explorerOverlayAvailable() ? 'filled-tonal' : 'text'"
+          [matTooltip]="(explorerPreferredOpen() ? 'explorer.expand' : 'explorer.title') | translate"
+          [attr.aria-label]="
+            (explorerOverlayAvailable() ? 'explorer.expand' : 'explorer.title') | translate
+          "
+          (click)="reopenExplorer()"
+        >
+          <mat-icon>folder_open</mat-icon>
+        </button>
+      }
+
+      @if (explorerDocked()) {
+        <app-explorer-panel
+          class="explorer"
+          [style.width.px]="explorerWidth()"
+          [tree]="explorerTree()"
+          [canCreateBuffer]="store.canAddBuffer()"
+          (viewChange)="setExplorerView($event)"
+          (select)="onExplorerSelect($event)"
+          (command)="onExplorerCommand($event)"
+          (reorder)="onExplorerReorder($event)"
+          (collapse)="collapseExplorer()"
         />
 
-        @if (activePass(); as pass) {
-          @if (configOpen()) {
-            <app-pass-config-panel class="config" [pass]="pass" />
+        <div
+          class="explorer-resizer"
+          role="separator"
+          tabindex="0"
+          aria-orientation="vertical"
+          [attr.aria-label]="'explorer.resizeHandle' | translate"
+          [attr.aria-valuenow]="explorerWidth()"
+          [attr.aria-valuemin]="fileExplorerLimits.width.min"
+          [attr.aria-valuemax]="fileExplorerLimits.width.max"
+          (pointerdown)="startExplorerResize($event)"
+          (keydown)="onExplorerResizeKeydown($event)"
+        ></div>
+      }
+
+      <div class="editor-main">
+        @if (editorDoc(); as doc) {
+          <app-code-editor
+            class="editor"
+            [doc]="doc"
+            [liveIds]="liveIds()"
+            [colorScheme]="preferences.resolved()"
+            [appearance]="settings.effective()"
+            [diagnostics]="activeDiagnostics()"
+            (valueChange)="store.setDocSource($event.id, $event.value)"
+          />
+
+          @if (activePass(); as pass) {
+            @if (configOpen()) {
+              <app-pass-config-panel class="config" [pass]="pass" />
+            }
           }
+        } @else {
+          <p class="empty">{{ 'editor.empty' | translate }}</p>
         }
-      } @else {
-        <p class="empty">{{ 'editor.empty' | translate }}</p>
+      </div>
+
+      @if (explorerOverlayOpen()) {
+        <button
+          type="button"
+          class="explorer-scrim"
+          tabindex="-1"
+          aria-hidden="true"
+          (click)="closeExplorerOverlay()"
+        ></button>
+
+        <div class="explorer-overlay" (keydown.escape)="onOverlayEscape($event)">
+          <app-explorer-panel
+            class="explorer overlay-panel"
+            [style.width.px]="explorerWidth()"
+            [tree]="explorerTree()"
+            [canCreateBuffer]="store.canAddBuffer()"
+            (viewChange)="setExplorerView($event)"
+            (select)="onExplorerSelect($event)"
+            (command)="onExplorerCommand($event)"
+            (reorder)="onExplorerReorder($event)"
+            (collapse)="collapseExplorer()"
+          />
+        </div>
       }
     </div>
   `,
@@ -225,6 +318,7 @@ import { WorkspaceActions } from '../workspace-actions';
       display: flex;
       flex: 1;
       min-height: 0;
+      min-width: 0;
     }
 
     .editor-body.collapsed {
@@ -232,6 +326,45 @@ import { WorkspaceActions } from '../workspace-actions';
       height: 0;
       overflow: hidden;
       visibility: hidden;
+    }
+
+    .editor-main {
+      display: flex;
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .explorer {
+      flex: 0 0 auto;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .explorer-resizer {
+      flex: 0 0 6px;
+      min-width: 6px;
+      cursor: ew-resize;
+      touch-action: none;
+      background: transparent;
+    }
+
+    .explorer-resizer:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: -2px;
+      background: color-mix(in srgb, var(--mat-sys-primary) 20%, transparent);
+    }
+
+    .explorer-reopen {
+      position: absolute;
+      left: 8px;
+      top: 10px;
+      z-index: 4;
+      min-width: 0;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border-radius: 999px;
     }
 
     .editor {
@@ -244,13 +377,38 @@ import { WorkspaceActions } from '../workspace-actions';
       max-width: 50%;
     }
 
+    .explorer-scrim {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      border: 0;
+      background: color-mix(in srgb, var(--mat-sys-shadow) 24%, transparent);
+      cursor: default;
+    }
+
+    .explorer-overlay {
+      position: absolute;
+      inset: 0 auto 0 0;
+      z-index: 4;
+      display: flex;
+      max-width: min(86%, 400px);
+      pointer-events: none;
+    }
+
+    .overlay-panel {
+      pointer-events: auto;
+      width: min(86vw, 400px);
+      max-width: 100%;
+      box-shadow: var(--mat-sys-level3);
+    }
+
     /*
      * On a narrow panel the settings sit *under* the editor rather than beside
      * it: 268px of controls next to 200px of code is not an editor with a
      * sidebar, it is two things that have both stopped working.
      */
     @container (max-width: 640px) {
-      .editor-body {
+      .editor-main {
         flex-direction: column;
       }
 
@@ -282,16 +440,58 @@ export class EditorPanel {
   protected readonly settings = inject(EditorSettings);
   protected readonly workspace = inject(WorkspaceActions);
   protected readonly status = inject(DocumentStatus);
+  protected readonly fileExplorerLimits = FILE_EXPLORER_LIMITS;
 
   readonly collapsed = input(false);
   readonly dragEnabled = input(false);
   readonly dragStart = output<PointerEvent>();
 
+  private readonly documentRef = inject(DOCUMENT);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly editor = viewChild(CodeEditor);
+  private readonly explorerPanel = viewChild(ExplorerPanel);
 
   protected readonly configOpen = signal(false);
+  private readonly narrow = signal(false);
+  private readonly overlayDismissed = signal(false);
+  private readonly liveExplorerWidth = signal<number | null>(null);
+  private stopExplorerResize: (() => void) | null = null;
 
   protected readonly activeDoc = computed(() => this.store.activeDoc());
+  protected readonly explorerPreferredOpen = computed(() => this.preferences.value().fileExplorerOpen);
+  protected readonly explorerWidth = computed(
+    () => this.liveExplorerWidth() ?? this.preferences.value().fileExplorerWidth,
+  );
+  protected readonly explorerTree = computed(() =>
+    buildExplorerTree({
+      view: this.preferences.value().fileExplorerView,
+      loading: this.store.loading(),
+      project: this.store.project(),
+      documents: this.store.documents(),
+      activeDocId: this.store.activeDoc()?.id ?? null,
+      dirty: this.store.dirty(),
+      compiling: this.store.compiling(),
+      errorCountFor: (docId) => this.store.errorCountFor(docId),
+      renderOrder: this.store.renderOrder(),
+      canAddBuffer: this.store.canAddBuffer(),
+    }),
+  );
+  protected readonly explorerDocked = computed(
+    () => !this.collapsed() && this.explorerPreferredOpen() && !this.narrow(),
+  );
+  protected readonly explorerOverlayAvailable = computed(
+    () => !this.collapsed() && this.explorerPreferredOpen() && this.narrow(),
+  );
+  protected readonly explorerOverlayOpen = computed(
+    () => this.explorerOverlayAvailable() && !this.overlayDismissed(),
+  );
+  protected readonly showExplorerReopen = computed(
+    () =>
+      !this.collapsed() &&
+      (!this.explorerPreferredOpen() || (this.explorerOverlayAvailable() && !this.explorerOverlayOpen())),
+  );
 
   /** The open document, in the shape the editor wants. */
   protected readonly editorDoc = computed<EditorDoc | null>(() => {
@@ -321,6 +521,8 @@ export class EditorPanel {
   private readonly editorNavigation = inject(EditorNavigation);
 
   constructor() {
+    afterNextRender(() => this.observeEditorWidth());
+
     // The Problems panel does not hold a reference to `CodeEditor` — it asks
     // through `EditorNavigation` instead, and this is the one place that picks
     // the request up and acts on it, the same way `reveal` below used to for a
@@ -330,6 +532,23 @@ export class EditorPanel {
       if (!request) return;
       untracked(() => this.handleNavigation(request));
     });
+
+    effect(() => {
+      this.collapsed();
+      this.explorerDocked();
+      this.explorerOverlayOpen();
+      this.explorerWidth();
+      this.configOpen();
+      untracked(() => this.scheduleRelayout());
+    });
+
+    effect(() => {
+      if (!this.narrow()) {
+        this.overlayDismissed.set(false);
+      }
+    });
+
+    this.destroyRef.onDestroy(() => this.stopExplorerResize?.());
   }
 
   relayout(): void {
@@ -343,6 +562,105 @@ export class EditorPanel {
   protected selectDoc(id: string): void {
     this.store.selectDoc(id);
     queueMicrotask(() => this.relayout());
+  }
+
+  protected setExplorerView(view: ExplorerViewMode): void {
+    this.preferences.patch({ fileExplorerView: view });
+  }
+
+  protected onExplorerSelect(event: ExplorerSelectEvent): void {
+    this.selectDoc(event.docId);
+  }
+
+  protected async onExplorerCommand(event: ExplorerCommandEvent): Promise<void> {
+    await this.workspace.runExplorerCommand(event.command, event.docId);
+    queueMicrotask(() => {
+      if (this.explorerDocked() || this.explorerOverlayOpen()) {
+        this.explorerPanel()?.focusNode(event.docId ?? this.store.activeDoc()?.id ?? null);
+      } else {
+        this.focusEditor();
+      }
+      this.relayout();
+    });
+  }
+
+  protected onExplorerReorder(intent: ExplorerReorderIntent): void {
+    this.workspace.reorderExplorer(intent);
+    queueMicrotask(() => this.relayout());
+  }
+
+  protected collapseExplorer(): void {
+    this.preferences.patch({ fileExplorerOpen: false });
+    this.overlayDismissed.set(false);
+    queueMicrotask(() => this.focusEditor());
+  }
+
+  protected reopenExplorer(): void {
+    if (!this.explorerPreferredOpen()) {
+      this.preferences.patch({ fileExplorerOpen: true });
+    }
+    this.overlayDismissed.set(false);
+    queueMicrotask(() => {
+      if (this.explorerDocked() || this.explorerOverlayOpen()) {
+        this.explorerPanel()?.focusNode(this.store.activeDoc()?.id ?? null);
+      }
+    });
+  }
+
+  protected closeExplorerOverlay(): void {
+    if (!this.explorerOverlayOpen()) return;
+    this.overlayDismissed.set(true);
+    queueMicrotask(() => this.focusEditor());
+  }
+
+  protected onOverlayEscape(event: KeyboardEvent): void {
+    event.preventDefault();
+    this.closeExplorerOverlay();
+  }
+
+  protected startExplorerResize(event: PointerEvent): void {
+    if (!this.isBrowser || event.button !== 0 || !this.explorerDocked()) return;
+
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = this.explorerWidth();
+    const target = event.currentTarget as HTMLElement | null;
+    target?.setPointerCapture?.(event.pointerId);
+
+    const move = (moveEvent: PointerEvent) => {
+      this.liveExplorerWidth.set(clampFileExplorerWidth(startWidth + moveEvent.clientX - startX, startWidth));
+      this.relayout();
+    };
+    const finish = (finishEvent: PointerEvent) => {
+      const width = clampFileExplorerWidth(startWidth + finishEvent.clientX - startX, startWidth);
+      this.preferences.patch({ fileExplorerWidth: width });
+      this.liveExplorerWidth.set(null);
+      target?.releasePointerCapture?.(event.pointerId);
+      this.stopExplorerResize?.();
+      this.scheduleRelayout();
+    };
+
+    this.bindExplorerResize(move, finish);
+  }
+
+  protected onExplorerResizeKeydown(event: KeyboardEvent): void {
+    if (!this.explorerDocked()) return;
+
+    const step = event.shiftKey ? 32 : 16;
+    const key = event.key;
+    let next: number | null = null;
+
+    if (key === 'ArrowLeft') next = this.explorerWidth() - step;
+    if (key === 'ArrowRight') next = this.explorerWidth() + step;
+    if (key === 'Home') next = FILE_EXPLORER_LIMITS.width.min;
+    if (key === 'End') next = FILE_EXPLORER_LIMITS.width.max;
+    if (next === null) return;
+
+    event.preventDefault();
+    this.preferences.patch({
+      fileExplorerWidth: clampFileExplorerWidth(next, this.preferences.value().fileExplorerWidth),
+    });
+    this.scheduleRelayout();
   }
 
   /**
@@ -382,5 +700,47 @@ export class EditorPanel {
     if (target?.closest('button, a, input, [role="tab"]')) return;
 
     this.dragStart.emit(event);
+  }
+
+  private observeEditorWidth(): void {
+    const element = this.host.nativeElement;
+    if (!this.isBrowser || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? element.getBoundingClientRect().width;
+      this.narrow.set(width <= FILE_EXPLORER_OVERLAY_BREAKPOINT);
+    });
+    observer.observe(element);
+    this.destroyRef.onDestroy(() => observer.disconnect());
+  }
+
+  private bindExplorerResize(
+    onMove: (event: PointerEvent) => void,
+    onFinish: (event: PointerEvent) => void,
+  ): void {
+    this.stopExplorerResize?.();
+
+    const move = (event: Event) => onMove(event as PointerEvent);
+    const finish = (event: Event) => onFinish(event as PointerEvent);
+    const cancel = () => {
+      this.liveExplorerWidth.set(null);
+      this.stopExplorerResize?.();
+      this.scheduleRelayout();
+    };
+
+    this.documentRef.addEventListener('pointermove', move);
+    this.documentRef.addEventListener('pointerup', finish, { once: true });
+    this.documentRef.addEventListener('pointercancel', cancel, { once: true });
+    this.stopExplorerResize = () => {
+      this.documentRef.removeEventListener('pointermove', move);
+      this.documentRef.removeEventListener('pointerup', finish);
+      this.documentRef.removeEventListener('pointercancel', cancel);
+      this.stopExplorerResize = null;
+    };
+  }
+
+  private scheduleRelayout(): void {
+    if (!this.isBrowser) return;
+    requestAnimationFrame(() => this.relayout());
   }
 }
