@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
 import type { UpdateState } from '@shader-studio/desktop-api/contracts';
+import { updateChannelForVersion } from './update-channel';
 
 const unsupportedState = (): UpdateState => ({
   status: 'unavailable',
@@ -26,6 +27,8 @@ export class UpdateController {
 
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.channel = updateChannelForVersion(app.getVersion());
+    autoUpdater.allowPrerelease = autoUpdater.channel !== 'latest';
 
     autoUpdater.on('checking-for-update', () => this.set({ status: 'checking' }));
     autoUpdater.on('update-available', (info) =>

@@ -1,20 +1,46 @@
-name: Desktop release
+name: Release
 
 on:
   push:
-    tags: ['v*']
+    branches: [master]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  version:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      sha: ${{ steps.release.outputs.sha }}
+      tag: ${{ steps.release.outputs.tag_name }}
+
+    steps:
+      - name: Create or update release pull request
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
   windows:
     name: Publish Windows desktop release
+    needs: version
+    if: needs.version.outputs.created == 'true'
     runs-on: windows-latest
     timeout-minutes: 25
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
@@ -25,8 +51,8 @@ jobs:
         shell: bash
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          test "$GITHUB_REF_NAME" = "v$VERSION" || {
-            echo "Tag $GITHUB_REF_NAME does not match package version $VERSION"
+          test "${{ needs.version.outputs.tag }}" = "v$VERSION" || {
+            echo "Tag ${{ needs.version.outputs.tag }} does not match package version $VERSION"
             exit 1
           }
 

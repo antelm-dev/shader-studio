@@ -1,0 +1,85 @@
+name: Beta release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer beta version (for example, 1.1.0-beta.1)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beta-release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Publish Windows beta
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26.5.0'
+          cache: pnpm
+
+      - name: Validate beta version
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]] || {
+            echo "Expected a version such as 1.1.0-beta.1, got: $VERSION"
+            exit 1
+          }
+
+      - name: Set build version
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Create draft prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            test "$(gh release view "v$VERSION" --json isDraft --jq .isDraft)" = "true" || {
+              echo "Release v$VERSION already exists and is not a draft"
+              exit 1
+            }
+            echo "Reusing draft release v$VERSION"
+          else
+            gh release create "v$VERSION" \
+              --target "$GITHUB_SHA" \
+              --title "Shader Studio v$VERSION" \
+              --generate-notes \
+              --prerelease \
+              --draft
+          fi
+
+      - name: Build and publish beta updater
+        run: pnpm dist:win
+        env:
+          ELECTRON_BUILDER_PUBLISH: always
+          ELECTRON_UPDATE_CHANNEL: beta
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish prerelease
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: gh release edit "v$VERSION" --draft=false --prerelease

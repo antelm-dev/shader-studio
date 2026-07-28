@@ -9,6 +9,7 @@ files:
   - package.json
   - '!node_modules/**/*'
 asar: true
+generateUpdatesFilesForAllChannels: true
 extraResources:
   - from: examples
     to: examples
@@ -30,5 +31,8 @@ nsis:
 portable:
   artifactName: ${name}-${version}-portable.${ext}
 publish:
-  provider: gitlab
-  projectId: antelm-dev/shader-studio
+  provider: github
+  owner: antelm-dev
+  repo: shader-studio
+  channel: latest
+  releaseType: release
