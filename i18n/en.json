@@ -236,6 +236,7 @@
   "explorer.binding.texture": "Texture slot {slot}",
   "explorer.binding.buffer": "Buffer “{name}”",
   "explorer.binding.feedback": "Feedback from “{name}”",
+  "explorer.binding.missingTarget": "missing target",
   "dialog.name": "Name",
   "dialog.renameShader": "Rename shader",
   "dialog.renameConfirm": "Rename",

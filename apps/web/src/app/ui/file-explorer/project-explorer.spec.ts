@@ -296,11 +296,76 @@ describe('buildExplorerTree', () => {
 
       expect(ch0.children[0].kind).toBe('channel-texture');
       expect(ch0.children[0].textureSlot).toBe(0);
+      expect(ch0.children[0].labelParams).toEqual({ slot: 0 });
       expect(ch1.children[0].kind).toBe('channel-buffer');
       expect(ch1.children[0].channelTargetPassId).toBe(BUFFER_A_ID);
+      expect(ch1.children[0].labelParams).toEqual({ name: 'Buffer A' });
       expect(ch2.children[0].kind).toBe('channel-feedback');
       expect(ch2.children[0].channelTargetPassId).toBe(BUFFER_B_ID);
+      expect(ch2.children[0].labelParams).toEqual({ name: 'Buffer B' });
       expect(ch3.children[0].kind).toBe('channel-none');
+    });
+
+    it('updates buffer binding labels when a target pass is renamed', () => {
+      const originalProject = fullProject();
+      const renamedProject: ShaderProject = {
+        ...originalProject,
+        passes: originalProject.passes.map((pass) =>
+          pass.id === BUFFER_A_ID ? { ...pass, name: 'Velocity Buffer' } : pass,
+        ),
+      };
+
+      const tree = buildExplorerTree(
+        baseContext({
+          view: 'pipeline',
+          project: renamedProject,
+          documents: documentsFromProject(renamedProject),
+          renderOrder: resolvePassOrder(renamedProject).order,
+        }),
+      );
+
+      const binding = findExplorerNode(tree, IMAGE_ID)!.children[0].children[1].children[0];
+      expect(binding.kind).toBe('channel-buffer');
+      expect(binding.labelParams).toEqual({ name: 'Velocity Buffer' });
+    });
+
+    it('uses a localized fallback token for dangling targets', () => {
+      const project = fullProject();
+      const danglingProject: ShaderProject = {
+        ...project,
+        passes: project.passes.map((pass) =>
+          pass.id === IMAGE_ID
+            ? {
+                ...pass,
+                channels: [
+                  { kind: 'buffer', passId: 'missing-buffer', feedback: false },
+                  { kind: 'buffer', passId: 'missing-feedback', feedback: true },
+                  { kind: 'none' },
+                  { kind: 'none' },
+                ],
+              }
+            : pass,
+        ),
+      };
+
+      const tree = buildExplorerTree(
+        baseContext({
+          view: 'pipeline',
+          project: danglingProject,
+          documents: documentsFromProject(danglingProject),
+          renderOrder: resolvePassOrder(danglingProject).order,
+        }),
+      );
+
+      const channels = findExplorerNode(tree, IMAGE_ID)!.children[0].children;
+      expect(channels[0].children[0]).toMatchObject({
+        kind: 'channel-buffer',
+        labelParams: { name: { kind: 'translation', key: 'explorer.binding.missingTarget' } },
+      });
+      expect(channels[1].children[0]).toMatchObject({
+        kind: 'channel-feedback',
+        labelParams: { name: { kind: 'translation', key: 'explorer.binding.missingTarget' } },
+      });
     });
 
     it('uses fixed iChannel0–3 channel row ids', () => {

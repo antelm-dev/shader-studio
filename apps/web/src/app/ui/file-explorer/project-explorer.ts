@@ -20,6 +20,7 @@ import {
   type ExplorerTree,
   type ExplorerViewMode,
 } from './contract';
+import type { TranslationKey } from '../../i18n/keys';
 import {
   assertSelectableNodeId,
   channelBindingId,
@@ -124,6 +125,7 @@ function buildPipelineView(
 ): ExplorerNode[] {
   const project = ctx.project!;
   const nodes: ExplorerNode[] = [];
+  const passNameById = new Map(displayPasses(project).map((pass) => [pass.id, pass.name]));
 
   const common = displayPasses(project).find((pass) => pass.kind === 'common');
   if (common) {
@@ -134,7 +136,7 @@ function buildPipelineView(
           id: pipelineGroupId('common'),
           labelKey: 'explorer.group.common',
           depth: 0,
-          children: [buildPassWithChannels(common, doc, 1, ctx)],
+          children: [buildPassWithChannels(common, doc, 1, ctx, passNameById)],
           defaultExpanded: true,
         }),
       );
@@ -144,7 +146,7 @@ function buildPipelineView(
   const executionChildren = ctx.renderOrder
     .map((pass) => {
       const doc = docById.get(pass.id);
-      return doc ? buildPassWithChannels(pass, doc, 1, ctx) : null;
+      return doc ? buildPassWithChannels(pass, doc, 1, ctx, passNameById) : null;
     })
     .filter((node): node is ExplorerNode => node !== null);
 
@@ -166,7 +168,7 @@ function buildPipelineView(
     const disabledChildren = disabledBuffers
       .map((pass) => {
         const doc = docById.get(pass.id);
-        return doc ? buildPassWithChannels(pass, doc, 1, ctx) : null;
+        return doc ? buildPassWithChannels(pass, doc, 1, ctx, passNameById) : null;
       })
       .filter((node): node is ExplorerNode => node !== null);
 
@@ -189,12 +191,15 @@ function buildPassWithChannels(
   doc: EditorDocument,
   depth: number,
   ctx: ExplorerProjectionContext,
+  passNameById: ReadonlyMap<string, string>,
 ): ExplorerNode {
   const channelsGroup = buildGroupNode({
     id: passChannelsGroupId(pass.id),
     labelKey: 'explorer.group.channels',
     depth: depth + 1,
-    children: CHANNEL_INDICES.map((channel) => buildChannelNode(pass, channel, depth + 2)),
+    children: CHANNEL_INDICES.map((channel) =>
+      buildChannelNode(pass, channel, depth + 2, passNameById),
+    ),
     defaultExpanded: false,
     icon: 'tune',
   });
@@ -202,7 +207,12 @@ function buildPassWithChannels(
   return buildSelectableNode(doc, depth, ctx, [channelsGroup]);
 }
 
-function buildChannelNode(pass: RenderPass, channel: ChannelIndex, depth: number): ExplorerNode {
+function buildChannelNode(
+  pass: RenderPass,
+  channel: ChannelIndex,
+  depth: number,
+  passNameById: ReadonlyMap<string, string>,
+): ExplorerNode {
   const binding = pass.channels[channel];
   return {
     id: passChannelId(pass.id, channel),
@@ -210,7 +220,7 @@ function buildChannelNode(pass: RenderPass, channel: ChannelIndex, depth: number
     labelKey: `explorer.channel.${channel}`,
     depth,
     channelIndex: channel,
-    children: [buildBindingNode(pass, channel, binding, depth + 1)],
+    children: [buildBindingNode(pass, channel, binding, depth + 1, passNameById)],
     capabilities: INFORMATIONAL_CAPABILITIES,
     status: INACTIVE_STATUS,
     icon: 'input',
@@ -222,6 +232,7 @@ function buildBindingNode(
   channel: ChannelIndex,
   binding: ChannelBinding,
   depth: number,
+  passNameById: ReadonlyMap<string, string>,
 ): ExplorerNode {
   switch (binding.kind) {
     case 'none':
@@ -244,6 +255,7 @@ function buildBindingNode(
         }),
         kind: 'channel-texture',
         labelKey: 'explorer.binding.texture',
+        labelParams: { slot: binding.slot },
         depth,
         channelIndex: channel,
         textureSlot: binding.slot,
@@ -261,6 +273,7 @@ function buildBindingNode(
           }),
           kind: 'channel-feedback',
           labelKey: 'explorer.binding.feedback',
+          labelParams: { name: targetLabel(passNameById, binding.passId) },
           depth,
           channelIndex: channel,
           channelTargetPassId: binding.passId,
@@ -277,6 +290,7 @@ function buildBindingNode(
         }),
         kind: 'channel-buffer',
         labelKey: 'explorer.binding.buffer',
+        labelParams: { name: targetLabel(passNameById, binding.passId) },
         depth,
         channelIndex: channel,
         channelTargetPassId: binding.passId,
@@ -288,9 +302,21 @@ function buildBindingNode(
   }
 }
 
+function targetLabel(
+  passNameById: ReadonlyMap<string, string>,
+  passId: string,
+): string | { kind: 'translation'; key: 'explorer.binding.missingTarget' } {
+  return (
+    passNameById.get(passId) ?? {
+      kind: 'translation',
+      key: 'explorer.binding.missingTarget',
+    }
+  );
+}
+
 function buildGroupNode(options: {
   id: string;
-  labelKey: string;
+  labelKey: TranslationKey;
   depth: number;
   children: ExplorerNode[];
   defaultExpanded?: boolean;

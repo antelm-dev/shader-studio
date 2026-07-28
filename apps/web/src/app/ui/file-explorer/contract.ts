@@ -1,5 +1,7 @@
 import type { BufferSlot, ChannelIndex } from '@shader-studio/shared/project';
 
+import type { TranslationKey } from '../../i18n/keys';
+
 /**
  * Contract types for the editor-local file explorer.
  *
@@ -65,6 +67,16 @@ export interface ExplorerNodeStatus {
   errorCount: number;
 }
 
+export interface ExplorerLabelToken {
+  kind: 'translation';
+  key: TranslationKey;
+}
+
+export interface ExplorerNodeLabelParams {
+  slot?: number;
+  name?: string | ExplorerLabelToken;
+}
+
 /**
  * One row in the explorer tree.
  *
@@ -77,7 +89,9 @@ export interface ExplorerNode {
   /** Set when the row opens an editor document. */
   docId?: string;
   /** i18n key when the label is not `name` (groups, channels, bindings). */
-  labelKey?: string;
+  labelKey?: TranslationKey;
+  /** Structured translation params resolved by the renderer, not the projection. */
+  labelParams?: ExplorerNodeLabelParams;
   /** Document display name for passes and files. */
   name?: string;
   slot?: BufferSlot | null;

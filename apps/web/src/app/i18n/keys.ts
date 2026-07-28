@@ -239,6 +239,7 @@ export const TRANSLATION_KEYS = [
   'explorer.binding.texture',
   'explorer.binding.buffer',
   'explorer.binding.feedback',
+  'explorer.binding.missingTarget',
   'dialog.name',
   'dialog.renameShader',
   'dialog.renameConfirm',
