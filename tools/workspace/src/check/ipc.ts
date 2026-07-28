@@ -55,6 +55,20 @@ if (errors.length > 0) {
   );
 }
 
+const second = spawnSync('pnpm', ['--filter', '@shader-studio/desktop', 'gen:ipc'], {
+  cwd: root,
+  encoding: 'utf8',
+  shell: process.platform === 'win32',
+});
+if (second.status !== 0) {
+  fail(`Second gen:ipc failed:\n${second.stderr || second.stdout}`);
+}
+
+const bridgeAfterSecondRun = readFileSync(outFile, 'utf8');
+if (bridgeAfterSecondRun !== bridge) {
+  fail('Second gen:ipc run changed ipc-bridge.ts — generation is not stable');
+}
+
 log.info(`ipc ok — generated bridge for ${moduleNames.join(', ')}`);
 
 function fail(message: string): never {
