@@ -33,7 +33,7 @@ import {
 } from './prefs/preferences';
 import { DesktopPlatform } from './desktop/desktop-platform';
 import { ShaderStore } from './workspace/shader-store';
-import { EditorWindow } from './editor/editor-window';
+import { SurfaceLayoutService } from './surfaces/surface-layout';
 import { EditorShell } from './ui/editor/editor-shell';
 import { BottomPanel } from './ui/bottom-panel/bottom-panel';
 import { AppTitlebar } from './ui/layout/app-titlebar';
@@ -84,7 +84,7 @@ export class App {
   protected readonly desktop = inject(DesktopPlatform);
   protected readonly status = inject(DocumentStatus);
   protected readonly commands = inject(MenuCommands);
-  protected readonly editorWindow = inject(EditorWindow);
+  protected readonly layout = inject(SurfaceLayoutService);
   protected readonly i18n = inject(I18n);
   protected readonly outputMode = isOutputWindow();
 
@@ -165,7 +165,7 @@ export class App {
     this.captureImage,
   ];
 
-  protected readonly editorOpen = computed(() => this.preferences.value().editorOpen);
+  protected readonly editorOpen = this.layout.editorOpen;
   protected readonly bottomPanelOpen = computed(() => this.preferences.value().bottomPanelOpen);
 
   /**

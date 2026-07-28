@@ -5,7 +5,8 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { EDITOR_DOCK_SIDES, type EditorDockSide } from '@shader-studio/shared/editor-prefs';
-import { EditorWindow } from '../../editor/editor-window';
+import { COMPACT_VIEWPORT_WIDTH, isContainedPlacement } from '@shader-studio/shared/surfaces';
+import { SurfaceLayoutService, SurfaceRegistry, describeSurfaceCommands } from '../../surfaces';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import type { TranslationKey } from '../../i18n/keys';
@@ -43,8 +44,8 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
         <mat-icon>tune</mat-icon>
         <span>{{ 'action.appearance' | translate }}</span>
       </button>
-      @if (!editorWindow.compact()) {
-        <button mat-menu-item type="button" (click)="editorWindow.detach()">
+      @if (!compact()) {
+        <button mat-menu-item type="button" (click)="layout.float(editorId)">
           <mat-icon>open_in_new</mat-icon>
           <span>{{ 'action.detach' | translate }}</span>
         </button>
@@ -54,7 +55,7 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
           mat-menu-item
           type="button"
           [attr.aria-checked]="dockedOn(side)"
-          (click)="editorWindow.dock(side)"
+          (click)="layout.dock(editorId, side)"
         >
           <mat-icon>{{ dockIcon(side) }}</mat-icon>
           <span>{{ dockLabel(side) }}</span>
@@ -69,28 +70,24 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
       matIconButton
       type="button"
       class="control"
-      [matTooltip]="(editorWindow.minimized() ? 'editor.expand' : 'editor.collapse') | translate"
-      [attr.aria-label]="
-        (editorWindow.minimized() ? 'editor.expand' : 'editor.collapse') | translate
-      "
-      [attr.aria-expanded]="!editorWindow.minimized()"
-      (click)="editorWindow.toggleMinimized()"
+      [matTooltip]="(minimized() ? 'editor.expand' : 'editor.collapse') | translate"
+      [attr.aria-label]="(minimized() ? 'editor.expand' : 'editor.collapse') | translate"
+      [attr.aria-expanded]="!minimized()"
+      (click)="layout.toggleMinimized(editorId)"
     >
-      <mat-icon>{{ editorWindow.minimized() ? 'expand_less' : 'minimize' }}</mat-icon>
+      <mat-icon>{{ minimized() ? 'expand_less' : 'minimize' }}</mat-icon>
     </button>
 
     <button
       matIconButton
       type="button"
       class="control"
-      [matTooltip]="(editorWindow.maximized() ? 'editor.restore' : 'editor.maximize') | translate"
-      [attr.aria-label]="
-        (editorWindow.maximized() ? 'editor.restore' : 'editor.maximize') | translate
-      "
-      [attr.aria-pressed]="editorWindow.maximized()"
-      (click)="editorWindow.toggleMaximized()"
+      [matTooltip]="(maximized() ? 'editor.restore' : 'editor.maximize') | translate"
+      [attr.aria-label]="(maximized() ? 'editor.restore' : 'editor.maximize') | translate"
+      [attr.aria-pressed]="maximized()"
+      (click)="layout.toggleMaximized(editorId)"
     >
-      <mat-icon>{{ editorWindow.maximized() ? 'close_fullscreen' : 'open_in_full' }}</mat-icon>
+      <mat-icon>{{ maximized() ? 'close_fullscreen' : 'open_in_full' }}</mat-icon>
     </button>
 
     <button
@@ -99,7 +96,7 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
       class="control"
       [matTooltip]="'editor.close' | translate"
       [attr.aria-label]="'editor.close' | translate"
-      (click)="editorWindow.close()"
+      (click)="layout.close(editorId)"
     >
       <mat-icon>close</mat-icon>
     </button>
@@ -125,21 +122,31 @@ const DOCK_ICONS: Record<EditorDockSide, string> = {
   `,
 })
 export class EditorWindowControls {
-  protected readonly editorWindow = inject(EditorWindow);
+  protected readonly layout = inject(SurfaceLayoutService);
+  protected readonly registry = inject(SurfaceRegistry);
   protected readonly workspace = inject(WorkspaceActions);
   private readonly i18n = inject(I18n);
   protected readonly dockSides = EDITOR_DOCK_SIDES;
+  protected readonly editorId = this.layout.editorId;
 
-  private readonly activeDockSide = computed(() => {
-    if (this.editorWindow.docked()) return this.editorWindow.dockSide();
-    if (
-      (this.editorWindow.maximized() || this.editorWindow.minimized()) &&
-      this.editorWindow.restoreMode() === 'docked'
-    ) {
-      return this.editorWindow.dockSide();
-    }
-    return null;
+  private readonly surface = computed(() => this.layout.editor());
+
+  protected readonly compact = computed(() => {
+    const { width } = this.registry.viewport();
+    return width > 0 && width < COMPACT_VIEWPORT_WIDTH;
   });
+
+  protected readonly maximized = computed(() => {
+    const placement = this.surface().placement;
+    return isContainedPlacement(placement) && placement.mode === 'maximized';
+  });
+
+  protected readonly minimized = computed(() => {
+    const placement = this.surface().placement;
+    return isContainedPlacement(placement) && placement.mode === 'minimized';
+  });
+
+  private readonly activeDockSide = computed(() => this.layout.editorDockSide());
 
   protected dockedOn(side: EditorDockSide): boolean {
     return this.activeDockSide() === side;
@@ -152,4 +159,9 @@ export class EditorWindowControls {
   protected dockIcon(side: EditorDockSide): string {
     return DOCK_ICONS[side];
   }
+
+  /** Capability-filtered commands for future menu wiring. */
+  protected readonly commands = computed(() =>
+    describeSurfaceCommands(this.surface(), this.layout.commandContext()),
+  );
 }

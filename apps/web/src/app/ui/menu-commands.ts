@@ -5,6 +5,7 @@ import { DesktopPlatform } from '../desktop/desktop-platform';
 import { Preferences, type WorkspacePreferences } from '../prefs/preferences';
 import { ShaderStore } from '../workspace/shader-store';
 import { RendererHandle } from '../rendering/renderer-handle';
+import { SurfaceLayoutService } from '../surfaces/surface-layout';
 import { WorkspaceActions } from './workspace-actions';
 import { I18n } from '../i18n/i18n';
 import type { TranslationKey } from '../i18n/keys';
@@ -48,6 +49,7 @@ export class MenuCommands {
   private readonly preferences = inject(Preferences);
   private readonly desktop = inject(DesktopPlatform);
   private readonly renderer = inject(RendererHandle);
+  private readonly layout = inject(SurfaceLayoutService);
   private readonly i18n = inject(I18n);
 
   private filePicker: ((mode: ImportMode) => void) | null = null;
@@ -163,9 +165,8 @@ export class MenuCommands {
   readonly toggleEditor: MenuCommand = {
     id: 'toggle-editor',
     icon: () => 'code',
-    label: () =>
-      this.i18n.t(this.preferences.value().editorOpen ? 'action.hideEditor' : 'action.showEditor'),
-    action: () => this.toggle('editorOpen'),
+    label: () => this.i18n.t(this.layout.editorOpen() ? 'action.hideEditor' : 'action.showEditor'),
+    action: () => this.layout.toggleEditorOpen(),
   };
 
   /** Problems and Output — the bottom panel, not the desktop's detached output window. */

@@ -300,8 +300,8 @@
            is never positioned against a box the panel is also inside of. -->
         <div
           class="workspace-main"
-          [class.dock-editor-left]="editorWindow.dockSide() === 'left'"
-          [class.dock-editor-right]="editorWindow.dockSide() === 'right'"
+          [class.dock-editor-left]="layout.editorDockSide() === 'left'"
+          [class.dock-editor-right]="layout.editorDockSide() === 'right'"
         >
           <!-- The region a windowed preview lives in: what "maximized" fills, and
              what a floating one is held inside. Empty, because the preview itself
@@ -357,7 +357,7 @@
           >
             <mat-icon>tune</mat-icon>
           </button>
-          } @if (preferences.value().editorOpen) {
+          } @if (editorOpen()) {
           <app-editor-shell class="editor" />
           }
         </div>

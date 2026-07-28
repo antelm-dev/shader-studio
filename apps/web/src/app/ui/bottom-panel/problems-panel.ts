@@ -3,7 +3,7 @@ import { MatIconModule } from '@angular/material/icon';
 
 import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { EditorNavigation } from '../../editor/editor-navigation';
-import { EditorWindow } from '../../editor/editor-window';
+import { SurfaceLayoutService } from '../../surfaces/surface-layout';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { ShaderStore } from '../../workspace/shader-store';
@@ -127,7 +127,7 @@ import { ShaderStore } from '../../workspace/shader-store';
 })
 export class ProblemsPanel {
   private readonly store = inject(ShaderStore);
-  private readonly editorWindow = inject(EditorWindow);
+  private readonly layout = inject(SurfaceLayoutService);
   private readonly navigation = inject(EditorNavigation);
   private readonly i18n = inject(I18n);
 
@@ -150,7 +150,7 @@ export class ProblemsPanel {
    * `docId`, a deleted document, or line 0.
    */
   protected open(diagnostic: CompileDiagnostic): void {
-    this.editorWindow.openEditor();
+    this.layout.openEditor();
     this.navigation.reveal(diagnostic.docId ?? '', diagnostic.line);
   }
 }
