@@ -14,14 +14,14 @@ current behavior, then lock the target seams.
 
 ### Surface kinds (MVP)
 
-| Kind               | Role today (start commit)                                      | MVP native? | Multiple instances?      |
-| ------------------ | -------------------------------------------------------------- | ----------- | ------------------------ |
-| `preview`          | Shader stage / floating preview (`PreviewWindow` + shell)      | yes         | **one** live preview     |
-| `editor`           | Source editor (`EditorWindow` + shell + tabs)                  | yes         | **required** (≥1 group)  |
-| `inspector`        | Right rail (`guiVisible`, `inspectorWidth`, `inspectorTab`)    | yes         | one                      |
-| `shader-browser`   | Left library rail (`browserOpen`, `browserWidth`)              | yes         | one                      |
-| `problems`         | Bottom-panel Problems tab                                      | yes         | one (with `output` tab)  |
-| `output`           | Bottom-panel Output tab **and/or** Electron `/output` window   | yes         | see §1.1                 |
+| Kind             | Role today (start commit)                                    | MVP native? | Multiple instances?     |
+| ---------------- | ------------------------------------------------------------ | ----------- | ----------------------- |
+| `preview`        | Shader stage / floating preview (`PreviewWindow` + shell)    | yes         | **one** live preview    |
+| `editor`         | Source editor (`EditorWindow` + shell + tabs)                | yes         | **required** (≥1 group) |
+| `inspector`      | Right rail (`guiVisible`, `inspectorWidth`, `inspectorTab`)  | yes         | one                     |
+| `shader-browser` | Left library rail (`browserOpen`, `browserWidth`)            | yes         | one                     |
+| `problems`       | Bottom-panel Problems tab                                    | yes         | one (with `output` tab) |
+| `output`         | Bottom-panel Output tab **and/or** Electron `/output` window | yes         | see §1.1                |
 
 ### §1.1 Output naming (fixed decision)
 
@@ -62,14 +62,14 @@ Until then, preserve today’s open/close IPC (`open-output` / `close-output` /
 
 ## 2. Contained vs native terminology
 
-| Term         | Meaning                                                                 |
-| ------------ | ----------------------------------------------------------------------- |
-| **Contained**| Rendered inside the main workspace DOM (Angular host).                  |
-| **Native**   | Rendered in an Electron `BrowserWindow` (satellite renderer).           |
-| **Docked**   | Contained, pinned to a workspace edge.                                  |
-| **Floating** | Contained, draggable/resizable over the workspace.                      |
-| **Stage**    | Contained full-workspace background (preview only).                     |
-| **External** | Native placement (`BrowserWindow`).                                     |
+| Term                      | Meaning                                                            |
+| ------------------------- | ------------------------------------------------------------------ |
+| **Contained**             | Rendered inside the main workspace DOM (Angular host).             |
+| **Native**                | Rendered in an Electron `BrowserWindow` (satellite renderer).      |
+| **Docked**                | Contained, pinned to a workspace edge.                             |
+| **Floating**              | Contained, draggable/resizable over the workspace.                 |
+| **Stage**                 | Contained full-workspace background (preview only).                |
+| **External**              | Native placement (`BrowserWindow`).                                |
 | **Maximized / minimized** | Transient presentation over a restore point (contained or native). |
 
 ### Detach vs float (breaking rename vs current UI)
@@ -82,12 +82,12 @@ At the start commit:
 
 **Target product vocabulary (Electron):**
 
-| User action              | Placement result                         | Availability      |
-| ------------------------ | ---------------------------------------- | ----------------- |
-| **Float in workspace**   | Contained `floating`                     | Web + Electron    |
-| **Detach** / externalize| Native `external`                        | Electron only     |
-| **Return to workspace**  | Contained restore point (dock/float/stage)| Electron          |
-| **Return to stage**      | Contained `stage` (preview)              | Web + Electron    |
+| User action              | Placement result                           | Availability   |
+| ------------------------ | ------------------------------------------ | -------------- |
+| **Float in workspace**   | Contained `floating`                       | Web + Electron |
+| **Detach** / externalize | Native `external`                          | Electron only  |
+| **Return to workspace**  | Contained restore point (dock/float/stage) | Electron       |
+| **Return to stage**      | Contained `stage` (preview)                | Web + Electron |
 
 Agents must not overload one command for both float and externalize. Migrate
 labels so Electron “Detach” means externalize; keep “Float in workspace”
@@ -101,20 +101,20 @@ Capabilities are **explicit per kind**. Do **not** invent a LCM base class that
 admits impossible states (mirrors today’s comment in `PreviewWindow`: editor and
 preview share geometry helpers only).
 
-| Capability            | preview | editor | inspector | shader-browser | bottom-panel | live-preview-output |
-| --------------------- | ------- | ------ | --------- | -------------- | ------------ | ------------------- |
-| `stage`               | yes     | no     | no        | no             | no           | no                  |
-| `dock`                | no      | yes    | yes\*     | yes\*          | yes\*        | no                  |
-| `float`               | yes     | yes    | later\*\* | later\*\*      | later\*\*    | no                  |
-| `maximize`            | yes     | yes    | yes       | yes            | yes          | native OS maximize  |
-| `minimize`            | yes     | yes    | yes       | yes            | yes          | native OS minimize  |
-| `externalize`         | yes     | yes    | yes       | yes            | yes          | n/a (already native)|
-| `return`              | yes     | yes    | yes       | yes            | yes          | return → contained preview |
-| `close`               | **no**  | yes    | yes       | yes            | yes          | yes (hides satellite)|
-| `singleton`           | yes     | no     | yes       | yes            | yes          | yes (≤1 native preview) |
-| `multiInstance`       | no      | yes    | no        | no             | no           | no                  |
-| `ownsWritableDocs`    | no      | yes    | no        | no             | no           | no                  |
-| `hostsGpuPreview`     | yes     | no     | no        | no             | no           | yes (same singleton)|
+| Capability         | preview | editor | inspector | shader-browser | bottom-panel | live-preview-output        |
+| ------------------ | ------- | ------ | --------- | -------------- | ------------ | -------------------------- |
+| `stage`            | yes     | no     | no        | no             | no           | no                         |
+| `dock`             | no      | yes    | yes\*     | yes\*          | yes\*        | no                         |
+| `float`            | yes     | yes    | later\*\* | later\*\*      | later\*\*    | no                         |
+| `maximize`         | yes     | yes    | yes       | yes            | yes          | native OS maximize         |
+| `minimize`         | yes     | yes    | yes       | yes            | yes          | native OS minimize         |
+| `externalize`      | yes     | yes    | yes       | yes            | yes          | n/a (already native)       |
+| `return`           | yes     | yes    | yes       | yes            | yes          | return → contained preview |
+| `close`            | **no**  | yes    | yes       | yes            | yes          | yes (hides satellite)      |
+| `singleton`        | yes     | no     | yes       | yes            | yes          | yes (≤1 native preview)    |
+| `multiInstance`    | no      | yes    | no        | no             | no           | no                         |
+| `ownsWritableDocs` | no      | yes    | no        | no             | no           | no                         |
+| `hostsGpuPreview`  | yes     | no     | no        | no             | no           | yes (same singleton)       |
 
 \*Today inspector / browser / bottom-panel are **edge rails / strips**, not the
 editor’s dock-side state machine. Domain `dock` means “edge-attached contained
@@ -194,13 +194,13 @@ OS chrome flags, unless the surface remains native.
 
 ## 6. Surface identity vs native window identity
 
-| Identity                         | Stable across relaunch? | Owner                         |
-| -------------------------------- | ----------------------- | ----------------------------- |
-| `SurfaceId`                      | yes (layout prefs)      | shared domain + preferences   |
-| `EditorGroupId`                  | yes (session + layout)  | editor-group model (Agent 08) |
-| `SessionClientId`                | per renderer connection | session protocol (Agent 05)   |
-| Electron `BrowserWindow.id`      | **no**                  | main process only             |
-| `webContents.id`                 | **no**                  | main process only             |
+| Identity                    | Stable across relaunch? | Owner                         |
+| --------------------------- | ----------------------- | ----------------------------- |
+| `SurfaceId`                 | yes (layout prefs)      | shared domain + preferences   |
+| `EditorGroupId`             | yes (session + layout)  | editor-group model (Agent 08) |
+| `SessionClientId`           | per renderer connection | session protocol (Agent 05)   |
+| Electron `BrowserWindow.id` | **no**                  | main process only             |
+| `webContents.id`            | **no**                  | main process only             |
 
 Persisted layout references **`SurfaceId` / `EditorGroupId` only**. Main maps
 `SurfaceId → BrowserWindow` in a live registry (Agent 04). Child crash or
@@ -210,12 +210,12 @@ recreate allocates a new native id without changing `SurfaceId`.
 
 ## 7. Geometry ownership and persistence
 
-| Concern                         | Owner / store                                                                 |
-| ------------------------------- | ----------------------------------------------------------------------------- |
-| Contained geometry + modes      | Layout preferences (today: `editorWindow`, `previewWindow`, panel widths)     |
-| Viewport measurement            | Contained runtime (shells today; Agent 03 registry) — never in shared domain  |
-| Native normal bounds / display  | Electron main surface manager (`window-state`-style persistence)              |
-| Shader drafts / params / assets | `ShaderStore` + persistence IPC / SQLite in main                              |
+| Concern                         | Owner / store                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------- |
+| Contained geometry + modes      | Layout preferences (today: `editorWindow`, `previewWindow`, panel widths)       |
+| Viewport measurement            | Contained runtime (shells today; Agent 03 registry) — never in shared domain    |
+| Native normal bounds / display  | Electron main surface manager (`window-state`-style persistence)                |
+| Shader drafts / params / assets | `ShaderStore` + persistence IPC / SQLite in main                                |
 | Open tab membership/order       | Session UI (`OpenDocuments`) — **not** project files; currently **unpersisted** |
 
 Rules:
@@ -247,16 +247,16 @@ capture prefs while reshaping layout.
 
 ## 8. Close, return, quit, child crash
 
-| Event                         | Required behavior                                                                 |
-| ----------------------------- | --------------------------------------------------------------------------------- |
-| Close editor surface          | Hide/destroy **surface UI** only. Drafts stay in session authority. Tabs may move |
-| Close last editor group       | Allowed only if another editor group remains **or** product keeps one empty group; never discard draft |
-| Close preview                 | **Illegal** for preview kind. Native satellite close = return/hide live host under singleton rules |
-| Return from native            | Destroy/hide `BrowserWindow`; restore contained placement; transfer focus         |
-| Main window close request     | Keep approve-close handshake (`close-requested` / `approve-close`)                |
-| App quit                      | Flush session save prompts as today; close satellites; persist layout             |
+| Event                         | Required behavior                                                                                               |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Close editor surface          | Hide/destroy **surface UI** only. Drafts stay in session authority. Tabs may move                               |
+| Close last editor group       | Allowed only if another editor group remains **or** product keeps one empty group; never discard draft          |
+| Close preview                 | **Illegal** for preview kind. Native satellite close = return/hide live host under singleton rules              |
+| Return from native            | Destroy/hide `BrowserWindow`; restore contained placement; transfer focus                                       |
+| Main window close request     | Keep approve-close handshake (`close-requested` / `approve-close`)                                              |
+| App quit                      | Flush session save prompts as today; close satellites; persist layout                                           |
 | Child crash / unresponsive    | Main clears registry entry; session releases that client’s document locks; drafts remain; UI may reopen surface |
-| Output satellite closed today | `outputWindow = null`, emit `output-state-changed(false)`; main `closed` also closes output |
+| Output satellite closed today | `outputWindow = null`, emit `output-state-changed(false)`; main `closed` also closes output                     |
 
 **Invariant:** closing any surface never deletes project content and never
 discards an unsaved draft.
@@ -289,13 +289,13 @@ discards an unsaved draft.
 
 ## 10. Monaco transfer policy
 
-| Asset                | Cross-renderer?                         |
-| -------------------- | --------------------------------------- |
-| Model text           | Via session snapshot / document events  |
-| Undo/redo stack      | **No** — explicitly lost on move        |
-| View state           | Yes — `ICodeEditorViewState`-compatible JSON |
-| Markers/diagnostics  | Recomputed or pushed as protocol events |
-| Theme/appearance     | From shared preferences                 |
+| Asset               | Cross-renderer?                              |
+| ------------------- | -------------------------------------------- |
+| Model text          | Via session snapshot / document events       |
+| Undo/redo stack     | **No** — explicitly lost on move             |
+| View state          | Yes — `ICodeEditorViewState`-compatible JSON |
+| Markers/diagnostics | Recomputed or pushed as protocol events      |
+| Theme/appearance    | From shared preferences                      |
 
 Document this in UX copy where Detach/move is offered (Agent 09).
 
@@ -346,10 +346,10 @@ From `PreviewWindow` comments and product constraints:
 
 ## 13. Surface entry routes and bootstrap
 
-| Surface host              | Entry today                                      | Target                                      |
-| ------------------------- | ------------------------------------------------ | ------------------------------------------- |
-| Main workspace            | `/`, `/shaders/:id` (`app.routes.ts`)            | unchanged + surface registry                |
-| Live output / native preview | pathname `/output` (`isOutputWindow()`)       | dedicated lightweight route/bootstrap       |
+| Surface host                 | Entry today                             | Target                                |
+| ---------------------------- | --------------------------------------- | ------------------------------------- |
+| Main workspace               | `/`, `/shaders/:id` (`app.routes.ts`)   | unchanged + surface registry          |
+| Live output / native preview | pathname `/output` (`isOutputWindow()`) | dedicated lightweight route/bootstrap |
 
 Constraints:
 
@@ -412,12 +412,12 @@ language unless platform ownership requires it (document if used).
 
 ## 16. File ownership — Agents 02–05
 
-| Agent | Owns (create/modify) | Must not touch |
-| ----- | -------------------- | -------------- |
-| **02** shared domain | `libs/shared/src/surfaces/**` (types, capabilities, placement, transitions, sanitize, migration, exports, specs) | Angular shells, Electron main/preload, `ShaderStore`, session transport |
-| **03** contained runtime | `apps/web/src/app/surfaces/**` (registry, controller, gestures, controls, SSR-safe projection, specs) | Electron main/preload, `ShaderStore` / `OutputSync`, preference migration removal, replacing production shells yet |
-| **04** Electron manager | `apps/desktop/main/src/windows/**`, window IPC extensions, preload/typed contracts via `gen:ipc`, registry/lifecycle tests | Angular contained shells, session broker core, native preview/editor product routes |
-| **05** session protocol | Shared protocol types + broker (+ transport interfaces/adapters under shared or agreed desktop seams), protocol tests | `BrowserWindow` factory, full `ShaderStore` rewrite, surface routes, CRDT |
+| Agent                    | Owns (create/modify)                                                                                                       | Must not touch                                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **02** shared domain     | `libs/shared/src/surfaces/**` (types, capabilities, placement, transitions, sanitize, migration, exports, specs)           | Angular shells, Electron main/preload, `ShaderStore`, session transport                                            |
+| **03** contained runtime | `apps/web/src/app/surfaces/**` (registry, controller, gestures, controls, SSR-safe projection, specs)                      | Electron main/preload, `ShaderStore` / `OutputSync`, preference migration removal, replacing production shells yet |
+| **04** Electron manager  | `apps/desktop/main/src/windows/**`, window IPC extensions, preload/typed contracts via `gen:ipc`, registry/lifecycle tests | Angular contained shells, session broker core, native preview/editor product routes                                |
+| **05** session protocol  | Shared protocol types + broker (+ transport interfaces/adapters under shared or agreed desktop seams), protocol tests      | `BrowserWindow` factory, full `ShaderStore` rewrite, surface routes, CRDT                                          |
 
 Wave 3 agents branch from the **post–Agent 02** integration commit and stay in
 their columns. Conflicts usually mean a contract violation.
