@@ -21,7 +21,11 @@ import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
 import { DesktopPlatform } from '../../desktop/desktop-platform';
 import { I18nCatalog, type I18nCatalogMap } from '../../i18n/catalog';
 import { I18n } from '../../i18n/i18n';
-import { Preferences, type WorkspacePreferences } from '../../prefs/preferences';
+import {
+  Preferences,
+  createDefaultWorkspacePreferences,
+  type WorkspacePreferences,
+} from '../../prefs/preferences';
 import { ShaderStore } from '../../workspace/shader-store';
 import { DocumentStatus } from '../editor/document-status';
 import { MenuCommands, type MenuCommand } from '../menu-commands';
@@ -87,6 +91,7 @@ describe('AppTitlebar Help and View menus', () => {
       editorWindow: DEFAULT_EDITOR_WINDOW,
       previewWindow: DEFAULT_PREVIEW_WINDOW,
       capture: DEFAULT_CAPTURE,
+      surfacesLayout: createDefaultWorkspacePreferences().surfacesLayout,
     };
 
     TestBed.configureTestingModule({
