@@ -1,26 +1,13 @@
-import { Component, inject, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenu, MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { PreviewWindow } from '../../rendering/preview-window';
+import { isContainedPlacement } from '@shader-studio/shared/surfaces';
+import { SurfaceLayoutService } from '../../surfaces/surface-layout';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 
-/**
- * The preview title bar's controls: the same buttons, the same metrics and the
- * same order as `EditorWindowControls`, minus the ones the preview has no
- * business having.
- *
- * There is no close button. Closing the preview would hide the only thing the
- * app is for, and leave nothing on screen to bring it back — "return to stage"
- * is what takes its place, and it is the one control here the editor has no
- * equivalent of.
- *
- * The menu is passed in rather than built here: it is the *same* menu the canvas
- * opens on right-click, defined once in `PreviewShell`, so the two can never
- * drift apart.
- */
 @Component({
   selector: 'app-preview-window-controls',
   imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
@@ -40,24 +27,24 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
       matIconButton
       type="button"
       class="control"
-      [matTooltip]="(preview.minimized() ? 'preview.expand' : 'preview.collapse') | translate"
-      [attr.aria-label]="(preview.minimized() ? 'preview.expand' : 'preview.collapse') | translate"
-      [attr.aria-expanded]="!preview.minimized()"
-      (click)="preview.toggleMinimized()"
+      [matTooltip]="(minimized() ? 'preview.expand' : 'preview.collapse') | translate"
+      [attr.aria-label]="(minimized() ? 'preview.expand' : 'preview.collapse') | translate"
+      [attr.aria-expanded]="!minimized()"
+      (click)="layout.toggleMinimized(previewId)"
     >
-      <mat-icon>{{ preview.minimized() ? 'expand_less' : 'minimize' }}</mat-icon>
+      <mat-icon>{{ minimized() ? 'expand_less' : 'minimize' }}</mat-icon>
     </button>
 
     <button
       matIconButton
       type="button"
       class="control"
-      [matTooltip]="(preview.maximized() ? 'preview.restore' : 'preview.maximize') | translate"
-      [attr.aria-label]="(preview.maximized() ? 'preview.restore' : 'preview.maximize') | translate"
-      [attr.aria-pressed]="preview.maximized()"
-      (click)="preview.toggleMaximized()"
+      [matTooltip]="(maximized() ? 'preview.restore' : 'preview.maximize') | translate"
+      [attr.aria-label]="(maximized() ? 'preview.restore' : 'preview.maximize') | translate"
+      [attr.aria-pressed]="maximized()"
+      (click)="layout.toggleMaximized(previewId)"
     >
-      <mat-icon>{{ preview.maximized() ? 'close_fullscreen' : 'open_in_full' }}</mat-icon>
+      <mat-icon>{{ maximized() ? 'close_fullscreen' : 'open_in_full' }}</mat-icon>
     </button>
 
     <button
@@ -66,7 +53,7 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
       class="control"
       [matTooltip]="'preview.returnToStage' | translate"
       [attr.aria-label]="'preview.returnToStage' | translate"
-      (click)="preview.showOnStage()"
+      (click)="layout.showOnStage(previewId)"
     >
       <mat-icon>wallpaper</mat-icon>
     </button>
@@ -88,8 +75,20 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
   `,
 })
 export class PreviewWindowControls {
-  protected readonly preview = inject(PreviewWindow);
+  protected readonly layout = inject(SurfaceLayoutService);
+  protected readonly previewId = this.layout.previewId;
 
-  /** The preview's command menu, owned by the shell and shared with the canvas. */
   readonly menu = input.required<MatMenu>();
+
+  private readonly surface = computed(() => this.layout.preview());
+
+  protected readonly maximized = computed(() => {
+    const placement = this.surface().placement;
+    return isContainedPlacement(placement) && placement.mode === 'maximized';
+  });
+
+  protected readonly minimized = computed(() => {
+    const placement = this.surface().placement;
+    return isContainedPlacement(placement) && placement.mode === 'minimized';
+  });
 }

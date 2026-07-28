@@ -59,3 +59,8 @@ export {
 } from './controls/surface-resize-handles';
 export { SurfaceTitleBarDirective } from './controls/surface-title-bar';
 export { SurfaceWorkspaceDirective } from './controls/surface-workspace';
+export {
+  SurfaceLayoutService,
+  PREVIEW_SURFACE_ID,
+  DEFAULT_EDITOR_SURFACE_ID,
+} from './surface-layout';

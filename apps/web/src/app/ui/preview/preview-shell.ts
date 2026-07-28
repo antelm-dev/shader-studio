@@ -1,37 +1,35 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  inject,
+  input,
+} from '@angular/core';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 
 import { DesktopPlatform } from '../../desktop/desktop-platform';
-import {
-  arrowKeyDelta,
-  containPoint,
-  containRect,
-  resizeRect,
-  type Point,
-  type Rect,
-  type ResizeEdge,
-  type Size,
-} from '@shader-studio/shared/geometry';
+import { isContainedPlacement } from '@shader-studio/shared/surfaces';
+import { PREVIEW_MINIMIZED_SIZE } from '@shader-studio/shared/preview-prefs';
+import type { ResizeEdge } from '@shader-studio/shared/geometry';
 import { COLOR_SCHEME_OPTIONS, Preferences, colorSchemeIcon } from '../../prefs/preferences';
-import {
-  PREVIEW_MINIMIZED_SIZE,
-  PREVIEW_MINIMIZED_WIDTH,
-  PREVIEW_MIN_FLOATING,
-  type PreviewMode,
-} from '@shader-studio/shared/preview-prefs';
 import { ShaderStore } from '../../workspace/shader-store';
-import { PreviewWindow } from '../../rendering/preview-window';
 import { ShaderCanvas } from '../../rendering/shader-canvas';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import type { TranslationKey } from '../../i18n/keys';
-import { PointerGesture } from '../layout/pointer-gesture';
-import { ResizeHandles } from '../layout/resize-handles';
+import { ReducedMotion } from '../../prefs/reduced-motion';
+import {
+  SurfaceGeometryGesture,
+  SurfaceLayoutService,
+  SurfaceRegistry,
+  SurfaceResizeHandles,
+  SurfaceTitleBarDirective,
+  keyboardResizeFloating,
+  projectSurfaceFrame,
+} from '../../surfaces';
 import { PreviewMenuCommands } from './preview-menu-commands';
 import { PreviewWindowControls } from './preview-window-controls';
-import { WorkspaceWindowStack } from '../workspace-window-stack';
 
 /**
  * The preview's frame: where it sits, and how you move and size it.
@@ -43,25 +41,7 @@ import { WorkspaceWindowStack } from '../workspace-window-stack';
  * WebGL context, the compiled programs, the buffer contents and the shader's
  * clock across every transition — not because we save and restore them, but
  * because nothing is ever torn down to need restoring.
- *
- * Dragging and resizing are done with pointer events and pointer capture rather
- * than with the CSS `resize` this replaces, for three reasons the native one
- * could not give: a window that can be pulled from any edge rather than only its
- * bottom-right corner, a gesture that keeps tracking when the pointer leaves the
- * frame, and a grip a keyboard can reach.
- *
- * The frame is positioned against the viewport and its geometry is remembered
- * against the workspace; `PreviewStage` measures the one and `frame()` converts
- * between them.
  */
-
-interface Gesture {
-  /** The geometry as it was when the gesture began, in workspace coordinates. */
-  rect: Rect;
-  point: Point;
-  /** The edges being pulled, or `null` for a move. */
-  edge: ResizeEdge | null;
-}
 
 @Component({
   selector: 'app-preview-shell',
@@ -70,19 +50,19 @@ interface Gesture {
     MatIconModule,
     MatMenuModule,
     PreviewWindowControls,
-    ResizeHandles,
+    SurfaceResizeHandles,
+    SurfaceTitleBarDirective,
     ShaderCanvas,
     TranslatePipe,
   ],
   template: `
-    <!-- Every mode but the stage is a window, and a window says what it is and
-         how to put it back. -->
     @if (windowed()) {
       <div
         class="title-bar"
-        [class.draggable]="draggable()"
-        (pointerdown)="onTitlePointerDown($event)"
-        (dblclick)="onTitleDoubleClick($event)"
+        surfaceTitleBar
+        [dragEnabled]="projected().draggable"
+        (dragStart)="onDrag($event)"
+        (toggleMaximize)="layout.toggleMaximized(previewId)"
       >
         <mat-icon class="title-icon" aria-hidden="true">blur_on</mat-icon>
         <span class="title">{{ 'preview.title' | translate }}</span>
@@ -90,9 +70,6 @@ interface Gesture {
       </div>
     }
 
-    <!-- One canvas, one context, mounted once. The context menu is on the body
-         rather than the canvas so that the same menu the title bar's button opens
-         is the one a right-click on the shader opens. -->
     <div class="body" [class.collapsed]="minimized()" [matContextMenuTriggerFor]="previewMenu">
       <app-shader-canvas />
     </div>
@@ -111,7 +88,7 @@ interface Gesture {
             mat-menu-item
             type="button"
             [attr.aria-pressed]="maximized()"
-            (click)="preview.toggleMaximized()"
+            (click)="layout.toggleMaximized(previewId)"
           >
             <mat-icon>{{ maximized() ? 'close_fullscreen' : 'open_in_full' }}</mat-icon>
             <span>{{
@@ -122,14 +99,14 @@ interface Gesture {
             mat-menu-item
             type="button"
             [attr.aria-expanded]="!minimized()"
-            (click)="preview.toggleMinimized()"
+            (click)="layout.toggleMinimized(previewId)"
           >
             <mat-icon>{{ minimized() ? 'expand_less' : 'minimize' }}</mat-icon>
             <span>{{
               (minimized() ? 'action.expandPreview' : 'action.collapsePreview') | translate
             }}</span>
           </button>
-          <button mat-menu-item type="button" (click)="preview.resetGeometry()">
+          <button mat-menu-item type="button" (click)="layout.resetGeometry(previewId)">
             <mat-icon>aspect_ratio</mat-icon>
             <span>{{ 'action.resetWindow' | translate }}</span>
           </button>
@@ -170,10 +147,10 @@ interface Gesture {
         }}</span>
         <span class="hint">H</span>
       </button>
-      <button mat-menu-item type="button" (click)="commands.toggle('editorOpen')">
+      <button mat-menu-item type="button" (click)="commands.toggleEditor()">
         <mat-icon>code</mat-icon>
         <span>{{
-          (preferences.value().editorOpen ? 'action.hideEditor' : 'action.showEditor') | translate
+          (layout.editorOpen() ? 'action.hideEditor' : 'action.showEditor') | translate
         }}</span>
       </button>
 
@@ -213,22 +190,16 @@ interface Gesture {
       }
     </mat-menu>
 
-    <!-- Eight grips, so the window can be pulled from any edge or corner. Only
-         when floating: the stage has no edges of its own, a maximized window's
-         are the workspace's, and a collapsed one is a bar. -->
-    @if (floating()) {
-      <app-resize-handles
+    @if (projected().resizableFloating) {
+      <surface-resize-handles
+        mode="floating"
         [label]="resizeLabel"
-        (pointerDown)="startResize($event.event, $event.edge)"
-        (keyDown)="onHandleKeydown($event.event, $event.edge)"
+        (pointerDown)="onResizePointer($event)"
+        (keyDown)="onResizeKey($event)"
       />
     }
   `,
   styles: `
-    /* Fixed, not absolute: on the stage the preview *is* the page, and the
-       chrome is drawn on top of it. A background cannot be a child of the thing
-       covering it, so the frame is positioned against the viewport and converts
-       the workspace's coordinates itself. */
     :host {
       position: fixed;
       display: flex;
@@ -237,17 +208,11 @@ interface Gesture {
       background: #0a0c10;
     }
 
-    /* No transition on the geometry, deliberately. Every frame of an animated
-       resize is a ResizeObserver callback, and every one of those reallocates the
-       drawing buffer and every render target hanging off it. The editor can
-       afford to slide; a live WebGL surface cannot. */
-
     :host(.stage) {
       inset: 0;
       z-index: 0;
     }
 
-    /* Windowed frames are stacked dynamically by WorkspaceWindowStack. */
     :host(.floating),
     :host(.minimized) {
       border: 1px solid var(--mat-sys-outline-variant);
@@ -259,9 +224,15 @@ interface Gesture {
       border: 1px solid var(--mat-sys-outline-variant);
     }
 
-    /* --- Title bar ------------------------------------------------------- */
-    /* The editor toolbar's metrics, to the pixel: 34px tall, 16px icons, the
-       same divider beneath it. The two windows have to read as one interface. */
+    :host(.surface-frame--animating) {
+      transition: none;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      :host(.surface-frame--animating) {
+        transition: none;
+      }
+    }
 
     .title-bar {
       display: flex;
@@ -280,7 +251,7 @@ interface Gesture {
       touch-action: none;
     }
 
-    .title-bar.draggable {
+    .title-bar.surface-title-bar--draggable {
       cursor: move;
     }
 
@@ -300,18 +271,12 @@ interface Gesture {
       white-space: nowrap;
     }
 
-    /* --- Body ------------------------------------------------------------ */
-    /* The title bar takes its height off the top and the canvas gets the rest,
-       so the bar never covers a pixel of the rendered image. */
-
     .body {
       display: flex;
       flex: 1 1 auto;
       min-height: 0;
     }
 
-    /* Collapsed to the bar. The canvas keeps its context and its clock — it is
-       simply given no room, which is the whole point of collapsing. */
     .body.collapsed {
       flex: 0 0 0;
       height: 0;
@@ -338,6 +303,8 @@ interface Gesture {
     '[style.width.px]': 'frame()?.width',
     '[style.height.px]': 'frameHeight()',
     '[style.z-index]': 'windowZIndex()',
+    '[class.surface-frame--dragging]': 'gesture.dragging()',
+    '[class.surface-frame--animating]': 'frameAnimating()',
     '(pointerdown)': 'activate()',
     '(focusin)': 'activate()',
     role: 'region',
@@ -345,242 +312,158 @@ interface Gesture {
   },
 })
 export class PreviewShell {
-  protected readonly preview = inject(PreviewWindow);
+  protected readonly layout = inject(SurfaceLayoutService);
+  protected readonly registry = inject(SurfaceRegistry);
   protected readonly store = inject(ShaderStore);
   protected readonly preferences = inject(Preferences);
   protected readonly desktop = inject(DesktopPlatform);
   protected readonly i18n = inject(I18n);
   protected readonly commands = inject(PreviewMenuCommands);
-  private readonly windowStack = inject(WorkspaceWindowStack);
+  private readonly reducedMotion = inject(ReducedMotion);
 
-  /**
-   * The output window renders the same shader with none of the chrome, and it
-   * reads the same stored preferences as the tab that spawned it. Without this it
-   * would faithfully reproduce the floating window you left the main window in —
-   * on a screen that exists to show the shader and nothing else.
-   *
-   * The *stored* mode is left alone, exactly as `EditorWindow.compact` leaves it:
-   * this is what is shown, not what is remembered.
-   */
   readonly stageOnly = input(false);
 
-  protected readonly mode = computed<PreviewMode>(() =>
-    this.stageOnly() ? 'stage' : this.preview.mode(),
-  );
+  protected readonly previewId = this.layout.previewId;
+  protected readonly gesture = new SurfaceGeometryGesture();
 
-  protected readonly onStage = computed(() => this.mode() === 'stage');
-  protected readonly floating = computed(() => this.mode() === 'floating');
-  protected readonly maximized = computed(() => this.mode() === 'maximized');
-  protected readonly minimized = computed(() => this.mode() === 'minimized');
+  private readonly surface = computed(() => this.layout.preview());
+
+  protected readonly displayMode = computed(() => {
+    if (this.stageOnly()) return 'stage' as const;
+    const placement = this.surface().placement;
+    if (!isContainedPlacement(placement)) return 'stage' as const;
+    return placement.mode;
+  });
+
+  protected readonly onStage = computed(() => this.displayMode() === 'stage');
+  protected readonly floating = computed(() => this.displayMode() === 'floating');
+  protected readonly maximized = computed(() => this.displayMode() === 'maximized');
+  protected readonly minimized = computed(() => this.displayMode() === 'minimized');
   protected readonly windowed = computed(() => !this.onStage());
-  protected readonly windowZIndex = computed(() =>
-    this.windowed() ? this.windowStack.zIndex('preview') : null,
+
+  protected readonly projected = computed(() => {
+    const workspace = this.layout.previewWorkspace();
+    const viewport = { width: workspace.width, height: workspace.height };
+    return projectSurfaceFrame(this.surface(), viewport, {
+      liveRect: this.gesture.liveRect(),
+      livePoint: this.gesture.livePoint(),
+      workspaceOrigin: { x: workspace.x, y: workspace.y },
+      minimizedSize: PREVIEW_MINIMIZED_SIZE,
+    });
+  });
+
+  protected readonly frame = computed(() => this.projected().frame);
+
+  protected readonly frameHeight = computed<number | null>(() =>
+    this.minimized() ? null : (this.frame()?.height ?? null),
   );
 
-  /** A maximized window fills the workspace; there is nothing to drag it to. */
-  protected readonly draggable = computed(() => this.floating() || this.minimized());
+  protected readonly windowZIndex = computed(() =>
+    this.projected().stacked ? this.layout.zIndex(this.previewId) : null,
+  );
 
   protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
   protected readonly themeIcon = computed(() =>
     colorSchemeIcon(this.preferences.value().colorScheme),
   );
 
-  /**
-   * The gesture in flight, if any.
-   *
-   * While it is set, the frame renders from `live` instead of from the store.
-   * Committing every pointermove to `Preferences` would serialise the whole
-   * preference object to `localStorage` sixty times a second, for a value that is
-   * only interesting once the user lets go.
-   */
-  private readonly pointerGesture = new PointerGesture();
-  private readonly liveRect = signal<Rect | null>(null);
-  private readonly livePoint = signal<Point | null>(null);
-
-  private readonly rect = computed<Rect>(() => this.liveRect() ?? this.preview.floatingRect());
-  private readonly point = computed<Point>(() => this.livePoint() ?? this.preview.minimizedPoint());
-
-  /**
-   * Where the frame goes, in client coordinates — the stored geometry, offset by
-   * the workspace's own origin on screen. `null` on the stage, where the frame is
-   * pinned to the viewport by CSS and has no geometry of its own.
-   */
-  protected readonly frame = computed<Rect | null>(() => {
-    const workspace = this.preview.workspace();
-    const mode = this.mode();
-
-    if (mode === 'stage') return null;
-
-    if (mode === 'maximized') return workspace;
-
-    if (mode === 'minimized') {
-      const point = this.point();
-      return {
-        x: workspace.x + point.x,
-        y: workspace.y + point.y,
-        width: PREVIEW_MINIMIZED_WIDTH,
-        height: PREVIEW_MINIMIZED_SIZE.height,
-      };
-    }
-
-    const rect = this.rect();
-    return {
-      x: workspace.x + rect.x,
-      y: workspace.y + rect.y,
-      width: rect.width,
-      height: rect.height,
-    };
-  });
-
-  /** Collapsed, the frame is as tall as its bar — which only the bar can know. */
-  protected readonly frameHeight = computed<number | null>(() =>
-    this.minimized() ? null : (this.frame()?.height ?? null),
+  protected readonly frameAnimating = computed(
+    () => !this.gesture.dragging() && !this.reducedMotion.enabled(),
   );
 
-  // --- Dragging -----------------------------------------------------------
+  protected onDrag(event: PointerEvent): void {
+    const workspace = this.layout.previewWorkspace();
+    const viewport = { width: workspace.width, height: workspace.height };
+    const placement = this.surface().placement;
+    if (!isContainedPlacement(placement)) return;
 
-  protected onTitlePointerDown(event: PointerEvent): void {
-    if (!this.draggable() || event.button !== 0) return;
-
-    // The controls live in the bar, and a click on one of them is not a drag.
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('button, a, input')) return;
-
-    this.begin(event, null);
-  }
-
-  /** Double-clicking a title bar has toggled maximize since windows had them. */
-  protected onTitleDoubleClick(event: MouseEvent): void {
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('button, a, input')) return;
-
-    this.preview.toggleMaximized();
-  }
-
-  protected startResize(event: PointerEvent, edge: ResizeEdge): void {
-    if (event.button !== 0) return;
-    this.begin(event, edge);
-  }
-
-  /**
-   * Take the pointer, and keep it until the gesture ends.
-   *
-   * `setPointerCapture` is what stops the drag from breaking the moment the
-   * pointer crosses onto the canvas, into the editor, or off the window entirely
-   * — and `preventDefault` is what stops it from also selecting text on the way.
-   */
-  private begin(event: PointerEvent, edge: ResizeEdge | null): void {
-    this.activate();
-    event.preventDefault();
-    event.stopPropagation();
-
-    const gesture: Gesture = {
-      rect: this.preview.floatingRect(),
-      point: this.preview.minimizedPoint(),
-      edge,
-    };
-
-    const target = event.currentTarget as HTMLElement | null;
-    this.pointerGesture.begin(event, target, {
-      onMove: (dx, dy) => this.applyMove(gesture, dx, dy),
-      onCommit: (dx, dy) => {
-        this.applyMove(gesture, dx, dy);
-        this.commit();
-      },
-    });
-  }
-
-  private applyMove(gesture: Gesture, dx: number, dy: number): void {
-    if (gesture.edge) {
-      this.liveRect.set(this.resized(gesture, dx, dy));
-      return;
-    }
-
-    // A collapsed bar is moved by its corner: it has no size to speak of, and
-    // nothing to resize.
     if (this.minimized()) {
-      this.livePoint.set(
-        containPoint(
-          { x: gesture.point.x + dx, y: gesture.point.y + dy },
-          this.viewport(),
-          PREVIEW_MINIMIZED_SIZE,
-        ),
+      const point =
+        placement.mode === 'minimized' ? (placement.point ?? { x: 24, y: 24 }) : { x: 24, y: 24 };
+      this.gesture.begin(
+        event,
+        event.currentTarget as HTMLElement,
+        {
+          gesture: 'move-minimized',
+          surfaceKind: 'preview',
+          viewport,
+          point,
+          minimizedSize: PREVIEW_MINIMIZED_SIZE,
+        },
+        (commit) => {
+          if (commit.point) this.layout.commitMinimizedPoint(this.previewId, commit.point);
+        },
       );
       return;
     }
 
-    this.liveRect.set(
-      this.contain({ ...gesture.rect, x: gesture.rect.x + dx, y: gesture.rect.y + dy }),
+    if (placement.mode !== 'floating') return;
+    this.gesture.begin(
+      event,
+      event.currentTarget as HTMLElement,
+      {
+        gesture: 'move-floating',
+        surfaceKind: 'preview',
+        viewport,
+        rect: placement.rect,
+      },
+      (commit) => {
+        if (commit.rect) this.layout.commitFloatingRect(this.previewId, commit.rect);
+      },
     );
   }
 
-  /**
-   * Resize from whichever edges the gesture holds.
-   *
-   * The north and west edges move the origin as well as the size, and they are
-   * clamped so that pulling an edge *past* its opposite one stops at the minimum
-   * size rather than turning the window inside out.
-   */
-  private resized(gesture: Gesture, dx: number, dy: number): Rect {
-    const { rect, edge } = gesture;
-    if (!edge) return rect;
+  protected onResizePointer(payload: { event: PointerEvent; edge: ResizeEdge }): void {
+    const workspace = this.layout.previewWorkspace();
+    const viewport = { width: workspace.width, height: workspace.height };
+    const placement = this.surface().placement;
+    if (!isContainedPlacement(placement) || placement.mode !== 'floating') return;
 
-    return this.contain(resizeRect(rect, edge, dx, dy, PREVIEW_MIN_FLOATING));
+    this.gesture.begin(
+      payload.event,
+      payload.event.currentTarget as HTMLElement,
+      {
+        gesture: 'resize-floating',
+        surfaceKind: 'preview',
+        viewport,
+        rect: placement.rect,
+        edge: payload.edge,
+      },
+      (commit) => {
+        if (commit.rect) this.layout.commitFloatingRect(this.previewId, commit.rect);
+      },
+    );
   }
 
-  /** Keep a rect inside the workspace, so its title bar is always reachable. */
-  private contain(rect: Rect): Rect {
-    return containRect(rect, this.viewport(), PREVIEW_MIN_FLOATING);
-  }
+  protected onResizeKey(payload: { event: KeyboardEvent; edge: ResizeEdge }): void {
+    const workspace = this.layout.previewWorkspace();
+    const viewport = { width: workspace.width, height: workspace.height };
+    const placement = this.surface().placement;
+    if (!isContainedPlacement(placement) || placement.mode !== 'floating') return;
 
-  private viewport(): Size {
-    return this.preview.viewport();
-  }
-
-  /** The gesture is over: hand the result to the service, which persists it. */
-  private commit(): void {
-    const rect = this.liveRect();
-    const point = this.livePoint();
-
-    if (rect) this.preview.setFloatingRect(rect);
-    if (point) this.preview.setMinimizedPoint(point);
-
-    this.liveRect.set(null);
-    this.livePoint.set(null);
+    const next = keyboardResizeFloating(
+      'preview',
+      placement.rect,
+      payload.edge,
+      payload.event,
+      viewport,
+    );
+    if (!next) return;
+    payload.event.preventDefault();
+    this.layout.commitFloatingRect(this.previewId, next);
   }
 
   protected activate(): void {
-    if (this.windowed()) this.windowStack.activate('preview');
+    if (this.windowed()) this.layout.activate(this.previewId);
   }
 
   protected toggleDetached(): void {
-    if (this.onStage()) this.windowStack.activate('preview');
-    this.preview.toggleDetached();
-  }
-
-  // --- Keyboard -----------------------------------------------------------
-
-  /**
-   * Resize from the keyboard.
-   *
-   * A grip you can only reach with a mouse is a feature half the users do not
-   * have — and it is the whole reason the native `resize: both` had to go. The
-   * handles are focusable separators, and the arrow keys pull them.
-   */
-  protected onHandleKeydown(event: KeyboardEvent, edge: ResizeEdge): void {
-    const move = arrowKeyDelta(event);
-    if (!move) return;
-
-    event.preventDefault();
-    const [dx, dy] = move;
-
-    const gesture: Gesture = {
-      rect: this.preview.floatingRect(),
-      point: this.preview.minimizedPoint(),
-      edge,
-    };
-
-    this.preview.setFloatingRect(this.resized(gesture, dx, dy));
+    if (this.onStage()) {
+      this.layout.activate(this.previewId);
+      this.layout.float(this.previewId);
+    } else {
+      this.layout.showOnStage(this.previewId);
+    }
   }
 
   protected readonly resizeLabel = (edge: ResizeEdge): string => {

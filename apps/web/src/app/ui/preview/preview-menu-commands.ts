@@ -3,25 +3,25 @@ import { Injectable, inject } from '@angular/core';
 import { I18n } from '../../i18n/i18n';
 import { Preferences, type ColorScheme, type WorkspacePreferences } from '../../prefs/preferences';
 import { RendererHandle } from '../../rendering/renderer-handle';
+import { SurfaceLayoutService } from '../../surfaces/surface-layout';
 import { ShaderStore } from '../../workspace/shader-store';
 
-/**
- * The command surface behind the preview's context menu: pausing, capturing
- * a frame, resetting parameters, visibility toggles and the theme picker.
- * Kept apart from `PreviewShell`, which owns the window's geometry (mode,
- * dragging, resizing) and nothing about what its menu items actually do.
- */
 @Injectable({ providedIn: 'root' })
 export class PreviewMenuCommands {
   private readonly preferences = inject(Preferences);
   private readonly store = inject(ShaderStore);
   private readonly renderer = inject(RendererHandle);
   private readonly i18n = inject(I18n);
+  private readonly layout = inject(SurfaceLayoutService);
 
-  toggle(key: 'editorOpen' | 'guiVisible'): void {
+  toggle(key: 'guiVisible'): void {
     this.preferences.patch({
       [key]: !this.preferences.value()[key],
     } as Partial<WorkspacePreferences>);
+  }
+
+  toggleEditor(): void {
+    this.layout.toggleEditorOpen();
   }
 
   togglePause(): void {

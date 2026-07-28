@@ -15,11 +15,13 @@ import {
   type Rect,
   type Size,
 } from '@shader-studio/shared/geometry';
+import { DEFAULT_EDITOR_WINDOW } from '@shader-studio/shared/editor-prefs';
 import {
   SURFACE_MIN_SIZES,
   clampDockSize,
   clampFloatingRect,
   clampSurfaceMinimizedPoint,
+  COMPACT_VIEWPORT_WIDTH,
   effectiveEditorDockSide,
   isNativePlacement,
   type ContainedPlacement,
@@ -201,6 +203,29 @@ export function projectSurfaceFrame(
       };
     }
     case 'floating': {
+      if (
+        surface.kind === 'editor' &&
+        viewport.width > 0 &&
+        viewport.width < COMPACT_VIEWPORT_WIDTH
+      ) {
+        const side = effectiveEditorDockSide('bottom', viewport.width);
+        const fallbackSize = displayDockSize(
+          surface.kind,
+          options.liveDockSize ?? DEFAULT_EDITOR_WINDOW.dockedHeight,
+        );
+        return {
+          frame: null,
+          mode: 'docked',
+          dockSide: side,
+          dockSize: fallbackSize,
+          freeEdge: dockFreeEdge(side),
+          stacked: false,
+          draggable: false,
+          resizableFloating: false,
+          resizableDocked: true,
+        };
+      }
+
       const raw = options.liveRect ?? placement.rect;
       const rect = displayFloatingRect(surface.kind, raw, viewport);
       return {
