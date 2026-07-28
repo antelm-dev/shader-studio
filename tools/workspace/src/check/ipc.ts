@@ -1,12 +1,13 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 
 import { createLogger } from '../lib/logger.js';
 import { root } from '../lib/paths.js';
 
 const log = createLogger('ipc');
-const ipcDir = resolve(root, 'apps/desktop/main/src/ipc');
+const desktopRoot = resolve(root, 'apps/desktop');
+const ipcDir = resolve(desktopRoot, 'main/src/ipc');
 const outFile = resolve(root, 'libs/desktop-api/src/ipc-bridge.ts');
 
 const moduleNames = readdirSync(ipcDir)
@@ -23,11 +24,19 @@ const moduleNames = readdirSync(ipcDir)
 
 if (moduleNames.length === 0) fail('No IPC modules found under apps/desktop/main/src/ipc');
 
-const generated = spawnSync('pnpm', ['--filter', '@shader-studio/desktop', 'gen:ipc'], {
-  cwd: root,
-  encoding: 'utf8',
-  shell: process.platform === 'win32',
-});
+/**
+ * Invoke the generator script directly. Going through `pnpm gen:ipc` / Nx can
+ * serve a cached terminal replay without rewriting the bridge, which would make
+ * the second-run stability assertion tautological — especially across worktrees.
+ */
+function runGenIpc(): SpawnSyncReturns<string> {
+  return spawnSync(process.execPath, ['scripts/gen-ipc.mjs'], {
+    cwd: desktopRoot,
+    encoding: 'utf8',
+  });
+}
+
+const generated = runGenIpc();
 if (generated.status !== 0) {
   fail(`gen:ipc failed:\n${generated.stderr || generated.stdout}`);
 }
@@ -55,11 +64,7 @@ if (errors.length > 0) {
   );
 }
 
-const second = spawnSync('pnpm', ['--filter', '@shader-studio/desktop', 'gen:ipc'], {
-  cwd: root,
-  encoding: 'utf8',
-  shell: process.platform === 'win32',
-});
+const second = runGenIpc();
 if (second.status !== 0) {
   fail(`Second gen:ipc failed:\n${second.stderr || second.stdout}`);
 }
