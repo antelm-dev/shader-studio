@@ -17,26 +17,7 @@ import {
   type TextureChannelSettingsPatch,
 } from '@shader-studio/shared/model';
 import {
-  addBuffer,
-  addFile,
-  bufferPasses,
-  duplicateFile,
-  duplicatePass,
-  findFile,
-  findPass,
-  freeSlot,
   imagePass,
-  moveFile,
-  movePass,
-  removeFile,
-  removePass,
-  renameFile,
-  renamePass,
-  setChannelBinding,
-  setFileSource,
-  setPassEnabled,
-  setPassResolution,
-  setPassSampling,
   setPassSource,
   setVertexSource,
   type ChannelBinding,
@@ -45,17 +26,21 @@ import {
   type RenderPass,
   type ShaderProject,
 } from '@shader-studio/shared/project';
-import { defaultParams, sanitizeParams } from '@shader-studio/shared/validate';
-import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
+import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { CompilationService } from './compilation.service';
-import { McpPatchService } from './mcp-patch.service';
 import { PersistenceService } from './persistence.service';
 import { PresetService } from './preset.service';
 import { ProjectPersistence } from './project-persistence';
 import { TextureService } from './texture.service';
 import { DocumentState } from './state/document-state';
-import { configErrors, parseControls } from './state/controls-schema';
+import {
+  ProjectMutations,
+  type DraftTextEdit,
+  type PatchFailure,
+  type SetParamsOutcome,
+} from './state/project-mutations';
+import { parseControls } from './state/controls-schema';
 import { ApiError, ShaderApi } from '../api/shader-api';
 import { Preferences } from '../prefs/preferences';
 import { OutputLog } from '../ui/bottom-panel/output-log';
@@ -63,13 +48,15 @@ import { OutputLog } from '../ui/bottom-panel/output-log';
 /**
  * The workspace, as the rest of the application sees it.
  *
- * Everything below is one of three things: a workflow the store still owns —
- * selecting, editing, saving, importing, presets, textures — or an alias onto
- * the signal that `DocumentState` owns, or a delegation to the collaborator that
- * owns the behaviour:
+ * Everything below is one of three things: a lifecycle or persistence workflow
+ * the store still owns — selecting, saving, importing, presets, textures — or an
+ * alias onto the signal that `DocumentState` owns, or a delegation to the
+ * collaborator that owns the behaviour:
  *
  *  - `DocumentState`      — the four layers of document data (record, saved,
  *                           draft, params) and every projection off them.
+ *  - `ProjectMutations`   — every edit to the open document, including the
+ *                           atomic MCP patch path.
  *  - `CompilationService` — the draft revision and the compile waiters.
  *
  * The aliases are aliases and not copies: `store.record` *is*
@@ -79,6 +66,7 @@ import { OutputLog } from '../ui/bottom-panel/output-log';
  */
 
 export type { ShaderDraft, DocumentKind, EditorDocument } from './state/document-state';
+export type { DraftTextEdit, SetParamsOutcome } from './state/project-mutations';
 
 /** A finished compile, tied to the revision it was compiled from. */
 export interface CompileOutcome {
@@ -86,27 +74,9 @@ export interface CompileOutcome {
   diagnostics: readonly CompileDiagnostic[];
 }
 
-/** One replacement of `[start, end)` in a document's source with `text`. Offsets are 0-based character positions. */
-export interface DraftTextEdit {
-  documentId: string;
-  start: number;
-  end: number;
-  text: string;
-}
-
 export type ApplyPatchResult =
   | { ok: true; revision: number; diagnostics: readonly CompileDiagnostic[] }
-  | {
-      ok: false;
-      code: 'STALE_REVISION' | 'VALIDATION_ERROR' | 'NOT_FOUND';
-      message: string;
-      currentRevision?: number;
-    };
-
-export interface SetParamsOutcome {
-  applied: string[];
-  errors: Record<string, string>;
-}
+  | PatchFailure;
 
 /**
  * What the server rendered, handed to the client inside the HTML.
@@ -136,8 +106,8 @@ export class ShaderStore {
   private readonly compilation = inject(CompilationService);
   private readonly persistence = inject(PersistenceService);
   private readonly outputLog = inject(OutputLog);
-  private readonly mcpPatch = inject(McpPatchService);
   private readonly documentState = inject(DocumentState);
+  private readonly mutations = inject(ProjectMutations);
 
   /** True once the client has taken over the server's snapshot. */
   private hydrated = false;
@@ -457,47 +427,19 @@ export class ShaderStore {
     this.setControlsText(recovered.controlsText);
   }
 
-  // --- Editing ------------------------------------------------------------
+  // --- Editing (owned by `ProjectMutations`) --------------------------------
 
   /** The Image pass's source — the shader's `fragment`, by any other name. */
   setFragment(fragment: string): void {
-    const project = this.project();
-    if (!project) return;
-    this.patchProject(setPassSource(project, imagePass(project).id, fragment));
+    this.mutations.setFragment(fragment);
   }
 
   setVertex(vertex: string): void {
-    const project = this.project();
-    if (!project) return;
-    this.patchProject(setVertexSource(project, vertex));
+    this.mutations.setVertex(vertex);
   }
 
-  /**
-   * Write to whichever document the editor is showing.
-   *
-   * The tab bar does not need to know that a pass, a file, the vertex shader and
-   * the config schema are stored in four different places — it has an id and a
-   * string, and this is where the id decides what that means.
-   */
   setDocSource(id: string, source: string): void {
-    const project = this.project();
-    if (!project) return;
-
-    if (id === CONFIG_DOC) {
-      this.setControlsText(source);
-      return;
-    }
-    if (id === VERTEX_DOC) {
-      this.patchProject(setVertexSource(project, source));
-      return;
-    }
-    if (findPass(project, id)) {
-      this.patchProject(setPassSource(project, id, source));
-      return;
-    }
-    if (findFile(project, id)) {
-      this.patchProject(setFileSource(project, id, source));
-    }
+    this.mutations.setDocSource(id, source);
   }
 
   selectDoc(id: string): void {
@@ -509,174 +451,79 @@ export class ShaderStore {
     this.documentState.cycleDocument(step);
   }
 
-  // --- Passes -------------------------------------------------------------
-
   addBufferPass(): void {
-    const project = this.project();
-    if (!project) return;
-
-    if (!freeSlot(project)) {
-      this.documentState.notify('All four buffer slots are in use', true);
-      return;
-    }
-
-    const next = addBuffer(project);
-    this.patchProject(next);
-    // Open what was just created: making a buffer and then having to go and find
-    // it is not a workflow anybody wants.
-    const created = bufferPasses(next).at(-1)?.id;
-    if (created) this.documentState.selectDocument(created);
+    this.mutations.addBufferPass();
   }
 
   duplicateBufferPass(id: string): void {
-    const project = this.project();
-    if (!project) return;
-
-    if (!freeSlot(project)) {
-      this.documentState.notify('All four buffer slots are in use', true);
-      return;
-    }
-
-    const next = duplicatePass(project, id);
-    this.patchProject(next);
-
-    const copy = bufferPasses(next).find(
-      (pass) => !bufferPasses(project).some((old) => old.id === pass.id),
-    );
-    if (copy) this.documentState.selectDocument(copy.id);
+    this.mutations.duplicateBufferPass(id);
   }
 
   removeBufferPass(id: string): void {
-    const project = this.project();
-    if (!project) return;
-
-    this.patchProject(removePass(project, id));
-    if (this.activeDocId() === id) this.documentState.selectDocument(imagePass(project).id);
+    this.mutations.removeBufferPass(id);
   }
 
   renamePassById(id: string, name: string): void {
-    const project = this.project();
-    if (project) this.patchProject(renamePass(project, id, name));
+    this.mutations.renamePassById(id, name);
   }
 
   setPassEnabledById(id: string, enabled: boolean): void {
-    const project = this.project();
-    if (project) this.patchProject(setPassEnabled(project, id, enabled));
+    this.mutations.setPassEnabledById(id, enabled);
   }
 
   movePassTo(id: string, toIndex: number): void {
-    const project = this.project();
-    if (project) this.patchProject(movePass(project, id, toIndex));
+    this.mutations.movePassTo(id, toIndex);
   }
 
   setPassResolutionById(id: string, patch: Partial<PassResolution>): void {
-    const project = this.project();
-    if (project) this.patchProject(setPassResolution(project, id, patch));
+    this.mutations.setPassResolutionById(id, patch);
   }
 
   setPassSamplingById(
     id: string,
     patch: { filter?: RenderPass['filter']; wrap?: RenderPass['wrap'] },
   ): void {
-    const project = this.project();
-    if (project) this.patchProject(setPassSampling(project, id, patch));
+    this.mutations.setPassSamplingById(id, patch);
   }
 
   setChannel(id: string, channel: ChannelIndex, binding: ChannelBinding): void {
-    const project = this.project();
-    if (project) this.patchProject(setChannelBinding(project, id, channel, binding));
+    this.mutations.setChannel(id, channel, binding);
   }
 
-  // --- Files --------------------------------------------------------------
-
   addSourceFile(name?: string): void {
-    const project = this.project();
-    if (!project) return;
-
-    const next = addFile(project, name);
-    this.patchProject(next);
-    const created = next.files.at(-1)?.id;
-    if (created) this.documentState.selectDocument(created);
+    this.mutations.addSourceFile(name);
   }
 
   duplicateSourceFile(id: string): void {
-    const project = this.project();
-    if (!project) return;
-
-    const next = duplicateFile(project, id);
-    this.patchProject(next);
-
-    const copy = next.files.find((file) => !project.files.some((old) => old.id === file.id));
-    if (copy) this.documentState.selectDocument(copy.id);
+    this.mutations.duplicateSourceFile(id);
   }
 
   removeSourceFile(id: string): void {
-    const project = this.project();
-    if (!project) return;
-
-    this.patchProject(removeFile(project, id));
-    if (this.activeDocId() === id) this.documentState.selectDocument(imagePass(project).id);
+    this.mutations.removeSourceFile(id);
   }
 
   renameSourceFile(id: string, name: string): void {
-    const project = this.project();
-    if (project) this.patchProject(renameFile(project, id, name));
+    this.mutations.renameSourceFile(id, name);
   }
 
   moveSourceFile(id: string, toIndex: number): void {
-    const project = this.project();
-    if (project) this.patchProject(moveFile(project, id, toIndex));
+    this.mutations.moveSourceFile(id, toIndex);
   }
 
-  private patchProject(project: ShaderProject): void {
-    this.documentState.patchDraft({ project });
-  }
-
-  /**
-   * Update the config buffer. When it parses, re-project the live params onto
-   * the new schema straight away, so adding a control makes its knob appear
-   * without a save and removing one drops its value.
-   */
   setControlsText(controlsText: string): void {
-    this.documentState.patchDraft({ controlsText });
-    this.applyControlsSideEffects(controlsText);
-  }
-
-  /**
-   * The part of `setControlsText` that is not "write the text": re-project the
-   * live params onto the new schema, and (in)validate it into the diagnostics.
-   * Split out so `applyPatch` can run it once after its own single, combined
-   * `patchDraft` call — folding it back into `setControlsText` would mean a
-   * multi-document patch that happens to touch `@config` bumps the revision
-   * twice for one edit.
-   */
-  private applyControlsSideEffects(controlsText: string): void {
-    const parsed = parseControls(controlsText);
-
-    if (parsed) {
-      this.documentState.setConfigDiagnostics([]);
-      this.documentState.setParams(sanitizeParams(parsed, this.params()));
-      return;
-    }
-
-    this.documentState.setConfigDiagnostics(configErrors(controlsText));
+    this.mutations.setControlsText(controlsText);
   }
 
   setRender(render: RenderSettings): void {
-    this.documentState.patchDraft({ render });
+    this.mutations.setRender(render);
   }
 
-  // --- Params -------------------------------------------------------------
-
   setParam(key: string, value: ParamValue): void {
-    this.documentState.setParams({ ...this.params(), [key]: value });
-    // The values no longer match the preset they came from.
-    this.documentState.clearActivePreset();
+    this.mutations.setParam(key, value);
   }
 
   resetParams(): void {
-    this.documentState.setParams(defaultParams(this.controls()));
-    this.documentState.clearActivePreset();
+    this.mutations.resetParams();
   }
 
   // --- Diagnostics --------------------------------------------------------
@@ -730,42 +577,20 @@ export class ShaderStore {
    * compile), or none of them do. Used by `apply_shader_patch` — never called
    * from the UI, which edits one document at a time through `setDocSource`.
    *
-   * Rejects a stale `baseRevision` before touching any state, which is what
-   * stops an agent from overwriting an edit — the user's or another agent's —
-   * made after it last read the document. Never saves.
+   * `ProjectMutations` owns the all-or-nothing write; what is left here is the
+   * decision to block on the compile it caused, and the empty batch that caused
+   * none — which reports the diagnostics already on screen rather than waiting
+   * for a compile nothing asked for.
    */
   async applyPatch(
     baseRevision: number,
     edits: readonly DraftTextEdit[],
   ): Promise<ApplyPatchResult> {
-    const project = this.project();
-    const draft = this.draft();
-    if (!project || !draft) {
-      return { ok: false, code: 'NOT_FOUND', message: 'No shader is open.' };
+    const applied = this.mutations.applyTextEdits(baseRevision, edits);
+    if (applied.status === 'failed') return applied.failure;
+    if (applied.status === 'noop') {
+      return { ok: true, revision: applied.revision, diagnostics: this.allDiagnostics() };
     }
-
-    const currentRevision = this.draftRevision();
-    if (baseRevision !== currentRevision) {
-      return {
-        ok: false,
-        code: 'STALE_REVISION',
-        message: `baseRevision ${baseRevision} is stale; the draft is at revision ${currentRevision}.`,
-        currentRevision,
-      };
-    }
-
-    if (edits.length === 0) {
-      return { ok: true, revision: currentRevision, diagnostics: this.allDiagnostics() };
-    }
-
-    const plan = this.mcpPatch.planPatch(
-      { project, controlsText: draft.controlsText, documents: this.documents() },
-      edits,
-    );
-    if (!plan.ok) return plan;
-
-    this.documentState.patchDraft({ project: plan.project, controlsText: plan.controlsText });
-    if (plan.controlsText !== draft.controlsText) this.applyControlsSideEffects(plan.controlsText);
 
     const outcome = await this.compileNow();
     return { ok: true, revision: outcome.revision, diagnostics: outcome.diagnostics };
@@ -779,9 +604,7 @@ export class ShaderStore {
    * request.
    */
   setParamsValidated(values: Record<string, unknown>): SetParamsOutcome {
-    const plan = this.mcpPatch.planParams(this.controls(), values);
-    for (const { key, value } of plan.applied) this.setParam(key, value);
-    return { applied: plan.applied.map((entry) => entry.key), errors: plan.errors };
+    return this.mutations.setParamsValidated(values);
   }
 
   // --- Persistence --------------------------------------------------------
