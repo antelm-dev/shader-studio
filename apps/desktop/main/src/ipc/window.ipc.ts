@@ -1,5 +1,7 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, shell } from 'electron';
 import { defineIpcEvents, defineIpcModule, handle, listen } from 'electron-ipc-module';
+
+import { resolveSupportLinkUrl } from './support-links';
 
 type WindowEvents = {
   'close-requested': [];
@@ -27,6 +29,14 @@ export function createWindowIpc(controller: CloseController) {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (win) win.setFullScreen(!win.isFullScreen());
     }),
+    'toggle-devtools': listen((event) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win || win.isDestroyed()) return;
+      const contents = win.webContents;
+      if (contents.isDestroyed()) return;
+      if (contents.isDevToolsOpened()) contents.closeDevTools();
+      else contents.openDevTools();
+    }),
     state: handle((event) => {
       const win = BrowserWindow.fromWebContents(event.sender);
       return { maximized: win?.isMaximized() ?? false, fullscreen: win?.isFullScreen() ?? false };
@@ -43,6 +53,11 @@ export function createWindowIpc(controller: CloseController) {
       if (!win || !approved) return;
       controller.approved.add(win);
       win.close();
+    }),
+    'open-support-link': listen((_event, destination: 'documentation' | 'issues') => {
+      const url = resolveSupportLinkUrl(destination);
+      if (!url) return;
+      void shell.openExternal(url);
     }),
   });
 }
