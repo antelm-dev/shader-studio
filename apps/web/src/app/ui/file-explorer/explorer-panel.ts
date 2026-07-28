@@ -650,9 +650,6 @@ export class ExplorerPanel {
         this.focusRow(action.nodeId);
         break;
       case 'expand':
-        event.preventDefault();
-        this.expansion.update((state) => toggleExpanded(state, action.nodeId));
-        break;
       case 'collapse':
         event.preventDefault();
         this.expansion.update((state) => toggleExpanded(state, action.nodeId));
@@ -703,6 +700,17 @@ export class ExplorerPanel {
 
   protected onDragEnd(): void {
     this.dragging = null;
+  }
+
+  focusNode(nodeId?: string | null): void {
+    const targetId = nodeId && this.rows().some((row) => row.node.id === nodeId) ? nodeId : this.focusedId();
+    if (targetId) {
+      this.focusRow(targetId);
+      return;
+    }
+
+    const first = this.rows()[0]?.node.id;
+    if (first) this.focusRow(first);
   }
 
   private focusRow(nodeId: string): void {

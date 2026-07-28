@@ -39,3 +39,5 @@ export {
   findExplorerNode,
   type ExplorerProjectionContext,
 } from './project-explorer';
+
+export { ExplorerPanel } from './explorer-panel';

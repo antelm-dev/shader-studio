@@ -207,7 +207,7 @@ function buildChannelNode(pass: RenderPass, channel: ChannelIndex, depth: number
   return {
     id: passChannelId(pass.id, channel),
     kind: 'channel',
-    labelKey: `explorer.channel.iChannel${channel}`,
+    labelKey: `explorer.channel.${channel}`,
     depth,
     channelIndex: channel,
     children: [buildBindingNode(pass, channel, binding, depth + 1)],
