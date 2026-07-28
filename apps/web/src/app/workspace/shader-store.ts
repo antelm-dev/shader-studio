@@ -3,31 +3,23 @@ import {
   Injectable,
   PLATFORM_ID,
   TransferState,
-  computed,
   effect,
   inject,
   makeStateKey,
-  signal,
 } from '@angular/core';
 
 import {
-  DEFAULT_CHANNELS,
   type ImportMode,
-  type Preset,
+  type ParamValue,
   type RenderSettings,
-  type ShaderControl,
-  type ShaderParams,
   type ShaderRecord,
   type ShaderSummary,
-  type ParamValue,
-  type TextureChannels,
   type TextureChannelSettingsPatch,
 } from '@shader-studio/shared/model';
 import {
   addBuffer,
   addFile,
   bufferPasses,
-  displayPasses,
   duplicateFile,
   duplicatePass,
   findFile,
@@ -40,7 +32,6 @@ import {
   removePass,
   renameFile,
   renamePass,
-  resolvePassOrder,
   setChannelBinding,
   setFileSource,
   setPassEnabled,
@@ -48,86 +39,46 @@ import {
   setPassSampling,
   setPassSource,
   setVertexSource,
-  type BufferSlot,
   type ChannelBinding,
   type ChannelIndex,
-  type PassKind,
   type PassResolution,
-  type ProjectError,
   type RenderPass,
   type ShaderProject,
 } from '@shader-studio/shared/project';
-import { defaultParams, sanitizeParams, validateControls } from '@shader-studio/shared/validate';
+import { defaultParams, sanitizeParams } from '@shader-studio/shared/validate';
 import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
 import { DraftRecovery, type RecoveredDraft } from './draft-recovery';
 import { CompilationService } from './compilation.service';
-import { controlsToText } from './controls-text';
 import { McpPatchService } from './mcp-patch.service';
 import { PersistenceService } from './persistence.service';
 import { PresetService } from './preset.service';
 import { ProjectPersistence } from './project-persistence';
 import { TextureService } from './texture.service';
+import { DocumentState } from './state/document-state';
+import { configErrors, parseControls } from './state/controls-schema';
 import { ApiError, ShaderApi } from '../api/shader-api';
 import { Preferences } from '../prefs/preferences';
 import { OutputLog } from '../ui/bottom-panel/output-log';
 
 /**
- * The single source of truth for the workspace.
+ * The workspace, as the rest of the application sees it.
  *
- * Four layers of state, deliberately distinct:
+ * Everything below is one of three things: a workflow the store still owns —
+ * selecting, editing, saving, importing, presets, textures — or an alias onto
+ * the signal that `DocumentState` owns, or a delegation to the collaborator that
+ * owns the behaviour:
  *
- *  - `record`  — the shader exactly as the server last gave it to us.
- *  - `saved`   — the project as last committed: the record's fragment and vertex,
- *                plus the passes and files that only exist locally. `dirty` is
- *                the difference between this and the draft.
- *  - `draft`   — the editor buffers: the whole project, the config text, and the
- *                render settings. Saving pushes it to the API and to storage.
- *  - `params`  — the live uniform values. These are *not* part of the draft:
- *                turning a knob is not an unsaved edit to the source, it is a
- *                value you can capture as a preset.
+ *  - `DocumentState`      — the four layers of document data (record, saved,
+ *                           draft, params) and every projection off them.
+ *  - `CompilationService` — the draft revision and the compile waiters.
  *
- * Rendering, editing and persistence all read from here and none of them know
- * about each other. In particular, nothing outside this file knows that a
- * project is stored in two places — the store is what makes a record and its
- * passes look like one document.
+ * The aliases are aliases and not copies: `store.record` *is*
+ * `DocumentState.record`, so there is exactly one instance of every signal and
+ * no possibility of the facade and the owner disagreeing. Consumers keep the
+ * names they have always used.
  */
 
-/** The editable buffers behind the source editor. */
-export interface ShaderDraft {
-  /**
-   * Every source the user can edit: the Image pass, Common, the buffers, the
-   * vertex shader and the plain files. The Image pass's source is what the
-   * server knows as `fragment`, which is why `fragment` below is derived rather
-   * than stored — two copies of the same string is one copy too many.
-   */
-  project: ShaderProject;
-  /** The control schema, as JSON text — this is what the config tab edits. */
-  controlsText: string;
-  render: RenderSettings;
-}
-
-/**
- * Anything the editor can open a tab for.
- *
- * Passes and files are deliberately in one namespace with `@vertex` and
- * `@config`: a tab is a tab, a diagnostic points at one of these ids whatever
- * kind of thing it is, and the tab bar's only job is to *show* the difference
- * between a render pass and a plain file rather than to model it twice.
- */
-export type DocumentKind = 'pass' | 'file' | 'vertex' | 'config';
-
-export interface EditorDocument {
-  id: string;
-  kind: DocumentKind;
-  name: string;
-  language: 'glsl' | 'json';
-  source: string;
-  /** Passes only: which of Image / Common / Buffer this is. */
-  passKind?: PassKind;
-  slot?: BufferSlot | null;
-  /** Passes only. A disabled buffer is still editable — it just does not render. */
-  enabled?: boolean;
-}
+export type { ShaderDraft, DocumentKind, EditorDocument } from './state/document-state';
 
 /** A finished compile, tied to the revision it was compiled from. */
 export interface CompileOutcome {
@@ -158,28 +109,6 @@ export interface SetParamsOutcome {
 }
 
 /**
- * One error, once.
- *
- * The Common pass is compiled into every pass that uses it, so a typo in Common
- * comes back from the driver once per pass — three passes, three identical
- * complaints about the same line of the same file. The user made one mistake and
- * should be shown one error.
- */
-function dedupe(diagnostics: readonly CompileDiagnostic[]): CompileDiagnostic[] {
-  const seen = new Set<string>();
-  const unique: CompileDiagnostic[] = [];
-
-  for (const diagnostic of diagnostics) {
-    const key = `${diagnostic.docId ?? ''}|${diagnostic.line}|${diagnostic.severity}|${diagnostic.message}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(diagnostic);
-  }
-
-  return unique;
-}
-
-/**
  * What the server rendered, handed to the client inside the HTML.
  *
  * Without this the client's first render would start from an empty store while
@@ -202,28 +131,29 @@ export class ShaderStore {
   private readonly isServer = isPlatformServer(inject(PLATFORM_ID));
   private readonly recovery = inject(DraftRecovery);
   private readonly projects = inject(ProjectPersistence);
-  private readonly mcpPatch = inject(McpPatchService);
   private readonly textureService = inject(TextureService);
   private readonly presetService = inject(PresetService);
   private readonly compilation = inject(CompilationService);
   private readonly persistence = inject(PersistenceService);
   private readonly outputLog = inject(OutputLog);
+  private readonly mcpPatch = inject(McpPatchService);
+  private readonly documentState = inject(DocumentState);
 
   /** True once the client has taken over the server's snapshot. */
   private hydrated = false;
 
   constructor() {
     this.recovery.onWarning = () =>
-      this.notice.set({
-        text: 'Local draft recovery is unavailable in this browser session',
-        error: true,
-      });
+      this.documentState.notify(
+        'Local draft recovery is unavailable in this browser session',
+        true,
+      );
 
     this.projects.onWarning = () =>
-      this.notice.set({
-        text: 'Local storage is full, so buffers and files may not survive a reload',
-        error: true,
-      });
+      this.documentState.notify(
+        'Local storage is full, so buffers and files may not survive a reload',
+        true,
+      );
 
     effect((onCleanup) => {
       const record = this.record();
@@ -248,47 +178,70 @@ export class ShaderStore {
     this.hydrated = true;
   }
 
-  // --- Raw state ----------------------------------------------------------
+  // --- Document state (owned by `DocumentState`) ----------------------------
 
-  readonly shaders = signal<readonly ShaderSummary[]>([]);
-  readonly record = signal<ShaderRecord | null>(null);
-  readonly draft = signal<ShaderDraft | null>(null);
-  readonly params = signal<ShaderParams>({});
+  readonly shaders = this.documentState.shaders;
+  readonly record = this.documentState.record;
+  readonly draft = this.documentState.draft;
+  readonly params = this.documentState.params;
 
-  /**
-   * The project as last committed — what `dirty` is measured against.
-   *
-   * Kept apart from `record` because the record cannot express it: the server
-   * only knows the Image pass and the vertex shader, so a change to Buffer B
-   * would otherwise be invisible to the unsaved-changes machinery, and closing
-   * the tab would take it with no warning at all.
-   */
-  private readonly savedProject = signal<ShaderProject | null>(null);
-
-  readonly loading = signal(false);
-  readonly saving = signal(false);
-  readonly activePresetId = signal<string | null>(null);
+  readonly loading = this.documentState.loading;
+  readonly saving = this.documentState.saving;
+  readonly activePresetId = this.documentState.activePresetId;
 
   /** The document the editor is showing. One of `documents()`. */
-  readonly activeDocId = signal<string | null>(null);
+  readonly activeDocId = this.documentState.activeDocId;
 
   /** Compile + config diagnostics for the current draft. */
-  readonly diagnostics = signal<readonly CompileDiagnostic[]>([]);
+  readonly diagnostics = this.documentState.diagnostics;
 
   /** Passes that are currently being recompiled, so their tabs can say so. */
-  readonly compiling = signal<ReadonlySet<string>>(new Set());
+  readonly compiling = this.documentState.compiling;
 
   /** Last message worth showing the user (error or confirmation). */
-  readonly notice = signal<{ text: string; error: boolean } | null>(null);
-  readonly staleRecovery = signal<RecoveredDraft | null>(null);
+  readonly notice = this.documentState.notice;
+  readonly staleRecovery = this.documentState.staleRecovery;
+
+  readonly selectedId = this.documentState.selectedId;
+  readonly presets = this.documentState.presets;
+  readonly channels = this.documentState.channels;
+
+  readonly project = this.documentState.project;
+  readonly fragment = this.documentState.fragment;
+  readonly vertex = this.documentState.vertex;
+  readonly passes = this.documentState.passes;
+  readonly buffers = this.documentState.buffers;
+  readonly canAddBuffer = this.documentState.canAddBuffer;
+  readonly renderOrder = this.documentState.renderOrder;
+  readonly projectErrors = this.documentState.projectErrors;
+
+  /** Every tab the editor can show, in the order it shows them. */
+  readonly documents = this.documentState.documents;
+  readonly activeDoc = this.documentState.activeDoc;
+  readonly controls = this.documentState.controls;
+  readonly configValid = this.documentState.configValid;
+  readonly dirty = this.documentState.dirty;
+  readonly allDiagnostics = this.documentState.allDiagnostics;
+  readonly hasErrors = this.documentState.hasErrors;
+
+  /** Errors belonging to one document — what its tab shows a badge for. */
+  diagnosticsFor(docId: string): CompileDiagnostic[] {
+    return this.documentState.diagnosticsFor(docId);
+  }
+
+  errorCountFor(docId: string): number {
+    return this.documentState.errorCountFor(docId);
+  }
+
+  // --- Revisions (owned by `CompilationService`) ----------------------------
 
   /**
-   * Bumped once by every `patchDraft` call — the single choke point behind
-   * every project/controls/render mutation. This is what `apply_shader_patch`
-   * checks a `baseRevision` against, and what `waitForCompile` correlates a
-   * finished compile back to a specific edit. Owned by `CompilationService`;
-   * aliased here so external readers (`shader-canvas`, `McpBridge`) keep
-   * reading it straight off the store.
+   * Bumped once by every `DocumentState.patchDraft` call — the single choke
+   * point behind every project/controls/render mutation. This is what
+   * `apply_shader_patch` checks a `baseRevision` against, and what
+   * `waitForCompile` correlates a finished compile back to a specific edit.
+   * Aliased here so external readers (`shader-canvas`, `McpBridge`) keep reading
+   * it straight off the store.
    */
   readonly draftRevision = this.compilation.draftRevision;
 
@@ -298,188 +251,19 @@ export class ShaderStore {
   /** Bumped to ask `shader-canvas` to flush its debounce timer immediately instead of waiting ~400ms. */
   readonly immediateCompileRequest = this.compilation.immediateCompileRequest;
 
-  // --- Derived ------------------------------------------------------------
-
-  readonly selectedId = computed(() => this.record()?.id ?? null);
-
-  readonly presets = computed<readonly Preset[]>(() => this.record()?.presets ?? []);
-
   /**
-   * Not part of the draft: like presets, assigning a texture is an immediate,
-   * persisted action rather than a discardable source edit, so it stays
-   * outside the unsaved-changes/recovery machinery that covers `draft`.
-   */
-  readonly channels = computed<TextureChannels>(() => this.record()?.channels ?? DEFAULT_CHANNELS);
-
-  // --- The project --------------------------------------------------------
-
-  readonly project = computed<ShaderProject | null>(() => this.draft()?.project ?? null);
-
-  /** The Image pass's source. What the server calls the shader's `fragment`. */
-  readonly fragment = computed(() => {
-    const project = this.project();
-    return project ? imagePass(project).source : '';
-  });
-
-  readonly vertex = computed(() => this.project()?.vertex ?? '');
-
-  readonly passes = computed<readonly RenderPass[]>(() => {
-    const project = this.project();
-    return project ? displayPasses(project) : [];
-  });
-
-  readonly buffers = computed<readonly RenderPass[]>(() => {
-    const project = this.project();
-    return project ? bufferPasses(project) : [];
-  });
-
-  readonly canAddBuffer = computed(() => {
-    const project = this.project();
-    return project !== null && freeSlot(project) !== null;
-  });
-
-  /**
-   * The render order, and everything wrong with the wiring that produced it.
+   * Force a recompile now, rather than when the debounce elapses.
    *
-   * Both come out of the same walk of the graph, because they are the same
-   * question: a cycle *is* the reason an order could not be found. Splitting them
-   * would mean walking twice and risking two different answers.
+   * The renderer recompiles a pass whose *composed source* changed, which means
+   * asking for a recompile of a source nobody touched would be a no-op. So the
+   * request is a signal the canvas watches, not a source edit: it says "compile,
+   * even though nothing changed", which is what the user means by Ctrl+Enter
+   * after the driver has been sulking or a texture has finished loading.
    */
-  private readonly graph = computed(() => {
-    const project = this.project();
-    return project
-      ? resolvePassOrder(project)
-      : { order: [] as RenderPass[], errors: [] as ProjectError[] };
-  });
+  readonly recompileRequest = this.compilation.recompileRequest;
 
-  readonly renderOrder = computed<readonly RenderPass[]>(() => this.graph().order);
-  readonly projectErrors = computed<readonly ProjectError[]>(() => this.graph().errors);
-
-  /** Every tab the editor can show, in the order it shows them. */
-  readonly documents = computed<readonly EditorDocument[]>(() => {
-    const draft = this.draft();
-    if (!draft) return [];
-
-    const project = draft.project;
-
-    return [
-      ...displayPasses(project).map(
-        (pass): EditorDocument => ({
-          id: pass.id,
-          kind: 'pass',
-          name: pass.name,
-          language: 'glsl',
-          source: pass.source,
-          passKind: pass.kind,
-          slot: pass.slot,
-          enabled: pass.enabled,
-        }),
-      ),
-      ...project.files.map(
-        (file): EditorDocument => ({
-          id: file.id,
-          kind: 'file',
-          name: file.name,
-          language: 'glsl',
-          source: file.source,
-        }),
-      ),
-      { id: VERTEX_DOC, kind: 'vertex', name: 'Vertex', language: 'glsl', source: project.vertex },
-      {
-        id: CONFIG_DOC,
-        kind: 'config',
-        name: 'Config',
-        language: 'json',
-        source: draft.controlsText,
-      },
-    ];
-  });
-
-  /**
-   * The open document. Falls back to the Image pass rather than to nothing: a
-   * tab can be deleted while it is open, and an editor showing nothing at all is
-   * a worse answer than an editor showing the one document that always exists.
-   */
-  readonly activeDoc = computed<EditorDocument | null>(() => {
-    const documents = this.documents();
-    if (documents.length === 0) return null;
-
-    const id = this.activeDocId();
-    return documents.find((document) => document.id === id) ?? documents[0];
-  });
-
-  /**
-   * The schema the GUI and the uniforms are built from: the draft's, if it
-   * parses, otherwise the last known-good one from the record. A half-typed
-   * config must not tear down a working control panel.
-   */
-  readonly controls = computed<readonly ShaderControl[]>(() => {
-    const draft = this.draft();
-    if (!draft) return [];
-    const parsed = this.parseControls(draft.controlsText);
-    return parsed ?? this.record()?.controls ?? [];
-  });
-
-  readonly configValid = computed(() => {
-    const draft = this.draft();
-    return draft === null || this.parseControls(draft.controlsText) !== null;
-  });
-
-  /**
-   * The project is compared against `savedProject`, not against the record: the
-   * record has no idea Buffer B exists, so measuring dirtiness against it would
-   * silently discard every change to a buffer, a file or a channel binding — the
-   * exact edits this whole feature is about.
-   */
-  readonly dirty = computed(() => {
-    const record = this.record();
-    const draft = this.draft();
-    const saved = this.savedProject();
-    if (!record || !draft) return false;
-
-    return (
-      JSON.stringify(draft.project) !== JSON.stringify(saved) ||
-      draft.controlsText !== controlsToText(record.controls) ||
-      JSON.stringify(draft.render) !== JSON.stringify(record.render)
-    );
-  });
-
-  /**
-   * A broken graph is an error like any other, and belongs in the same list: a
-   * circular buffer dependency is exactly as much a reason the shader is not
-   * doing what you asked as a missing semicolon, and hiding it somewhere else
-   * would leave the editor showing no errors while the picture stayed frozen.
-   */
-  readonly allDiagnostics = computed<readonly CompileDiagnostic[]>(() => {
-    const project = this.project();
-
-    const graph = this.projectErrors().map((error): CompileDiagnostic => {
-      const pass = error.passId && project ? findPass(project, error.passId) : null;
-      return {
-        severity: 'error',
-        line: 0,
-        message: error.message,
-        source: 'fragment',
-        ...(error.passId ? { docId: error.passId } : {}),
-        ...(pass ? { docName: pass.name } : {}),
-      };
-    });
-
-    return dedupe([...graph, ...this.diagnostics()]);
-  });
-
-  readonly hasErrors = computed(() =>
-    this.allDiagnostics().some((diagnostic) => diagnostic.severity === 'error'),
-  );
-
-  /** Errors belonging to one document — what its tab shows a badge for. */
-  diagnosticsFor(docId: string): CompileDiagnostic[] {
-    return this.allDiagnostics().filter((diagnostic) => diagnostic.docId === docId);
-  }
-
-  errorCountFor(docId: string): number {
-    return this.diagnosticsFor(docId).filter((diagnostic) => diagnostic.severity === 'error')
-      .length;
+  recompile(): void {
+    this.compilation.recompile();
   }
 
   // --- Loading ------------------------------------------------------------
@@ -559,18 +343,8 @@ export class ShaderStore {
   private adopt(record: ShaderRecord): void {
     const { project, migrate } = this.projectFor(record);
 
-    this.record.set(record);
-    this.savedProject.set(structuredClone(project));
-    this.draft.set({
-      project,
-      controlsText: controlsToText(record.controls),
-      render: structuredClone(record.render),
-    });
-    this.params.set(defaultParams(record.controls));
-    this.activePresetId.set(null);
-    this.diagnostics.set([]);
-    this.activeDocId.set(imagePass(project).id);
-    this.resetCompileState();
+    this.documentState.adopt(record, project);
+    this.compilation.reset();
 
     const recovered = this.isServer ? null : this.recovery.get(record.id);
     if (recovered?.baselineUpdatedAt === record.updatedAt) this.applyRecoveredDraft(recovered);
@@ -634,8 +408,7 @@ export class ShaderStore {
     try {
       const updated = await this.api.update(shaderId, { project });
       if (this.selectedId() === shaderId) {
-        this.record.set(updated);
-        this.savedProject.set(structuredClone(project));
+        this.documentState.commitMigratedProject(updated, project);
       }
       this.projects.remove(shaderId);
     } catch (error) {
@@ -680,11 +453,7 @@ export class ShaderStore {
   }
 
   private applyRecoveredDraft(recovered: RecoveredDraft): void {
-    this.draft.set({
-      project: structuredClone(recovered.project),
-      controlsText: recovered.controlsText,
-      render: structuredClone(recovered.render),
-    });
+    this.documentState.restoreDraft(recovered);
     this.setControlsText(recovered.controlsText);
   }
 
@@ -732,32 +501,12 @@ export class ShaderStore {
   }
 
   selectDoc(id: string): void {
-    this.activeDocId.set(id);
+    this.documentState.selectDocument(id);
   }
 
   /** Next or previous tab, wrapping. What Ctrl+PageDown does everywhere else. */
   cycleDoc(step: 1 | -1): void {
-    const documents = this.documents();
-    if (documents.length === 0) return;
-
-    const current = documents.findIndex((doc) => doc.id === this.activeDoc()?.id);
-    const next = (current + step + documents.length) % documents.length;
-    this.activeDocId.set(documents[next].id);
-  }
-
-  /**
-   * Force a recompile now, rather than when the debounce elapses.
-   *
-   * The renderer recompiles a pass whose *composed source* changed, which means
-   * asking for a recompile of a source nobody touched would be a no-op. So the
-   * request is a signal the canvas watches, not a source edit: it says "compile,
-   * even though nothing changed", which is what the user means by Ctrl+Enter
-   * after the driver has been sulking or a texture has finished loading.
-   */
-  readonly recompileRequest = this.compilation.recompileRequest;
-
-  recompile(): void {
-    this.compilation.recompile();
+    this.documentState.cycleDocument(step);
   }
 
   // --- Passes -------------------------------------------------------------
@@ -767,7 +516,7 @@ export class ShaderStore {
     if (!project) return;
 
     if (!freeSlot(project)) {
-      this.notice.set({ text: 'All four buffer slots are in use', error: true });
+      this.documentState.notify('All four buffer slots are in use', true);
       return;
     }
 
@@ -775,7 +524,8 @@ export class ShaderStore {
     this.patchProject(next);
     // Open what was just created: making a buffer and then having to go and find
     // it is not a workflow anybody wants.
-    this.activeDocId.set(bufferPasses(next).at(-1)?.id ?? this.activeDocId());
+    const created = bufferPasses(next).at(-1)?.id;
+    if (created) this.documentState.selectDocument(created);
   }
 
   duplicateBufferPass(id: string): void {
@@ -783,7 +533,7 @@ export class ShaderStore {
     if (!project) return;
 
     if (!freeSlot(project)) {
-      this.notice.set({ text: 'All four buffer slots are in use', error: true });
+      this.documentState.notify('All four buffer slots are in use', true);
       return;
     }
 
@@ -793,7 +543,7 @@ export class ShaderStore {
     const copy = bufferPasses(next).find(
       (pass) => !bufferPasses(project).some((old) => old.id === pass.id),
     );
-    if (copy) this.activeDocId.set(copy.id);
+    if (copy) this.documentState.selectDocument(copy.id);
   }
 
   removeBufferPass(id: string): void {
@@ -801,7 +551,7 @@ export class ShaderStore {
     if (!project) return;
 
     this.patchProject(removePass(project, id));
-    if (this.activeDocId() === id) this.activeDocId.set(imagePass(project).id);
+    if (this.activeDocId() === id) this.documentState.selectDocument(imagePass(project).id);
   }
 
   renamePassById(id: string, name: string): void {
@@ -845,7 +595,8 @@ export class ShaderStore {
 
     const next = addFile(project, name);
     this.patchProject(next);
-    this.activeDocId.set(next.files.at(-1)?.id ?? this.activeDocId());
+    const created = next.files.at(-1)?.id;
+    if (created) this.documentState.selectDocument(created);
   }
 
   duplicateSourceFile(id: string): void {
@@ -856,7 +607,7 @@ export class ShaderStore {
     this.patchProject(next);
 
     const copy = next.files.find((file) => !project.files.some((old) => old.id === file.id));
-    if (copy) this.activeDocId.set(copy.id);
+    if (copy) this.documentState.selectDocument(copy.id);
   }
 
   removeSourceFile(id: string): void {
@@ -864,7 +615,7 @@ export class ShaderStore {
     if (!project) return;
 
     this.patchProject(removeFile(project, id));
-    if (this.activeDocId() === id) this.activeDocId.set(imagePass(project).id);
+    if (this.activeDocId() === id) this.documentState.selectDocument(imagePass(project).id);
   }
 
   renameSourceFile(id: string, name: string): void {
@@ -878,7 +629,7 @@ export class ShaderStore {
   }
 
   private patchProject(project: ShaderProject): void {
-    this.patchDraft({ project });
+    this.documentState.patchDraft({ project });
   }
 
   /**
@@ -887,96 +638,52 @@ export class ShaderStore {
    * without a save and removing one drops its value.
    */
   setControlsText(controlsText: string): void {
-    this.patchDraft({ controlsText });
+    this.documentState.patchDraft({ controlsText });
     this.applyControlsSideEffects(controlsText);
   }
 
   /**
    * The part of `setControlsText` that is not "write the text": re-project the
-   * live params onto the new schema, and (in)validate it into `diagnostics`.
+   * live params onto the new schema, and (in)validate it into the diagnostics.
    * Split out so `applyPatch` can run it once after its own single, combined
    * `patchDraft` call — folding it back into `setControlsText` would mean a
    * multi-document patch that happens to touch `@config` bumps the revision
    * twice for one edit.
    */
   private applyControlsSideEffects(controlsText: string): void {
-    const parsed = this.parseControls(controlsText);
-    this.diagnostics.update((all) => all.filter((entry) => entry.source !== 'config'));
+    const parsed = parseControls(controlsText);
 
     if (parsed) {
-      this.params.update((current) => sanitizeParams(parsed, current));
+      this.documentState.setConfigDiagnostics([]);
+      this.documentState.setParams(sanitizeParams(parsed, this.params()));
       return;
     }
 
-    this.diagnostics.update((all) => [
-      ...all,
-      ...this.configErrors(controlsText).map(
-        (message): CompileDiagnostic => ({
-          severity: 'error',
-          line: 0,
-          message,
-          source: 'config',
-        }),
-      ),
-    ]);
+    this.documentState.setConfigDiagnostics(configErrors(controlsText));
   }
 
   setRender(render: RenderSettings): void {
-    this.patchDraft({ render });
-  }
-
-  private patchDraft(patch: Partial<ShaderDraft>): void {
-    const current = this.draft();
-    if (!current) return;
-    this.draft.set({ ...current, ...patch });
-    this.draftRevision.update((n) => n + 1);
-  }
-
-  /** Returns the parsed schema, or null if the text is not a valid schema. */
-  private parseControls(text: string): ShaderControl[] | null {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      return null;
-    }
-    const result = validateControls(parsed);
-    return result.ok ? result.value : null;
-  }
-
-  /** The reason `parseControls` said no, phrased for the diagnostics panel. */
-  private configErrors(text: string): string[] {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch (error) {
-      return [`Config is not valid JSON: ${(error as Error).message}`];
-    }
-    const result = validateControls(parsed);
-    return result.ok ? [] : result.errors;
+    this.documentState.patchDraft({ render });
   }
 
   // --- Params -------------------------------------------------------------
 
   setParam(key: string, value: ParamValue): void {
-    this.params.update((params) => ({ ...params, [key]: value }));
+    this.documentState.setParams({ ...this.params(), [key]: value });
     // The values no longer match the preset they came from.
-    this.activePresetId.set(null);
+    this.documentState.clearActivePreset();
   }
 
   resetParams(): void {
-    this.params.set(defaultParams(this.controls()));
-    this.activePresetId.set(null);
+    this.documentState.setParams(defaultParams(this.controls()));
+    this.documentState.clearActivePreset();
   }
 
   // --- Diagnostics --------------------------------------------------------
 
   /** Replace the compile diagnostics, leaving config diagnostics in place. */
   setCompileDiagnostics(diagnostics: readonly CompileDiagnostic[]): void {
-    this.diagnostics.update((all) => [
-      ...all.filter((entry) => entry.source === 'config'),
-      ...diagnostics,
-    ]);
+    this.documentState.setCompileDiagnostics(diagnostics);
   }
 
   // --- Compile completion & revisions --------------------------------------
@@ -990,7 +697,7 @@ export class ShaderStore {
    * would have.
    */
   recordCompileResult(revision: number, diagnostics: readonly CompileDiagnostic[]): void {
-    this.setCompileDiagnostics(diagnostics);
+    this.documentState.setCompileDiagnostics(diagnostics);
     this.compilation.recordCompileResult(revision, this.allDiagnostics());
   }
 
@@ -1013,10 +720,6 @@ export class ShaderStore {
     if (force) this.recompile();
     this.immediateCompileRequest.update((n) => n + 1);
     return this.waitForCompile(revision);
-  }
-
-  private resetCompileState(): void {
-    this.compilation.reset();
   }
 
   // --- Patches (MCP) --------------------------------------------------------
@@ -1061,7 +764,7 @@ export class ShaderStore {
     );
     if (!plan.ok) return plan;
 
-    this.patchDraft({ project: plan.project, controlsText: plan.controlsText });
+    this.documentState.patchDraft({ project: plan.project, controlsText: plan.controlsText });
     if (plan.controlsText !== draft.controlsText) this.applyControlsSideEffects(plan.controlsText);
 
     const outcome = await this.compileNow();
@@ -1088,9 +791,9 @@ export class ShaderStore {
     const draft = this.draft();
     if (!record || !draft || this.saving()) return false;
 
-    const controls = this.parseControls(draft.controlsText);
+    const controls = parseControls(draft.controlsText);
     if (!controls) {
-      this.notice.set({ text: 'Fix the configuration schema before saving', error: true });
+      this.documentState.notify('Fix the configuration schema before saving', true);
       return false;
     }
 
@@ -1107,14 +810,10 @@ export class ShaderStore {
         record.revision,
       );
 
-      this.record.set(result.record);
-      this.savedProject.set(structuredClone(result.draft.project));
-      this.draft.set(result.draft);
-      this.params.set(result.params);
-      this.activePresetId.set(presetId);
+      this.documentState.commitSaved(result.record, result.draft, result.params, presetId);
 
       await this.refreshList();
-      this.notice.set({ text: `Saved “${result.record.name}”`, error: false });
+      this.documentState.notify(`Saved “${result.record.name}”`, false);
       this.recovery.remove(result.record.id);
       void this.capturePreview(result.record.id);
       return true;
@@ -1174,7 +873,7 @@ export class ShaderStore {
       await this.refreshList();
       this.adopt(created);
       this.preferences.patch({ lastShaderId: created.id });
-      this.notice.set({ text: `Created “${created.name}”`, error: false });
+      this.documentState.notify(`Created “${created.name}”`, false);
     } catch (error) {
       this.report(error);
     }
@@ -1186,7 +885,7 @@ export class ShaderStore {
       await this.refreshList();
       this.adopt(copy);
       this.preferences.patch({ lastShaderId: copy.id });
-      this.notice.set({ text: `Duplicated as “${copy.name}”`, error: false });
+      this.documentState.notify(`Duplicated as “${copy.name}”`, false);
     } catch (error) {
       this.report(error);
     }
@@ -1199,7 +898,7 @@ export class ShaderStore {
       if (this.selectedId() === id) {
         this.record.update((record) => (record ? { ...record, name: updated.name } : record));
       }
-      this.notice.set({ text: `Renamed to “${updated.name}”`, error: false });
+      this.documentState.notify(`Renamed to “${updated.name}”`, false);
     } catch (error) {
       this.report(error);
     }
@@ -1211,17 +910,14 @@ export class ShaderStore {
       await this.refreshList();
 
       if (this.selectedId() === id) {
-        this.record.set(null);
-        this.draft.set(null);
-        this.savedProject.set(null);
-        this.params.set({});
+        this.documentState.clearWorkspace();
         this.preferences.patch({ lastShaderId: null });
-        this.resetCompileState();
+        this.compilation.reset();
 
         const next = this.shaders()[0];
         if (next) await this.select(next.id);
       }
-      this.notice.set({ text: 'Shader deleted', error: false });
+      this.documentState.notify('Shader deleted', false);
     } catch (error) {
       this.report(error);
     }
@@ -1250,7 +946,7 @@ export class ShaderStore {
       this.record.update((current) => (current ? { ...current, presets } : current));
       this.activePresetId.set(preset.id);
       await this.refreshList();
-      this.notice.set({ text: `Saved preset “${preset.name}”`, error: false });
+      this.documentState.notify(`Saved preset “${preset.name}”`, false);
     } catch (error) {
       this.report(error);
     }
@@ -1269,7 +965,7 @@ export class ShaderStore {
     const plan = this.presetService.planApply(this.presets(), this.controls(), presetId);
     if (!plan) return;
 
-    this.params.set(plan.params);
+    this.documentState.setParams(plan.params);
     if (plan.render) this.setRender(plan.render);
     this.activePresetId.set(plan.presetId);
   }
@@ -1283,7 +979,7 @@ export class ShaderStore {
       this.record.update((current) => (current ? { ...current, presets } : current));
       if (this.activePresetId() === presetId) this.activePresetId.set(null);
       await this.refreshList();
-      this.notice.set({ text: 'Preset deleted', error: false });
+      this.documentState.notify('Preset deleted', false);
     } catch (error) {
       this.report(error);
     }
@@ -1298,12 +994,12 @@ export class ShaderStore {
     try {
       const result = await this.textureService.setImage(record.id, channel, file);
       if (!result.ok) {
-        this.notice.set({ text: result.message, error: true });
+        this.documentState.notify(result.message, true);
         return;
       }
       this.record.set(result.record);
       await this.refreshList();
-      this.notice.set({ text: result.notice, error: false });
+      this.documentState.notify(result.notice, false);
     } catch (error) {
       this.report(error);
     }
@@ -1317,7 +1013,7 @@ export class ShaderStore {
       const result = await this.textureService.clearImage(record.id, channel);
       this.record.set(result.record);
       await this.refreshList();
-      this.notice.set({ text: result.notice, error: false });
+      this.documentState.notify(result.notice, false);
     } catch (error) {
       this.report(error);
     }
@@ -1357,12 +1053,11 @@ export class ShaderStore {
       if (first) await this.forceSelect(first.id);
 
       const replaced = result.imported.filter((entry) => entry.replaced).length;
-      this.notice.set({
-        text:
-          `Imported ${result.imported.length} shader${result.imported.length === 1 ? '' : 's'}` +
+      this.documentState.notify(
+        `Imported ${result.imported.length} shader${result.imported.length === 1 ? '' : 's'}` +
           (replaced ? ` (${replaced} replaced)` : ''),
-        error: false,
-      });
+        false,
+      );
     } catch (error) {
       this.report(error);
     }
@@ -1384,10 +1079,10 @@ export class ShaderStore {
       if (first) await this.forceSelect(first.id);
 
       const suffix = warnings.length ? ` ${warnings.join(' ')}` : '';
-      this.notice.set({
-        text: `Imported “${first?.name ?? 'shader'}” from Shadertoy.${suffix}`,
-        error: false,
-      });
+      this.documentState.notify(
+        `Imported “${first?.name ?? 'shader'}” from Shadertoy.${suffix}`,
+        false,
+      );
     } catch (error) {
       this.report(error);
     }
@@ -1404,7 +1099,7 @@ export class ShaderStore {
   private report(error: unknown): void {
     const message = error instanceof ApiError ? error.summary : String(error);
     console.error('[shader-store]', error);
-    this.notice.set({ text: message, error: true });
+    this.documentState.notify(message, true);
     this.outputLog.error('workspace', message);
   }
 }
