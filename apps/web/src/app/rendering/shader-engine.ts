@@ -1,6 +1,4 @@
 import type * as THREE from 'three';
-import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import type { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 import {
   MAX_WAVES,
@@ -23,6 +21,7 @@ import { GlContext, type GlContextOptions, type ThreeModule } from './gl-context
 import { parseInfoLog, prefixLineCount } from '@shader-studio/shared/glsl-diagnostics';
 import { expandMacros } from '@shader-studio/shared/glsl-export';
 import { BufferTargets, type TargetSpec } from './pass-targets';
+import { PostProcessing } from './engine/post-processing';
 import { CHANNEL_COUNT, TextureManager, type ChannelSource } from './engine/texture-manager';
 
 export type { ChannelSource } from './engine/texture-manager';
@@ -188,8 +187,8 @@ export class ShaderEngine {
   private readonly bufferScene: THREE.Scene;
   private readonly bufferMesh: THREE.Mesh;
 
-  private composer: EffectComposer | null = null;
-  private bloomPass: UnrealBloomPass | null = null;
+  /** Bloom, and the choice between the composer and the bare renderer. */
+  private readonly post: PostProcessing;
 
   private uniforms: Record<string, THREE.IUniform> = {};
   private controls: readonly ShaderControl[] = [];
@@ -213,10 +212,6 @@ export class ShaderEngine {
 
   /** What the buffers need from `BufferTargets`, kept so a resize can re-sync. */
   private targetSpecs: TargetSpec[] = [];
-
-  private render: RenderSettings = {
-    bloom: { enabled: false, strength: 0.3, radius: 0.5, threshold: 0.85 },
-  };
 
   private frame = 0;
   private lastFrameTime = 0;
@@ -314,6 +309,10 @@ export class ShaderEngine {
     // The public callback stays the engine's: this forwards to whatever it is
     // set to at the moment a decode finishes, including `null`.
     this.textures.onSettled = () => this.onTextureSettled?.();
+
+    this.post = new PostProcessing(context, this.scene, this.camera);
+    // A composer arrives long after the resize that would have sized it.
+    this.post.onComposerCreated = () => this.resize();
 
     this.unsubscribe.push(
       context.onLost(() => this.handleContextLost()),
@@ -917,52 +916,7 @@ export class ShaderEngine {
   // -------------------------------------------------------------------------
 
   setRenderSettings(render: RenderSettings): void {
-    this.render = render;
-
-    if (!render.bloom.enabled) {
-      this.disposeComposer();
-      return;
-    }
-
-    void this.ensureComposer().then(() => {
-      if (!this.bloomPass) return;
-      this.bloomPass.strength = render.bloom.strength;
-      this.bloomPass.radius = render.bloom.radius;
-      this.bloomPass.threshold = render.bloom.threshold;
-    });
-  }
-
-  /** Post-processing is only downloaded if a shader actually asks for bloom. */
-  private async ensureComposer(): Promise<void> {
-    if (this.composer || this.disposed) return;
-
-    const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }] = await Promise.all([
-      import('three/examples/jsm/postprocessing/EffectComposer.js'),
-      import('three/examples/jsm/postprocessing/RenderPass.js'),
-      import('three/examples/jsm/postprocessing/UnrealBloomPass.js'),
-    ]);
-    if (this.disposed || this.composer) return;
-
-    const composer = new EffectComposer(this.renderer);
-    composer.addPass(new RenderPass(this.scene, this.camera));
-
-    const bloom = new UnrealBloomPass(
-      new this.three.Vector2(1, 1),
-      this.render.bloom.strength,
-      this.render.bloom.radius,
-      this.render.bloom.threshold,
-    );
-    composer.addPass(bloom);
-
-    this.composer = composer;
-    this.bloomPass = bloom;
-    this.resize();
-  }
-
-  private disposeComposer(): void {
-    this.composer?.dispose();
-    this.composer = null;
-    this.bloomPass = null;
+    this.post.setSettings(render);
   }
 
   /**
@@ -1025,9 +979,7 @@ export class ShaderEngine {
     // 800px canvas without the layout so much as flinching.
     this.renderer.setSize(width, height, false);
 
-    this.composer?.setPixelRatio(scale);
-    this.composer?.setSize(width, height);
-    this.bloomPass?.setSize(width * scale, height * scale);
+    this.post.setSize(width, height, scale);
 
     // Only the Image pass' resolution is the canvas's. A buffer's is its own
     // target's, and `drawBuffers` sets it from the target it is about to fill.
@@ -1267,7 +1219,7 @@ export class ShaderEngine {
     if (this.disposed) return;
 
     cancelAnimationFrame(this.frame);
-    this.disposeComposer();
+    this.post.invalidate();
     this.onContextLost?.();
   }
 
@@ -1291,7 +1243,7 @@ export class ShaderEngine {
 
     const spec = this.lastSpec;
     if (spec) this.setPasses(spec);
-    else this.setRenderSettings(this.render);
+    else this.post.restore();
 
     this.resize();
     this.start();
@@ -1368,11 +1320,7 @@ export class ShaderEngine {
 
     if (this.image) this.bindChannels(this.image);
 
-    if (this.render.bloom.enabled && this.composer) {
-      this.composer.render();
-    } else {
-      this.renderer.render(this.scene, this.camera);
-    }
+    this.post.render(this.scene, this.camera);
   }
 
   private drawBuffers(): void {
@@ -1439,7 +1387,7 @@ export class ShaderEngine {
     this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
     this.canvas.removeEventListener('contextmenu', this.onContextMenu);
 
-    this.disposeComposer();
+    this.post.dispose();
     this.probeTarget.dispose();
     this.targets.dispose();
 
