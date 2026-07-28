@@ -18,7 +18,11 @@ import {
 } from '@shader-studio/shared';
 
 import { CONFIG_DOC, VERTEX_DOC } from '@shader-studio/shared/diagnostic';
-import { Preferences, createDefaultWorkspacePreferences, type WorkspacePreferences } from '../prefs/preferences';
+import {
+  Preferences,
+  createDefaultWorkspacePreferences,
+  type WorkspacePreferences,
+} from '../prefs/preferences';
 import { ProjectPersistence } from './project-persistence';
 import { ShaderApi, type UpdateShaderPatch } from '../api/shader-api';
 import { ShaderStore } from './shader-store';

@@ -81,9 +81,9 @@ describe('EditorGroups service', () => {
 
     const groupB = groups.createGroup({ activate: true });
     expect(groupB).toBeTruthy();
-    expect(groups.moveDocument(VERTEX_DOC, groupB!, { sourceGroupId: DEFAULT_EDITOR_GROUP_ID })).toBe(
-      true,
-    );
+    expect(
+      groups.moveDocument(VERTEX_DOC, groupB!, { sourceGroupId: DEFAULT_EDITOR_GROUP_ID }),
+    ).toBe(true);
     TestBed.tick();
 
     expect(groups.openIds(DEFAULT_EDITOR_GROUP_ID)).toEqual([imageId]);
@@ -101,7 +101,9 @@ describe('EditorGroups service', () => {
     expect(groups.closeGroup(groupB!)).toBe(true);
     TestBed.tick();
     expect(groups.groupIds()).toEqual([DEFAULT_EDITOR_GROUP_ID]);
-    expect(openIdsForGroup(groups.peekState(), 'waves', DEFAULT_EDITOR_GROUP_ID)).toContain(VERTEX_DOC);
+    expect(openIdsForGroup(groups.peekState(), 'waves', DEFAULT_EDITOR_GROUP_ID)).toContain(
+      VERTEX_DOC,
+    );
   });
 
   it('rejects closing the sole editor group', () => {

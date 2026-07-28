@@ -15,7 +15,11 @@ import {
   type ShaderSummary,
 } from '@shader-studio/shared/model';
 import { imagePass, migrateLegacyProject } from '@shader-studio/shared/project';
-import { Preferences, createDefaultWorkspacePreferences, type WorkspacePreferences } from '../prefs/preferences';
+import {
+  Preferences,
+  createDefaultWorkspacePreferences,
+  type WorkspacePreferences,
+} from '../prefs/preferences';
 import { ApiError, type UpdateShaderPatch } from '../api/shader-api';
 import { ShaderApi } from '../api/shader-api';
 import { ShaderStore } from './shader-store';

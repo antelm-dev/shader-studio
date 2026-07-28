@@ -25,7 +25,11 @@ import {
   type ShaderProject,
 } from '@shader-studio/shared/project';
 import { migrateLayoutFromPreferences } from '@shader-studio/shared/surfaces';
-import { Preferences, createDefaultWorkspacePreferences, type WorkspacePreferences } from '../../prefs/preferences';
+import {
+  Preferences,
+  createDefaultWorkspacePreferences,
+  type WorkspacePreferences,
+} from '../../prefs/preferences';
 import { I18n } from '../../i18n/i18n';
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
 import { WorkspaceActions } from '../workspace-actions';

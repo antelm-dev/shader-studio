@@ -4,17 +4,17 @@ import { MatDialog } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 
-import {
-  DEFAULT_CHANNELS,
-  DEFAULT_RENDER,
-  type ShaderRecord,
-} from '@shader-studio/shared/model';
+import { DEFAULT_CHANNELS, DEFAULT_RENDER, type ShaderRecord } from '@shader-studio/shared/model';
 import { migrateLegacyProject } from '@shader-studio/shared/project';
 import { ShaderApi } from '../api/shader-api';
 import { DesktopPlatform } from '../desktop/desktop-platform';
 import { DesktopUpdater } from '../desktop/desktop-updater';
 import { I18n } from '../i18n/i18n';
-import { Preferences, createDefaultWorkspacePreferences, type WorkspacePreferences } from '../prefs/preferences';
+import {
+  Preferences,
+  createDefaultWorkspacePreferences,
+  type WorkspacePreferences,
+} from '../prefs/preferences';
 import { ShaderStore } from '../workspace/shader-store';
 import { OpenDocuments } from './editor/open-documents';
 import { WorkspaceActions } from './workspace-actions';
