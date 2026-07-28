@@ -290,8 +290,8 @@ describe('SessionBroker', () => {
       params: { speed: 9 },
     });
     expect(stale?.code).toBe('STALE_REVISION');
-    expect(stale?.snapshot?.params.speed).toBe(2);
-    expect(broker.getSnapshot().params.speed).toBe(2);
+    expect(stale?.snapshot?.params['speed']).toBe(2);
+    expect(broker.getSnapshot().params['speed']).toBe(2);
   });
 
   it('recovers via requestResync after reconnect', async () => {
