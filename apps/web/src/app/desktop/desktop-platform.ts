@@ -2,6 +2,9 @@ import { Injectable, computed, signal } from '@angular/core';
 
 import type { Bundle, ImportMode } from '@shader-studio/shared/model';
 
+/** Semantic Help destinations — never pass raw URLs to the main process. */
+export type SupportLinkDestination = 'documentation' | 'issues';
+
 type WindowState = { maximized: boolean; fullscreen: boolean };
 
 const IDLE_STATE: WindowState = { maximized: false, fullscreen: false };
@@ -18,9 +21,7 @@ export class DesktopPlatform {
 
   constructor() {
     if (!this.available) return;
-    void window.electron.bridge.window
-      .state()
-      .then((state) => this.windowStateSignal.set(state));
+    void window.electron.bridge.window.state().then((state) => this.windowStateSignal.set(state));
     window.electron.bridge.window.onStateChanged((state) => this.windowStateSignal.set(state));
     void window.electron.bridge.window.outputOpen().then((open) => this.outputOpen.set(open));
     window.electron.bridge.window.onOutputStateChanged((open) => this.outputOpen.set(open));
@@ -168,6 +169,16 @@ export class DesktopPlatform {
 
   toggleFullscreen(): void {
     if (this.available) window.electron.bridge.window.toggleFullscreen();
+  }
+
+  /** Toggles DevTools for the Electron window that owns this renderer. */
+  toggleDevTools(): void {
+    if (this.available) window.electron.bridge.window.toggleDevtools();
+  }
+
+  /** Opens an allowlisted Help destination in the system browser. */
+  openSupportLink(destination: SupportLinkDestination): void {
+    if (this.available) window.electron.bridge.window.openSupportLink(destination);
   }
 
   openOutput(): void {

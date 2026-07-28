@@ -8,6 +8,15 @@ import { DesktopUpdater } from '../../desktop/desktop-updater';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 
+/**
+ * About / update status dialog for the desktop shell.
+ *
+ * Presentation is About-oriented; update checking, download progress, and
+ * install/restart still come exclusively from `DesktopUpdater`.
+ *
+ * Stable export name kept for existing `WorkspaceActions` dynamic import.
+ * Prefer `AboutShaderStudioDialog` at new call sites (Task 03).
+ */
 @Component({
   selector: 'app-desktop-version-dialog',
   imports: [MatButtonModule, MatDialogModule, MatIconModule, MatProgressBarModule, TranslatePipe],
@@ -15,6 +24,7 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
     <h2 mat-dialog-title>{{ 'desktop.versionTitle' | translate }}</h2>
     <mat-dialog-content>
       <div class="identity">
+        <mat-icon class="app-icon" aria-hidden="true">auto_awesome</mat-icon>
         <div>
           <strong>Shader Studio</strong>
           <span>{{
@@ -22,7 +32,7 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
           }}</span>
         </div>
       </div>
-      <div class="status" aria-live="polite">
+      <div class="status" role="status" aria-live="polite">
         <mat-icon [class.error]="updater.state().status === 'error'">{{ statusIcon() }}</mat-icon>
         <span>{{ statusText() }}</span>
       </div>
@@ -53,6 +63,13 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
       align-items: center;
       gap: 18px;
       padding-block: 8px 24px;
+    }
+    .identity .app-icon {
+      flex: 0 0 auto;
+      width: 40px;
+      height: 40px;
+      font-size: 40px;
+      color: var(--mat-sys-primary);
     }
     .identity div {
       display: grid;
@@ -187,3 +204,6 @@ export class DesktopVersionDialog {
     else this.updater.update();
   }
 }
+
+/** Preferred alias for Help → About Shader Studio… call sites. */
+export { DesktopVersionDialog as AboutShaderStudioDialog };

@@ -15,7 +15,11 @@ import {
 } from '@shader-studio/shared/project';
 import { I18n } from '../../i18n/i18n';
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
-import { buildExplorerTree, collectSelectableDocIds, type ExplorerViewMode } from '../file-explorer';
+import {
+  buildExplorerTree,
+  collectSelectableDocIds,
+  type ExplorerViewMode,
+} from '../file-explorer';
 import { EditorGroupSession } from './editor-group-session';
 import { EditorGroups } from './editor-groups';
 import { EditorTabs } from './editor-tabs';
@@ -219,7 +223,10 @@ describe('EditorTabs open-document strip', () => {
 
     let selected: string | null = null;
     fixture.componentInstance.select.subscribe((id) => (selected = id));
-    tabButtons[2].triggerEventHandler('keydown', new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+    tabButtons[2].triggerEventHandler(
+      'keydown',
+      new KeyboardEvent('keydown', { key: 'ArrowLeft' }),
+    );
     expect(selected).toBe(VERTEX_DOC);
 
     openDocs.activate(VERTEX_DOC);

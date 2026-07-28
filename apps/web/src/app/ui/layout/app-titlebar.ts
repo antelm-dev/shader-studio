@@ -150,6 +150,12 @@ import { WorkspaceActions } from '../workspace-actions';
           }
         </button>
       }
+      <mat-divider />
+      <button mat-menu-item type="button" (click)="desktop.toggleDevTools()">
+        <mat-icon>code</mat-icon>
+        <span>{{ 'menu.toggleDevTools' | translate }}</span>
+        <span class="menu-hint">Ctrl+Shift+I</span>
+      </button>
     </mat-menu>
 
     <mat-menu #themeMenu="matMenu">
@@ -184,9 +190,26 @@ import { WorkspaceActions } from '../workspace-actions';
     </mat-menu>
 
     <mat-menu #helpMenu="matMenu">
-      <button mat-menu-item type="button" (click)="workspace.openDesktopVersion()">
+      <button mat-menu-item type="button" (click)="workspace.openKeyboardShortcuts()">
+        <mat-icon>keyboard</mat-icon>
+        <span>{{ 'menu.keyboardShortcuts' | translate }}</span>
+      </button>
+      <button mat-menu-item type="button" (click)="desktop.openSupportLink('documentation')">
+        <mat-icon>menu_book</mat-icon>
+        <span>{{ 'menu.documentation' | translate }}</span>
+      </button>
+      <button mat-menu-item type="button" (click)="desktop.openSupportLink('issues')">
+        <mat-icon>bug_report</mat-icon>
+        <span>{{ 'menu.reportIssue' | translate }}</span>
+      </button>
+      <mat-divider />
+      <button mat-menu-item type="button" (click)="workspace.checkForUpdates()">
+        <mat-icon>system_update</mat-icon>
+        <span>{{ 'menu.checkForUpdates' | translate }}</span>
+      </button>
+      <button mat-menu-item type="button" (click)="workspace.openAboutShaderStudio()">
         <mat-icon>info</mat-icon>
-        <span>{{ 'menu.desktopVersion' | translate }}</span>
+        <span>{{ 'menu.aboutShaderStudio' | translate }}</span>
       </button>
     </mat-menu>
   `,

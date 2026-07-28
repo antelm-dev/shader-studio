@@ -368,12 +368,13 @@ describe('ExplorerPanel', () => {
     const source = fixture.nativeElement.querySelector('[data-node-id="buf-a"]') as HTMLElement;
     const target = fixture.nativeElement.querySelector('[data-node-id="buf-b"]') as HTMLElement;
 
-    const dataTransfer: Pick<DataTransfer, 'setData' | 'getData' | 'dropEffect' | 'effectAllowed'> = {
-      dropEffect: 'none',
-      effectAllowed: 'all',
-      getData: () => '',
-      setData: () => undefined,
-    };
+    const dataTransfer: Pick<DataTransfer, 'setData' | 'getData' | 'dropEffect' | 'effectAllowed'> =
+      {
+        dropEffect: 'none',
+        effectAllowed: 'all',
+        getData: () => '',
+        setData: () => undefined,
+      };
     dispatchDragEvent(source, 'dragstart', dataTransfer);
     dispatchDragEvent(target, 'drop', dataTransfer);
     fixture.detectChanges();
@@ -419,7 +420,9 @@ describe('ExplorerPanel', () => {
   it('renders texture binding labels with resolved English and French slots', async () => {
     tree.set(pipelineTree());
     const fixture = mount();
-    let row = fixture.nativeElement.querySelector('[data-node-id="binding-texture"] .label') as HTMLElement;
+    let row = fixture.nativeElement.querySelector(
+      '[data-node-id="binding-texture"] .label',
+    ) as HTMLElement;
     expect(row.textContent?.trim()).toBe('Texture slot 0');
     expect(row.textContent).not.toContain('{slot}');
 
@@ -427,7 +430,9 @@ describe('ExplorerPanel', () => {
     await TestBed.inject(I18n).ensureLoaded('fr');
     fixture.detectChanges();
 
-    row = fixture.nativeElement.querySelector('[data-node-id="binding-texture"] .label') as HTMLElement;
+    row = fixture.nativeElement.querySelector(
+      '[data-node-id="binding-texture"] .label',
+    ) as HTMLElement;
     expect(row.textContent?.trim()).toBe('Emplacement texture 0');
     expect(row.textContent).not.toContain('{slot}');
   });
@@ -443,7 +448,9 @@ describe('ExplorerPanel', () => {
     ) as HTMLElement;
 
     expect(bufferRow.querySelector('.label')?.textContent?.trim()).toBe('Buffer “Buffer A”');
-    expect(feedbackRow.querySelector('.label')?.textContent?.trim()).toBe('Feedback from “Buffer B”');
+    expect(feedbackRow.querySelector('.label')?.textContent?.trim()).toBe(
+      'Feedback from “Buffer B”',
+    );
     expect(bufferRow.dataset['nodeId']).toBe('binding-buffer');
     expect(feedbackRow.dataset['nodeId']).toBe('binding-feedback');
   });
@@ -470,14 +477,18 @@ describe('ExplorerPanel', () => {
     fixture.componentRef.setInput('tree', tree());
     fixture.detectChanges();
 
-    const row = fixture.nativeElement.querySelector('[data-node-id="binding-buffer"] .label') as HTMLElement;
+    const row = fixture.nativeElement.querySelector(
+      '[data-node-id="binding-buffer"] .label',
+    ) as HTMLElement;
     expect(row.textContent?.trim()).toBe('Buffer “Velocity Buffer”');
   });
 
   it('renders localized fallback labels for dangling targets without placeholders', async () => {
     tree.set(pipelineTree());
     const fixture = mount();
-    let row = fixture.nativeElement.querySelector('[data-node-id="binding-dangling"] .label') as HTMLElement;
+    let row = fixture.nativeElement.querySelector(
+      '[data-node-id="binding-dangling"] .label',
+    ) as HTMLElement;
     expect(row.textContent?.trim()).toBe('Buffer “missing target”');
     expect(row.textContent).not.toContain('{name}');
 
@@ -485,7 +496,9 @@ describe('ExplorerPanel', () => {
     await TestBed.inject(I18n).ensureLoaded('fr');
     fixture.detectChanges();
 
-    row = fixture.nativeElement.querySelector('[data-node-id="binding-dangling"] .label') as HTMLElement;
+    row = fixture.nativeElement.querySelector(
+      '[data-node-id="binding-dangling"] .label',
+    ) as HTMLElement;
     expect(row.textContent?.trim()).toBe('Buffer « cible manquante »');
     expect(row.textContent).not.toContain('{name}');
   });
@@ -493,10 +506,18 @@ describe('ExplorerPanel', () => {
   it('uses resolved labels in accessible names', () => {
     tree.set(pipelineTree());
     const fixture = mount();
-    const texture = fixture.nativeElement.querySelector('[data-node-id="binding-texture"]') as HTMLElement;
-    const buffer = fixture.nativeElement.querySelector('[data-node-id="binding-buffer"]') as HTMLElement;
-    const feedback = fixture.nativeElement.querySelector('[data-node-id="binding-feedback"]') as HTMLElement;
-    const dangling = fixture.nativeElement.querySelector('[data-node-id="binding-dangling"]') as HTMLElement;
+    const texture = fixture.nativeElement.querySelector(
+      '[data-node-id="binding-texture"]',
+    ) as HTMLElement;
+    const buffer = fixture.nativeElement.querySelector(
+      '[data-node-id="binding-buffer"]',
+    ) as HTMLElement;
+    const feedback = fixture.nativeElement.querySelector(
+      '[data-node-id="binding-feedback"]',
+    ) as HTMLElement;
+    const dangling = fixture.nativeElement.querySelector(
+      '[data-node-id="binding-dangling"]',
+    ) as HTMLElement;
 
     expect(texture.getAttribute('aria-label')).toContain('Texture slot 0');
     expect(buffer.getAttribute('aria-label')).toContain('Buffer “Buffer A”');
@@ -513,27 +534,24 @@ describe('ExplorerPanel', () => {
       { width: 180, iconTabs: true, compact: true },
       { width: 240, iconTabs: true, compact: true },
       { width: 400, iconTabs: false, compact: false },
-    ])(
-      'keeps header controls reachable at ${width}px',
-      ({ width, iconTabs, compact }) => {
-        const fixture = mount();
-        setPanelWidth(fixture, width);
-        const host = fixture.nativeElement as HTMLElement;
+    ])('keeps header controls reachable at ${width}px', ({ width, iconTabs, compact }) => {
+      const fixture = mount();
+      setPanelWidth(fixture, width);
+      const host = fixture.nativeElement as HTMLElement;
 
-        expect(host.classList.contains('explorer-icon-view-tabs')).toBe(iconTabs);
-        expect(host.classList.contains('explorer-header-compact')).toBe(compact);
+      expect(host.classList.contains('explorer-icon-view-tabs')).toBe(iconTabs);
+      expect(host.classList.contains('explorer-header-compact')).toBe(compact);
 
-        const tabs = host.querySelectorAll('[role="tab"]');
-        expect(tabs).toHaveLength(2);
-        expect(headerControl(fixture, '.create')).not.toBeNull();
-        expect(headerControl(fixture, '.collapse')).not.toBeNull();
+      const tabs = host.querySelectorAll('[role="tab"]');
+      expect(tabs).toHaveLength(2);
+      expect(headerControl(fixture, '.create')).not.toBeNull();
+      expect(headerControl(fixture, '.collapse')).not.toBeNull();
 
-        for (const tab of tabs) {
-          expect(tab.getAttribute('aria-selected')).toMatch(/true|false/);
-          expect(tab.getAttribute('aria-label')).toBeTruthy();
-        }
-      },
-    );
+      for (const tab of tabs) {
+        expect(tab.getAttribute('aria-selected')).toMatch(/true|false/);
+        expect(tab.getAttribute('aria-label')).toBeTruthy();
+      }
+    });
 
     it('emits viewChange from compact icon tabs at 180px', () => {
       const fixture = mount();
@@ -541,7 +559,9 @@ describe('ExplorerPanel', () => {
       const viewChange = vi.fn();
       fixture.componentInstance.viewChange.subscribe(viewChange);
 
-      const pipelineTab = fixture.nativeElement.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement;
+      const pipelineTab = fixture.nativeElement.querySelectorAll(
+        '[role="tab"]',
+      )[1] as HTMLButtonElement;
       pipelineTab.click();
       fixture.detectChanges();
 
@@ -576,7 +596,9 @@ describe('ExplorerPanel', () => {
     it('does not set aria-disabled on render-disabled buffers', () => {
       tree.set(disabledTree());
       const fixture = mount();
-      const row = fixture.nativeElement.querySelector('[data-node-id="buf-disabled"]') as HTMLElement;
+      const row = fixture.nativeElement.querySelector(
+        '[data-node-id="buf-disabled"]',
+      ) as HTMLElement;
 
       expect(row.getAttribute('aria-disabled')).toBeNull();
       expect(row.getAttribute('aria-label')).toContain('Disabled');
@@ -597,7 +619,9 @@ describe('ExplorerPanel', () => {
       await Promise.resolve();
       fixture.detectChanges();
 
-      const row = fixture.nativeElement.querySelector('[data-node-id="buf-disabled"]') as HTMLElement;
+      const row = fixture.nativeElement.querySelector(
+        '[data-node-id="buf-disabled"]',
+      ) as HTMLElement;
       row.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
       );
@@ -618,15 +642,17 @@ describe('ExplorerPanel', () => {
       const command = vi.fn();
       fixture.componentInstance.command.subscribe(command);
 
-      const row = fixture.nativeElement.querySelector('[data-node-id="buf-disabled"]') as HTMLElement;
+      const row = fixture.nativeElement.querySelector(
+        '[data-node-id="buf-disabled"]',
+      ) as HTMLElement;
       const menuBtn = row.querySelector('.row-menu') as HTMLButtonElement;
       expect(menuBtn).not.toBeNull();
 
       menuBtn.click();
       fixture.detectChanges();
 
-      const enableItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
-        item.textContent?.includes('Enable'),
+      const enableItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+        (item) => item.textContent?.includes('Enable'),
       ) as HTMLButtonElement | undefined;
       expect(enableItem).toBeDefined();
       enableItem?.click();
@@ -642,7 +668,9 @@ describe('ExplorerPanel', () => {
       fixture.componentInstance.command.subscribe(command);
 
       const treeRoot = fixture.nativeElement.querySelector('#explorer-tree') as HTMLElement;
-      const row = fixture.nativeElement.querySelector('[data-node-id="buf-disabled"]') as HTMLElement;
+      const row = fixture.nativeElement.querySelector(
+        '[data-node-id="buf-disabled"]',
+      ) as HTMLElement;
       treeRoot.focus();
       row.focus();
       fixture.detectChanges();
@@ -653,8 +681,8 @@ describe('ExplorerPanel', () => {
       await Promise.resolve();
       fixture.detectChanges();
 
-      const enableItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
-        item.textContent?.includes('Enable'),
+      const enableItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+        (item) => item.textContent?.includes('Enable'),
       ) as HTMLButtonElement | undefined;
       expect(enableItem).toBeDefined();
       enableItem?.click();

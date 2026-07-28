@@ -797,7 +797,8 @@ export class ExplorerPanel {
   }
 
   private currentFocusedNodeId(): string | null {
-    const activeElement = this.treeRoot()?.nativeElement.ownerDocument.activeElement as HTMLElement | null;
+    const activeElement = this.treeRoot()?.nativeElement.ownerDocument
+      .activeElement as HTMLElement | null;
     return activeElement?.closest<HTMLElement>('[data-node-id]')?.dataset['nodeId'] ?? null;
   }
 
