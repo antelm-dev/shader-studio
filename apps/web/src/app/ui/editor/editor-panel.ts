@@ -38,7 +38,7 @@ import { ShaderStore } from '../../workspace/shader-store';
 import { DocumentStatus } from './document-status';
 import { EditorTabs } from './editor-tabs';
 import { EditorWindowControls } from './editor-window-controls';
-import { OpenDocuments } from './open-documents';
+import { EditorGroups } from './editor-groups';
 import { PassConfigPanel } from '../inspector/pass-config-panel';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { WorkspaceActions } from '../workspace-actions';
@@ -185,7 +185,9 @@ type EditorSurface = Pick<CodeEditor, 'focus' | 'format' | 'layout' | 'revealIn'
           type="button"
           class="explorer-reopen"
           [matButton]="explorerOverlayAvailable() ? 'tonal' : 'text'"
-          [matTooltip]="(explorerPreferredOpen() ? 'explorer.expand' : 'explorer.title') | translate"
+          [matTooltip]="
+            (explorerPreferredOpen() ? 'explorer.expand' : 'explorer.title') | translate
+          "
           [attr.aria-label]="
             (explorerOverlayAvailable() ? 'explorer.expand' : 'explorer.title') | translate
           "
@@ -442,7 +444,7 @@ export class EditorPanel {
   protected readonly settings = inject(EditorSettings);
   protected readonly workspace = inject(WorkspaceActions);
   protected readonly status = inject(DocumentStatus);
-  protected readonly openDocs = inject(OpenDocuments);
+  protected readonly groups = inject(EditorGroups);
   protected readonly fileExplorerLimits = FILE_EXPLORER_LIMITS;
 
   readonly collapsed = input(false);
@@ -464,7 +466,9 @@ export class EditorPanel {
   private stopExplorerResize: (() => void) | null = null;
 
   protected readonly activeDoc = computed(() => this.store.activeDoc());
-  protected readonly explorerPreferredOpen = computed(() => this.preferences.value().fileExplorerOpen);
+  protected readonly explorerPreferredOpen = computed(
+    () => this.preferences.value().fileExplorerOpen,
+  );
   protected readonly explorerWidth = computed(
     () => this.liveExplorerWidth() ?? this.preferences.value().fileExplorerWidth,
   );
@@ -494,7 +498,8 @@ export class EditorPanel {
   protected readonly showExplorerReopen = computed(
     () =>
       !this.collapsed() &&
-      (!this.explorerPreferredOpen() || (this.explorerOverlayAvailable() && !this.explorerOverlayOpen())),
+      (!this.explorerPreferredOpen() ||
+        (this.explorerOverlayAvailable() && !this.explorerOverlayOpen())),
   );
 
   /** The open document, in the shape the editor wants. */
@@ -564,7 +569,7 @@ export class EditorPanel {
   }
 
   protected selectDoc(id: string): void {
-    this.openDocs.activate(id);
+    this.groups.activate(id);
     queueMicrotask(() => this.relayout());
   }
 
@@ -642,7 +647,9 @@ export class EditorPanel {
     target?.setPointerCapture?.(event.pointerId);
 
     const move = (moveEvent: PointerEvent) => {
-      this.liveExplorerWidth.set(clampFileExplorerWidth(startWidth + moveEvent.clientX - startX, startWidth));
+      this.liveExplorerWidth.set(
+        clampFileExplorerWidth(startWidth + moveEvent.clientX - startX, startWidth),
+      );
       this.relayout();
     };
     const finish = (finishEvent: PointerEvent) => {
@@ -694,7 +701,7 @@ export class EditorPanel {
     );
     if (!resolved) return;
 
-    this.openDocs.activate(resolved.docId);
+    this.groups.activate(resolved.docId);
 
     if (resolved.reveal) this.editor()?.revealIn(resolved.docId, resolved.line);
     else this.focusEditor();

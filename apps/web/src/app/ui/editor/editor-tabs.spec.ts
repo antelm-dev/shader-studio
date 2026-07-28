@@ -16,6 +16,8 @@ import {
 import { I18n } from '../../i18n/i18n';
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
 import { buildExplorerTree, collectSelectableDocIds, type ExplorerViewMode } from '../file-explorer';
+import { EditorGroupSession } from './editor-group-session';
+import { EditorGroups } from './editor-groups';
 import { EditorTabs } from './editor-tabs';
 import { OpenDocuments } from './open-documents';
 
@@ -129,6 +131,8 @@ describe('EditorTabs open-document strip', () => {
               key === 'editor.closeTab' ? `Close ${params['name']}` : key,
           },
         },
+        EditorGroupSession,
+        EditorGroups,
         OpenDocuments,
       ],
     });

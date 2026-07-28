@@ -1,4 +1,5 @@
 import { Component, ElementRef, inject, input, output, viewChildren } from '@angular/core';
+import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -6,7 +7,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
-import { OpenDocuments } from './open-documents';
+import { DEFAULT_EDITOR_GROUP_ID, type EditorGroupId } from '@shader-studio/shared/surfaces';
+import { EditorGroups } from './editor-groups';
 
 /** What a tab is doing, which is what its dot is coloured for. */
 export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
@@ -21,10 +23,10 @@ export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
  */
 @Component({
   selector: 'app-editor-tabs',
-  imports: [MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
+  imports: [MatDividerModule, MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
   template: `
     <div class="tabs" role="tablist" [attr.aria-label]="'editor.documents' | translate">
-      @for (doc of openDocs.openDocs(); track doc.id) {
+      @for (doc of groups.openDocs(groupId()); track doc.id) {
         <div
           class="tab-wrap"
           [class.active]="doc.id === activeId()"
@@ -61,7 +63,7 @@ export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
             }
           </button>
 
-          @if (openDocs.canClose()) {
+          @if (groups.canClose(groupId())) {
             <button
               type="button"
               class="tab-close"
@@ -81,7 +83,7 @@ export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
         <button
           mat-menu-item
           type="button"
-          [disabled]="!openDocs.canClose()"
+          [disabled]="!groups.canClose(groupId())"
           (click)="onCloseMenu(doc)"
         >
           <mat-icon>close</mat-icon>
@@ -90,11 +92,26 @@ export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
         <button
           mat-menu-item
           type="button"
-          [disabled]="!openDocs.canClose()"
-          (click)="openDocs.closeOthers(doc.id)"
+          [disabled]="!groups.canClose(groupId())"
+          (click)="groups.closeOthers(doc.id, groupId())"
         >
           <mat-icon>tab_close</mat-icon>
           <span>{{ 'editor.closeOtherTabs' | translate }}</span>
+        </button>
+        <mat-divider />
+        <button mat-menu-item type="button" (click)="moveToNewGroup(doc)">
+          <mat-icon>open_in_new</mat-icon>
+          <span>{{ 'editor.moveToNewGroup' | translate }}</span>
+        </button>
+        @for (targetGroup of groups.otherGroupIds(groupId()); track targetGroup) {
+          <button mat-menu-item type="button" (click)="moveToGroup(doc, targetGroup)">
+            <mat-icon>drive_file_move</mat-icon>
+            <span>{{ 'editor.moveToGroup' | translate: { id: targetGroup } }}</span>
+          </button>
+        }
+        <button mat-menu-item type="button" disabled>
+          <mat-icon>launch</mat-icon>
+          <span>{{ 'editor.externalizeGroup' | translate }}</span>
         </button>
       </ng-template>
     </mat-menu>
@@ -251,11 +268,12 @@ export type TabState = 'idle' | 'compiling' | 'error' | 'ok';
 })
 export class EditorTabs {
   protected readonly store = inject(ShaderStore);
-  protected readonly openDocs = inject(OpenDocuments);
+  protected readonly groups = inject(EditorGroups);
   private readonly i18n = inject(I18n);
   private readonly tabButtons = viewChildren<ElementRef<HTMLButtonElement>>('tabButton');
 
   readonly activeId = input<string | null>(null);
+  readonly groupId = input<EditorGroupId>(DEFAULT_EDITOR_GROUP_ID);
 
   readonly select = output<string>();
   /** Emitted after a close so the panel can restore focus. */
@@ -325,13 +343,13 @@ export class EditorTabs {
 
   protected onAuxClick(event: MouseEvent, doc: EditorDocument): void {
     // Middle-click closes when more than one tab is open.
-    if (event.button !== 1 || !this.openDocs.canClose()) return;
+    if (event.button !== 1 || !this.groups.canClose(this.groupId())) return;
     event.preventDefault();
     this.closeTab(doc.id);
   }
 
   protected onTabKeydown(event: KeyboardEvent, doc: EditorDocument): void {
-    const ids = this.openDocs.openIds();
+    const ids = this.groups.openIds(this.groupId());
     const index = ids.indexOf(doc.id);
     if (index < 0) return;
 
@@ -363,14 +381,17 @@ export class EditorTabs {
       return;
     }
 
-    if ((event.key === 'Delete' || event.key === 'Backspace') && this.openDocs.canClose()) {
+    if (
+      (event.key === 'Delete' || event.key === 'Backspace') &&
+      this.groups.canClose(this.groupId())
+    ) {
       event.preventDefault();
       this.closeTab(doc.id);
     }
   }
 
   private closeTab(docId: string): void {
-    const closed = this.openDocs.close(docId);
+    const closed = this.groups.close(docId, this.groupId());
     if (!closed) return;
 
     const nextActive = this.store.activeDoc()?.id ?? null;
@@ -409,6 +430,14 @@ export class EditorTabs {
     if (!source || source.id === doc.id) return;
 
     event.preventDefault();
-    this.openDocs.reorder(source.id, doc.id);
+    this.groups.reorder(source.id, doc.id, this.groupId());
+  }
+
+  protected moveToNewGroup(doc: EditorDocument): void {
+    this.groups.moveToNewGroup(doc.id);
+  }
+
+  protected moveToGroup(doc: EditorDocument, targetGroupId: EditorGroupId): void {
+    this.groups.moveDocument(doc.id, targetGroupId, { sourceGroupId: this.groupId() });
   }
 }

@@ -12,6 +12,8 @@ import {
   type ShaderProject,
 } from '@shader-studio/shared/project';
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
+import { EditorGroupSession } from './editor-group-session';
+import { EditorGroups } from './editor-groups';
 import { OpenDocuments } from './open-documents';
 import { openIdsFor } from './open-documents-state';
 
@@ -100,6 +102,8 @@ describe('OpenDocuments service', () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: ShaderStore, useValue: tabs.asShaderStore() },
+        EditorGroupSession,
+        EditorGroups,
         OpenDocuments,
       ],
     });

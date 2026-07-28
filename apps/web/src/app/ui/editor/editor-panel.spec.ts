@@ -26,6 +26,8 @@ import { DocumentStatus } from './document-status';
 import { EditorPanel } from './editor-panel';
 import { EditorTabs } from './editor-tabs';
 import { EditorWindowControls } from './editor-window-controls';
+import { EditorGroupSession } from './editor-group-session';
+import { EditorGroups } from './editor-groups';
 import { OpenDocuments } from './open-documents';
 import { PassConfigPanel } from '../inspector/pass-config-panel';
 
@@ -271,6 +273,8 @@ describe('EditorPanel file explorer integration', () => {
         { provide: DocumentStatus, useValue: new FakeStatus() },
         { provide: EditorNavigation, useValue: { request: signal(null).asReadonly() } },
         { provide: I18n, useValue: { t: (key: string) => key } },
+        EditorGroupSession,
+        EditorGroups,
         OpenDocuments,
       ],
     });
