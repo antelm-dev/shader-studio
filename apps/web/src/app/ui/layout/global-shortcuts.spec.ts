@@ -156,6 +156,13 @@ describe('GlobalShortcuts', () => {
     }
   });
 
+  it('ignores key-repeat for Ctrl+Shift+I so DevTools does not flicker', () => {
+    const event = chordEvent('i', { ctrlKey: true, shiftKey: true, repeat: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(toggleDevTools).not.toHaveBeenCalled();
+  });
+
   it('still treats Ctrl+S as a chord ahead of the typing guard', () => {
     const input = document.createElement('input');
     document.body.appendChild(input);

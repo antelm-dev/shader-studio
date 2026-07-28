@@ -101,9 +101,10 @@ export class GlobalShortcuts {
         return true;
 
       // Desktop DevTools — full Ctrl/Meta+Shift+I chord only. Plain Ctrl+I or
-      // Shift+I must not reach here as handled (they fall through).
+      // Shift+I must not reach here as handled (they fall through). Key-repeat
+      // would otherwise flicker DevTools open/closed while the chord is held.
       case 'i':
-        if (!event.shiftKey || !this.desktop.available) return false;
+        if (!event.shiftKey || !this.desktop.available || event.repeat) return false;
         event.preventDefault();
         this.desktop.toggleDevTools();
         return true;
