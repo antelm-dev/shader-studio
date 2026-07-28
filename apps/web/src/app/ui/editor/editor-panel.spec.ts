@@ -4,14 +4,7 @@ import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_EDITOR_APPEARANCE, DEFAULT_EDITOR_WINDOW } from '@shader-studio/shared/editor-prefs';
-import { DEFAULT_CAPTURE } from '@shader-studio/shared/model';
-import {
-  DEFAULT_FILE_EXPLORER_OPEN,
-  DEFAULT_FILE_EXPLORER_VIEW,
-  DEFAULT_FILE_EXPLORER_WIDTH,
-  FILE_EXPLORER_LIMITS,
-} from '@shader-studio/shared/panel-prefs';
-import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
+import { FILE_EXPLORER_LIMITS } from '@shader-studio/shared/panel-prefs';
 import {
   addBuffer,
   addFile,
@@ -21,7 +14,8 @@ import {
   resolvePassOrder,
   type ShaderProject,
 } from '@shader-studio/shared/project';
-import { Preferences, type WorkspacePreferences } from '../../prefs/preferences';
+import { migrateLayoutFromPreferences } from '@shader-studio/shared/surfaces';
+import { Preferences, createDefaultWorkspacePreferences, type WorkspacePreferences } from '../../prefs/preferences';
 import { I18n } from '../../i18n/i18n';
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
 import { WorkspaceActions } from '../workspace-actions';
@@ -133,29 +127,15 @@ function toDocuments(project: ShaderProject): EditorDocument[] {
 
 class FakePreferences implements Partial<Preferences> {
   private readonly state = signal<WorkspacePreferences>({
-    language: 'en',
-    lastShaderId: null,
-    shadertoyApiKey: null,
-    browserOpen: true,
+    ...createDefaultWorkspacePreferences(),
     editorOpen: true,
-    guiVisible: true,
     browserWidth: 300,
     inspectorWidth: 300,
-    inspectorTab: 'controls',
-    bottomPanelOpen: false,
-    bottomPanelHeight: 220,
-    bottomPanelTab: 'problems',
-    fileExplorerOpen: DEFAULT_FILE_EXPLORER_OPEN,
-    fileExplorerView: DEFAULT_FILE_EXPLORER_VIEW,
-    fileExplorerWidth: DEFAULT_FILE_EXPLORER_WIDTH,
-    resolutionScale: 1,
-    paused: false,
-    autoRipples: false,
-    colorScheme: 'dark',
-    editorAppearance: DEFAULT_EDITOR_APPEARANCE,
     editorWindow: { ...DEFAULT_EDITOR_WINDOW, dockSide: 'right' },
-    previewWindow: DEFAULT_PREVIEW_WINDOW,
-    capture: DEFAULT_CAPTURE,
+    surfacesLayout: migrateLayoutFromPreferences({
+      editorOpen: true,
+      editorWindow: { ...DEFAULT_EDITOR_WINDOW, dockSide: 'right' },
+    }),
   });
 
   readonly value = this.state.asReadonly();

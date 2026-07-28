@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  DEFAULT_CAPTURE,
   DEFAULT_CHANNELS,
   DEFAULT_RENDER,
   toSummary,
@@ -16,18 +15,7 @@ import {
   type ShaderSummary,
 } from '@shader-studio/shared/model';
 import { imagePass, migrateLegacyProject } from '@shader-studio/shared/project';
-import { Preferences, type WorkspacePreferences } from '../prefs/preferences';
-import {
-  DEFAULT_EDITOR_APPEARANCE,
-  DEFAULT_EDITOR_WINDOW,
-} from '@shader-studio/shared/editor-prefs';
-import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
-import {
-  DEFAULT_FILE_EXPLORER_OPEN,
-  DEFAULT_FILE_EXPLORER_VIEW,
-  DEFAULT_FILE_EXPLORER_WIDTH,
-  DEFAULT_PANEL_WIDTHS,
-} from '@shader-studio/shared/panel-prefs';
+import { Preferences, createDefaultWorkspacePreferences, type WorkspacePreferences } from '../prefs/preferences';
 import { ApiError, type UpdateShaderPatch } from '../api/shader-api';
 import { ShaderApi } from '../api/shader-api';
 import { ShaderStore } from './shader-store';
@@ -187,31 +175,7 @@ class FakeApi implements Partial<ShaderApi> {
 
 /** Preferences without the browser: a signal and a patch, nothing persisted. */
 class FakePreferences implements Partial<Preferences> {
-  private readonly state = signal<WorkspacePreferences>({
-    language: 'en',
-    lastShaderId: null,
-    shadertoyApiKey: null,
-    browserOpen: true,
-    editorOpen: false,
-    guiVisible: true,
-    browserWidth: DEFAULT_PANEL_WIDTHS.browser,
-    inspectorWidth: DEFAULT_PANEL_WIDTHS.inspector,
-    inspectorTab: 'controls',
-    bottomPanelOpen: false,
-    bottomPanelHeight: 220,
-    bottomPanelTab: 'problems',
-    fileExplorerOpen: DEFAULT_FILE_EXPLORER_OPEN,
-    fileExplorerView: DEFAULT_FILE_EXPLORER_VIEW,
-    fileExplorerWidth: DEFAULT_FILE_EXPLORER_WIDTH,
-    resolutionScale: 1,
-    paused: false,
-    autoRipples: false,
-    colorScheme: 'dark',
-    editorAppearance: DEFAULT_EDITOR_APPEARANCE,
-    editorWindow: DEFAULT_EDITOR_WINDOW,
-    previewWindow: DEFAULT_PREVIEW_WINDOW,
-    capture: DEFAULT_CAPTURE,
-  });
+  private readonly state = signal<WorkspacePreferences>(createDefaultWorkspacePreferences());
 
   readonly value = this.state.asReadonly();
 
