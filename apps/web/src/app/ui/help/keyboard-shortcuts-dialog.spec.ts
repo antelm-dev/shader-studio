@@ -95,8 +95,10 @@ describe('KeyboardShortcutsDialog', () => {
     });
 
     // Labels come from DOM text nodes, not CSS pseudo-content.
+    // Chord aria-label is the accessible name; kbd tokens stay visual-only.
     for (const kbd of root.querySelectorAll('kbd')) {
       expect(kbd.textContent?.trim().length).toBeGreaterThan(0);
+      expect(kbd.getAttribute('aria-hidden')).toBe('true');
     }
   });
 

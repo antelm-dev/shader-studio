@@ -27,7 +27,7 @@ import { SHORTCUT_CATALOG } from './shortcut-catalog';
                   <span class="label">{{ entry.labelKey | translate }}</span>
                   <span class="chord" [attr.aria-label]="entry.chord.ariaLabel">
                     @for (key of entry.chord.keys; track $index; let last = $last) {
-                      <kbd>{{ key }}</kbd>
+                      <kbd aria-hidden="true">{{ key }}</kbd>
                       @if (!last) {
                         <span class="chord-sep" aria-hidden="true">+</span>
                       }
