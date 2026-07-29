@@ -113,10 +113,14 @@ export class PostProcessing {
     }
 
     void this.ensureComposer().then(() => {
-      if (!this.bloomPass) return;
-      this.bloomPass.strength = render.bloom.strength;
-      this.bloomPass.radius = render.bloom.radius;
-      this.bloomPass.threshold = render.bloom.threshold;
+      // Re-read this.current rather than the captured argument: a newer
+      // setSettings call may have resolved first and already written its
+      // values. Using the captured argument would let an older continuation
+      // overwrite a newer composer's settings.
+      if (!this.bloomPass || !this.current.bloom.enabled) return;
+      this.bloomPass.strength = this.current.bloom.strength;
+      this.bloomPass.radius = this.current.bloom.radius;
+      this.bloomPass.threshold = this.current.bloom.threshold;
     });
   }
 

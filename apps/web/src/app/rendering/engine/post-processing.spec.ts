@@ -119,28 +119,29 @@ function controllableLoader(): {
 }
 
 /**
- * A loader that suspends until `resolve()` is called, letting the test
- * precisely control when the dynamic import completes.
+ * A loader that suspends each call until the corresponding `resolve(n)` is
+ * invoked, letting the test precisely control when each dynamic import
+ * completes. Resolvers are stored in a FIFO queue keyed by call index.
  */
 function deferredLoader(): {
   load: () => Promise<PostProcessingModules>;
   calls: number;
-  resolve: () => Promise<void>;
+  /** Settle the n-th load call (0-based). Defaults to 0. */
+  resolve: (index?: number) => Promise<void>;
 } {
-  let pending: (() => void) | null = null;
+  const resolvers: Array<() => void> = [];
   const state = {
     calls: 0,
     load: () => {
       state.calls++;
       return new Promise<PostProcessingModules>((res) => {
-        pending = () => res(fakeModules);
+        resolvers.push(() => res(fakeModules));
       });
     },
-    resolve: async () => {
-      pending?.();
-      pending = null;
+    resolve: async (index = 0) => {
+      resolvers[index]?.();
       // Two microtask turns: one to settle the loader promise, one for the
-      // `.then` inside ensureComposer/setSettings.
+      // .then continuation inside ensureComposer / setSettings.
       await Promise.resolve();
       await Promise.resolve();
     },
@@ -435,12 +436,12 @@ describe('PostProcessing', () => {
       deferred.load as unknown as () => Promise<PostProcessingModules>,
     );
 
-    p.setSettings(settings({ strength: 1.5 })); // triggers load
-    p.invalidate(); // stale
-    await deferred.resolve(); // discarded
+    p.setSettings(settings({ strength: 1.5 })); // triggers load (index 0)
+    p.invalidate(); // stale — bumps generation
+    await deferred.resolve(0); // discarded: generation mismatch
 
-    p.restore(); // starts a fresh load
-    await deferred.resolve(); // this one is valid
+    p.restore(); // starts a fresh load (index 1)
+    await deferred.resolve(1); // this one is valid
 
     expect(FakeComposer.created).toBe(1);
     expect((FakeComposer.last().passes[1] as FakeBloomPass).strength).toBe(1.5);
@@ -461,17 +462,80 @@ describe('PostProcessing', () => {
       d1.load as unknown as () => Promise<PostProcessingModules>,
     );
 
-    p.setSettings(settings({ strength: 0.1 })); // load #1 starts
+    p.setSettings(settings({ strength: 0.1 })); // load #1 starts (index 0)
     p.setSettings(OFF); // invalidates load #1 generation
-    p.setSettings(settings({ strength: 0.9 })); // load #2 starts — but same loader
+    p.setSettings(settings({ strength: 0.9 })); // load #2 starts (index 1)
 
-    // Resolve both pending calls in order: first the old one, then the current.
-    await d1.resolve(); // first call resolves — must be silently dropped
-    await d1.resolve(); // second call resolves — should install
+    // Resolve in call order: old one first, then the current.
+    await d1.resolve(0); // first call resolves — must be silently dropped
+    await d1.resolve(1); // second call resolves — should install
 
     // Only the second (valid) call should have produced a composer.
     expect(FakeComposer.created).toBe(1);
     expect((FakeComposer.last().passes[1] as FakeBloomPass).strength).toBe(0.9);
+
+    p.dispose();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Race: out-of-order resolution — newer settles first
+  // ---------------------------------------------------------------------------
+
+  it('newer enable request settles first and installs settings B; older settling after cannot overwrite', async () => {
+    const deferred = deferredLoader();
+    const p = new PostProcessing(
+      context,
+      scene as never,
+      camera as never,
+      deferred.load as unknown as () => Promise<PostProcessingModules>,
+    );
+
+    // Load A (index 0) starts, then load B (index 1) starts.
+    p.setSettings(settings({ strength: 0.2 })); // A
+    p.setSettings(settings({ strength: 0.8 })); // B — ensureComposer returns early (composer already pending)
+
+    // Resolve B first (index 1).
+    await deferred.resolve(1);
+
+    expect(FakeComposer.created).toBe(1);
+    const bloom = FakeComposer.last().passes[1] as FakeBloomPass;
+    // The composer was just created; the B continuation ran and wrote 0.8.
+    expect(bloom.strength).toBe(0.8);
+
+    // Now resolve A (index 0) — its continuation must not overwrite B's values.
+    await deferred.resolve(0);
+
+    expect(FakeComposer.created).toBe(1); // still only one composer
+    expect(bloom.strength).toBe(0.8); // not 0.2
+
+    p.dispose();
+  });
+
+  it('two enabled-setting updates resolving out of order converge on the latest values', async () => {
+    const deferred = deferredLoader();
+    const p = new PostProcessing(
+      context,
+      scene as never,
+      camera as never,
+      deferred.load as unknown as () => Promise<PostProcessingModules>,
+    );
+
+    // Composer already exists from a prior enable.
+    p.setSettings(settings({ strength: 0.3 }));
+    await deferred.resolve(0); // load #1 resolves — composer created
+    expect(FakeComposer.created).toBe(1);
+
+    // Two successive updates — both re-use the existing composer.
+    p.setSettings(settings({ strength: 0.5 })); // update A (no new load needed)
+    p.setSettings(settings({ strength: 0.9 })); // update B (no new load needed)
+
+    // Both continuations resolve synchronously since ensureComposer returns early.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const bloom = FakeComposer.last().passes[1] as FakeBloomPass;
+    expect(bloom.strength).toBe(0.9);
+    expect(FakeComposer.created).toBe(1);
 
     p.dispose();
   });
