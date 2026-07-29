@@ -823,6 +823,8 @@ export class ShaderEngine {
     // "reusing" materials that no longer exist on the GPU.
     this.compiler.invalidate();
 
+    this.profiler.onContextLost();
+
     // Replayed exactly once, and as a *request*, not as an error: a context loss
     // is not the shader's fault and must not be reported as one.
     const spec = this.compiler.lastSpec;
