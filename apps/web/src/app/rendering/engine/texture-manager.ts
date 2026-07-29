@@ -44,6 +44,8 @@ export interface ChannelSource {
 
 export const CHANNEL_COUNT = 4;
 
+const CHANNEL_INDICES = [0, 1, 2, 3] as const;
+
 /** Decode state. Absent means "not ours" — see the note on late callbacks above. */
 type LoadStatus = 'loading' | 'settled';
 
@@ -55,6 +57,13 @@ export interface TextureManagerOptions {
 /** Keyed by every input that changes the resulting GPU object, not just the URL. */
 function cacheKey(source: ChannelSource): string {
   return `${source.url}|${source.wrap}|${source.filter}|${source.flipY}`;
+}
+
+function decodedTextureDimensions(texture: THREE.Texture): { width: number; height: number } | null {
+  const image = texture.image as { width?: number; height?: number } | undefined;
+  if (!image || typeof image.width !== 'number' || typeof image.height !== 'number') return null;
+  if (image.width <= 0 || image.height <= 0) return null;
+  return { width: image.width, height: image.height };
 }
 
 export class TextureManager {
@@ -156,6 +165,48 @@ export class TextureManager {
       if (!source) return true;
       return this.status.get(cacheKey(source)) !== 'loading';
     });
+  }
+
+  /**
+   * Decoded GPU dimensions for uploaded channel textures. Unknown or loading
+   * dimensions stay null rather than being guessed.
+   */
+  textureAllocations(): {
+    readonly items: readonly {
+      slot: number;
+      width: number | null;
+      height: number | null;
+      bytes: number | null;
+    }[];
+    readonly totalBytes: number | null;
+    readonly estimated: true;
+  } {
+    const items = CHANNEL_INDICES.map((slot) => {
+      const source = this.live[slot];
+      if (!source) {
+        return { slot, width: null, height: null, bytes: null };
+      }
+
+      const key = cacheKey(source);
+      if (this.status.get(key) === 'loading') {
+        return { slot, width: null, height: null, bytes: null };
+      }
+
+      const texture = this.cache.get(key);
+      if (!texture) return { slot, width: null, height: null, bytes: null };
+
+      const dimensions = decodedTextureDimensions(texture);
+      if (!dimensions) return { slot, width: null, height: null, bytes: null };
+
+      const bytes = dimensions.width * dimensions.height * 4;
+      return { slot, width: dimensions.width, height: dimensions.height, bytes };
+    });
+
+    const known = items.filter((item) => item.bytes !== null);
+    const totalBytes =
+      known.length === 0 ? null : known.reduce((sum, item) => sum + (item.bytes ?? 0), 0);
+
+    return { items, totalBytes, estimated: true };
   }
 
   /**

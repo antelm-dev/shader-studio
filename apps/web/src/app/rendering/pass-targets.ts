@@ -39,6 +39,16 @@ export interface Viewport {
   height: number;
 }
 
+export const RGBA16F_BYTES_PER_PIXEL = 8;
+export const RENDER_TARGETS_PER_BUFFER = 2;
+
+export interface BufferAllocation {
+  id: string;
+  width: number;
+  height: number;
+  bytes: number;
+}
+
 interface Entry {
   targets: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget];
   /** Index into `targets` of the frame most recently finished. */
@@ -221,6 +231,19 @@ export class BufferTargets {
 
   has(id: string): boolean {
     return this.entries.has(id);
+  }
+
+  allocations(): readonly BufferAllocation[] {
+    const result: BufferAllocation[] = [];
+    for (const [id, entry] of this.entries) {
+      result.push({
+        id,
+        width: entry.width,
+        height: entry.height,
+        bytes: entry.width * entry.height * RGBA16F_BYTES_PER_PIXEL * RENDER_TARGETS_PER_BUFFER,
+      });
+    }
+    return result;
   }
 
   /**

@@ -171,6 +171,10 @@ export class PostProcessing {
   }
 
   /** Post-processing is only downloaded if a shader actually asks for bloom. */
+  usesComposer(): boolean {
+    return this.current.bloom.enabled && this.composer !== null;
+  }
+
   private async ensureComposer(): Promise<void> {
     if (this.composer || this.disposed) return;
 

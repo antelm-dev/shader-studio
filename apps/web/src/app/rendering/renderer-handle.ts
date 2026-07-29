@@ -3,6 +3,7 @@ import { DesktopPlatform } from '../desktop/desktop-platform';
 
 import type { ThumbnailUpload } from '../api/shader-api';
 import type { ShaderEngine } from './shader-engine';
+import type { ProfilerSnapshot } from './performance-profiler';
 import { encodeThumbnail } from './thumbnail';
 
 /**
@@ -24,6 +25,7 @@ export class RendererHandle {
 
   private readonly engines = signal<ReadonlyMap<string, ShaderEngine>>(new Map());
   private readonly activeId = signal<string | null>(null);
+  private profilingEnabled = false;
 
   /** The engine the app's global actions apply to. Null until a context exists. */
   readonly engine = computed(() => {
@@ -41,10 +43,26 @@ export class RendererHandle {
     return this.engines().get(contextId) ?? null;
   }
 
+  setProfilingEnabled(enabled: boolean): void {
+    this.profilingEnabled = enabled;
+    for (const engine of this.engines().values()) engine.setProfilingEnabled(false);
+    if (enabled) this.engine()?.setProfilingEnabled(true);
+  }
+
+  profilerSnapshot(): ProfilerSnapshot | null {
+    return this.engine()?.profilerSnapshot() ?? null;
+  }
+
+  private syncProfiling(): void {
+    for (const engine of this.engines().values()) engine.setProfilingEnabled(false);
+    if (this.profilingEnabled) this.engine()?.setProfilingEnabled(true);
+  }
+
   /** The first engine registered becomes the active one; later ones only join the map. */
   register(contextId: string, engine: ShaderEngine): void {
     this.engines.update((engines) => new Map(engines).set(contextId, engine));
     if (this.activeId() === null) this.activeId.set(contextId);
+    this.syncProfiling();
   }
 
   unregister(contextId: string): void {
@@ -61,10 +79,14 @@ export class RendererHandle {
       this.activeId.set(first ?? null);
       this.fps.set(0);
     }
+    this.syncProfiling();
   }
 
   setActive(contextId: string): void {
-    if (this.engines().has(contextId)) this.activeId.set(contextId);
+    if (this.engines().has(contextId)) {
+      this.activeId.set(contextId);
+      this.syncProfiling();
+    }
   }
 
   /** Save the current frame as a PNG. No-op if there is nothing rendering. */

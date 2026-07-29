@@ -17,6 +17,12 @@ import { PassCompiler, type MultiPassSpec } from './engine/pass-compiler';
 import { PostProcessing } from './engine/post-processing';
 import { CHANNEL_COUNT, TextureManager, type ChannelSource } from './engine/texture-manager';
 import { UniformRegistry } from './engine/uniform-registry';
+import {
+  IMAGE_PASS_ID,
+  POST_PASS_ID,
+  PerformanceProfiler,
+  type ProfilerSnapshot,
+} from './performance-profiler';
 
 export type { ChannelSource } from './engine/texture-manager';
 export type { EnginePass, MultiPassSpec, PassRuntime } from './engine/pass-compiler';
@@ -110,6 +116,8 @@ export class ShaderEngine {
 
   private readonly targets: BufferTargets;
 
+  private readonly profiler: PerformanceProfiler;
+
   /**
    * iChannel0…3 of the *shader record* — what a `texture` binding points into —
    * and every `THREE.Texture` behind them.
@@ -186,6 +194,11 @@ export class ShaderEngine {
     // set to at the moment a decode finishes, including `null`.
     this.textures.onSettled = () => this.onTextureSettled?.();
 
+    this.profiler = new PerformanceProfiler(
+      () => this.renderer,
+      () => this.textures,
+    );
+
     const geometry = context.own(new T.PlaneGeometry(2, 2));
 
     this.registry = new UniformRegistry();
@@ -196,6 +209,8 @@ export class ShaderEngine {
       clickData: this.clickData,
       time: () => this.time,
       write: (level, source, message) => this.logOutput(level, source, message),
+      onProbe: (passId, durationMs, success) =>
+        this.profiler.recordCompile(passId, durationMs, success),
     });
 
     this.mesh = new T.Mesh(geometry, this.compiler.material);
@@ -349,6 +364,15 @@ export class ShaderEngine {
   /** The passes the driver has accepted, in render order. Image last. */
   get activePasses(): readonly { id: string; kind: 'image' | 'buffer' }[] {
     return this.compiler.passes.map((pass) => ({ id: pass.id, kind: pass.kind }));
+  }
+
+  setProfilingEnabled(enabled: boolean): void {
+    if (this.disposed) return;
+    this.profiler.setEnabled(enabled);
+  }
+
+  profilerSnapshot(): ProfilerSnapshot {
+    return this.profiler.snapshot(this.targets.allocations());
   }
 
   /**
@@ -589,6 +613,8 @@ export class ShaderEngine {
 
     cancelAnimationFrame(this.frame);
 
+    this.profiler.onCaptureStart();
+
     this.offline = {
       time: this.time,
       paused: this.paused,
@@ -776,6 +802,7 @@ export class ShaderEngine {
 
     cancelAnimationFrame(this.frame);
     this.post.invalidate();
+    this.profiler.onContextLost();
     this.onContextLost?.();
   }
 
@@ -856,8 +883,35 @@ export class ShaderEngine {
     }
 
     // Draw even while paused, so parameter edits stay visible with time frozen.
-    this.draw();
+    this.drawMeasured();
     this.onFrameRendered?.();
+  }
+
+  private drawMeasured(): void {
+    if (this.disposed || this.context.status() !== 'live') return;
+
+    if (!this.profiler.isEnabled || this.offline) {
+      this.drawFrame();
+      return;
+    }
+
+    const usesComposer = this.post.usesComposer();
+    this.profiler.schedulePasses(
+      this.compiler.bufferPasses.map((pass) => pass.id),
+      this.compiler.imagePass !== null,
+      usesComposer,
+    );
+
+    const cpuStart = performance.now();
+    if (this.profiler.isTotalFrame()) {
+      this.profiler.beginGpu();
+      this.drawFrame();
+      this.profiler.endGpu();
+    } else {
+      this.drawFrameWithPassSample(this.profiler.currentPassId(), usesComposer);
+    }
+
+    this.profiler.endFrame(performance.now() - cpuStart);
   }
 
   /**
@@ -870,18 +924,35 @@ export class ShaderEngine {
    * before any of this, so "the previous frame" means the same thing to every
    * pass regardless of where its owner sits in the order.
    */
-  private draw(): void {
-    if (this.disposed || this.context.status() !== 'live') return;
-
+  private drawFrame(): void {
     this.drawBuffers();
-
     const image = this.compiler.imagePass;
     if (image) this.binder.bind(image.uniforms, image.channels);
+    this.post.render(this.scene, this.camera);
+  }
+
+  private drawFrameWithPassSample(samplePassId: string | null, usesComposer: boolean): void {
+    this.drawBuffers(samplePassId);
+    const image = this.compiler.imagePass;
+    if (image) this.binder.bind(image.uniforms, image.channels);
+
+    const finalPassId = usesComposer ? POST_PASS_ID : IMAGE_PASS_ID;
+    if (samplePassId === finalPassId) {
+      this.profiler.beginGpu();
+      this.post.render(this.scene, this.camera);
+      this.profiler.endGpu();
+      return;
+    }
 
     this.post.render(this.scene, this.camera);
   }
 
-  private drawBuffers(): void {
+  /** @deprecated internal alias kept for screenshot path */
+  private draw(): void {
+    this.drawMeasured();
+  }
+
+  private drawBuffers(samplePassId: string | null = null): void {
     const buffers = this.compiler.bufferPasses;
     if (buffers.length === 0) return;
 
@@ -907,9 +978,14 @@ export class ShaderEngine {
       const resolution = pass.uniforms['iResolution']?.value as THREE.Vector2 | undefined;
       if (size && resolution) resolution.set(size.width, size.height);
 
+      const sample = samplePassId === pass.id;
+      if (sample) this.profiler.beginGpu();
+
       this.bufferMesh.material = pass.material;
       this.renderer.setRenderTarget(target);
       this.renderer.render(this.bufferScene, this.camera);
+
+      if (sample) this.profiler.endGpu();
 
       // What was just drawn becomes the buffer's current frame, and the target
       // holding the frame before it becomes the one we draw into next time.
@@ -952,6 +1028,7 @@ export class ShaderEngine {
 
     this.post.dispose();
     this.targets.dispose();
+    this.profiler.dispose();
 
     // Every shader program, and the probe target they were tried on.
     this.compiler.dispose();
