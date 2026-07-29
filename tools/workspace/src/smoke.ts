@@ -84,12 +84,11 @@ try {
   await inspector.getByRole('tab', { name: /Profiler/i }).click({ force: true });
   const profiler = inspector.locator('app-profiler-panel');
   await profiler.waitFor({ state: 'visible', timeout: 15_000 });
-  await waitForMatch(
-    () => profiler.innerText(),
-    // Require body copy — the overview heading alone must not satisfy this.
-    /GPU timing is unavailable|Collecting GPU samples|Waiting for the active preview|CPU submission|GPU samples/i,
-    10_000,
-  );
+  const profilerStatePattern =
+    /GPU timing is unavailable|Collecting GPU samples|Waiting for the active preview|GPU timing was interrupted by the driver/i;
+  const profilerText = await waitForMatch(() => profiler.innerText(), profilerStatePattern, 10_000);
+  const observedProfilerState = profilerStatePattern.exec(profilerText)?.[0] ?? 'unknown';
+  log.info(`Profiler state observed: ${observedProfilerState}`);
 
   // Force-path DOM click: the preview canvas can intercept Playwright hit-testing
   // even when the tab is scrolled into view inside the inspector rail.
@@ -138,12 +137,12 @@ async function waitForMatch(
   read: () => Promise<string>,
   pattern: RegExp,
   timeoutMs: number,
-): Promise<void> {
+): Promise<string> {
   const started = Date.now();
   let last = '';
   while (Date.now() - started < timeoutMs) {
     last = await read();
-    if (pattern.test(last)) return;
+    if (pattern.test(last)) return last;
     await delay(200);
   }
   throw new Error(`Timed out waiting for ${pattern}: last text was ${JSON.stringify(last)}`);
