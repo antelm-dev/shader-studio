@@ -86,18 +86,19 @@ try {
   await profiler.waitFor({ state: 'visible', timeout: 15_000 });
   await waitForMatch(
     () => profiler.innerText(),
-    /GPU timing is unavailable|Collecting GPU samples|Waiting for the active preview|Frame timing/i,
+    // Require body copy — the overview heading alone must not satisfy this.
+    /GPU timing is unavailable|Collecting GPU samples|Waiting for the active preview|CPU submission|GPU samples/i,
     10_000,
   );
 
   // Force-path DOM click: the preview canvas can intercept Playwright hit-testing
   // even when the tab is scrolled into view inside the inspector rail.
-  await page.evaluate(() => {
+  await page.evaluate(`(() => {
     const tabs = document.querySelectorAll('aside.inspector [role="tab"]');
     const controls = [...tabs].find((tab) => /Controls/i.test(tab.textContent ?? ''));
     if (!(controls instanceof HTMLElement)) throw new Error('Controls tab not found');
     controls.click();
-  });
+  })()`);
   await waitForMatch(
     async () =>
       [
@@ -111,6 +112,8 @@ try {
     .locator('.lil-gui .lil-controller')
     .first()
     .waitFor({ state: 'visible', timeout: 10_000 });
+  // preserveContent keeps ProfilerPanel mounted; disable-on-leave is covered by
+  // mounted unit tests via setProfilingEnabled(false). Smoke asserts the tab left.
 
   await browser.close();
   log.info('smoke ok — drawer, inspector controls, Monaco editor, and Profiler tab loaded');

@@ -345,4 +345,94 @@ describe('ProfilerPanel', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('0');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Collecting GPU samples');
   });
+
+  it('renders pass, memory, and compile details from a supported snapshot', async () => {
+    patch({ inspectorTab: 'profiler' });
+    snapshot.set(
+      emptySnapshot({
+        gpuSupport: 'supported',
+        sampleCount: PROFILER_MIN_GPU_SAMPLES,
+        lastSampleAgeMs: 40,
+        cpuSubmission: { medianMs: 1.5, p95Ms: 2 },
+        totalGpu: { medianMs: 20, p95Ms: 22 },
+        renderTargetBytes: 2048,
+        textureBytes: 4096,
+        passes: [
+          {
+            id: 'buf-a',
+            label: 'buf-a',
+            gpu: { medianMs: 5, p95Ms: 6 },
+            width: 320,
+            height: 180,
+            targetBytes: 1024,
+          },
+          {
+            id: '__image__',
+            label: 'Image',
+            gpu: { medianMs: 30, p95Ms: 32 },
+            width: null,
+            height: null,
+            targetBytes: null,
+          },
+        ],
+        compiles: [
+          { passId: 'buf-a', durationMs: 4.25, success: true },
+          { passId: 'buf-new', durationMs: 1.5, success: false },
+        ],
+      }),
+    );
+
+    const fixture = TestBed.createComponent(ProfilerPanel);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const text = root.textContent ?? '';
+    expect(text).toContain('buf-a');
+    expect(text).toContain('5.00 ms');
+    expect(text).toContain('25%');
+    expect(text).toContain('320×180');
+    expect(text).toContain('1.0 KB');
+    expect(text).toContain('2.0 KB');
+    expect(text).toContain('4.0 KB');
+    expect(text).toContain('estimates');
+    expect(text).toContain('4.25 ms');
+    expect(text).toContain('OK');
+    expect(text).toContain('Failed');
+
+    // Image pass: unavailable size/memory as em dashes; share clamped at 100%.
+    const rows = [...root.querySelectorAll('.pass-table tbody tr')];
+    const imageRow = rows.find((row) => row.textContent?.includes('Image'));
+    expect(imageRow?.textContent).toContain('—');
+    expect(imageRow?.textContent).toContain('100%');
+  });
+
+  it('guards frame-share edges for zero totals and missing medians', async () => {
+    patch({ inspectorTab: 'profiler' });
+    snapshot.set(
+      emptySnapshot({
+        gpuSupport: 'unavailable',
+        totalGpu: { medianMs: 0, p95Ms: null },
+        passes: [
+          {
+            id: 'buf-a',
+            label: 'buf-a',
+            gpu: { medianMs: 5, p95Ms: null },
+            width: null,
+            height: null,
+            targetBytes: null,
+          },
+        ],
+      }),
+    );
+
+    const fixture = TestBed.createComponent(ProfilerPanel);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const shareCell = (fixture.nativeElement as HTMLElement).querySelector(
+      '.pass-table tbody td:nth-child(3)',
+    );
+    expect(shareCell?.textContent?.trim()).toBe('—');
+  });
 });
