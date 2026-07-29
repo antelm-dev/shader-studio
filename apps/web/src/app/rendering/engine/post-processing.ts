@@ -64,6 +64,13 @@ export class PostProcessing {
   };
 
   private disposed = false;
+  /**
+   * Incremented whenever a pending composer creation is invalidated — either
+   * because bloom was disabled or the context was lost. `ensureComposer` records
+   * the generation it started with and discards its result if the value has
+   * changed by the time the dynamic import resolves.
+   */
+  private generation = 0;
 
   /**
    * Fired once a composer has actually been created. A composer arrives
@@ -163,10 +170,13 @@ export class PostProcessing {
   private async ensureComposer(): Promise<void> {
     if (this.composer || this.disposed) return;
 
+    const startGeneration = this.generation;
     const { EffectComposer, RenderPass, UnrealBloomPass } = await this.load();
-    // The await is long enough for the engine to have been disposed, or for a
-    // second call to have won the race.
-    if (this.disposed || this.composer) return;
+
+    // The await is long enough for the engine to have been disposed, bloom to
+    // have been disabled, or the context to have been invalidated — any of
+    // which bumps the generation token.
+    if (this.disposed || this.composer || this.generation !== startGeneration) return;
 
     const composer = new EffectComposer(this.context.renderer);
     composer.addPass(new RenderPass(this.scene, this.camera));
@@ -185,6 +195,7 @@ export class PostProcessing {
   }
 
   private disposeComposer(): void {
+    this.generation++;
     this.composer?.dispose();
     this.composer = null;
     this.bloomPass = null;

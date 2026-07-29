@@ -118,6 +118,36 @@ function controllableLoader(): {
   return state;
 }
 
+/**
+ * A loader that suspends until `resolve()` is called, letting the test
+ * precisely control when the dynamic import completes.
+ */
+function deferredLoader(): {
+  load: () => Promise<PostProcessingModules>;
+  calls: number;
+  resolve: () => Promise<void>;
+} {
+  let pending: (() => void) | null = null;
+  const state = {
+    calls: 0,
+    load: () => {
+      state.calls++;
+      return new Promise<PostProcessingModules>((res) => {
+        pending = () => res(fakeModules);
+      });
+    },
+    resolve: async () => {
+      pending?.();
+      pending = null;
+      // Two microtask turns: one to settle the loader promise, one for the
+      // `.then` inside ensureComposer/setSettings.
+      await Promise.resolve();
+      await Promise.resolve();
+    },
+  };
+  return state;
+}
+
 function settings(overrides: Partial<RenderSettings['bloom']> = {}): RenderSettings {
   return { bloom: { enabled: true, strength: 0.3, radius: 0.5, threshold: 0.85, ...overrides } };
 }
@@ -348,5 +378,101 @@ describe('PostProcessing', () => {
     await loader.flush();
 
     expect(FakeComposer.created).toBe(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Race: disable-before-resolution
+  // ---------------------------------------------------------------------------
+
+  it('creates no composer when bloom is disabled before the loader resolves', async () => {
+    const deferred = deferredLoader();
+    const p = new PostProcessing(
+      context,
+      scene as never,
+      camera as never,
+      deferred.load as unknown as () => Promise<PostProcessingModules>,
+    );
+
+    p.setSettings(settings()); // triggers load — loader is now pending
+    p.setSettings(OFF); // disable before import resolves
+
+    await deferred.resolve(); // let the import land
+
+    expect(FakeComposer.created).toBe(0);
+
+    p.dispose();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Race: invalidate-before-resolution
+  // ---------------------------------------------------------------------------
+
+  it('creates no stale composer when the context is invalidated before the loader resolves', async () => {
+    const deferred = deferredLoader();
+    const p = new PostProcessing(
+      context,
+      scene as never,
+      camera as never,
+      deferred.load as unknown as () => Promise<PostProcessingModules>,
+    );
+
+    p.setSettings(settings()); // triggers load — loader is now pending
+    p.invalidate(); // context lost before import resolves
+
+    await deferred.resolve(); // late arrival — must be discarded
+
+    expect(FakeComposer.created).toBe(0);
+
+    p.dispose();
+  });
+
+  it('builds exactly one fresh composer on restore after an invalidated-in-flight load', async () => {
+    const deferred = deferredLoader();
+    const p = new PostProcessing(
+      context,
+      scene as never,
+      camera as never,
+      deferred.load as unknown as () => Promise<PostProcessingModules>,
+    );
+
+    p.setSettings(settings({ strength: 1.5 })); // triggers load
+    p.invalidate(); // stale
+    await deferred.resolve(); // discarded
+
+    p.restore(); // starts a fresh load
+    await deferred.resolve(); // this one is valid
+
+    expect(FakeComposer.created).toBe(1);
+    expect((FakeComposer.last().passes[1] as FakeBloomPass).strength).toBe(1.5);
+
+    p.dispose();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Race: rapid settings updates
+  // ---------------------------------------------------------------------------
+
+  it('rapid enable/disable cycles cannot let an older completion overwrite the current state', async () => {
+    const d1 = deferredLoader();
+    const p = new PostProcessing(
+      context,
+      scene as never,
+      camera as never,
+      d1.load as unknown as () => Promise<PostProcessingModules>,
+    );
+
+    p.setSettings(settings({ strength: 0.1 })); // load #1 starts
+    p.setSettings(OFF); // invalidates load #1 generation
+    p.setSettings(settings({ strength: 0.9 })); // load #2 starts — but same loader
+
+    // Resolve both pending calls in order: first the old one, then the current.
+    await d1.resolve(); // first call resolves — must be silently dropped
+    await d1.resolve(); // second call resolves — should install
+
+    // Only the second (valid) call should have produced a composer.
+    expect(FakeComposer.created).toBe(1);
+    expect((FakeComposer.last().passes[1] as FakeBloomPass).strength).toBe(0.9);
+
+    p.dispose();
   });
 });
