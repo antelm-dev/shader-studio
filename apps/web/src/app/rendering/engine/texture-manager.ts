@@ -44,6 +44,8 @@ export interface ChannelSource {
 
 export const CHANNEL_COUNT = 4;
 
+const CHANNEL_INDICES = [0, 1, 2, 3] as const;
+
 /** Decode state. Absent means "not ours" — see the note on late callbacks above. */
 type LoadStatus = 'loading' | 'settled';
 
@@ -55,6 +57,15 @@ export interface TextureManagerOptions {
 /** Keyed by every input that changes the resulting GPU object, not just the URL. */
 function cacheKey(source: ChannelSource): string {
   return `${source.url}|${source.wrap}|${source.filter}|${source.flipY}`;
+}
+
+function decodedTextureDimensions(
+  texture: THREE.Texture,
+): { width: number; height: number } | null {
+  const image = texture.image as { width?: number; height?: number } | undefined;
+  if (!image || typeof image.width !== 'number' || typeof image.height !== 'number') return null;
+  if (image.width <= 0 || image.height <= 0) return null;
+  return { width: image.width, height: image.height };
 }
 
 export class TextureManager {
@@ -156,6 +167,87 @@ export class TextureManager {
       if (!source) return true;
       return this.status.get(cacheKey(source)) !== 'loading';
     });
+  }
+
+  /**
+   * Decoded GPU dimensions for uploaded channel textures. Unknown or loading
+   * dimensions stay null rather than being guessed.
+   */
+  textureAllocations(): {
+    readonly items: readonly {
+      slot: number;
+      width: number | null;
+      height: number | null;
+      bytes: number | null;
+    }[];
+    readonly totalBytes: number | null;
+    readonly estimated: true;
+  } {
+    const keyBySlot = new Map<number, string>();
+    const usedKeys = new Set<string>();
+
+    for (const slot of CHANNEL_INDICES) {
+      const source = this.live[slot];
+      if (!source) continue;
+      const key = cacheKey(source);
+      usedKeys.add(key);
+      keyBySlot.set(slot, key);
+    }
+
+    // Compute unique allocation bytes only once per cached texture.
+    const bytesByKey = new Map<string, { width: number; height: number; bytes: number } | null>();
+    let incomplete = false;
+
+    for (const key of usedKeys) {
+      if (this.status.get(key) === 'loading') {
+        bytesByKey.set(key, null);
+        incomplete = true;
+        continue;
+      }
+
+      const texture = this.cache.get(key);
+      if (!texture) {
+        bytesByKey.set(key, null);
+        incomplete = true;
+        continue;
+      }
+
+      const dimensions = decodedTextureDimensions(texture);
+      if (!dimensions) {
+        bytesByKey.set(key, null);
+        incomplete = true;
+        continue;
+      }
+
+      const bytes = dimensions.width * dimensions.height * 4;
+      bytesByKey.set(key, { width: dimensions.width, height: dimensions.height, bytes });
+    }
+
+    const items = CHANNEL_INDICES.map((slot) => {
+      const key = keyBySlot.get(slot);
+      if (!key) return { slot, width: null, height: null, bytes: null };
+
+      const resolved = bytesByKey.get(key) ?? null;
+      if (!resolved) return { slot, width: null, height: null, bytes: null };
+
+      return { slot, width: resolved.width, height: resolved.height, bytes: resolved.bytes };
+    });
+
+    // Always-owned transparent 1×1 placeholder (RGBA8).
+    const placeholderBytes = 1 * 1 * 4;
+
+    const totalBytes = incomplete
+      ? null
+      : (() => {
+          let sum = placeholderBytes;
+          for (const resolved of bytesByKey.values()) {
+            if (!resolved) return null;
+            sum += resolved.bytes;
+          }
+          return sum;
+        })();
+
+    return { items, totalBytes, estimated: true };
   }
 
   /**

@@ -417,6 +417,17 @@ describe('PassCompiler', () => {
     expect(probe.disposed).toBe(true);
   });
 
+  it('creates the compile probe without depth or stencil attachments', () => {
+    const probe = FakeRenderTarget.created.find(
+      (target) =>
+        target.width === 1 &&
+        target.height === 1 &&
+        target.options['depthBuffer'] === false &&
+        target.options['stencilBuffer'] === false,
+    );
+    expect(probe).toBeDefined();
+  });
+
   it('frees the placeholder program even when nothing was ever compiled', () => {
     const placeholder = compiler.material as unknown as FakeMaterial;
 

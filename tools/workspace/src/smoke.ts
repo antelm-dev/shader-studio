@@ -76,8 +76,46 @@ try {
   await page.locator('app-editor-shell').waitFor({ state: 'visible', timeout: 30_000 });
   await page.locator('.monaco-editor').waitFor({ state: 'visible', timeout: 30_000 });
 
+  // Bounded Profiler path: open the tab, assert honest content, then leave and
+  // confirm the panel is no longer active. Headless Chromium typically lacks
+  // EXT_disjoint_timer_query_webgl2, so the unsupported/empty copy is the
+  // supported-path stand-in; deterministic unit tests cover the timing path.
+  const inspector = page.locator('aside.inspector');
+  await inspector.getByRole('tab', { name: /Profiler/i }).click({ force: true });
+  const profiler = inspector.locator('app-profiler-panel');
+  await profiler.waitFor({ state: 'visible', timeout: 15_000 });
+  const profilerStatePattern =
+    /GPU timing is unavailable|Collecting GPU samples|Waiting for the active preview|GPU timing was interrupted by the driver/i;
+  const profilerText = await waitForMatch(() => profiler.innerText(), profilerStatePattern, 10_000);
+  const observedProfilerState = profilerStatePattern.exec(profilerText)?.[0] ?? 'unknown';
+  log.info(`Profiler state observed: ${observedProfilerState}`);
+
+  // Force-path DOM click: the preview canvas can intercept Playwright hit-testing
+  // even when the tab is scrolled into view inside the inspector rail.
+  await page.evaluate(`(() => {
+    const tabs = document.querySelectorAll('aside.inspector [role="tab"]');
+    const controls = [...tabs].find((tab) => /Controls/i.test(tab.textContent ?? ''));
+    if (!(controls instanceof HTMLElement)) throw new Error('Controls tab not found');
+    controls.click();
+  })()`);
+  await waitForMatch(
+    async () =>
+      [
+        await inspector.getByRole('tab', { name: /Profiler/i }).getAttribute('aria-selected'),
+        await inspector.getByRole('tab', { name: /Controls/i }).getAttribute('aria-selected'),
+      ].join(','),
+    /^false,true$/,
+    5_000,
+  );
+  await inspector
+    .locator('.lil-gui .lil-controller')
+    .first()
+    .waitFor({ state: 'visible', timeout: 10_000 });
+  // preserveContent keeps ProfilerPanel mounted; disable-on-leave is covered by
+  // mounted unit tests via setProfilingEnabled(false). Smoke asserts the tab left.
+
   await browser.close();
-  log.info('smoke ok — drawer, inspector controls, and Monaco editor loaded');
+  log.info('smoke ok — drawer, inspector controls, Monaco editor, and Profiler tab loaded');
   await shutdown(0);
 } catch (error) {
   log.error('smoke failed');
@@ -93,6 +131,21 @@ function assertServeHealthy(): void {
   if (/Application bundle generation failed|ERROR in |✘ \[ERROR\]/i.test(output)) {
     throw new Error('ng serve reported a compile failure');
   }
+}
+
+async function waitForMatch(
+  read: () => Promise<string>,
+  pattern: RegExp,
+  timeoutMs: number,
+): Promise<string> {
+  const started = Date.now();
+  let last = '';
+  while (Date.now() - started < timeoutMs) {
+    last = await read();
+    if (pattern.test(last)) return last;
+    await delay(200);
+  }
+  throw new Error(`Timed out waiting for ${pattern}: last text was ${JSON.stringify(last)}`);
 }
 
 function waitForReady(timeoutMs: number): Promise<void> {

@@ -1,0 +1,3 @@
+# oxfmt emits LF. Keep TypeScript and JSON stable across Windows worktrees.
+*.ts text eol=lf
+*.json text eol=lf

@@ -3,6 +3,7 @@ import { DesktopPlatform } from '../desktop/desktop-platform';
 
 import type { ThumbnailUpload } from '../api/shader-api';
 import type { ShaderEngine } from './shader-engine';
+import type { ProfilerSnapshot } from './performance-profiler';
 import { encodeThumbnail } from './thumbnail';
 
 /**
@@ -24,6 +25,13 @@ export class RendererHandle {
 
   private readonly engines = signal<ReadonlyMap<string, ShaderEngine>>(new Map());
   private readonly activeId = signal<string | null>(null);
+  private profilingEnabled = false;
+
+  /**
+   * Bumps whenever the active profiler source or its lifecycle generation changes,
+   * so the Inspector can drop stale snapshots without waiting for the poll interval.
+   */
+  readonly profilerEpoch = signal(0);
 
   /** The engine the app's global actions apply to. Null until a context exists. */
   readonly engine = computed(() => {
@@ -41,13 +49,51 @@ export class RendererHandle {
     return this.engines().get(contextId) ?? null;
   }
 
+  setProfilingEnabled(enabled: boolean): void {
+    if (enabled === this.profilingEnabled) return;
+    this.profilingEnabled = enabled;
+    this.syncProfiling();
+  }
+
+  profilerSnapshot(): ProfilerSnapshot | null {
+    return this.engine()?.profilerSnapshot() ?? null;
+  }
+
+  resetProfilerSamples(): void {
+    this.engine()?.resetProfilerSamples();
+    this.bumpProfilerEpoch();
+  }
+
+  private bumpProfilerEpoch(): void {
+    this.profilerEpoch.update((value) => value + 1);
+  }
+
+  /**
+   * Align each engine with the requested profiling state.
+   * Inactive engines are forced off; the active engine is set to the requested
+   * flag without a disable/enable cycle that would wipe samples.
+   */
+  private syncProfiling(): void {
+    const active = this.engine();
+    for (const engine of this.engines().values()) {
+      if (engine !== active) engine.setProfilingEnabled(false);
+    }
+    active?.setProfilingEnabled(this.profilingEnabled);
+    this.bumpProfilerEpoch();
+  }
+
   /** The first engine registered becomes the active one; later ones only join the map. */
   register(contextId: string, engine: ShaderEngine): void {
+    engine.onProfilerLifecycle = () => this.bumpProfilerEpoch();
     this.engines.update((engines) => new Map(engines).set(contextId, engine));
     if (this.activeId() === null) this.activeId.set(contextId);
+    this.syncProfiling();
   }
 
   unregister(contextId: string): void {
+    const leaving = this.engines().get(contextId);
+    if (leaving) leaving.onProfilerLifecycle = null;
+
     this.engines.update((engines) => {
       const next = new Map(engines);
       next.delete(contextId);
@@ -61,10 +107,14 @@ export class RendererHandle {
       this.activeId.set(first ?? null);
       this.fps.set(0);
     }
+    this.syncProfiling();
   }
 
   setActive(contextId: string): void {
-    if (this.engines().has(contextId)) this.activeId.set(contextId);
+    if (this.engines().has(contextId)) {
+      this.activeId.set(contextId);
+      this.syncProfiling();
+    }
   }
 
   /** Save the current frame as a PNG. No-op if there is nothing rendering. */

@@ -68,6 +68,7 @@ describe('clampPanelWidth', () => {
 describe('sanitizeInspectorTab', () => {
   it('keeps a known tab', () => {
     expect(sanitizeInspectorTab('textures')).toBe('textures');
+    expect(sanitizeInspectorTab('profiler')).toBe('profiler');
   });
 
   it.each([['presets-old'], [''], [null], [3]])('falls back to controls for %s', (value) => {

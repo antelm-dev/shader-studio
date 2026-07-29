@@ -17,6 +17,12 @@ import { PassCompiler, type MultiPassSpec } from './engine/pass-compiler';
 import { PostProcessing } from './engine/post-processing';
 import { CHANNEL_COUNT, TextureManager, type ChannelSource } from './engine/texture-manager';
 import { UniformRegistry } from './engine/uniform-registry';
+import {
+  IMAGE_PASS_ID,
+  POST_PASS_ID,
+  PerformanceProfiler,
+  type ProfilerSnapshot,
+} from './performance-profiler';
 
 export type { ChannelSource } from './engine/texture-manager';
 export type { EnginePass, MultiPassSpec, PassRuntime } from './engine/pass-compiler';
@@ -61,6 +67,13 @@ interface OfflineState {
   /** The drawing buffer the capture owns. Every `resize` during it lands back here. */
   width: number;
   height: number;
+}
+
+interface ProfilerWorkloadPass {
+  readonly id: string;
+  readonly kind: 'image' | 'buffer';
+  readonly material: THREE.ShaderMaterial;
+  readonly targetKey: string;
 }
 
 /** Uniforms the engine supplies to every shader, whether it declares them or not. */
@@ -110,6 +123,8 @@ export class ShaderEngine {
 
   private readonly targets: BufferTargets;
 
+  private readonly profiler: PerformanceProfiler;
+
   /**
    * iChannel0…3 of the *shader record* — what a `texture` binding points into —
    * and every `THREE.Texture` behind them.
@@ -126,6 +141,9 @@ export class ShaderEngine {
   private autoRipples = false;
   private nextAutoRipple = 0;
   private resolutionScale = 1;
+  private profilerWorkload: readonly ProfilerWorkloadPass[] = [];
+  private profilerBufferWidth: number | null = null;
+  private profilerBufferHeight: number | null = null;
 
   /** Set for as long as the clock belongs to a caller rather than to the wall. */
   private offline: OfflineState | null = null;
@@ -186,6 +204,11 @@ export class ShaderEngine {
     // set to at the moment a decode finishes, including `null`.
     this.textures.onSettled = () => this.onTextureSettled?.();
 
+    this.profiler = new PerformanceProfiler(
+      () => this.renderer,
+      () => this.textures,
+    );
+
     const geometry = context.own(new T.PlaneGeometry(2, 2));
 
     this.registry = new UniformRegistry();
@@ -196,6 +219,8 @@ export class ShaderEngine {
       clickData: this.clickData,
       time: () => this.time,
       write: (level, source, message) => this.logOutput(level, source, message),
+      onProbe: (passId, durationMs, success) =>
+        this.profiler.recordCompile(passId, durationMs, success),
     });
 
     this.mesh = new T.Mesh(geometry, this.compiler.material);
@@ -208,6 +233,7 @@ export class ShaderEngine {
     this.post = new PostProcessing(context, this.scene, this.camera);
     // A composer arrives long after the resize that would have sized it.
     this.post.onComposerCreated = () => this.resize();
+    this.post.onRenderPathChanged = () => this.resetProfilerForWorkloadChange();
 
     this.unsubscribe.push(
       context.onLost(() => this.handleContextLost()),
@@ -287,6 +313,9 @@ export class ShaderEngine {
   setPasses(spec: MultiPassSpec, force = false): CompileDiagnostic[] {
     if (this.disposed) return [];
 
+    // Track requested project pass IDs for compile records (real IDs, not timing synthetics).
+    this.profiler.setRequestedPasses(spec.passes.map((pass) => pass.id));
+
     // A lost context has no driver to compile against. Remember what was asked
     // for and apply it on restore, rather than reporting a compile failure the
     // shader is not responsible for.
@@ -321,6 +350,7 @@ export class ShaderEngine {
     // rather than only once the next frame is drawn.
     this.syncTargets();
     for (const pass of this.compiler.passes) this.binder.bind(pass.uniforms, pass.channels);
+    this.updateProfilerWorkload();
 
     this.setRenderSettings(spec.render);
 
@@ -350,6 +380,75 @@ export class ShaderEngine {
   get activePasses(): readonly { id: string; kind: 'image' | 'buffer' }[] {
     return this.compiler.passes.map((pass) => ({ id: pass.id, kind: pass.kind }));
   }
+
+  setProfilingEnabled(enabled: boolean): void {
+    if (this.disposed) return;
+    const generation = this.profiler.generation;
+    this.profiler.setEnabled(enabled);
+    if (this.profiler.generation !== generation) this.onProfilerLifecycle?.();
+  }
+
+  profilerSnapshot(): ProfilerSnapshot {
+    return this.profiler.snapshot(this.targets.allocations());
+  }
+
+  /** Monotonic lifecycle generation for UI that must drop stale snapshots immediately. */
+  profilerGeneration(): number {
+    return this.profiler.generation;
+  }
+
+  resetProfilerSamples(): void {
+    if (this.disposed) return;
+    this.profiler.resetTimingSamples();
+    this.onProfilerLifecycle?.();
+  }
+
+  private resetProfilerForWorkloadChange(): void {
+    this.profiler.resetTimingSamples();
+    this.onProfilerLifecycle?.();
+  }
+
+  /**
+   * Reset timing only when the accepted live pipeline changed. Requested passes
+   * that failed compilation are absent here, while skipped passes retain their
+   * material identity, so neither case wipes otherwise valid samples.
+   */
+  private updateProfilerWorkload(): void {
+    const targets = new Map(this.targetSpecs.map((target) => [target.id, target]));
+    const next = this.compiler.passes.map((pass): ProfilerWorkloadPass => {
+      const target = targets.get(pass.id);
+      const targetKey = target
+        ? [
+            target.resolution.mode,
+            target.resolution.scale,
+            target.resolution.width,
+            target.resolution.height,
+            target.filter,
+            target.wrap,
+          ].join(':')
+        : '';
+      return { id: pass.id, kind: pass.kind, material: pass.material, targetKey };
+    });
+
+    const changed =
+      next.length !== this.profilerWorkload.length ||
+      next.some((pass, index) => {
+        const previous = this.profilerWorkload[index];
+        return (
+          !previous ||
+          pass.id !== previous.id ||
+          pass.kind !== previous.kind ||
+          pass.material !== previous.material ||
+          pass.targetKey !== previous.targetKey
+        );
+      });
+
+    this.profilerWorkload = next;
+    if (changed) this.resetProfilerForWorkloadChange();
+  }
+
+  /** Fired when profiler enablement, capture, context, or sample-reset changes. */
+  onProfilerLifecycle: (() => void) | null = null;
 
   /**
    * The program a pass is currently running.
@@ -494,7 +593,8 @@ export class ShaderEngine {
   }
 
   setResolutionScale(scale: number): void {
-    this.resolutionScale = Math.min(Math.max(scale, 0.25), 2);
+    const next = Math.min(Math.max(scale, 0.25), 2);
+    this.resolutionScale = next;
     this.resize();
   }
 
@@ -530,6 +630,17 @@ export class ShaderEngine {
    * never the CSS one.
    */
   private setDrawingBufferSize(width: number, height: number, scale: number): void {
+    let profilerBufferChanged = false;
+    if (!this.offline) {
+      const pixelWidth = Math.max(1, Math.floor(width * scale));
+      const pixelHeight = Math.max(1, Math.floor(height * scale));
+      profilerBufferChanged =
+        this.profilerBufferWidth !== null &&
+        (pixelWidth !== this.profilerBufferWidth || pixelHeight !== this.profilerBufferHeight);
+      this.profilerBufferWidth = pixelWidth;
+      this.profilerBufferHeight = pixelHeight;
+    }
+
     this.renderer.setPixelRatio(scale);
     // `false`: never touch the CSS size. On screen that keeps the canvas filling
     // its panel; during a capture it is what lets a 4K buffer sit behind an
@@ -549,6 +660,7 @@ export class ShaderEngine {
     // `ResizeObserver` fires far more often than the size really changes, and a
     // reallocation would wipe every feedback buffer's history each time.
     this.targets.sync(this.targetSpecs, { width: width * scale, height: height * scale });
+    if (profilerBufferChanged) this.resetProfilerForWorkloadChange();
   }
 
   // -------------------------------------------------------------------------
@@ -588,6 +700,9 @@ export class ShaderEngine {
     }
 
     cancelAnimationFrame(this.frame);
+
+    this.profiler.onCaptureStart();
+    this.onProfilerLifecycle?.();
 
     this.offline = {
       time: this.time,
@@ -639,6 +754,9 @@ export class ShaderEngine {
     if (!offline) return;
 
     this.offline = null;
+
+    this.profiler.onCaptureEnd();
+    this.onProfilerLifecycle?.();
 
     // The preview resumes where it was, not where the capture left off: filming
     // the shader is not the same as scrubbing it.
@@ -776,6 +894,8 @@ export class ShaderEngine {
 
     cancelAnimationFrame(this.frame);
     this.post.invalidate();
+    this.profiler.onContextLost();
+    this.onProfilerLifecycle?.();
     this.onContextLost?.();
   }
 
@@ -795,6 +915,9 @@ export class ShaderEngine {
     // is what stops the next compile recognising their sources as unchanged and
     // "reusing" materials that no longer exist on the GPU.
     this.compiler.invalidate();
+
+    this.profiler.onContextRestored();
+    this.onProfilerLifecycle?.();
 
     // Replayed exactly once, and as a *request*, not as an error: a context loss
     // is not the shader's fault and must not be reported as one.
@@ -856,8 +979,35 @@ export class ShaderEngine {
     }
 
     // Draw even while paused, so parameter edits stay visible with time frozen.
-    this.draw();
+    this.drawMeasured();
     this.onFrameRendered?.();
+  }
+
+  private drawMeasured(): void {
+    if (this.disposed || this.context.status() !== 'live') return;
+
+    if (!this.profiler.isEnabled || this.offline) {
+      this.drawFrame();
+      return;
+    }
+
+    const usesComposer = this.post.usesComposer();
+    this.profiler.schedulePasses(
+      this.compiler.bufferPasses.map((pass) => pass.id),
+      this.compiler.imagePass !== null,
+      usesComposer,
+    );
+
+    const cpuStart = performance.now();
+    if (this.profiler.isTotalFrame()) {
+      this.profiler.beginGpu();
+      this.drawFrame();
+      this.profiler.endGpu();
+    } else {
+      this.drawFrameWithPassSample(this.profiler.currentPassId(), usesComposer);
+    }
+
+    this.profiler.endFrame(performance.now() - cpuStart);
   }
 
   /**
@@ -870,18 +1020,35 @@ export class ShaderEngine {
    * before any of this, so "the previous frame" means the same thing to every
    * pass regardless of where its owner sits in the order.
    */
-  private draw(): void {
-    if (this.disposed || this.context.status() !== 'live') return;
-
+  private drawFrame(): void {
     this.drawBuffers();
-
     const image = this.compiler.imagePass;
     if (image) this.binder.bind(image.uniforms, image.channels);
+    this.post.render(this.scene, this.camera);
+  }
+
+  private drawFrameWithPassSample(samplePassId: string | null, usesComposer: boolean): void {
+    this.drawBuffers(samplePassId);
+    const image = this.compiler.imagePass;
+    if (image) this.binder.bind(image.uniforms, image.channels);
+
+    const finalPassId = usesComposer ? POST_PASS_ID : IMAGE_PASS_ID;
+    if (samplePassId === finalPassId) {
+      this.profiler.beginGpu();
+      this.post.render(this.scene, this.camera);
+      this.profiler.endGpu();
+      return;
+    }
 
     this.post.render(this.scene, this.camera);
   }
 
-  private drawBuffers(): void {
+  /** @deprecated internal alias kept for screenshot path */
+  private draw(): void {
+    this.drawMeasured();
+  }
+
+  private drawBuffers(samplePassId: string | null = null): void {
     const buffers = this.compiler.bufferPasses;
     if (buffers.length === 0) return;
 
@@ -907,9 +1074,14 @@ export class ShaderEngine {
       const resolution = pass.uniforms['iResolution']?.value as THREE.Vector2 | undefined;
       if (size && resolution) resolution.set(size.width, size.height);
 
+      const sample = samplePassId === pass.id;
+      if (sample) this.profiler.beginGpu();
+
       this.bufferMesh.material = pass.material;
       this.renderer.setRenderTarget(target);
       this.renderer.render(this.bufferScene, this.camera);
+
+      if (sample) this.profiler.endGpu();
 
       // What was just drawn becomes the buffer's current frame, and the target
       // holding the frame before it becomes the one we draw into next time.
@@ -952,6 +1124,7 @@ export class ShaderEngine {
 
     this.post.dispose();
     this.targets.dispose();
+    this.profiler.dispose();
 
     // Every shader program, and the probe target they were tried on.
     this.compiler.dispose();

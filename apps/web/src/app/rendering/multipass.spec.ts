@@ -489,6 +489,63 @@ describe('multi-pass rendering', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Profiler workload generations
+  // ---------------------------------------------------------------------------
+
+  describe('profiler workload generations', () => {
+    it('retains samples for an unchanged compile and resets after an accepted source change', () => {
+      const project = migrateLegacyProject('IMAGE', VERTEX);
+      engine.setPasses(toSpec(project));
+      const stable = engine.profilerGeneration();
+
+      engine.setPasses(toSpec(project));
+      expect(engine.profilerGeneration()).toBe(stable);
+
+      engine.setPasses(toSpec(setPassSource(project, imagePass(project).id, 'IMAGE_EDITED')));
+      expect(engine.profilerGeneration()).toBeGreaterThan(stable);
+    });
+
+    it('resets after accepted pass topology and buffer-resolution changes', () => {
+      let project = migrateLegacyProject('IMAGE', VERTEX);
+      engine.setPasses(toSpec(project));
+
+      const beforeAdd = engine.profilerGeneration();
+      project = addBuffer(project);
+      engine.setPasses(toSpec(project));
+      expect(engine.profilerGeneration()).toBeGreaterThan(beforeAdd);
+
+      const buffer = bufferPasses(project)[0];
+      const beforeResolution = engine.profilerGeneration();
+      project = setPassResolution(project, buffer.id, {
+        mode: 'fixed',
+        width: 256,
+        height: 128,
+      });
+      engine.setPasses(toSpec(project));
+      expect(engine.profilerGeneration()).toBeGreaterThan(beforeResolution);
+
+      const beforeRemove = engine.profilerGeneration();
+      project = removePass(project, buffer.id);
+      engine.setPasses(toSpec(project));
+      expect(engine.profilerGeneration()).toBeGreaterThan(beforeRemove);
+    });
+
+    it('resets only when drawing-buffer dimensions really change', () => {
+      const project = migrateLegacyProject('IMAGE', VERTEX);
+      engine.setPasses(toSpec(project));
+      const stable = engine.profilerGeneration();
+
+      engine.resize();
+      engine.resize();
+      expect(engine.profilerGeneration()).toBe(stable);
+
+      vi.spyOn(canvas, 'clientWidth', 'get').mockReturnValue(1024);
+      engine.resize();
+      expect(engine.profilerGeneration()).toBeGreaterThan(stable);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // A failed compile must not take the picture down
   // ---------------------------------------------------------------------------
 
@@ -542,6 +599,19 @@ describe('multi-pass rendering', () => {
       // must not black out the preview.
       expect(engine.passMaterial(a.id)).toBe(good);
       expect(good?.fragmentShader).toContain('GOOD');
+    });
+
+    it('retains profiler samples when a rejected compile leaves the live workload unchanged', () => {
+      let project = addBuffer(migrateLegacyProject('IMAGE', VERTEX));
+      const a = bufferPasses(project)[0];
+      project = setPassSource(project, a.id, 'GOOD');
+      engine.setPasses(toSpec(project));
+      const stable = engine.profilerGeneration();
+
+      failNextCompile();
+      engine.setPasses(toSpec(setPassSource(project, a.id, 'BROKEN')));
+
+      expect(engine.profilerGeneration()).toBe(stable);
     });
 
     it('keeps rendering every pass, including the failed one', () => {

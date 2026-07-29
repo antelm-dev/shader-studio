@@ -127,6 +127,8 @@ export interface PassCompilerOptions {
   time: () => number;
   /** Where compile output goes. Absent means nothing is logged. */
   write?: (level: EngineOutputLevel, source: EngineOutputSource, message: string) => void;
+  /** Fired after each forced 1×1 probe, including rejected compiles. */
+  onProbe?: (passId: string, durationMs: number, success: boolean) => void;
 }
 
 const PLACEHOLDER_FRAGMENT = `precision mediump float;
@@ -231,7 +233,10 @@ export class PassCompiler {
     this.probeScene = new T.Scene();
     this.probeMesh = new T.Mesh(geometry, this.placeholder);
     this.probeScene.add(this.probeMesh);
-    this.probeTarget = context.own(new T.WebGLRenderTarget(1, 1));
+    // Depth/stencil unused for compile probes — keep the allocation at 1×1 RGBA.
+    this.probeTarget = context.own(
+      new T.WebGLRenderTarget(1, 1, { depthBuffer: false, stencilBuffer: false }),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -401,7 +406,11 @@ export class PassCompiler {
       new T.ShaderMaterial({ vertexShader: vertex, fragmentShader: fragment, uniforms }),
     );
 
+    const probeStarted = performance.now();
     const raw = this.probe(material, fragment, vertex);
+    const probeDurationMs = performance.now() - probeStarted;
+    this.options.onProbe?.(pass.id, probeDurationMs, raw.length === 0);
+
     if (raw.length > 0) {
       material.dispose();
       const diagnostics = attribute(raw, pass);
