@@ -1,4 +1,4 @@
-import type { WebGLRenderer } from 'three';
+﻿import type { WebGLRenderer } from 'three';
 
 import {
   RGBA16F_BYTES_PER_PIXEL,
@@ -65,8 +65,6 @@ export interface ProfilerSnapshot {
 
 interface GpuTimerExtension {
   readonly TIME_ELAPSED_EXT: number;
-  readonly QUERY_RESULT_EXT: number;
-  readonly QUERY_RESULT_AVAILABLE_EXT: number;
   readonly GPU_DISJOINT_EXT: number;
 }
 
@@ -85,9 +83,7 @@ interface PassSchedule {
 function median(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1]! + sorted[mid]!) / 2
-    : sorted[mid]!;
+  return sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
 }
 
 function percentile(values: readonly number[], p: number): number {
@@ -97,9 +93,7 @@ function percentile(values: readonly number[], p: number): number {
 }
 
 function timingFrom(samples: readonly number[]): ProfilerTiming {
-  if (samples.length < PROFILER_MIN_GPU_SAMPLES) {
-    return { medianMs: null, p95Ms: null };
-  }
+  if (samples.length < PROFILER_MIN_GPU_SAMPLES) return { medianMs: null, p95Ms: null };
   return { medianMs: median(samples), p95Ms: percentile(samples, 0.95) };
 }
 
@@ -135,7 +129,8 @@ class GpuTimerAdapter {
   private readonly ext: GpuTimerExtension | null;
   private activeQuery: WebGLQuery | null = null;
   private readonly pending: PendingGpuSample[] = [];
-  private disjoint = false;
+  private activeKind: 'total' | 'pass' = 'total';
+  private activePassId: string | undefined;
 
   constructor(renderer: WebGLRenderer) {
     this.gl = renderer.getContext() as WebGL2RenderingContext;
@@ -146,11 +141,8 @@ class GpuTimerAdapter {
     return this.ext !== null;
   }
 
-  private activeKind: 'total' | 'pass' = 'total';
-  private activePassId: string | undefined;
-
   begin(kind: 'total' | 'pass', passId?: string): void {
-    if (!this.ext || this.activeQuery || this.disjoint) return;
+    if (!this.ext || this.activeQuery) return;
 
     const query = this.gl.createQuery();
     if (!query) return;
@@ -164,57 +156,60 @@ class GpuTimerAdapter {
   end(): void {
     if (!this.ext || !this.activeQuery) return;
     this.gl.endQuery(this.ext.TIME_ELAPSED_EXT);
+
     this.pending.push({
       query: this.activeQuery,
       kind: this.activeKind,
       passId: this.activePassId,
     });
+
     this.activeQuery = null;
     this.activePassId = undefined;
   }
 
-  poll(): { totalMs: number | null; passMs: Map<string, number>; disjoint: boolean } {
-    const passMs = new Map<string, number>();
-    let totalMs: number | null = null;
+  poll(): {
+    readonly disjoint: boolean;
+    readonly totals: readonly number[];
+    readonly passes: readonly { passId: string; ms: number }[];
+  } {
+    const totals: number[] = [];
+    const passes: { passId: string; ms: number }[] = [];
 
-    if (!this.ext) return { totalMs, passMs, disjoint: false };
+    if (!this.ext) return { disjoint: false, totals, passes };
 
-    if (this.gl.getParameter(this.ext.GPU_DISJOINT_EXT)) {
-      this.disjoint = true;
+    const disjointNow = this.gl.getParameter(this.ext.GPU_DISJOINT_EXT) as unknown as boolean;
+    if (disjointNow) {
       this.discardPending();
-      return { totalMs: null, passMs, disjoint: true };
+      return { disjoint: true, totals, passes };
     }
 
     const stillPending: PendingGpuSample[] = [];
 
     for (const sample of this.pending) {
-      const available = this.gl.getQueryParameter(
-        sample.query,
-        this.ext.QUERY_RESULT_AVAILABLE_EXT,
-      );
+      const available = this.gl.getQueryParameter(sample.query, this.gl.QUERY_RESULT_AVAILABLE);
       if (!available) {
         stillPending.push(sample);
         continue;
       }
 
-      const nanos = this.gl.getQueryParameter(sample.query, this.ext.QUERY_RESULT_EXT) as number;
+      const nanos = this.gl.getQueryParameter(sample.query, this.gl.QUERY_RESULT) as number;
       this.gl.deleteQuery(sample.query);
       const ms = nanos / 1_000_000;
 
-      if (sample.kind === 'total') totalMs = ms;
-      else if (sample.passId) passMs.set(sample.passId, ms);
+      if (sample.kind === 'total') totals.push(ms);
+      else if (sample.passId) passes.push({ passId: sample.passId, ms });
     }
 
     this.pending.length = 0;
     this.pending.push(...stillPending);
-    return { totalMs, passMs, disjoint: false };
+
+    return { disjoint: false, totals, passes };
   }
 
   clear(): void {
     for (const sample of this.pending) this.gl.deleteQuery(sample.query);
     this.pending.length = 0;
     this.activeQuery = null;
-    this.disjoint = false;
   }
 
   private discardPending(): void {
@@ -224,9 +219,20 @@ class GpuTimerAdapter {
   }
 }
 
+/**
+ * WebGL2 timer-query profiler.
+ *
+ * Core guarantees:
+ * - only uses core GL query params (`gl.QUERY_RESULT_AVAILABLE` / `gl.QUERY_RESULT`)
+ * - aggregates every resolved query event (never overwrites delayed batches)
+ * - transient disjoint discards affected samples and recovers automatically
+ * - supported requires total + every currently displayed pass bucket to have enough samples
+ */
 export class PerformanceProfiler {
-  private enabled = false;
+  private requestedEnabled = false;
+  private suspended = false; // offline capture suspend
   private timer: GpuTimerAdapter | null = null;
+
   private gpuSupport: ProfilerGpuSupport = 'unavailable';
   private frameIndex = 0;
   private lastSampleAt: number | null = null;
@@ -235,39 +241,79 @@ export class PerformanceProfiler {
   private readonly cpuSamples = new RollingSamples();
   private readonly totalGpuSamples = new RollingSamples();
   private readonly passGpuSamples = new Map<string, RollingSamples>();
+
   private readonly compileByPass = new Map<string, ProfilerCompileRecord>();
+
   private passIds: readonly string[] = [];
   private currentSchedule: PassSchedule = { passIds: [], mode: 'total', passId: null };
+
+  // 1x1 probe render target created by PassCompiler (default WebGLRenderTarget defaults).
+  private readonly compilerProbeBytes = 1 * 1 * 4;
 
   constructor(
     private readonly getRenderer: () => WebGLRenderer | null,
     private readonly getTextures: () => TextureManager,
   ) {}
 
-  setEnabled(enabled: boolean): void {
-    if (enabled === this.enabled) return;
+  setEnabled(requested: boolean): void {
+    if (requested === this.requestedEnabled) return;
+    this.requestedEnabled = requested;
 
-    this.enabled = enabled;
-    if (!enabled) {
-      this.clear();
-      return;
-    }
-
-    const renderer = this.getRenderer();
-    if (!renderer) {
+    if (!requested) {
+      this.suspended = false;
       this.gpuSupport = 'unavailable';
+      this.timer?.clear();
+      this.timer = null;
+      this.clearTimingSamplesOnly();
+      this.passIds = [];
+      this.currentSchedule = { passIds: [], mode: 'total', passId: null };
       return;
     }
 
-    this.timer = new GpuTimerAdapter(renderer);
-    this.gpuSupport = this.timer.supported ? 'warming' : 'unavailable';
-    this.frameIndex = 0;
-    this.resolvedGpuSamples = 0;
-    this.lastSampleAt = null;
+    // Requested enabled: initialize immediately unless offline-suspended.
+    if (!this.suspended) this.ensureTimer();
+    this.clearTimingSamplesOnly();
+    this.gpuSupport = this.timer?.supported ? 'warming' : 'unavailable';
+  }
+
+  onCaptureStart(): void {
+    this.suspended = true;
+    this.timer?.clear();
+    this.clearTimingSamplesOnly();
+    this.gpuSupport = this.timer?.supported ? 'warming' : 'unavailable';
+  }
+
+  onCaptureEnd(): void {
+    this.suspended = false;
+    if (!this.requestedEnabled) return;
+    this.ensureTimer();
+    this.gpuSupport = this.timer?.supported ? 'warming' : 'unavailable';
+  }
+
+  onContextLost(): void {
+    this.timer?.clear();
+    this.timer = null;
+    this.clearTimingSamplesOnly();
+    if (this.requestedEnabled) this.gpuSupport = 'warming';
+  }
+
+  onContextRestored(): void {
+    if (!this.requestedEnabled || this.suspended) return;
+    this.ensureTimer();
+    this.gpuSupport = this.timer?.supported ? 'warming' : 'unavailable';
+  }
+
+  dispose(): void {
+    this.requestedEnabled = false;
+    this.suspended = false;
+    this.timer?.clear();
+    this.timer = null;
+    this.gpuSupport = 'unavailable';
+    this.clearTimingSamplesOnly();
   }
 
   get isEnabled(): boolean {
-    return this.enabled;
+    return this.requestedEnabled && !this.suspended;
   }
 
   schedulePasses(
@@ -277,10 +323,17 @@ export class PerformanceProfiler {
   ): PassSchedule {
     const finals: string[] = [];
     if (hasImage) finals.push(usesComposer ? POST_PASS_ID : IMAGE_PASS_ID);
+
     this.passIds = [...bufferIds, ...finals];
 
+    // Prune compile records for passes that are not active anymore.
+    const active = new Set(this.passIds);
+    for (const passId of this.compileByPass.keys()) {
+      if (!active.has(passId)) this.compileByPass.delete(passId);
+    }
+
     const cycle = 1 + this.passIds.length;
-    const slot = this.frameIndex % cycle;
+    const slot = cycle === 0 ? 0 : this.frameIndex % cycle;
     if (slot === 0 || this.passIds.length === 0) {
       this.currentSchedule = { passIds: this.passIds, mode: 'total', passId: null };
     } else {
@@ -300,21 +353,22 @@ export class PerformanceProfiler {
   }
 
   beginGpu(): void {
-    if (!this.enabled || !this.timer?.supported || this.gpuSupport === 'disjoint') return;
+    if (!this.requestedEnabled || this.suspended) return;
+    if (!this.timer?.supported) return;
+    if (this.passIds.length === 0) return;
 
     if (this.currentSchedule.mode === 'total') this.timer.begin('total');
-    else if (this.currentSchedule.passId) {
-      this.timer.begin('pass', this.currentSchedule.passId);
-    }
+    else if (this.currentSchedule.passId) this.timer.begin('pass', this.currentSchedule.passId);
   }
 
   endGpu(): void {
-    if (!this.enabled || !this.timer?.supported || this.gpuSupport === 'disjoint') return;
+    if (!this.requestedEnabled || this.suspended) return;
+    if (!this.timer?.supported) return;
     this.timer.end();
   }
 
   endFrame(cpuSubmissionMs: number): void {
-    if (!this.enabled) return;
+    if (!this.requestedEnabled || this.suspended) return;
 
     this.cpuSamples.push(cpuSubmissionMs);
     this.frameIndex++;
@@ -326,56 +380,42 @@ export class PerformanceProfiler {
       this.gpuSupport = 'disjoint';
       this.totalGpuSamples.clear();
       for (const samples of this.passGpuSamples.values()) samples.clear();
+      this.passGpuSamples.clear();
       this.resolvedGpuSamples = 0;
+      this.lastSampleAt = null;
       return;
     }
 
-    if (poll.totalMs !== null) {
-      this.totalGpuSamples.push(poll.totalMs);
+    for (const ms of poll.totals) {
+      this.totalGpuSamples.push(ms);
       this.resolvedGpuSamples++;
       this.lastSampleAt = performance.now();
-      if (this.gpuSupport === 'warming' && this.resolvedGpuSamples >= PROFILER_MIN_GPU_SAMPLES) {
-        this.gpuSupport = 'supported';
-      }
     }
 
-    for (const [passId, ms] of poll.passMs) {
+    for (const { passId, ms } of poll.passes) {
       const bucket = this.passGpuSamples.get(passId) ?? new RollingSamples();
       bucket.push(ms);
       this.passGpuSamples.set(passId, bucket);
       this.resolvedGpuSamples++;
       this.lastSampleAt = performance.now();
-      if (this.gpuSupport === 'warming' && this.resolvedGpuSamples >= PROFILER_MIN_GPU_SAMPLES) {
-        this.gpuSupport = 'supported';
-      }
     }
+
+    this.updateGpuSupportFromSamples();
   }
 
   recordCompile(passId: string, durationMs: number, success: boolean): void {
     this.compileByPass.set(passId, { passId, durationMs, success });
   }
 
-  onContextLost(): void {
-    this.clearTransient();
-    if (this.enabled) this.gpuSupport = this.timer?.supported ? 'warming' : 'unavailable';
-  }
-
-  onCaptureStart(): void {
-    this.setEnabled(false);
-  }
-
-  dispose(): void {
-    this.clear();
-    this.enabled = false;
-  }
-
   snapshot(allocations: readonly BufferAllocation[]): ProfilerSnapshot {
     const textures = this.getTextures().textureAllocations();
-    const renderTargetBytes = allocations.reduce((sum, entry) => sum + entry.bytes, 0);
+    const baseRenderTargetsBytes = allocations.reduce((sum, entry) => sum + entry.bytes, 0);
+    const renderTargetBytes = baseRenderTargetsBytes + this.compilerProbeBytes;
 
     const passes: ProfilerPassTiming[] = this.passIds.map((id) => {
       const size = allocations.find((entry) => entry.id === id);
       const isSynthetic = id === IMAGE_PASS_ID || id === POST_PASS_ID;
+
       return {
         id,
         label: passLabel(id),
@@ -387,8 +427,8 @@ export class PerformanceProfiler {
     });
 
     return {
-      enabled: this.enabled,
-      gpuSupport: this.enabled ? this.gpuSupport : 'unavailable',
+      enabled: this.requestedEnabled,
+      gpuSupport: this.requestedEnabled ? this.gpuSupport : 'unavailable',
       sampleCount: this.resolvedGpuSamples,
       lastSampleAgeMs:
         this.lastSampleAt === null ? null : Math.max(0, performance.now() - this.lastSampleAt),
@@ -399,26 +439,60 @@ export class PerformanceProfiler {
       textureBytes: textures.totalBytes,
       textureEstimated: true,
       textures: textures.items,
-      compiles: [...this.compileByPass.values()],
+      compiles:
+        this.passIds.length === 0
+          ? []
+          : [...this.compileByPass.values()].filter((record) =>
+              this.passIds.includes(record.passId),
+            ),
     };
   }
 
-  private clear(): void {
-    this.timer?.clear();
-    this.timer = null;
-    this.clearTransient();
-    this.gpuSupport = 'unavailable';
+  private ensureTimer(): void {
+    const renderer = this.getRenderer();
+    if (!renderer) {
+      this.timer = null;
+      this.gpuSupport = 'unavailable';
+      return;
+    }
+    this.timer = new GpuTimerAdapter(renderer);
   }
 
-  private clearTransient(): void {
+  private updateGpuSupportFromSamples(): void {
+    if (!this.timer?.supported) {
+      this.gpuSupport = 'unavailable';
+      return;
+    }
+
+    if (this.passIds.length === 0) {
+      this.gpuSupport = 'unavailable';
+      return;
+    }
+
+    if (this.totalGpuSamples.length < PROFILER_MIN_GPU_SAMPLES) {
+      this.gpuSupport = 'warming';
+      return;
+    }
+
+    for (const passId of this.passIds) {
+      const bucket = this.passGpuSamples.get(passId);
+      if (!bucket || bucket.length < PROFILER_MIN_GPU_SAMPLES) {
+        this.gpuSupport = 'warming';
+        return;
+      }
+    }
+
+    this.gpuSupport = 'supported';
+  }
+
+  private clearTimingSamplesOnly(): void {
     this.cpuSamples.clear();
     this.totalGpuSamples.clear();
     this.passGpuSamples.clear();
     this.frameIndex = 0;
     this.resolvedGpuSamples = 0;
     this.lastSampleAt = null;
-    this.passIds = [];
-    this.currentSchedule = { passIds: [], mode: 'total', passId: null };
+    // Keep passIds for supported gating; timings start fresh.
   }
 }
 

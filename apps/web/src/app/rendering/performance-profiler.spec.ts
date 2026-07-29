@@ -13,6 +13,7 @@ function createProfiler(options?: {
   supported?: boolean;
   disjoint?: boolean;
   pollResults?: number[];
+  availableSequence?: readonly boolean[];
 }) {
   const disjoint = options?.disjoint ?? false;
   const pollResults = [...(options?.pollResults ?? [])];
@@ -25,7 +26,12 @@ function createProfiler(options?: {
     GPU_DISJOINT_EXT: 0x8fbb,
   };
 
+  let pollIndex = 0;
+  let availableForPoll = false;
+
   const gl = {
+    QUERY_RESULT_AVAILABLE: 0x8867,
+    QUERY_RESULT: 0x8866,
     getExtension: (name: string) =>
       options?.supported === false || name !== 'EXT_disjoint_timer_query_webgl2' ? null : ext,
     createQuery: () => {
@@ -37,14 +43,17 @@ function createProfiler(options?: {
     beginQuery: () => {},
     endQuery: () => {},
     getParameter: (pname: number) => {
-      if (pname === ext.GPU_DISJOINT_EXT) return disjoint;
+      if (pname === ext.GPU_DISJOINT_EXT) {
+        const seq = options?.availableSequence;
+        availableForPoll = seq ? (seq[pollIndex] ?? seq[seq.length - 1]!) : pollResults.length > 0;
+        pollIndex++;
+        return disjoint;
+      }
       return false;
     },
     getQueryParameter: (query: WebGLQuery, pname: number) => {
-      if (pname === ext.QUERY_RESULT_AVAILABLE_EXT) {
-        return pollResults.length > 0 || options?.pollResults !== undefined;
-      }
-      if (pname === ext.QUERY_RESULT_EXT) {
+      if (pname === gl.QUERY_RESULT_AVAILABLE) return availableForPoll;
+      if (pname === gl.QUERY_RESULT) {
         return pollResults.shift() ?? options?.pollResults?.[0] ?? 2_000_000;
       }
       void query;
@@ -61,7 +70,10 @@ function createProfiler(options?: {
     }),
   } as never;
 
-  const profiler = new PerformanceProfiler(() => renderer, () => textures);
+  const profiler = new PerformanceProfiler(
+    () => renderer,
+    () => textures,
+  );
   return { profiler, gl, queries };
 }
 
@@ -73,9 +85,9 @@ describe('bufferAllocationBytes', () => {
 
 describe('targetSize', () => {
   it('keeps fixed-resolution passes at their declared size', () => {
-    expect(targetSize({ mode: 'fixed', width: 512, height: 256, scale: 1 }, { width: 800, height: 600 })).toEqual(
-      { width: 512, height: 256 },
-    );
+    expect(
+      targetSize({ mode: 'fixed', width: 512, height: 256, scale: 1 }, { width: 800, height: 600 }),
+    ).toEqual({ width: 512, height: 256 });
   });
 });
 
@@ -87,11 +99,18 @@ describe('PerformanceProfiler', () => {
     expect(queries).toHaveLength(0);
   });
 
-  it('records compile probes without touching unchanged passes', () => {
+  it('records compile probes for active passes, and prunes inactive passes', () => {
     const { profiler } = createProfiler();
+    profiler.setEnabled(true);
+
     profiler.recordCompile('buf-a', 12.5, true);
-    const snapshot = profiler.snapshot([]);
-    expect(snapshot.compiles).toEqual([{ passId: 'buf-a', durationMs: 12.5, success: true }]);
+    profiler.schedulePasses(['buf-a'], true, false);
+    const withActive = profiler.snapshot([]);
+    expect(withActive.compiles).toEqual([{ passId: 'buf-a', durationMs: 12.5, success: true }]);
+
+    profiler.schedulePasses([], false, false);
+    const pruned = profiler.snapshot([]);
+    expect(pruned.compiles).toEqual([]);
   });
 
   it('alternates total-frame and single-pass sampling schedules', () => {
@@ -148,17 +167,69 @@ describe('PerformanceProfiler', () => {
     expect(profiler.snapshot([]).gpuSupport).toBe('warming');
   });
 
-  it('resolves supported GPU timing asynchronously without blocking', () => {
+  it('aggregates every resolved query event (sampleCount is not overwritten)', () => {
     const nanos = 2_000_000;
-    const { profiler } = createProfiler({ supported: true, pollResults: [nanos] });
+    const pollResults = [1, 2, 3, 4, 5].map(() => nanos);
+    const availableSequence = [false, false, false, false, false, true];
+
+    const { profiler } = createProfiler({ supported: true, pollResults, availableSequence });
     profiler.setEnabled(true);
 
-    for (let frame = 0; frame < PROFILER_MIN_GPU_SAMPLES * 2; frame++) {
+    // Accumulate 5 in-flight queries across 5 polls.
+    for (let frame = 0; frame < 5; frame++) {
+      profiler.schedulePasses(['buf-a'], true, false);
+      profiler.beginGpu();
+      profiler.endGpu();
+      profiler.endFrame(1);
+    }
+
+    // 6th poll resolves all pending queries at once.
+    profiler.endFrame(1);
+
+    const snapshot = profiler.snapshot([]);
+    expect(snapshot.sampleCount).toBe(5);
+  });
+
+  it('suspends/clears during offline capture and resumes after endOffline', () => {
+    const nanos = 2_000_000;
+
+    const { profiler } = createProfiler({
+      supported: true,
+      pollResults: [nanos, nanos],
+      availableSequence: [true, true, true],
+    });
+
+    profiler.setEnabled(true);
+    profiler.schedulePasses(['buf-a'], true, false);
+    profiler.beginGpu();
+    profiler.endGpu();
+    profiler.endFrame(1);
+
+    expect(profiler.snapshot([]).sampleCount).toBeGreaterThan(0);
+
+    profiler.onCaptureStart();
+    expect(profiler.snapshot([]).sampleCount).toBe(0);
+
+    profiler.onCaptureEnd();
+    profiler.schedulePasses(['buf-a'], true, false);
+    profiler.beginGpu();
+    profiler.endGpu();
+    profiler.endFrame(1);
+
+    expect(profiler.snapshot([]).sampleCount).toBeGreaterThan(0);
+  });
+
+  it('resolves supported GPU timing asynchronously without blocking', () => {
+    const nanos = 2_000_000;
+    const frames = PROFILER_MIN_GPU_SAMPLES * 2;
+    const pollResults = Array.from({ length: frames }, () => nanos);
+    const { profiler } = createProfiler({ supported: true, pollResults });
+    profiler.setEnabled(true);
+
+    for (let frame = 0; frame < frames; frame++) {
       profiler.schedulePasses([], true, false);
-      if (profiler.isTotalFrame()) {
-        profiler.beginGpu();
-        profiler.endGpu();
-      }
+      profiler.beginGpu();
+      profiler.endGpu();
       profiler.endFrame(1);
     }
 
@@ -168,7 +239,11 @@ describe('PerformanceProfiler', () => {
   });
 
   it('discards samples and reports disjoint when the driver signals it', () => {
-    const { profiler } = createProfiler({ supported: true, disjoint: true, pollResults: [1_000_000] });
+    const { profiler } = createProfiler({
+      supported: true,
+      disjoint: true,
+      pollResults: [1_000_000],
+    });
     profiler.setEnabled(true);
     profiler.schedulePasses([], true, false);
     profiler.beginGpu();
@@ -206,7 +281,7 @@ describe('PerformanceProfiler', () => {
       { id: 'buf-a', width: 100, height: 50, bytes: bufferAllocationBytes(100, 50) },
     ]);
 
-    expect(snapshot.renderTargetBytes).toBe(bufferAllocationBytes(100, 50));
+    expect(snapshot.renderTargetBytes).toBe(bufferAllocationBytes(100, 50) + 4);
     expect(snapshot.textureEstimated).toBe(true);
     expect(snapshot.textureBytes).toBe(64 * 64 * 4);
     expect(snapshot.passes.find((pass) => pass.id === 'buf-a')?.targetBytes).toBe(

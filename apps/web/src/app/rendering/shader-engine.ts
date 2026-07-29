@@ -666,6 +666,8 @@ export class ShaderEngine {
 
     this.offline = null;
 
+    this.profiler.onCaptureEnd();
+
     // The preview resumes where it was, not where the capture left off: filming
     // the shader is not the same as scrubbing it.
     this.time = offline.time;
@@ -823,7 +825,7 @@ export class ShaderEngine {
     // "reusing" materials that no longer exist on the GPU.
     this.compiler.invalidate();
 
-    this.profiler.onContextLost();
+    this.profiler.onContextRestored();
 
     // Replayed exactly once, and as a *request*, not as an error: a context loss
     // is not the shader's fault and must not be reported as one.

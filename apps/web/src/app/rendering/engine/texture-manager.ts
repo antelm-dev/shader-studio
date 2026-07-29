@@ -59,7 +59,9 @@ function cacheKey(source: ChannelSource): string {
   return `${source.url}|${source.wrap}|${source.filter}|${source.flipY}`;
 }
 
-function decodedTextureDimensions(texture: THREE.Texture): { width: number; height: number } | null {
+function decodedTextureDimensions(
+  texture: THREE.Texture,
+): { width: number; height: number } | null {
   const image = texture.image as { width?: number; height?: number } | undefined;
   if (!image || typeof image.width !== 'number' || typeof image.height !== 'number') return null;
   if (image.width <= 0 || image.height <= 0) return null;
@@ -181,30 +183,66 @@ export class TextureManager {
     readonly totalBytes: number | null;
     readonly estimated: true;
   } {
-    const items = CHANNEL_INDICES.map((slot) => {
-      const source = this.live[slot];
-      if (!source) {
-        return { slot, width: null, height: null, bytes: null };
-      }
+    const keyBySlot = new Map<number, string>();
+    const usedKeys = new Set<string>();
 
+    for (const slot of CHANNEL_INDICES) {
+      const source = this.live[slot];
+      if (!source) continue;
       const key = cacheKey(source);
+      usedKeys.add(key);
+      keyBySlot.set(slot, key);
+    }
+
+    // Compute unique allocation bytes only once per cached texture.
+    const bytesByKey = new Map<string, { width: number; height: number; bytes: number } | null>();
+    let incomplete = false;
+
+    for (const key of usedKeys) {
       if (this.status.get(key) === 'loading') {
-        return { slot, width: null, height: null, bytes: null };
+        bytesByKey.set(key, null);
+        incomplete = true;
+        continue;
       }
 
       const texture = this.cache.get(key);
-      if (!texture) return { slot, width: null, height: null, bytes: null };
+      if (!texture) {
+        bytesByKey.set(key, null);
+        incomplete = true;
+        continue;
+      }
 
       const dimensions = decodedTextureDimensions(texture);
-      if (!dimensions) return { slot, width: null, height: null, bytes: null };
+      if (!dimensions) {
+        bytesByKey.set(key, null);
+        incomplete = true;
+        continue;
+      }
 
       const bytes = dimensions.width * dimensions.height * 4;
-      return { slot, width: dimensions.width, height: dimensions.height, bytes };
+      bytesByKey.set(key, { width: dimensions.width, height: dimensions.height, bytes });
+    }
+
+    const items = CHANNEL_INDICES.map((slot) => {
+      const key = keyBySlot.get(slot);
+      if (!key) return { slot, width: null, height: null, bytes: null };
+
+      const resolved = bytesByKey.get(key) ?? null;
+      if (!resolved) return { slot, width: null, height: null, bytes: null };
+
+      return { slot, width: resolved.width, height: resolved.height, bytes: resolved.bytes };
     });
 
-    const known = items.filter((item) => item.bytes !== null);
-    const totalBytes =
-      known.length === 0 ? null : known.reduce((sum, item) => sum + (item.bytes ?? 0), 0);
+    const totalBytes = incomplete
+      ? null
+      : (() => {
+          let sum = 0;
+          for (const resolved of bytesByKey.values()) {
+            if (!resolved) return null;
+            sum += resolved.bytes;
+          }
+          return sum;
+        })();
 
     return { items, totalBytes, estimated: true };
   }
