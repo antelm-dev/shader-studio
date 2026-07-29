@@ -302,6 +302,9 @@ export class ShaderEngine {
   setPasses(spec: MultiPassSpec, force = false): CompileDiagnostic[] {
     if (this.disposed) return [];
 
+    // Track requested project pass IDs for compile records (real IDs, not timing synthetics).
+    this.profiler.setRequestedPasses(spec.passes.map((pass) => pass.id));
+
     // A lost context has no driver to compile against. Remember what was asked
     // for and apply it on restore, rather than reporting a compile failure the
     // shader is not responsible for.
@@ -368,12 +371,28 @@ export class ShaderEngine {
 
   setProfilingEnabled(enabled: boolean): void {
     if (this.disposed) return;
+    const generation = this.profiler.generation;
     this.profiler.setEnabled(enabled);
+    if (this.profiler.generation !== generation) this.onProfilerLifecycle?.();
   }
 
   profilerSnapshot(): ProfilerSnapshot {
     return this.profiler.snapshot(this.targets.allocations());
   }
+
+  /** Monotonic lifecycle generation for UI that must drop stale snapshots immediately. */
+  profilerGeneration(): number {
+    return this.profiler.generation;
+  }
+
+  resetProfilerSamples(): void {
+    if (this.disposed) return;
+    this.profiler.resetTimingSamples();
+    this.onProfilerLifecycle?.();
+  }
+
+  /** Fired when profiler enablement, capture, context, or sample-reset changes. */
+  onProfilerLifecycle: (() => void) | null = null;
 
   /**
    * The program a pass is currently running.
@@ -518,8 +537,14 @@ export class ShaderEngine {
   }
 
   setResolutionScale(scale: number): void {
-    this.resolutionScale = Math.min(Math.max(scale, 0.25), 2);
+    const next = Math.min(Math.max(scale, 0.25), 2);
+    const changed = next !== this.resolutionScale;
+    this.resolutionScale = next;
     this.resize();
+    if (changed) {
+      this.profiler.resetTimingSamples();
+      this.onProfilerLifecycle?.();
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -614,6 +639,7 @@ export class ShaderEngine {
     cancelAnimationFrame(this.frame);
 
     this.profiler.onCaptureStart();
+    this.onProfilerLifecycle?.();
 
     this.offline = {
       time: this.time,
@@ -667,6 +693,7 @@ export class ShaderEngine {
     this.offline = null;
 
     this.profiler.onCaptureEnd();
+    this.onProfilerLifecycle?.();
 
     // The preview resumes where it was, not where the capture left off: filming
     // the shader is not the same as scrubbing it.
@@ -805,6 +832,7 @@ export class ShaderEngine {
     cancelAnimationFrame(this.frame);
     this.post.invalidate();
     this.profiler.onContextLost();
+    this.onProfilerLifecycle?.();
     this.onContextLost?.();
   }
 
@@ -826,6 +854,7 @@ export class ShaderEngine {
     this.compiler.invalidate();
 
     this.profiler.onContextRestored();
+    this.onProfilerLifecycle?.();
 
     // Replayed exactly once, and as a *request*, not as an error: a context loss
     // is not the shader's fault and must not be reported as one.

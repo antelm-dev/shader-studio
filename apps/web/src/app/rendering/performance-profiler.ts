@@ -243,17 +243,24 @@ export class PerformanceProfiler {
   private readonly passGpuSamples = new Map<string, RollingSamples>();
 
   private readonly compileByPass = new Map<string, ProfilerCompileRecord>();
+  /** Project pass IDs last requested for compilation (real IDs, not synthetic timing IDs). */
+  private requestedCompilePassIds: readonly string[] = [];
 
   private passIds: readonly string[] = [];
   private currentSchedule: PassSchedule = { passIds: [], mode: 'total', passId: null };
+  private lifecycleGeneration = 0;
 
-  // 1x1 probe render target created by PassCompiler (default WebGLRenderTarget defaults).
+  // 1×1 RGBA probe with depth/stencil disabled (see PassCompiler).
   private readonly compilerProbeBytes = 1 * 1 * 4;
 
   constructor(
     private readonly getRenderer: () => WebGLRenderer | null,
     private readonly getTextures: () => TextureManager,
   ) {}
+
+  get generation(): number {
+    return this.lifecycleGeneration;
+  }
 
   setEnabled(requested: boolean): void {
     if (requested === this.requestedEnabled) return;
@@ -267,6 +274,7 @@ export class PerformanceProfiler {
       this.clearTimingSamplesOnly();
       this.passIds = [];
       this.currentSchedule = { passIds: [], mode: 'total', passId: null };
+      this.bumpGeneration();
       return;
     }
 
@@ -274,6 +282,7 @@ export class PerformanceProfiler {
     if (!this.suspended) this.ensureTimer();
     this.clearTimingSamplesOnly();
     this.gpuSupport = this.timer?.supported ? 'warming' : 'unavailable';
+    this.bumpGeneration();
   }
 
   onCaptureStart(): void {
@@ -281,13 +290,18 @@ export class PerformanceProfiler {
     this.timer?.clear();
     this.clearTimingSamplesOnly();
     this.gpuSupport = this.timer?.supported ? 'warming' : 'unavailable';
+    this.bumpGeneration();
   }
 
   onCaptureEnd(): void {
     this.suspended = false;
-    if (!this.requestedEnabled) return;
+    if (!this.requestedEnabled) {
+      this.bumpGeneration();
+      return;
+    }
     this.ensureTimer();
     this.gpuSupport = this.timer?.supported ? 'warming' : 'unavailable';
+    this.bumpGeneration();
   }
 
   onContextLost(): void {
@@ -295,12 +309,17 @@ export class PerformanceProfiler {
     this.timer = null;
     this.clearTimingSamplesOnly();
     if (this.requestedEnabled) this.gpuSupport = 'warming';
+    this.bumpGeneration();
   }
 
   onContextRestored(): void {
-    if (!this.requestedEnabled || this.suspended) return;
+    if (!this.requestedEnabled || this.suspended) {
+      this.bumpGeneration();
+      return;
+    }
     this.ensureTimer();
     this.gpuSupport = this.timer?.supported ? 'warming' : 'unavailable';
+    this.bumpGeneration();
   }
 
   dispose(): void {
@@ -310,10 +329,32 @@ export class PerformanceProfiler {
     this.timer = null;
     this.gpuSupport = 'unavailable';
     this.clearTimingSamplesOnly();
+    this.bumpGeneration();
   }
 
   get isEnabled(): boolean {
     return this.requestedEnabled && !this.suspended;
+  }
+
+  /**
+   * Project pass IDs involved in the latest compile request.
+   * Separate from `schedulePasses` timing IDs (which use synthetic `__image__` / `__post__`).
+   */
+  setRequestedPasses(passIds: readonly string[]): void {
+    this.requestedCompilePassIds = [...passIds];
+    const active = new Set(this.requestedCompilePassIds);
+    for (const passId of this.compileByPass.keys()) {
+      if (!active.has(passId)) this.compileByPass.delete(passId);
+    }
+  }
+
+  /** Drop rolling timing samples without disabling profiling (e.g. after a scale change). */
+  resetTimingSamples(): void {
+    this.clearTimingSamplesOnly();
+    if (this.requestedEnabled && !this.suspended) {
+      this.gpuSupport = this.timer?.supported ? 'warming' : 'unavailable';
+    }
+    this.bumpGeneration();
   }
 
   schedulePasses(
@@ -325,12 +366,6 @@ export class PerformanceProfiler {
     if (hasImage) finals.push(usesComposer ? POST_PASS_ID : IMAGE_PASS_ID);
 
     this.passIds = [...bufferIds, ...finals];
-
-    // Prune compile records for passes that are not active anymore.
-    const active = new Set(this.passIds);
-    for (const passId of this.compileByPass.keys()) {
-      if (!active.has(passId)) this.compileByPass.delete(passId);
-    }
 
     const cycle = 1 + this.passIds.length;
     const slot = cycle === 0 ? 0 : this.frameIndex % cycle;
@@ -439,13 +474,14 @@ export class PerformanceProfiler {
       textureBytes: textures.totalBytes,
       textureEstimated: true,
       textures: textures.items,
-      compiles:
-        this.passIds.length === 0
-          ? []
-          : [...this.compileByPass.values()].filter((record) =>
-              this.passIds.includes(record.passId),
-            ),
+      compiles: [...this.compileByPass.values()].filter((record) =>
+        this.requestedCompilePassIds.includes(record.passId),
+      ),
     };
+  }
+
+  private bumpGeneration(): void {
+    this.lifecycleGeneration++;
   }
 
   private ensureTimer(): void {

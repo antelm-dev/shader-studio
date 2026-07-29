@@ -233,7 +233,10 @@ export class PassCompiler {
     this.probeScene = new T.Scene();
     this.probeMesh = new T.Mesh(geometry, this.placeholder);
     this.probeScene.add(this.probeMesh);
-    this.probeTarget = context.own(new T.WebGLRenderTarget(1, 1));
+    // Depth/stencil unused for compile probes — keep the allocation at 1×1 RGBA.
+    this.probeTarget = context.own(
+      new T.WebGLRenderTarget(1, 1, { depthBuffer: false, stencilBuffer: false }),
+    );
   }
 
   // ---------------------------------------------------------------------------

@@ -15,14 +15,13 @@ function createProfiler(options?: {
   pollResults?: number[];
   availableSequence?: readonly boolean[];
 }) {
-  const disjoint = options?.disjoint ?? false;
+  let disjoint = options?.disjoint ?? false;
   const pollResults = [...(options?.pollResults ?? [])];
   const queries: WebGLQuery[] = [];
 
+  // Extension only exposes TIME_ELAPSED + GPU_DISJOINT; results use core WebGL2 enums.
   const ext = {
     TIME_ELAPSED_EXT: 0x88bf,
-    QUERY_RESULT_EXT: 0x8866,
-    QUERY_RESULT_AVAILABLE_EXT: 0x8867,
     GPU_DISJOINT_EXT: 0x8fbb,
   };
 
@@ -74,7 +73,14 @@ function createProfiler(options?: {
     () => renderer,
     () => textures,
   );
-  return { profiler, gl, queries };
+  return {
+    profiler,
+    gl,
+    queries,
+    setDisjoint: (value: boolean) => {
+      disjoint = value;
+    },
+  };
 }
 
 describe('bufferAllocationBytes', () => {
@@ -99,18 +105,27 @@ describe('PerformanceProfiler', () => {
     expect(queries).toHaveLength(0);
   });
 
-  it('records compile probes for active passes, and prunes inactive passes', () => {
+  it('keeps Image and failed-new-pass compile records against requested project IDs', () => {
     const { profiler } = createProfiler();
     profiler.setEnabled(true);
 
-    profiler.recordCompile('buf-a', 12.5, true);
-    profiler.schedulePasses(['buf-a'], true, false);
-    const withActive = profiler.snapshot([]);
-    expect(withActive.compiles).toEqual([{ passId: 'buf-a', durationMs: 12.5, success: true }]);
+    profiler.setRequestedPasses(['image-1', 'buf-new']);
+    profiler.recordCompile('image-1', 8, true);
+    profiler.recordCompile('buf-new', 3, false);
 
-    profiler.schedulePasses([], false, false);
+    // Timing schedule uses synthetic finals; must not prune real compile IDs.
+    profiler.schedulePasses(['buf-a'], true, false);
+    const snapshot = profiler.snapshot([]);
+    expect(snapshot.compiles).toEqual(
+      expect.arrayContaining([
+        { passId: 'image-1', durationMs: 8, success: true },
+        { passId: 'buf-new', durationMs: 3, success: false },
+      ]),
+    );
+
+    profiler.setRequestedPasses(['image-1']);
     const pruned = profiler.snapshot([]);
-    expect(pruned.compiles).toEqual([]);
+    expect(pruned.compiles).toEqual([{ passId: 'image-1', durationMs: 8, success: true }]);
   });
 
   it('alternates total-frame and single-pass sampling schedules', () => {
@@ -239,13 +254,13 @@ describe('PerformanceProfiler', () => {
   });
 
   it('discards samples and reports disjoint when the driver signals it', () => {
-    const { profiler } = createProfiler({
+    const { profiler, setDisjoint } = createProfiler({
       supported: true,
       disjoint: true,
       pollResults: [1_000_000],
     });
     profiler.setEnabled(true);
-    profiler.schedulePasses([], true, false);
+    profiler.schedulePasses(['buf-a'], true, false);
     profiler.beginGpu();
     profiler.endGpu();
     profiler.endFrame(1);
@@ -253,6 +268,44 @@ describe('PerformanceProfiler', () => {
     const snapshot = profiler.snapshot([]);
     expect(snapshot.gpuSupport).toBe('disjoint');
     expect(snapshot.totalGpu.medianMs).toBeNull();
+
+    setDisjoint(false);
+    profiler.schedulePasses(['buf-a'], true, false);
+    profiler.beginGpu();
+    profiler.endGpu();
+    profiler.endFrame(1);
+    expect(profiler.snapshot([]).gpuSupport).toBe('warming');
+  });
+
+  it('recovers after a mid-flight disjoint with pending queries', () => {
+    const { profiler, setDisjoint, gl, queries } = createProfiler({
+      supported: true,
+      pollResults: [2_000_000, 2_000_000, 2_000_000],
+      availableSequence: [false, true, true, true],
+    });
+    profiler.setEnabled(true);
+    profiler.schedulePasses(['buf-a'], true, false);
+    profiler.beginGpu();
+    profiler.endGpu();
+    // First poll: result not available yet, query stays pending.
+    profiler.endFrame(1);
+    expect(queries.length).toBe(1);
+    expect(gl.deleteQuery).not.toHaveBeenCalled();
+
+    setDisjoint(true);
+    profiler.endFrame(1);
+    expect(profiler.snapshot([]).gpuSupport).toBe('disjoint');
+    expect(profiler.snapshot([]).sampleCount).toBe(0);
+    expect(gl.deleteQuery).toHaveBeenCalled();
+
+    const queriesAfterDisjoint = queries.length;
+    setDisjoint(false);
+    profiler.schedulePasses(['buf-a'], true, false);
+    profiler.beginGpu();
+    profiler.endGpu();
+    profiler.endFrame(1);
+    expect(queries.length).toBeGreaterThan(queriesAfterDisjoint);
+    expect(profiler.snapshot([]).gpuSupport).toBe('warming');
   });
 
   it('reports unavailable GPU timing when the extension is missing', () => {
@@ -289,10 +342,51 @@ describe('PerformanceProfiler', () => {
     );
   });
 
-  it('resets warming after a context loss', () => {
-    const { profiler } = createProfiler({ supported: true });
+  it('resets warming after a context loss and reacquires the adapter on restore', () => {
+    const { profiler, gl, queries } = createProfiler({
+      supported: true,
+      pollResults: [2_000_000, 2_000_000],
+      availableSequence: [true, true],
+    });
     profiler.setEnabled(true);
+    profiler.schedulePasses(['buf-a'], true, false);
+    profiler.beginGpu();
+    profiler.endGpu();
+    const pendingBeforeLoss = queries.length;
+
     profiler.onContextLost();
+    expect(gl.deleteQuery).toHaveBeenCalled();
+    expect(profiler.snapshot([]).gpuSupport).toBe('warming');
+    expect(profiler.snapshot([]).sampleCount).toBe(0);
+
+    profiler.onContextRestored();
+    profiler.schedulePasses(['buf-a'], true, false);
+    profiler.beginGpu();
+    profiler.endGpu();
+    profiler.endFrame(1);
+
+    expect(queries.length).toBeGreaterThan(pendingBeforeLoss);
+    expect(profiler.snapshot([]).gpuSupport).toBe('warming');
+  });
+
+  it('resets timing samples without disabling profiling', () => {
+    const { profiler } = createProfiler({
+      supported: true,
+      pollResults: [2_000_000],
+      availableSequence: [true],
+    });
+    profiler.setEnabled(true);
+    profiler.schedulePasses(['buf-a'], true, false);
+    profiler.beginGpu();
+    profiler.endGpu();
+    profiler.endFrame(1);
+    expect(profiler.snapshot([]).sampleCount).toBeGreaterThan(0);
+
+    const generation = profiler.generation;
+    profiler.resetTimingSamples();
+    expect(profiler.isEnabled).toBe(true);
+    expect(profiler.generation).toBeGreaterThan(generation);
+    expect(profiler.snapshot([]).sampleCount).toBe(0);
     expect(profiler.snapshot([]).gpuSupport).toBe('warming');
   });
 });

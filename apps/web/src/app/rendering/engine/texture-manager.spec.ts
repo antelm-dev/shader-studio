@@ -294,6 +294,24 @@ describe('TextureManager', () => {
     expect((textures.placeholder as unknown as FakeTexture).needsUpdate).toBe(true);
   });
 
+  it('counts the placeholder and deduplicates shared textures in allocations', () => {
+    expect(textures.textureAllocations().totalBytes).toBe(4);
+
+    textures.setSlots([source('shared.png'), source('shared.png'), null, null]);
+    textures.resolveSlot(0);
+    textures.resolveSlot(1);
+    expect(textures.textureAllocations().totalBytes).toBeNull();
+
+    const texture = loads[0].texture as FakeTexture & { image?: { width: number; height: number } };
+    texture.image = { width: 8, height: 4 };
+    loads[0].settle();
+
+    const allocations = textures.textureAllocations();
+    expect(allocations.totalBytes).toBe(4 + 8 * 4 * 4);
+    expect(allocations.items[0]?.bytes).toBe(8 * 4 * 4);
+    expect(allocations.items[1]?.bytes).toBe(8 * 4 * 4);
+  });
+
   it('disposes everything it made, repeatedly and safely', () => {
     textures.setSlots([source('a.png'), null, null, null]);
     const a = textures.resolveSlot(0) as unknown as FakeTexture;

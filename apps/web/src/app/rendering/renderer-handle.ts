@@ -27,6 +27,12 @@ export class RendererHandle {
   private readonly activeId = signal<string | null>(null);
   private profilingEnabled = false;
 
+  /**
+   * Bumps whenever the active profiler source or its lifecycle generation changes,
+   * so the Inspector can drop stale snapshots without waiting for the poll interval.
+   */
+  readonly profilerEpoch = signal(0);
+
   /** The engine the app's global actions apply to. Null until a context exists. */
   readonly engine = computed(() => {
     const id = this.activeId();
@@ -44,28 +50,44 @@ export class RendererHandle {
   }
 
   setProfilingEnabled(enabled: boolean): void {
+    const changed = enabled !== this.profilingEnabled;
     this.profilingEnabled = enabled;
     for (const engine of this.engines().values()) engine.setProfilingEnabled(false);
     if (enabled) this.engine()?.setProfilingEnabled(true);
+    if (changed) this.bumpProfilerEpoch();
   }
 
   profilerSnapshot(): ProfilerSnapshot | null {
     return this.engine()?.profilerSnapshot() ?? null;
   }
 
+  resetProfilerSamples(): void {
+    this.engine()?.resetProfilerSamples();
+    this.bumpProfilerEpoch();
+  }
+
+  private bumpProfilerEpoch(): void {
+    this.profilerEpoch.update((value) => value + 1);
+  }
+
   private syncProfiling(): void {
     for (const engine of this.engines().values()) engine.setProfilingEnabled(false);
     if (this.profilingEnabled) this.engine()?.setProfilingEnabled(true);
+    this.bumpProfilerEpoch();
   }
 
   /** The first engine registered becomes the active one; later ones only join the map. */
   register(contextId: string, engine: ShaderEngine): void {
+    engine.onProfilerLifecycle = () => this.bumpProfilerEpoch();
     this.engines.update((engines) => new Map(engines).set(contextId, engine));
     if (this.activeId() === null) this.activeId.set(contextId);
     this.syncProfiling();
   }
 
   unregister(contextId: string): void {
+    const leaving = this.engines().get(contextId);
+    if (leaving) leaving.onProfilerLifecycle = null;
+
     this.engines.update((engines) => {
       const next = new Map(engines);
       next.delete(contextId);

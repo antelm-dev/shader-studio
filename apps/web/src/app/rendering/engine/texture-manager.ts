@@ -233,10 +233,13 @@ export class TextureManager {
       return { slot, width: resolved.width, height: resolved.height, bytes: resolved.bytes };
     });
 
+    // Always-owned transparent 1×1 placeholder (RGBA8).
+    const placeholderBytes = 1 * 1 * 4;
+
     const totalBytes = incomplete
       ? null
       : (() => {
-          let sum = 0;
+          let sum = placeholderBytes;
           for (const resolved of bytesByKey.values()) {
             if (!resolved) return null;
             sum += resolved.bytes;
