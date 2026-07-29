@@ -50,11 +50,9 @@ export class RendererHandle {
   }
 
   setProfilingEnabled(enabled: boolean): void {
-    const changed = enabled !== this.profilingEnabled;
+    if (enabled === this.profilingEnabled) return;
     this.profilingEnabled = enabled;
-    for (const engine of this.engines().values()) engine.setProfilingEnabled(false);
-    if (enabled) this.engine()?.setProfilingEnabled(true);
-    if (changed) this.bumpProfilerEpoch();
+    this.syncProfiling();
   }
 
   profilerSnapshot(): ProfilerSnapshot | null {
@@ -70,9 +68,17 @@ export class RendererHandle {
     this.profilerEpoch.update((value) => value + 1);
   }
 
+  /**
+   * Align each engine with the requested profiling state.
+   * Inactive engines are forced off; the active engine is set to the requested
+   * flag without a disable/enable cycle that would wipe samples.
+   */
   private syncProfiling(): void {
-    for (const engine of this.engines().values()) engine.setProfilingEnabled(false);
-    if (this.profilingEnabled) this.engine()?.setProfilingEnabled(true);
+    const active = this.engine();
+    for (const engine of this.engines().values()) {
+      if (engine !== active) engine.setProfilingEnabled(false);
+    }
+    active?.setProfilingEnabled(this.profilingEnabled);
     this.bumpProfilerEpoch();
   }
 

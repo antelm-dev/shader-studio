@@ -348,8 +348,12 @@ export class PerformanceProfiler {
     }
   }
 
-  /** Drop rolling timing samples without disabling profiling (e.g. after a scale change). */
+  /**
+   * Drop rolling timing samples without disabling profiling (e.g. after a scale change).
+   * Pending timer queries are deleted so late results cannot land in the new generation.
+   */
   resetTimingSamples(): void {
+    this.timer?.clear();
     this.clearTimingSamplesOnly();
     if (this.requestedEnabled && !this.suspended) {
       this.gpuSupport = this.timer?.supported ? 'warming' : 'unavailable';

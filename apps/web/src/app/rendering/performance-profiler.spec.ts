@@ -27,6 +27,7 @@ function createProfiler(options?: {
 
   let pollIndex = 0;
   let availableForPoll = false;
+  let forcedAvailable: boolean | null = null;
 
   const gl = {
     QUERY_RESULT_AVAILABLE: 0x8867,
@@ -43,9 +44,15 @@ function createProfiler(options?: {
     endQuery: () => {},
     getParameter: (pname: number) => {
       if (pname === ext.GPU_DISJOINT_EXT) {
-        const seq = options?.availableSequence;
-        availableForPoll = seq ? (seq[pollIndex] ?? seq[seq.length - 1]!) : pollResults.length > 0;
-        pollIndex++;
+        if (forcedAvailable !== null) {
+          availableForPoll = forcedAvailable;
+        } else {
+          const seq = options?.availableSequence;
+          availableForPoll = seq
+            ? (seq[pollIndex] ?? seq[seq.length - 1]!)
+            : pollResults.length > 0;
+          pollIndex++;
+        }
         return disjoint;
       }
       return false;
@@ -79,6 +86,9 @@ function createProfiler(options?: {
     queries,
     setDisjoint: (value: boolean) => {
       disjoint = value;
+    },
+    setResultAvailable: (value: boolean | null) => {
+      forcedAvailable = value;
     },
   };
 }
@@ -387,6 +397,42 @@ describe('PerformanceProfiler', () => {
     expect(profiler.isEnabled).toBe(true);
     expect(profiler.generation).toBeGreaterThan(generation);
     expect(profiler.snapshot([]).sampleCount).toBe(0);
+    expect(profiler.snapshot([]).gpuSupport).toBe('warming');
+  });
+
+  it('deletes pending queries on reset so late results cannot enter the new generation', () => {
+    const { profiler, gl, setResultAvailable } = createProfiler({
+      supported: true,
+      pollResults: [9_000_000, 2_000_000],
+    });
+    profiler.setEnabled(true);
+    profiler.schedulePasses(['buf-a'], true, false);
+
+    setResultAvailable(false);
+    profiler.beginGpu();
+    profiler.endGpu();
+    profiler.endFrame(1);
+    expect(profiler.snapshot([]).sampleCount).toBe(0);
+    expect(gl.deleteQuery).not.toHaveBeenCalled();
+
+    const generation = profiler.generation;
+    profiler.resetTimingSamples();
+    expect(gl.deleteQuery).toHaveBeenCalled();
+    expect(profiler.isEnabled).toBe(true);
+    expect(profiler.generation).toBeGreaterThan(generation);
+    expect(profiler.snapshot([]).sampleCount).toBe(0);
+
+    // Pre-reset query is gone; making results available must not resurrect it.
+    setResultAvailable(true);
+    profiler.endFrame(1);
+    expect(profiler.snapshot([]).sampleCount).toBe(0);
+    expect(profiler.snapshot([]).totalGpu.medianMs).toBeNull();
+
+    profiler.schedulePasses(['buf-a'], true, false);
+    profiler.beginGpu();
+    profiler.endGpu();
+    profiler.endFrame(1);
+    expect(profiler.snapshot([]).sampleCount).toBe(1);
     expect(profiler.snapshot([]).gpuSupport).toBe('warming');
   });
 });
