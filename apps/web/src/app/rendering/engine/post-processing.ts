@@ -79,6 +79,9 @@ export class PostProcessing {
    */
   onComposerCreated: (() => void) | null = null;
 
+  /** Fired only when rendering actually switches between direct and composer paths. */
+  onRenderPathChanged: (() => void) | null = null;
+
   /**
    * `scene` and `camera` are the ones the composer's `RenderPass` will draw, and
    * are held only for the moment a composer is built. They are not this type's
@@ -108,7 +111,9 @@ export class PostProcessing {
     this.current = render;
 
     if (!render.bloom.enabled) {
+      const wasUsingComposer = this.composer !== null;
       this.disposeComposer();
+      if (wasUsingComposer) this.onRenderPathChanged?.();
       return;
     }
 
@@ -200,6 +205,7 @@ export class PostProcessing {
     this.composer = composer;
     this.bloomPass = bloom;
     this.onComposerCreated?.();
+    this.onRenderPathChanged?.();
   }
 
   private disposeComposer(): void {

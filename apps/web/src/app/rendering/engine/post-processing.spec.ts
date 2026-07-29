@@ -249,6 +249,27 @@ describe('PostProcessing', () => {
     expect(created).toHaveBeenCalledTimes(1);
   });
 
+  it('reports only actual direct/composer render-path transitions', async () => {
+    const changed = vi.fn();
+    post.onRenderPathChanged = changed;
+
+    post.setSettings(settings());
+    expect(changed).not.toHaveBeenCalled();
+
+    await loader.flush();
+    expect(changed).toHaveBeenCalledTimes(1);
+
+    post.setSettings(settings({ strength: 1.2 }));
+    await loader.flush();
+    expect(changed).toHaveBeenCalledTimes(1);
+
+    post.setSettings(OFF);
+    expect(changed).toHaveBeenCalledTimes(2);
+
+    post.setSettings(OFF);
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
   // ---------------------------------------------------------------------------
   // Live updates
   // ---------------------------------------------------------------------------

@@ -69,6 +69,13 @@ interface OfflineState {
   height: number;
 }
 
+interface ProfilerWorkloadPass {
+  readonly id: string;
+  readonly kind: 'image' | 'buffer';
+  readonly material: THREE.ShaderMaterial;
+  readonly targetKey: string;
+}
+
 /** Uniforms the engine supplies to every shader, whether it declares them or not. */
 export const BUILT_IN_UNIFORMS = [
   'iTime',
@@ -134,6 +141,9 @@ export class ShaderEngine {
   private autoRipples = false;
   private nextAutoRipple = 0;
   private resolutionScale = 1;
+  private profilerWorkload: readonly ProfilerWorkloadPass[] = [];
+  private profilerBufferWidth: number | null = null;
+  private profilerBufferHeight: number | null = null;
 
   /** Set for as long as the clock belongs to a caller rather than to the wall. */
   private offline: OfflineState | null = null;
@@ -223,6 +233,7 @@ export class ShaderEngine {
     this.post = new PostProcessing(context, this.scene, this.camera);
     // A composer arrives long after the resize that would have sized it.
     this.post.onComposerCreated = () => this.resize();
+    this.post.onRenderPathChanged = () => this.resetProfilerForWorkloadChange();
 
     this.unsubscribe.push(
       context.onLost(() => this.handleContextLost()),
@@ -339,6 +350,7 @@ export class ShaderEngine {
     // rather than only once the next frame is drawn.
     this.syncTargets();
     for (const pass of this.compiler.passes) this.binder.bind(pass.uniforms, pass.channels);
+    this.updateProfilerWorkload();
 
     this.setRenderSettings(spec.render);
 
@@ -389,6 +401,50 @@ export class ShaderEngine {
     if (this.disposed) return;
     this.profiler.resetTimingSamples();
     this.onProfilerLifecycle?.();
+  }
+
+  private resetProfilerForWorkloadChange(): void {
+    this.profiler.resetTimingSamples();
+    this.onProfilerLifecycle?.();
+  }
+
+  /**
+   * Reset timing only when the accepted live pipeline changed. Requested passes
+   * that failed compilation are absent here, while skipped passes retain their
+   * material identity, so neither case wipes otherwise valid samples.
+   */
+  private updateProfilerWorkload(): void {
+    const targets = new Map(this.targetSpecs.map((target) => [target.id, target]));
+    const next = this.compiler.passes.map((pass): ProfilerWorkloadPass => {
+      const target = targets.get(pass.id);
+      const targetKey = target
+        ? [
+            target.resolution.mode,
+            target.resolution.scale,
+            target.resolution.width,
+            target.resolution.height,
+            target.filter,
+            target.wrap,
+          ].join(':')
+        : '';
+      return { id: pass.id, kind: pass.kind, material: pass.material, targetKey };
+    });
+
+    const changed =
+      next.length !== this.profilerWorkload.length ||
+      next.some((pass, index) => {
+        const previous = this.profilerWorkload[index];
+        return (
+          !previous ||
+          pass.id !== previous.id ||
+          pass.kind !== previous.kind ||
+          pass.material !== previous.material ||
+          pass.targetKey !== previous.targetKey
+        );
+      });
+
+    this.profilerWorkload = next;
+    if (changed) this.resetProfilerForWorkloadChange();
   }
 
   /** Fired when profiler enablement, capture, context, or sample-reset changes. */
@@ -538,13 +594,8 @@ export class ShaderEngine {
 
   setResolutionScale(scale: number): void {
     const next = Math.min(Math.max(scale, 0.25), 2);
-    const changed = next !== this.resolutionScale;
     this.resolutionScale = next;
     this.resize();
-    if (changed) {
-      this.profiler.resetTimingSamples();
-      this.onProfilerLifecycle?.();
-    }
   }
 
   // -------------------------------------------------------------------------
@@ -579,6 +630,17 @@ export class ShaderEngine {
    * never the CSS one.
    */
   private setDrawingBufferSize(width: number, height: number, scale: number): void {
+    let profilerBufferChanged = false;
+    if (!this.offline) {
+      const pixelWidth = Math.max(1, Math.floor(width * scale));
+      const pixelHeight = Math.max(1, Math.floor(height * scale));
+      profilerBufferChanged =
+        this.profilerBufferWidth !== null &&
+        (pixelWidth !== this.profilerBufferWidth || pixelHeight !== this.profilerBufferHeight);
+      this.profilerBufferWidth = pixelWidth;
+      this.profilerBufferHeight = pixelHeight;
+    }
+
     this.renderer.setPixelRatio(scale);
     // `false`: never touch the CSS size. On screen that keeps the canvas filling
     // its panel; during a capture it is what lets a 4K buffer sit behind an
@@ -598,6 +660,7 @@ export class ShaderEngine {
     // `ResizeObserver` fires far more often than the size really changes, and a
     // reallocation would wipe every feedback buffer's history each time.
     this.targets.sync(this.targetSpecs, { width: width * scale, height: height * scale });
+    if (profilerBufferChanged) this.resetProfilerForWorkloadChange();
   }
 
   // -------------------------------------------------------------------------
