@@ -21,6 +21,7 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
 import {
   TARGET_FRAME_MS,
   formatBytes,
+  formatFrameShare,
   formatMilliseconds,
   recommendLowerScale,
 } from './profiler-recommendation';
@@ -93,13 +94,7 @@ import {
                   <tr>
                     <td>{{ pass.label }}</td>
                     <td>{{ formatMs(pass.gpu.medianMs) }}</td>
-                    <td>
-                      @if (pass.gpu.p95Ms !== null && data.totalGpu.p95Ms !== null) {
-                        {{ ((pass.gpu.p95Ms / data.totalGpu.p95Ms) * 100).toFixed(0) }}%
-                      } @else {
-                        —
-                      }
-                    </td>
+                    <td>{{ formatShare(pass.gpu.medianMs, data.totalGpu.medianMs) }}</td>
                     <td>
                       @if (pass.width !== null && pass.height !== null) {
                         {{ pass.width }}×{{ pass.height }}
@@ -260,6 +255,7 @@ export class ProfilerPanel implements OnInit, OnDestroy {
   protected readonly targetFrameMs = TARGET_FRAME_MS.toFixed(2);
   protected readonly formatMs = formatMilliseconds;
   protected readonly formatBytes = formatBytes;
+  protected readonly formatShare = formatFrameShare;
 
   private readonly handle = inject(RendererHandle);
   private readonly preferences = inject(Preferences);
@@ -272,6 +268,8 @@ export class ProfilerPanel implements OnInit, OnDestroy {
   protected readonly statusText = signal('');
 
   private appliedSuggestion: number | null = null;
+  private holdAppliedStatus = false;
+  private lastSeenScale: number | null = null;
 
   constructor() {
     effect(() => {
@@ -281,8 +279,26 @@ export class ProfilerPanel implements OnInit, OnDestroy {
         this.snapshot.set(null);
         this.suggestion.set(null);
         this.appliedSuggestion = null;
+        this.holdAppliedStatus = false;
         this.statusText.set('');
+        this.lastSeenScale = null;
       }
+    });
+
+    effect(() => {
+      if (this.preferences.value().inspectorTab !== 'profiler') return;
+
+      // Track engine replacement and lifecycle generations so stale snapshots clear immediately.
+      void this.handle.engine();
+      void this.handle.profilerEpoch();
+
+      const scale = this.preferences.value().resolutionScale;
+      if (this.lastSeenScale !== null && this.lastSeenScale !== scale) {
+        this.suggestion.set(null);
+      }
+      this.lastSeenScale = scale;
+
+      this.refresh();
     });
   }
 
@@ -302,7 +318,10 @@ export class ProfilerPanel implements OnInit, OnDestroy {
     this.preferences.patch({ resolutionScale: scale });
     this.appliedSuggestion = scale;
     this.suggestion.set(null);
+    this.holdAppliedStatus = true;
     this.statusText.set(this.i18n.t('profiler.statusApplied', { scale: scale.toFixed(2) }));
+    // Drop pre-application samples immediately; canvas also resets via setResolutionScale.
+    this.handle.resetProfilerSamples();
   }
 
   private refresh(): void {
@@ -312,8 +331,15 @@ export class ProfilerPanel implements OnInit, OnDestroy {
     this.snapshot.set(data);
     if (!data) {
       this.suggestion.set(null);
-      this.statusText.set('');
+      if (!this.holdAppliedStatus) this.statusText.set('');
       return;
+    }
+
+    // Hold the applied announcement until samples restart at the new scale.
+    if (this.holdAppliedStatus) {
+      this.suggestion.set(null);
+      if (data.sampleCount === 0) return;
+      this.holdAppliedStatus = false;
     }
 
     const resolutionByPass = new Map<string, PassResolution>(

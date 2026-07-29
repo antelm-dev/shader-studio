@@ -72,3 +72,25 @@ export function formatBytes(value: number | null): string {
   if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
   return `${value} B`;
 }
+
+/**
+ * Coherent frame-share from matching median statistics.
+ * Returns null when a meaningful share cannot be established.
+ */
+export function frameSharePercent(
+  passMedianMs: number | null,
+  totalMedianMs: number | null,
+): number | null {
+  if (passMedianMs === null || totalMedianMs === null || !(totalMedianMs > 0)) return null;
+  const share = (passMedianMs / totalMedianMs) * 100;
+  if (!Number.isFinite(share) || share < 0) return null;
+  return Math.min(share, 100);
+}
+
+export function formatFrameShare(
+  passMedianMs: number | null,
+  totalMedianMs: number | null,
+): string {
+  const share = frameSharePercent(passMedianMs, totalMedianMs);
+  return share === null ? '—' : `${share.toFixed(0)}%`;
+}
