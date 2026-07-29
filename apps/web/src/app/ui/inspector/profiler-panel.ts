@@ -16,6 +16,7 @@ import { Preferences } from '../../prefs/preferences';
 import { RendererHandle } from '../../rendering/renderer-handle';
 import type { ProfilerSnapshot } from '../../rendering/performance-profiler';
 import { ShaderStore } from '../../workspace/shader-store';
+import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import {
   TARGET_FRAME_MS,
@@ -28,13 +29,12 @@ import {
   selector: 'app-profiler-panel',
   imports: [MatButtonModule, TranslatePipe],
   template: `
-    <section class="profiler" aria-live="polite">
+    <section class="profiler">
+      <p class="status" role="status" aria-live="polite">{{ statusText() }}</p>
       @if (snapshot(); as data) {
         <header class="section">
           <h3>{{ 'profiler.overview' | translate }}</h3>
-          <p class="budget">
-            {{ 'profiler.budget' | translate }}: {{ targetFrameMs }} ms (60 FPS)
-          </p>
+          <p class="budget">{{ 'profiler.budget' | translate }}: {{ targetFrameMs }} ms (60 FPS)</p>
           @switch (data.gpuSupport) {
             @case ('warming') {
               <p class="state">{{ 'profiler.warming' | translate }}</p>
@@ -83,6 +83,7 @@ import {
                 <tr>
                   <th scope="col">{{ 'profiler.pass' | translate }}</th>
                   <th scope="col">{{ 'profiler.gpuMedian' | translate }}</th>
+                  <th scope="col">{{ 'profiler.frameShare' | translate }}</th>
                   <th scope="col">{{ 'profiler.resolution' | translate }}</th>
                   <th scope="col">{{ 'profiler.targetMemory' | translate }}</th>
                 </tr>
@@ -92,6 +93,13 @@ import {
                   <tr>
                     <td>{{ pass.label }}</td>
                     <td>{{ formatMs(pass.gpu.medianMs) }}</td>
+                    <td>
+                      @if (pass.gpu.p95Ms !== null && data.totalGpu.p95Ms !== null) {
+                        {{ ((pass.gpu.p95Ms / data.totalGpu.p95Ms) * 100).toFixed(0) }}%
+                      } @else {
+                        —
+                      }
+                    </td>
                     <td>
                       @if (pass.width !== null && pass.height !== null) {
                         {{ pass.width }}×{{ pass.height }}
@@ -200,6 +208,18 @@ import {
       margin: 0;
     }
 
+    .status {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     .pass-table {
       width: 100%;
       border-collapse: collapse;
@@ -244,10 +264,12 @@ export class ProfilerPanel implements OnInit, OnDestroy {
   private readonly handle = inject(RendererHandle);
   private readonly preferences = inject(Preferences);
   private readonly store = inject(ShaderStore);
+  private readonly i18n = inject(I18n);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly snapshot = signal<ProfilerSnapshot | null>(null);
   protected readonly suggestion = signal<number | null>(null);
+  protected readonly statusText = signal('');
 
   private appliedSuggestion: number | null = null;
 
@@ -259,6 +281,7 @@ export class ProfilerPanel implements OnInit, OnDestroy {
         this.snapshot.set(null);
         this.suggestion.set(null);
         this.appliedSuggestion = null;
+        this.statusText.set('');
       }
     });
   }
@@ -279,6 +302,7 @@ export class ProfilerPanel implements OnInit, OnDestroy {
     this.preferences.patch({ resolutionScale: scale });
     this.appliedSuggestion = scale;
     this.suggestion.set(null);
+    this.statusText.set(this.i18n.t('profiler.statusApplied', { scale: scale.toFixed(2) }));
   }
 
   private refresh(): void {
@@ -288,6 +312,7 @@ export class ProfilerPanel implements OnInit, OnDestroy {
     this.snapshot.set(data);
     if (!data) {
       this.suggestion.set(null);
+      this.statusText.set('');
       return;
     }
 
@@ -311,9 +336,15 @@ export class ProfilerPanel implements OnInit, OnDestroy {
 
     if (proposed !== null && proposed === this.appliedSuggestion) {
       this.suggestion.set(null);
+      this.statusText.set('');
       return;
     }
 
     this.suggestion.set(proposed);
+    this.statusText.set(
+      proposed === null
+        ? ''
+        : this.i18n.t('profiler.statusSuggestion', { scale: proposed.toFixed(2) }),
+    );
   }
 }

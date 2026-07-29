@@ -1,4 +1,7 @@
-import { PROFILER_MIN_GPU_SAMPLES, type ProfilerGpuSupport } from '../../rendering/performance-profiler';
+import {
+  PROFILER_MIN_GPU_SAMPLES,
+  type ProfilerGpuSupport,
+} from '../../rendering/performance-profiler';
 
 export const TARGET_FRAME_MS = 1000 / 60;
 export const OVER_BUDGET_RATIO = 1.1;
@@ -35,13 +38,15 @@ export function recommendLowerScale(input: ScaleRecommendationInput): number | n
   const gpuP95 = input.totalGpuP95Ms;
   if (gpuP95 === null) return null;
 
-  const cpuP95 = input.cpuSubmissionP95Ms ?? 0;
+  const cpuP95 = input.cpuSubmissionP95Ms;
+  if (cpuP95 === null) return null;
   if (gpuP95 <= cpuP95 * 1.05) return null;
   if (gpuP95 <= TARGET_FRAME_MS * OVER_BUDGET_RATIO) return null;
 
-  const fixedCost = input.passes
-    .filter((pass) => pass.fixedResolution)
-    .reduce((sum, pass) => sum + (pass.gpuP95Ms ?? 0), 0);
+  const fixedPasses = input.passes.filter((pass) => pass.fixedResolution);
+  // Unknown/still-warming fixed cost must not produce a suggestion.
+  if (fixedPasses.some((pass) => pass.gpuP95Ms === null)) return null;
+  const fixedCost = fixedPasses.reduce((sum, pass) => sum + (pass.gpuP95Ms as number), 0);
 
   const scalableCost = gpuP95 - fixedCost;
   const targetScalable = (TARGET_FRAME_MS - fixedCost) * SAFETY_MARGIN;
