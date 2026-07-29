@@ -29,9 +29,9 @@ function spec(): ShaderSpec {
   };
 }
 
+/** Read through the registry's primary map: the Image pass's uniforms. */
 function uniformValue(engine: ShaderEngine, name: string): unknown {
-  const uniforms = (engine as unknown as { uniforms: Record<string, { value: unknown }> }).uniforms;
-  return uniforms[name]?.value;
+  return (engine as unknown as { registry: { value(name: string): unknown } }).registry.value(name);
 }
 
 describe('renderFrame', () => {
