@@ -158,12 +158,17 @@ import {
   styles: `
     :host {
       display: block;
+      min-width: 0;
+      max-width: 100%;
       padding: 0 12px 12px;
+      overflow-x: clip;
     }
 
     .profiler {
       display: flex;
       flex-direction: column;
+      min-width: 0;
+      max-width: 100%;
       gap: 16px;
       font: var(--mat-sys-body-medium);
     }
@@ -217,6 +222,7 @@ import {
 
     .pass-table {
       width: 100%;
+      table-layout: fixed;
       border-collapse: collapse;
       font: var(--mat-sys-body-small);
     }
@@ -224,8 +230,15 @@ import {
     .pass-table th,
     .pass-table td {
       padding: 4px 6px;
+      overflow-wrap: anywhere;
       text-align: left;
+      vertical-align: top;
       border-bottom: 1px solid var(--mat-sys-outline-variant);
+    }
+
+    .pass-table th:first-child,
+    .pass-table td:first-child {
+      width: 24%;
     }
 
     .compile-list {
