@@ -8,6 +8,8 @@
     "dist-renderer/**",
     "dist-web/**",
     "release/**",
+    "CHANGELOG.md",
+    ".release-please-manifest.json",
     "data/**",
     "libs/desktop-api/src/ipc-bridge.ts",
     ".angular/**"
