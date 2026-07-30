@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { BloomSettings, RenderSettings } from '@shader-studio/shared';
+import type {
+  BloomSettings,
+  PostProcessingEffect,
+  RenderSettings,
+  VignetteSettings,
+} from '@shader-studio/shared';
 import { GlContext } from '../gl-context';
 import { FakeRenderer, FakeScene, fakeBackend } from '../testing/fake-gl';
 import { PostProcessing, type PostProcessingModules } from './post-processing';
@@ -76,6 +81,7 @@ class FakeRenderPass {
 class FakeBloomPass {
   width = 0;
   height = 0;
+  disposed = false;
 
   constructor(
     readonly resolution: unknown,
@@ -88,12 +94,33 @@ class FakeBloomPass {
     this.width = width;
     this.height = height;
   }
+
+  dispose(): void {
+    this.disposed = true;
+  }
+}
+
+/** Stands in for `ShaderPass` — the real one is what Vignette rides on. */
+class FakeShaderPass {
+  disposed = false;
+  readonly uniforms: Record<string, { value: unknown }>;
+
+  constructor(shader: { uniforms: Record<string, { value: unknown }> }) {
+    this.uniforms = Object.fromEntries(
+      Object.entries(shader.uniforms).map(([key, uniform]) => [key, { value: uniform.value }]),
+    );
+  }
+
+  dispose(): void {
+    this.disposed = true;
+  }
 }
 
 const fakeModules = {
   EffectComposer: FakeComposer,
   RenderPass: FakeRenderPass,
   UnrealBloomPass: FakeBloomPass,
+  ShaderPass: FakeShaderPass,
 } as unknown as PostProcessingModules;
 
 /** A loader whose promise the test resolves, so "the import is in flight" is a state. */
@@ -174,6 +201,46 @@ function settings(
 }
 
 const OFF = settings({ enabled: false });
+
+/** A `RenderSettings` whose chain has one enabled Vignette effect. */
+function vignetteSettings(
+  overrides: Partial<VignetteSettings> & { enabled?: boolean } = {},
+): RenderSettings {
+  const { enabled = true, ...vignetteOverrides } = overrides;
+  return {
+    postProcessing: {
+      enabled: true,
+      effects: [
+        {
+          type: 'vignette',
+          enabled,
+          settings: { intensity: 0.4, softness: 0.5, roundness: 1, ...vignetteOverrides },
+        },
+      ],
+    },
+  };
+}
+
+/** A chain in the exact effect order given, every entry enabled. */
+function chain(...effects: PostProcessingEffect[]): RenderSettings {
+  return { postProcessing: { enabled: true, effects } };
+}
+
+function bloomEffect(overrides: Partial<BloomSettings> = {}): PostProcessingEffect {
+  return {
+    type: 'bloom',
+    enabled: true,
+    settings: { strength: 0.3, radius: 0.5, threshold: 0.85, ...overrides },
+  };
+}
+
+function vignetteEffect(overrides: Partial<VignetteSettings> = {}): PostProcessingEffect {
+  return {
+    type: 'vignette',
+    enabled: true,
+    settings: { intensity: 0.4, softness: 0.5, roundness: 1, ...overrides },
+  };
+}
 
 describe('PostProcessing', () => {
   let context: GlContext;
@@ -590,5 +657,156 @@ describe('PostProcessing', () => {
     expect(FakeComposer.created).toBe(1);
 
     p.dispose();
+  });
+});
+
+describe('Vignette and multi-effect ordering', () => {
+  let context: GlContext;
+  let renderer: FakeRenderer;
+  let scene: FakeScene;
+  let camera: object;
+  let loader: ReturnType<typeof controllableLoader>;
+  let post: PostProcessing;
+
+  const create = (): PostProcessing =>
+    new PostProcessing(
+      context,
+      scene as never,
+      camera as never,
+      loader.load as unknown as () => Promise<PostProcessingModules>,
+    );
+
+  beforeEach(async () => {
+    FakeComposer.reset();
+
+    const { backend, renderers } = fakeBackend();
+    context = await GlContext.create(document.createElement('canvas'), {
+      id: 'post-vignette',
+      backend,
+    });
+    renderer = renderers[0];
+
+    scene = new FakeScene();
+    camera = {};
+    loader = controllableLoader();
+    post = create();
+  });
+
+  afterEach(() => {
+    post.dispose();
+    context.dispose();
+  });
+
+  it('builds a Vignette-only composer with alpha-preserving, resolution-independent uniforms', async () => {
+    post.setSettings(vignetteSettings({ intensity: 0.6, softness: 0.2, roundness: 0.8 }));
+    await loader.flush();
+
+    const composer = FakeComposer.last();
+    const [render, vignette] = composer.passes as [FakeRenderPass, FakeShaderPass];
+
+    expect(render.scene).toBe(scene);
+    expect(vignette.uniforms['uIntensity'].value).toBe(0.6);
+    expect(vignette.uniforms['uSoftness'].value).toBe(0.2);
+    expect(vignette.uniforms['uRoundness'].value).toBe(0.8);
+
+    post.render(scene as never, camera as never);
+    expect(renderer.draws).toBe(0); // drew through the composer, not the direct path
+  });
+
+  it('builds the composer with passes in the chain order given: Vignette before Bloom', async () => {
+    post.setSettings(chain(vignetteEffect(), bloomEffect()));
+    await loader.flush();
+
+    const [, vignette, bloom] = FakeComposer.last().passes as [
+      FakeRenderPass,
+      FakeShaderPass,
+      FakeBloomPass,
+    ];
+    expect(vignette).toBeInstanceOf(FakeShaderPass);
+    expect(bloom).toBeInstanceOf(FakeBloomPass);
+  });
+
+  it('rebuilds with the new order when the chain is reordered', async () => {
+    post.setSettings(chain(bloomEffect(), vignetteEffect()));
+    await loader.flush();
+    const first = FakeComposer.last();
+    expect(first.passes[1]).toBeInstanceOf(FakeBloomPass);
+    expect(first.passes[2]).toBeInstanceOf(FakeShaderPass);
+
+    post.setSettings(chain(vignetteEffect(), bloomEffect()));
+    await loader.flush();
+
+    expect(FakeComposer.created).toBe(2);
+    expect(first.disposed).toBe(true); // the stale order was freed, not left bypassed
+    const second = FakeComposer.last();
+    expect(second.passes[1]).toBeInstanceOf(FakeShaderPass);
+    expect(second.passes[2]).toBeInstanceOf(FakeBloomPass);
+  });
+
+  it('pushes Vignette values through without rebuilding when only settings change', async () => {
+    post.setSettings(vignetteSettings({ intensity: 0.2 }));
+    await loader.flush();
+    const composer = FakeComposer.last();
+
+    post.setSettings(vignetteSettings({ intensity: 0.9, softness: 0.7, roundness: 0.1 }));
+
+    const vignette = composer.passes[1] as FakeShaderPass;
+    expect(vignette.uniforms['uIntensity'].value).toBe(0.9);
+    expect(vignette.uniforms['uSoftness'].value).toBe(0.7);
+    expect(vignette.uniforms['uRoundness'].value).toBe(0.1);
+    expect(FakeComposer.created).toBe(1);
+    expect(composer.disposed).toBe(false);
+  });
+
+  it('rebuilds — rather than leaving a mismatched composer bypassed — when a second effect is enabled', async () => {
+    post.setSettings(chain(bloomEffect()));
+    await loader.flush();
+    const first = FakeComposer.last();
+
+    post.setSettings(chain(bloomEffect(), vignetteEffect()));
+    await loader.flush();
+
+    expect(first.disposed).toBe(true);
+    expect(FakeComposer.created).toBe(2);
+    expect(FakeComposer.last().passes).toHaveLength(3); // render + bloom + vignette
+  });
+
+  it('rebuilds down to the remaining effect when one is disabled from a two-effect chain', async () => {
+    post.setSettings(chain(bloomEffect(), vignetteEffect()));
+    await loader.flush();
+
+    post.setSettings(chain(bloomEffect(), { ...vignetteEffect(), enabled: false }));
+    await loader.flush();
+
+    const composer = FakeComposer.last();
+    expect(composer.passes).toHaveLength(2); // render + bloom only
+    expect(composer.passes[1]).toBeInstanceOf(FakeBloomPass);
+  });
+
+  it('takes the direct path when the master switch is off, even with a full two-effect chain', async () => {
+    post.setSettings({
+      postProcessing: { enabled: false, effects: [bloomEffect(), vignetteEffect()] },
+    });
+    await loader.flush();
+
+    post.render(scene as never, camera as never);
+
+    expect(FakeComposer.created).toBe(0);
+    expect(renderer.draws).toBe(1);
+  });
+
+  it('disposes every built pass, not just the composer, on teardown', async () => {
+    post.setSettings(chain(bloomEffect(), vignetteEffect()));
+    await loader.flush();
+
+    const [, bloom, vignette] = FakeComposer.last().passes as [
+      FakeRenderPass,
+      FakeBloomPass,
+      FakeShaderPass,
+    ];
+    post.dispose();
+
+    expect(bloom.disposed).toBe(true);
+    expect(vignette.disposed).toBe(true);
   });
 });
