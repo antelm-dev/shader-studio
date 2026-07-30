@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.0](https://github.com/antelm-dev/shader-studio/compare/v1.1.0...v1.2.0) (2026-07-30)
+
+
+### Features
+
+* Bloom + Vignette Effects Rack (round-1 fix) ([eaa1e9e](https://github.com/antelm-dev/shader-studio/commit/eaa1e9e38f60c8483e68820741211bfd94052e9b))
+* post-processing chain foundation and Bloom migration ([00a73db](https://github.com/antelm-dev/shader-studio/commit/00a73db368b1e393ec8a65de02eda91efe90b2bf))
+* **shared:** add Vignette to the post-processing chain model ([7067ff5](https://github.com/antelm-dev/shader-studio/commit/7067ff5d7725f10b079554163e42d58e9d76c1bd))
+* **shared:** replace Bloom-only render contract with a post-processing chain ([c55618d](https://github.com/antelm-dev/shader-studio/commit/c55618db4f3bb49b442b208f2299638ac9733a17))
+* **web:** rebuild PostProcessing composer ownership on the effect chain ([eb92c45](https://github.com/antelm-dev/shader-studio/commit/eb92c457dd50428cadee5b80c4b469244a0049c2))
+* **web:** render the chain by its own order, add a Vignette pass ([d244ece](https://github.com/antelm-dev/shader-studio/commit/d244ecef72965a3287159aeea49cfd61f84eb15e))
+* **web:** ship the Effects Rack, generalize preset/wallpaper wording ([dda9fc2](https://github.com/antelm-dev/shader-studio/commit/dda9fc207d904afb3eca8b42166639f96122ea84))
+
+
+### Bug Fixes
+
+* **web,docs:** resolve round-1 review blockers on the Effects Rack ([8e51a66](https://github.com/antelm-dev/shader-studio/commit/8e51a66c74c2662533b9a4fe2fb3dcfdd926ab17))
+
 ## [1.1.0](https://github.com/antelm-dev/shader-studio/compare/v1.0.0...v1.1.0) (2026-07-30)
 
 
