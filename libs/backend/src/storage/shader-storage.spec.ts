@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { LEGACY_BUNDLE_FORMAT, type ShaderPayload } from '@shader-studio/shared/model';
+import {
+  LEGACY_BUNDLE_FORMAT,
+  getBloomEffect,
+  type ShaderPayload,
+} from '@shader-studio/shared/model';
 import {
   addBuffer,
   addFile,
@@ -431,9 +435,15 @@ describe('presets', () => {
     });
 
     expect(preset.render).toEqual({
-      bloom: { enabled: true, strength: 3, radius: 0.4, threshold: 0.7 },
+      postProcessing: {
+        enabled: true,
+        effects: [
+          { type: 'bloom', enabled: true, settings: { strength: 3, radius: 0.4, threshold: 0.7 } },
+        ],
+      },
     });
-    expect((await storage.read(id)).presets[0].render?.bloom.enabled).toBe(true);
+    const stored = (await storage.read(id)).presets[0].render;
+    expect(stored && getBloomEffect(stored).enabled).toBe(true);
   });
 
   it('leaves render off a preset saved without it, rather than storing the defaults', async () => {

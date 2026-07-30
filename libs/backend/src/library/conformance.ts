@@ -13,6 +13,7 @@ import {
   DEFAULT_CHANNELS,
   DEFAULT_RENDER,
   LEGACY_BUNDLE_FORMAT,
+  getBloomEffect,
   type ShaderPayload,
   type TextureChannelPayloads,
 } from '@shader-studio/shared/model';
@@ -250,7 +251,7 @@ export function runShaderLibraryConformance(
         values: {},
         render: { bloom: { enabled: true, strength: 99, radius: 0.4, threshold: 0.7 } },
       });
-      expect(glow.render?.bloom.strength).toBe(3);
+      expect(glow.render && getBloomEffect(glow.render).settings.strength).toBe(3);
     });
 
     // 9 & 10 — textures across all four channels, replace and clear
