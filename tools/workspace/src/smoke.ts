@@ -87,8 +87,14 @@ try {
 
   // Vignette is appended after Bloom — move it up so it now precedes Bloom,
   // then confirm the DOM order (which mirrors the composer's build order)
-  // actually changed.
+  // actually changed. The reorder mutation lands via an Angular signal, which
+  // re-renders on its own microtask, so poll for the new order instead of
+  // reading it synchronously right after the click.
   await vignetteRow.locator('[data-testid="pp-move-up-vignette"]').click();
+  await page.waitForFunction(
+    () => document.querySelector('.effect')?.getAttribute('data-testid') === 'pp-effect-vignette',
+    { timeout: 10_000 },
+  );
   const rowTypes = await rack
     .locator('.effect')
     .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-testid')));

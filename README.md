@@ -460,8 +460,16 @@ shader changes its display name only; the id, and therefore the path, is stable.
     "postProcessing": {
       "enabled": true,
       "effects": [
-        { "type": "bloom", "enabled": true, "settings": { "strength": 0.55, "radius": 0.55, "threshold": 0.65 } },
-        { "type": "vignette", "enabled": false, "settings": { "intensity": 0.4, "softness": 0.5, "roundness": 1 } }
+        {
+          "type": "bloom",
+          "enabled": true,
+          "settings": { "strength": 0.55, "radius": 0.55, "threshold": 0.65 }
+        },
+        {
+          "type": "vignette",
+          "enabled": false,
+          "settings": { "intensity": 0.4, "softness": 0.5, "roundness": 1 }
+        }
       ]
     }
   }
@@ -487,7 +495,11 @@ including a bare `{ "bloom": {...} }` (pre-chain) record, still import; see
         "postProcessing": {
           "enabled": true,
           "effects": [
-            { "type": "bloom", "enabled": true, "settings": { "strength": 1.2, "radius": 0.4, "threshold": 0.7 } }
+            {
+              "type": "bloom",
+              "enabled": true,
+              "settings": { "strength": 1.2, "radius": 0.4, "threshold": 0.7 }
+            }
           ]
         }
       }
