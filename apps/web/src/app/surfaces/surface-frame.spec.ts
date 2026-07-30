@@ -80,6 +80,24 @@ describe('surface-frame', () => {
     expect(projected.dockSide).toBe('bottom');
   });
 
+  it('forces a floating inspector to its docked (right) side when the workspace is narrow', () => {
+    const inspector = createDefaultSurface('inspector', {
+      placement: {
+        host: 'contained',
+        mode: 'floating',
+        rect: { x: 400, y: 100, width: 320, height: 400 },
+      },
+    });
+    const projected = projectSurfaceFrame(inspector, { width: 640, height: 800 });
+    expect(projected.mode).toBe('docked');
+    expect(projected.dockSide).toBe('right');
+    expect(projected.frame).toBeNull();
+
+    // Stored placement is untouched — only the display projection changes.
+    const wide = projectSurfaceFrame(inspector, { width: 1200, height: 800 });
+    expect(wide.mode).toBe('floating');
+  });
+
   it('displayFloatingRect clamps without requiring DOM', () => {
     const rect = displayFloatingRect(
       'preview',

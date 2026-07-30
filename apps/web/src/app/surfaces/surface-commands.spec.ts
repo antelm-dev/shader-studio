@@ -36,11 +36,15 @@ describe('surface-commands', () => {
     expect(desktop.find((c) => c.id === 'externalize')?.available).toBe(true);
   });
 
-  it('hides inspector float in descriptors when capability is false', () => {
+  it('lists inspector float (phase 1) alongside its single dock side', () => {
     const inspector = createDefaultSurface('inspector');
-    const ids = describeSurfaceCommands(inspector).map((c) => c.id);
-    expect(ids).not.toContain('float');
+    const commands = describeSurfaceCommands(inspector);
+    const ids = commands.map((c) => c.id);
+    expect(ids).toContain('float');
     expect(ids).toContain('dock');
+
+    const docks = commands.filter((c) => c.id === 'dock');
+    expect(docks.map((d) => d.dockSide)).toEqual(['right']);
   });
 
   it('availableSurfaceCommands drops inactive restore when not maximized', () => {

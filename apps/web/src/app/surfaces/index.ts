@@ -63,4 +63,5 @@ export {
   SurfaceLayoutService,
   PREVIEW_SURFACE_ID,
   DEFAULT_EDITOR_SURFACE_ID,
+  INSPECTOR_SURFACE_ID,
 } from './surface-layout';

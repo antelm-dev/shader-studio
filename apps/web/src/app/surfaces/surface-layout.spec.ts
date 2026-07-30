@@ -108,6 +108,90 @@ describe('SurfaceLayoutService characterization', () => {
     });
   });
 
+  describe('inspector', () => {
+    const inspectorId = WELL_KNOWN_SURFACE_IDS.inspector;
+    const inspectorPlacement = () => layout.inspector().placement;
+
+    it('starts docked to the right by default', () => {
+      const placement = inspectorPlacement();
+      expect(isContainedPlacement(placement) && placement.mode === 'docked' && placement.side).toBe(
+        'right',
+      );
+    });
+
+    it('floats into a contained window and can dock back to the right', () => {
+      layout.float(inspectorId);
+      const floated = inspectorPlacement();
+      expect(isContainedPlacement(floated) && floated.mode).toBe('floating');
+
+      layout.dock(inspectorId, 'right');
+      const docked = inspectorPlacement();
+      expect(isContainedPlacement(docked) && docked.mode).toBe('docked');
+    });
+
+    it('restores a maximized floating inspector back to floating', () => {
+      layout.float(inspectorId);
+      layout.maximize(inspectorId);
+      layout.restore(inspectorId);
+      const placement = inspectorPlacement();
+      expect(isContainedPlacement(placement) && placement.mode).toBe('floating');
+    });
+
+    it('toggleInspectorOpen closes an open inspector and reopens a closed one', () => {
+      expect(layout.inspectorOpen()).toBe(true);
+      layout.toggleInspectorOpen();
+      expect(layout.inspectorOpen()).toBe(false);
+      layout.toggleInspectorOpen();
+      expect(layout.inspectorOpen()).toBe(true);
+    });
+
+    it('toggleInspectorOpen restores (never strands) a minimized inspector', () => {
+      layout.float(inspectorId);
+      layout.minimize(inspectorId);
+      expect(layout.inspectorOpen()).toBe(true);
+
+      layout.toggleInspectorOpen();
+      const placement = inspectorPlacement();
+      expect(isContainedPlacement(placement) && placement.mode).toBe('floating');
+    });
+
+    it('closing then toggling reopens without losing placement', () => {
+      layout.float(inspectorId);
+      layout.close(inspectorId);
+      expect(layout.inspectorOpen()).toBe(false);
+
+      layout.toggleInspectorOpen();
+      expect(layout.inspectorOpen()).toBe(true);
+      const placement = inspectorPlacement();
+      expect(isContainedPlacement(placement) && placement.mode).toBe('floating');
+    });
+
+    it('setInspectorTab writes chrome.tab and mirrors the legacy inspectorTab pref', () => {
+      layout.setInspectorTab('presets');
+      expect(layout.inspectorTab()).toBe('presets');
+      expect(preferences.value().inspectorTab).toBe('presets');
+    });
+
+    it('persistLayout mirrors open state and docked width into legacy prefs', () => {
+      layout.dock(inspectorId, 'right', 340);
+      expect(preferences.value().inspectorWidth).toBe(340);
+      expect(preferences.value().guiVisible).toBe(true);
+
+      layout.close(inspectorId);
+      expect(preferences.value().guiVisible).toBe(false);
+    });
+
+    it('renders a floating inspector docked (right) for display on a narrow workspace', () => {
+      layout.float(inspectorId);
+      registry.setViewport({ width: COMPACT_VIEWPORT_WIDTH - 1, height: 800 });
+      const projected = projectSurfaceFrame(layout.inspector(), registry.viewport());
+      expect(projected.mode).toBe('docked');
+      expect(projected.dockSide).toBe('right');
+      const stored = inspectorPlacement();
+      expect(isContainedPlacement(stored) && stored.mode).toBe('floating');
+    });
+  });
+
   describe('preview', () => {
     it('starts on the stage by default', () => {
       const placement = previewPlacement();

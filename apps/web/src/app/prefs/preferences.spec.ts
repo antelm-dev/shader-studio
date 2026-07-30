@@ -89,3 +89,47 @@ describe('Preferences file explorer fields', () => {
     expect(prefs.value().fileExplorerWidth).toBe(DEFAULT_FILE_EXPLORER_WIDTH);
   });
 });
+
+describe('Preferences inspector surface mirror', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('mirrors the migrated inspector surface onto guiVisible/inspectorTab', () => {
+    const prefs = makePreferences();
+    const layout = prefs.value().surfacesLayout;
+    const inspector = layout.surfaces.find((surface) => surface.kind === 'inspector');
+    expect(inspector).toBeDefined();
+    expect(prefs.value().guiVisible).toBe(inspector?.open);
+    expect(inspector?.chrome.kind === 'inspector' && inspector.chrome.tab).toBe(
+      prefs.value().inspectorTab,
+    );
+  });
+
+  it('prefers a persisted surfacesLayout inspector over stale legacy fields', () => {
+    const prefs = makePreferences(
+      JSON.stringify({
+        guiVisible: true,
+        inspectorTab: 'controls',
+        surfacesLayout: {
+          version: 1,
+          surfaces: [
+            {
+              id: 'surface:inspector',
+              kind: 'inspector',
+              open: false,
+              placement: {
+                host: 'contained',
+                mode: 'floating',
+                rect: { x: 10, y: 10, width: 300, height: 300 },
+              },
+              chrome: { kind: 'inspector', tab: 'presets' },
+            },
+          ],
+          zOrder: ['surface:inspector'],
+        },
+      }),
+    );
+
+    expect(prefs.value().guiVisible).toBe(false);
+    expect(prefs.value().inspectorTab).toBe('presets');
+  });
+});

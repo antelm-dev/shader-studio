@@ -11,6 +11,7 @@
 import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
+import type { InspectorTab } from '@shader-studio/shared/panel-prefs';
 import type { Point, Rect } from '@shader-studio/shared/geometry';
 import {
   DEFAULT_EDITOR_GROUP_ID,
@@ -21,6 +22,7 @@ import {
   migrateLayoutFromPreferences,
   type DockSide,
   type SurfaceId,
+  type SurfaceKind,
   type SurfaceRecord,
 } from '@shader-studio/shared/surfaces';
 
@@ -32,6 +34,7 @@ import type { SurfaceCommandContext } from './surface-commands';
 
 export const PREVIEW_SURFACE_ID = WELL_KNOWN_SURFACE_IDS.preview;
 export const DEFAULT_EDITOR_SURFACE_ID = editorSurfaceId(DEFAULT_EDITOR_GROUP_ID);
+export const INSPECTOR_SURFACE_ID = WELL_KNOWN_SURFACE_IDS.inspector;
 
 @Injectable({ providedIn: 'root' })
 export class SurfaceLayoutService {
@@ -46,13 +49,22 @@ export class SurfaceLayoutService {
 
   readonly previewId = PREVIEW_SURFACE_ID;
   readonly editorId = DEFAULT_EDITOR_SURFACE_ID;
+  readonly inspectorId = INSPECTOR_SURFACE_ID;
 
   readonly previewWorkspace = this.previewWorkspaceRect.asReadonly();
 
   readonly preview = computed(() => this.surfaceRecord(this.previewId, 'preview'));
   readonly editor = computed(() => this.surfaceRecord(this.editorId, 'editor'));
+  readonly inspector = computed(() => this.surfaceRecord(this.inspectorId, 'inspector'));
 
   readonly editorOpen = computed(() => this.editor().open);
+  readonly inspectorOpen = computed(() => this.inspector().open);
+
+  /** Durable tab source — `chrome.tab`, never a second competing preference. */
+  readonly inspectorTab = computed<InspectorTab>(() => {
+    const chrome = this.inspector().chrome;
+    return chrome.kind === 'inspector' ? chrome.tab : 'controls';
+  });
 
   readonly editorDockSide = computed<DockSide>(() => {
     const placement = this.editor().placement;
@@ -88,6 +100,7 @@ export class SurfaceLayoutService {
       id: this.editorId,
       chrome: { kind: 'editor', editorGroupId: DEFAULT_EDITOR_GROUP_ID },
     });
+    this.registry.ensure('inspector');
   }
 
   setPreviewWorkspace(rect: Rect): void {
@@ -115,9 +128,24 @@ export class SurfaceLayoutService {
   persistLayout(): void {
     const layout = this.registry.snapshot();
     const editor = layout.surfaces.find((surface) => surface.id === this.editorId);
+    const inspector = layout.surfaces.find((surface) => surface.id === this.inspectorId);
+    const inspectorTab = inspector?.chrome.kind === 'inspector' ? inspector.chrome.tab : undefined;
+    const inspectorDockSize =
+      inspector &&
+      isContainedPlacement(inspector.placement) &&
+      inspector.placement.mode === 'docked'
+        ? inspector.placement.size
+        : undefined;
+
     this.preferences.patch({
       surfacesLayout: layout,
       editorOpen: editor?.open ?? false,
+      // Legacy mirrors — kept in sync for the code (e.g. the profiler tab)
+      // that still reads `guiVisible` / `inspectorTab` / `inspectorWidth`
+      // directly rather than through this service.
+      ...(inspector ? { guiVisible: inspector.open } : {}),
+      ...(inspectorTab ? { inspectorTab } : {}),
+      ...(inspectorDockSize !== undefined ? { inspectorWidth: inspectorDockSize } : {}),
     });
   }
 
@@ -215,6 +243,32 @@ export class SurfaceLayoutService {
     return this.open(this.editorId);
   }
 
+  /**
+   * The "show controls" affordance: reopen a closed inspector, restore a
+   * minimized one, or otherwise close it. Never leaves a minimized inspector
+   * stranded — pressing it again always makes the inspector visible.
+   */
+  toggleInspectorOpen(): boolean {
+    const surface = this.inspector();
+    if (!surface.open) return this.open(this.inspectorId);
+    if (isContainedPlacement(surface.placement) && surface.placement.mode === 'minimized') {
+      return this.restore(this.inspectorId);
+    }
+    return this.close(this.inspectorId);
+  }
+
+  openInspector(): boolean {
+    return this.open(this.inspectorId);
+  }
+
+  /** Chrome.tab is the durable tab source — this is the only place it is written. */
+  setInspectorTab(tab: InspectorTab): void {
+    const surface = this.inspector();
+    if (surface.chrome.kind !== 'inspector' || surface.chrome.tab === tab) return;
+    this.registry.upsert({ ...surface, chrome: { kind: 'inspector', tab } });
+    this.persistLayout();
+  }
+
   externalize(id: SurfaceId, bounds: Rect): boolean {
     if (!this.desktop.available) return false;
     return this.apply(
@@ -251,7 +305,7 @@ export class SurfaceLayoutService {
     return this.returnToWorkspace(id);
   }
 
-  private surfaceRecord(id: SurfaceId, kind: 'preview' | 'editor'): SurfaceRecord {
+  private surfaceRecord(id: SurfaceId, kind: SurfaceKind): SurfaceRecord {
     return this.registry.get(id) ?? createDefaultSurface(kind, { id });
   }
 

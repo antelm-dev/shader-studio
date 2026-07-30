@@ -22,6 +22,7 @@ import {
   clampFloatingRect,
   clampSurfaceMinimizedPoint,
   COMPACT_VIEWPORT_WIDTH,
+  defaultDockSize,
   effectiveEditorDockSide,
   isNativePlacement,
   type ContainedPlacement,
@@ -203,15 +204,24 @@ export function projectSurfaceFrame(
       };
     }
     case 'floating': {
+      // Floating chrome is desktop-sized geometry; below the compact threshold
+      // a floating editor or inspector projects as its (only) docked side
+      // instead, so it can never render as an off-screen or unreachable
+      // floating window on a narrow workspace. The *stored* placement is left
+      // untouched — this only changes what gets painted.
       if (
-        surface.kind === 'editor' &&
+        (surface.kind === 'editor' || surface.kind === 'inspector') &&
         viewport.width > 0 &&
         viewport.width < COMPACT_VIEWPORT_WIDTH
       ) {
-        const side = effectiveEditorDockSide('bottom', viewport.width);
+        const side =
+          surface.kind === 'editor' ? effectiveEditorDockSide('bottom', viewport.width) : 'right';
         const fallbackSize = displayDockSize(
           surface.kind,
-          options.liveDockSize ?? DEFAULT_EDITOR_WINDOW.dockedHeight,
+          options.liveDockSize ??
+            (surface.kind === 'editor'
+              ? DEFAULT_EDITOR_WINDOW.dockedHeight
+              : defaultDockSize(surface.kind)),
         );
         return {
           frame: null,
