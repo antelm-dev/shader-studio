@@ -41,6 +41,12 @@ export type SurfaceCommandResult = TransitionResult & {
 };
 
 export interface SurfaceControllerOptions {
+  /**
+   * Containment box for this command. Preview and editor surfaces can occupy
+   * different regions of the workspace, so callers may not always use the
+   * registry's editor workspace viewport.
+   */
+  readonly viewport?: Size;
   /** Electron only. Web must leave false. */
   readonly allowNative?: boolean;
   readonly workArea?: Size;
@@ -58,7 +64,7 @@ export class SurfaceController {
 
   context(extra: SurfaceControllerOptions = {}): TransitionContext {
     return {
-      viewport: this.registry.viewport(),
+      viewport: extra.viewport ?? this.registry.viewport(),
       workArea: extra.workArea,
       displayId: extra.displayId,
       allowNative: extra.allowNative ?? false,
@@ -74,20 +80,27 @@ export class SurfaceController {
     return this.apply(id, (surface, ctx) => dock(surface, side, size, ctx));
   }
 
-  float(id: SurfaceId, rect?: Rect): SurfaceCommandResult {
-    return this.apply(id, (surface, ctx) => floatSurface(surface, rect, ctx));
+  float(id: SurfaceId, rect?: Rect, options: SurfaceControllerOptions = {}): SurfaceCommandResult {
+    return this.apply(id, (surface, ctx) => floatSurface(surface, rect, ctx), { options });
   }
 
-  maximize(id: SurfaceId): SurfaceCommandResult {
-    return this.apply(id, (surface, ctx) => maximize(surface, ctx), { activate: true });
+  maximize(id: SurfaceId, options: SurfaceControllerOptions = {}): SurfaceCommandResult {
+    return this.apply(id, (surface, ctx) => maximize(surface, ctx), { options, activate: true });
   }
 
-  minimize(id: SurfaceId, point?: Point): SurfaceCommandResult {
-    return this.apply(id, (surface, ctx) => minimize(surface, point, ctx), { activate: true });
+  minimize(
+    id: SurfaceId,
+    point?: Point,
+    options: SurfaceControllerOptions = {},
+  ): SurfaceCommandResult {
+    return this.apply(id, (surface, ctx) => minimize(surface, point, ctx), {
+      options,
+      activate: true,
+    });
   }
 
-  restore(id: SurfaceId): SurfaceCommandResult {
-    return this.apply(id, (surface, ctx) => restore(surface, ctx), { activate: true });
+  restore(id: SurfaceId, options: SurfaceControllerOptions = {}): SurfaceCommandResult {
+    return this.apply(id, (surface, ctx) => restore(surface, ctx), { options, activate: true });
   }
 
   externalize(
@@ -109,13 +122,21 @@ export class SurfaceController {
     return this.apply(id, (surface, ctx) => move(surface, position, ctx));
   }
 
-  resize(id: SurfaceId, next: { rect?: Rect; size?: number; bounds?: Rect }): SurfaceCommandResult {
-    return this.apply(id, (surface, ctx) => resize(surface, next, ctx));
+  resize(
+    id: SurfaceId,
+    next: { rect?: Rect; size?: number; bounds?: Rect },
+    options: SurfaceControllerOptions = {},
+  ): SurfaceCommandResult {
+    return this.apply(id, (surface, ctx) => resize(surface, next, ctx), { options });
   }
 
   /** Commit a floating rect after a gesture ends. */
-  commitFloatingRect(id: SurfaceId, rect: Rect): SurfaceCommandResult {
-    return this.resize(id, { rect });
+  commitFloatingRect(
+    id: SurfaceId,
+    rect: Rect,
+    options: SurfaceControllerOptions = {},
+  ): SurfaceCommandResult {
+    return this.resize(id, { rect }, options);
   }
 
   /** Commit a dock size after a gesture ends. */
@@ -124,12 +145,16 @@ export class SurfaceController {
   }
 
   /** Commit a minimized point after a gesture ends. */
-  commitMinimizedPoint(id: SurfaceId, point: Point): SurfaceCommandResult {
-    return this.apply(id, (surface, ctx) => minimize(surface, point, ctx));
+  commitMinimizedPoint(
+    id: SurfaceId,
+    point: Point,
+    options: SurfaceControllerOptions = {},
+  ): SurfaceCommandResult {
+    return this.apply(id, (surface, ctx) => minimize(surface, point, ctx), { options });
   }
 
-  resetGeometry(id: SurfaceId): SurfaceCommandResult {
-    return this.apply(id, (surface, ctx) => resetGeometry(surface, ctx));
+  resetGeometry(id: SurfaceId, options: SurfaceControllerOptions = {}): SurfaceCommandResult {
+    return this.apply(id, (surface, ctx) => resetGeometry(surface, ctx), { options });
   }
 
   close(id: SurfaceId, options: SurfaceControllerOptions = {}): SurfaceCommandResult {

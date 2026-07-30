@@ -106,6 +106,14 @@ describe('SurfaceLayoutService characterization', () => {
       const stored = editorPlacement();
       expect(isContainedPlacement(stored) && stored.mode).toBe('floating');
     });
+
+    it('does not let a smaller preview stage change the editor viewport', () => {
+      layout.float(editorId);
+      layout.setPreviewWorkspace({ x: 0, y: 0, width: COMPACT_VIEWPORT_WIDTH - 1, height: 400 });
+
+      expect(registry.viewport()).toEqual(viewport);
+      expect(projectSurfaceFrame(layout.editor(), registry.viewport()).mode).toBe('floating');
+    });
   });
 
   describe('inspector', () => {
@@ -202,6 +210,22 @@ describe('SurfaceLayoutService characterization', () => {
       layout.float(previewId);
       const placement = previewPlacement();
       expect(isContainedPlacement(placement) && placement.mode).toBe('floating');
+    });
+
+    it('uses the preview stage to clamp preview geometry without changing the editor viewport', () => {
+      layout.setPreviewWorkspace({ x: 40, y: 80, width: 500, height: 400 });
+      layout.float(previewId, { x: 480, y: 380, width: 400, height: 300 });
+
+      const placement = previewPlacement();
+      expect(
+        isContainedPlacement(placement) && placement.mode === 'floating' && placement.rect,
+      ).toEqual({
+        x: 100,
+        y: 100,
+        width: 400,
+        height: 300,
+      });
+      expect(registry.viewport()).toEqual(viewport);
     });
 
     it('returns to the stage', () => {

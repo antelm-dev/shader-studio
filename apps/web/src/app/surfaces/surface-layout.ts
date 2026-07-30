@@ -28,7 +28,11 @@ import {
 
 import { DesktopPlatform } from '../desktop/desktop-platform';
 import { Preferences } from '../prefs/preferences';
-import { SurfaceController, type SurfaceCommandResult } from './surface-controller';
+import {
+  SurfaceController,
+  type SurfaceCommandResult,
+  type SurfaceControllerOptions,
+} from './surface-controller';
 import { SurfaceRegistry } from './surface-registry';
 import type { SurfaceCommandContext } from './surface-commands';
 
@@ -114,7 +118,6 @@ export class SurfaceLayoutService {
       return;
     }
     this.previewWorkspaceRect.set(rect);
-    this.registry.setViewport({ width: rect.width, height: rect.height });
   }
 
   commandContext(extra: Partial<SurfaceCommandContext> = {}): SurfaceCommandContext {
@@ -168,7 +171,7 @@ export class SurfaceLayoutService {
   }
 
   float(id: SurfaceId, rect?: Rect): boolean {
-    return this.apply(this.controller.float(id, rect));
+    return this.apply(this.controller.float(id, rect, this.containmentOptions(id)));
   }
 
   dock(id: SurfaceId, side?: DockSide, size?: number): boolean {
@@ -176,15 +179,15 @@ export class SurfaceLayoutService {
   }
 
   maximize(id: SurfaceId): boolean {
-    return this.apply(this.controller.maximize(id));
+    return this.apply(this.controller.maximize(id, this.containmentOptions(id)));
   }
 
   minimize(id: SurfaceId, point?: Point): boolean {
-    return this.apply(this.controller.minimize(id, point));
+    return this.apply(this.controller.minimize(id, point, this.containmentOptions(id)));
   }
 
   restore(id: SurfaceId): boolean {
-    return this.apply(this.controller.restore(id));
+    return this.apply(this.controller.restore(id, this.containmentOptions(id)));
   }
 
   toggleMaximized(id: SurfaceId): boolean {
@@ -202,7 +205,7 @@ export class SurfaceLayoutService {
   }
 
   resetGeometry(id: SurfaceId): boolean {
-    return this.apply(this.controller.resetGeometry(id));
+    return this.apply(this.controller.resetGeometry(id, this.containmentOptions(id)));
   }
 
   close(id: SurfaceId): boolean {
@@ -284,7 +287,7 @@ export class SurfaceLayoutService {
   }
 
   commitFloatingRect(id: SurfaceId, rect: Rect): boolean {
-    return this.apply(this.controller.commitFloatingRect(id, rect));
+    return this.apply(this.controller.commitFloatingRect(id, rect, this.containmentOptions(id)));
   }
 
   commitDockSize(id: SurfaceId, size: number): boolean {
@@ -292,7 +295,7 @@ export class SurfaceLayoutService {
   }
 
   commitMinimizedPoint(id: SurfaceId, point: Point): boolean {
-    return this.apply(this.controller.commitMinimizedPoint(id, point));
+    return this.apply(this.controller.commitMinimizedPoint(id, point, this.containmentOptions(id)));
   }
 
   /** Electron-only; no-op on web. */
@@ -311,5 +314,12 @@ export class SurfaceLayoutService {
 
   private readLegacyEditorDockSide(): DockSide {
     return this.preferences.value().editorWindow.dockSide;
+  }
+
+  /** Preview geometry is contained by the stage; every other surface uses the editor workspace. */
+  private containmentOptions(id: SurfaceId): SurfaceControllerOptions {
+    if (id !== this.previewId) return {};
+    const { width, height } = this.previewWorkspaceRect();
+    return { viewport: { width, height } };
   }
 }
