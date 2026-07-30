@@ -73,6 +73,40 @@ try {
     .first()
     .waitFor({ state: 'visible', timeout: 15_000 });
 
+  // Effects Rack: add Vignette, reorder it ahead of Bloom, then exercise both
+  // the per-effect and master bypass switches. Asserted through stable
+  // data-testid hooks rather than translated labels, so a locale change or a
+  // copy edit cannot break this script.
+  const rack = page.locator('app-post-processing-panel');
+  await rack.waitFor({ state: 'visible', timeout: 15_000 });
+
+  await rack.locator('[data-testid="pp-add"]').click();
+  await page.locator('[data-testid="pp-add-vignette"]').click();
+  const vignetteRow = rack.locator('[data-testid="pp-effect-vignette"]');
+  await vignetteRow.waitFor({ state: 'visible', timeout: 10_000 });
+
+  // Vignette is appended after Bloom — move it up so it now precedes Bloom,
+  // then confirm the DOM order (which mirrors the composer's build order)
+  // actually changed.
+  await vignetteRow.locator('[data-testid="pp-move-up-vignette"]').click();
+  const rowTypes = await rack
+    .locator('.effect')
+    .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-testid')));
+  if (rowTypes[0] !== 'pp-effect-vignette') {
+    throw new Error(`Expected Vignette first after reordering, got: ${rowTypes.join(', ')}`);
+  }
+
+  // Per-effect bypass, then the chain's master switch — both must stay
+  // interactive with no reload. Rendering-path correctness (direct vs.
+  // composer) is asserted by the deterministic PostProcessing unit tests;
+  // smoke only proves the controls survive real DOM interaction.
+  await vignetteRow.locator('[data-testid="pp-enable-vignette"]').click();
+  await rack.locator('[data-testid="pp-master-toggle"]').click();
+  await rack.locator('[data-testid="pp-master-toggle"]').click();
+  await vignetteRow.locator('[data-testid="pp-enable-vignette"]').click();
+  await vignetteRow.locator('[data-testid="pp-remove-vignette"]').click();
+  await vignetteRow.waitFor({ state: 'detached', timeout: 10_000 });
+
   await page.locator('button[aria-label="More actions"]').click();
   await page.getByRole('menuitem', { name: 'Show editor' }).click();
   await page.locator('app-editor-shell').waitFor({ state: 'visible', timeout: 30_000 });
