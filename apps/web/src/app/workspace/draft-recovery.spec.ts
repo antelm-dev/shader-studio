@@ -3,7 +3,13 @@ import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { addBuffer, bufferPasses, imagePass, migrateLegacyProject } from '@shader-studio/shared';
+import {
+  DEFAULT_RENDER,
+  addBuffer,
+  bufferPasses,
+  imagePass,
+  migrateLegacyProject,
+} from '@shader-studio/shared';
 import { DraftRecovery } from './draft-recovery';
 import type { ShaderDraft } from './shader-store';
 
@@ -32,7 +38,7 @@ class MemoryStorage implements Storage {
 const draft: ShaderDraft = {
   project: migrateLegacyProject('void main() {}', 'void main() {}'),
   controlsText: '[]',
-  render: { bloom: { enabled: false, strength: 0.3, radius: 0.5, threshold: 0.85 } },
+  render: structuredClone(DEFAULT_RENDER),
 };
 
 describe('DraftRecovery', () => {

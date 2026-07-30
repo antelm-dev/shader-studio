@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { addBuffer, bufferPasses, imagePass, migrateLegacyProject } from '@shader-studio/shared';
+import {
+  DEFAULT_RENDER,
+  addBuffer,
+  bufferPasses,
+  imagePass,
+  migrateLegacyProject,
+} from '@shader-studio/shared';
 import type { ShaderDraft } from '../state/document-state';
 import {
   FRAGMENT,
@@ -63,7 +69,7 @@ function unsavedDraft(): ShaderDraft {
   return {
     project: addBuffer(migrateLegacyProject('void main() { /* recovered */ }', VERTEX)),
     controlsText: '[]',
-    render: { bloom: { enabled: false, strength: 0.3, radius: 0.5, threshold: 0.85 } },
+    render: structuredClone(DEFAULT_RENDER),
   };
 }
 

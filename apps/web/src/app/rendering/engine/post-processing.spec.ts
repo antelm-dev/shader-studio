@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { RenderSettings } from '@shader-studio/shared';
+import type { BloomSettings, RenderSettings } from '@shader-studio/shared';
 import { GlContext } from '../gl-context';
 import { FakeRenderer, FakeScene, fakeBackend } from '../testing/fake-gl';
 import { PostProcessing, type PostProcessingModules } from './post-processing';
@@ -149,8 +149,28 @@ function deferredLoader(): {
   return state;
 }
 
-function settings(overrides: Partial<RenderSettings['bloom']> = {}): RenderSettings {
-  return { bloom: { enabled: true, strength: 0.3, radius: 0.5, threshold: 0.85, ...overrides } };
+/**
+ * Builds a `RenderSettings` whose chain has one Bloom effect. `enabled`
+ * toggles the effect itself; `masterEnabled` toggles the chain's master
+ * switch — the two are deliberately independent knobs, since either one off
+ * takes the direct-render path.
+ */
+function settings(
+  overrides: Partial<BloomSettings> & { enabled?: boolean; masterEnabled?: boolean } = {},
+): RenderSettings {
+  const { enabled = true, masterEnabled = true, ...bloomOverrides } = overrides;
+  return {
+    postProcessing: {
+      enabled: masterEnabled,
+      effects: [
+        {
+          type: 'bloom',
+          enabled,
+          settings: { strength: 0.3, radius: 0.5, threshold: 0.85, ...bloomOverrides },
+        },
+      ],
+    },
+  };
 }
 
 const OFF = settings({ enabled: false });
@@ -206,6 +226,17 @@ describe('PostProcessing', () => {
     expect(FakeComposer.created).toBe(0);
     expect(renderer.draws).toBe(1);
     expect(renderer.drawLog[0].scene).toBe(scene);
+  });
+
+  it('takes the direct path when the master switch is off, even with bloom individually enabled', async () => {
+    post.setSettings(settings({ masterEnabled: false }));
+    await loader.flush();
+
+    post.render(scene as never, camera as never);
+
+    expect(loader.calls).toBe(0);
+    expect(FakeComposer.created).toBe(0);
+    expect(renderer.draws).toBe(1);
   });
 
   it('builds the chain on the first settings that ask for bloom, then renders through it', async () => {

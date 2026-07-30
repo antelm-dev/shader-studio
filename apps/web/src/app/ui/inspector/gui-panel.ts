@@ -15,7 +15,7 @@ import type { Controller } from 'lil-gui';
 import { Preferences } from '../../prefs/preferences';
 import { ShaderStore } from '../../workspace/shader-store';
 import { RendererHandle } from '../../rendering/renderer-handle';
-import type { ShaderControl } from '@shader-studio/shared/model';
+import { getBloomEffect, withBloomEffect, type ShaderControl } from '@shader-studio/shared/model';
 
 /**
  * The parameter panel, generated entirely from the shader's control schema.
@@ -199,13 +199,21 @@ export class GuiPanel {
     }
   }
 
-  /** Bloom belongs to the shader, so it is a draft edit rather than a param. */
+  /**
+   * Bloom belongs to the shader, so it is a draft edit rather than a param.
+   * Reads and writes the Bloom entry of the canonical `postProcessing` chain —
+   * this folder is the chain's only UI in Phase 1, there is no rack yet.
+   */
   private addRenderFolder(gui: GUI): void {
     const render = this.store.draft()?.render;
     if (!render) return;
 
-    const bloom = { ...render.bloom };
-    const apply = (): void => this.store.setRender({ bloom: { ...bloom } });
+    const effect = getBloomEffect(render);
+    const bloom = { enabled: effect.enabled, ...effect.settings };
+    // Re-reads the draft at apply time rather than closing over `render`, so a
+    // change elsewhere in the chain while this folder is open is not clobbered.
+    const apply = (): void =>
+      this.store.setRender(withBloomEffect(this.store.draft()?.render ?? render, { ...bloom }));
 
     const folder = gui.addFolder('Bloom');
     folder.add(bloom, 'enabled').name('Enabled').onChange(apply);
