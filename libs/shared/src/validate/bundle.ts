@@ -1,4 +1,10 @@
-import { BUNDLE_FORMAT, LEGACY_BUNDLE_FORMAT, type Bundle, type ShaderPayload } from '../model';
+import {
+  BUNDLE_FORMAT,
+  LEGACY_BUNDLE_FORMAT,
+  LEGACY_BUNDLE_FORMAT_V2,
+  type Bundle,
+  type ShaderPayload,
+} from '../model';
 import { LIMITS } from './limits';
 import { validateShaderPayload } from './payload';
 import { isRecord } from './primitives';
@@ -10,10 +16,17 @@ export function parseBundle(input: unknown): Result<ShaderPayload[]> {
   }
   // A `shader-studio/v1` bundle has no `project` field; `validateShaderPayload`
   // synthesizes one via `migrateLegacyProject`, so accepting the old tag here is
-  // the whole of v1 import compatibility.
-  if (input['format'] !== BUNDLE_FORMAT && input['format'] !== LEGACY_BUNDLE_FORMAT) {
+  // the whole of v1 import compatibility. A `v2` bundle has a `project` but its
+  // `render` is still the pre-chain `{ bloom }` shape, which `validateRender`
+  // (inside `validateShaderPayload`) normalizes into a single-effect chain.
+  const format = input['format'];
+  if (
+    format !== BUNDLE_FORMAT &&
+    format !== LEGACY_BUNDLE_FORMAT_V2 &&
+    format !== LEGACY_BUNDLE_FORMAT
+  ) {
     return fail(
-      `unsupported bundle format ${JSON.stringify(input['format'] ?? null)}; expected "${BUNDLE_FORMAT}"`,
+      `unsupported bundle format ${JSON.stringify(format ?? null)}; expected "${BUNDLE_FORMAT}"`,
     );
   }
 

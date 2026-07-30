@@ -92,13 +92,23 @@ const shaderControlSchema = z.discriminatedUnion('type', [
   selectControlSchema,
 ]);
 
-const bloomSettingsSchema = z.object({
+const bloomEffectSchema = z.object({
+  type: z.literal('bloom'),
   enabled: z.boolean(),
-  strength: z.number(),
-  radius: z.number(),
-  threshold: z.number(),
+  settings: z.object({
+    strength: z.number(),
+    radius: z.number(),
+    threshold: z.number(),
+  }),
 });
-const renderSettingsSchema = z.object({ bloom: bloomSettingsSchema });
+/** Phase 1 has exactly one effect type; extend this union for the next one. */
+const postProcessingEffectSchema = z.discriminatedUnion('type', [bloomEffectSchema]);
+const renderSettingsSchema = z.object({
+  postProcessing: z.object({
+    enabled: z.boolean(),
+    effects: z.array(postProcessingEffectSchema),
+  }),
+});
 
 const presetSchema = z.object({
   id: z.string(),
