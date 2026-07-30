@@ -9,6 +9,7 @@ import { ShaderStore } from '../../workspace/shader-store';
 import { GuiPanel } from './gui-panel';
 import { InspectorWindowControls } from './inspector-window-controls';
 import { TranslatePipe } from '../../i18n/translate.pipe';
+import { PostProcessingPanel } from './post-processing-panel';
 import { PresetPanel } from './preset-panel';
 import { TexturePanel } from './texture-panel';
 import { SurfaceLayoutService } from '../../surfaces';
@@ -40,6 +41,7 @@ import { WorkspaceActions } from '../workspace-actions';
     MatIconModule,
     MatTabsModule,
     MatTooltipModule,
+    PostProcessingPanel,
     PresetPanel,
     TexturePanel,
     TranslatePipe,
@@ -112,6 +114,7 @@ import { WorkspaceActions } from '../workspace-actions';
             <span class="badge">{{ count }}</span>
           }
         </ng-template>
+        <app-post-processing-panel />
         <app-gui-panel />
       </mat-tab>
 
@@ -196,7 +199,6 @@ import { WorkspaceActions } from '../workspace-actions';
 
     /* Keep every preserved tab panel stretched to the full body height, even
        when its own content is short. */
-    .tabs ::ng-deep .mat-mdc-tab-body-content > app-gui-panel,
     .tabs ::ng-deep .mat-mdc-tab-body-content > app-texture-panel,
     .tabs ::ng-deep .mat-mdc-tab-body-content > app-preset-panel {
       box-sizing: border-box;

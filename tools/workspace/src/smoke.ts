@@ -73,6 +73,52 @@ try {
     .first()
     .waitFor({ state: 'visible', timeout: 15_000 });
 
+  // Effects Rack: add Vignette, reorder it ahead of Bloom, then exercise both
+  // the per-effect and master bypass switches. Asserted through stable
+  // data-testid hooks rather than translated labels, so a locale change or a
+  // copy edit cannot break this script.
+  const rack = page.locator('app-post-processing-panel');
+  await rack.waitFor({ state: 'visible', timeout: 15_000 });
+
+  await rack.locator('[data-testid="pp-add"]').click();
+  await page.locator('[data-testid="pp-add-vignette"]').click();
+  const vignetteRow = rack.locator('[data-testid="pp-effect-vignette"]');
+  await vignetteRow.waitFor({ state: 'visible', timeout: 10_000 });
+
+  // Vignette is appended after Bloom — move it up so it now precedes Bloom,
+  // then confirm the DOM order (which mirrors the composer's build order)
+  // actually changed. The reorder mutation lands via an Angular signal, which
+  // re-renders on its own microtask, so poll for the new order instead of
+  // reading it synchronously right after the click. Locator.getAttribute
+  // (rather than page.waitForFunction) keeps this tool-script context free of
+  // the DOM lib the browser-side callback would otherwise need.
+  await vignetteRow.locator('[data-testid="pp-move-up-vignette"]').click();
+  const firstEffect = rack.locator('.effect').first();
+  const deadline = Date.now() + 10_000;
+  let firstEffectTestId: string | null = null;
+  while (Date.now() < deadline) {
+    firstEffectTestId = await firstEffect.getAttribute('data-testid');
+    if (firstEffectTestId === 'pp-effect-vignette') break;
+    await delay(50);
+  }
+  const rowTypes = await rack
+    .locator('.effect')
+    .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-testid')));
+  if (rowTypes[0] !== 'pp-effect-vignette') {
+    throw new Error(`Expected Vignette first after reordering, got: ${rowTypes.join(', ')}`);
+  }
+
+  // Per-effect bypass, then the chain's master switch — both must stay
+  // interactive with no reload. Rendering-path correctness (direct vs.
+  // composer) is asserted by the deterministic PostProcessing unit tests;
+  // smoke only proves the controls survive real DOM interaction.
+  await vignetteRow.locator('[data-testid="pp-enable-vignette"]').click();
+  await rack.locator('[data-testid="pp-master-toggle"]').click();
+  await rack.locator('[data-testid="pp-master-toggle"]').click();
+  await vignetteRow.locator('[data-testid="pp-enable-vignette"]').click();
+  await vignetteRow.locator('[data-testid="pp-remove-vignette"]').click();
+  await vignetteRow.waitFor({ state: 'detached', timeout: 10_000 });
+
   await page.locator('button[aria-label="More actions"]').click();
   await page.getByRole('menuitem', { name: 'Show editor' }).click();
   await page.locator('app-editor-shell').waitFor({ state: 'visible', timeout: 30_000 });

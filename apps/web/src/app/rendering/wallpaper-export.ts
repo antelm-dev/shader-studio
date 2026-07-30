@@ -21,7 +21,8 @@ export interface WallpaperExportInput {
   controls: readonly ShaderControl[];
   params: ShaderParams;
   channels: ShaderPayload['channels'];
-  bloomEnabled: boolean;
+  /** Whether the shader's post-processing chain would alter the frame — any generic warning is about this, not any one effect. */
+  postProcessingActive: boolean;
 }
 
 interface WallpaperChannel {
@@ -203,9 +204,9 @@ export function buildWallpaperDocument(input: WallpaperExportInput): WallpaperDo
     channels,
   };
 
-  const warnings = input.bloomEnabled
+  const warnings = input.postProcessingActive
     ? [
-        'Bloom is not included; the exported wallpaper renders the shader passes without post-processing.',
+        'Post-processing is not included; the exported wallpaper renders the shader passes without it.',
       ]
     : [];
 
