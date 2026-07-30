@@ -338,6 +338,30 @@ describe('validateRender', () => {
     expect(validateRender(render)).toEqual(render);
   });
 
+  it('round-trips a two-effect chain, preserving order', () => {
+    const render = {
+      postProcessing: {
+        enabled: true,
+        effects: [
+          {
+            type: 'vignette',
+            enabled: true,
+            settings: { intensity: 0.2, softness: 0.6, roundness: 0 },
+          },
+          {
+            type: 'bloom',
+            enabled: false,
+            settings: { strength: 0.9, radius: 0.3, threshold: 0.7 },
+          },
+        ],
+      },
+    };
+
+    expect(validateRender(render)).toEqual(render);
+    // Order is the effect's identity — Vignette stays first.
+    expect(validateRender(render).postProcessing.effects[0]?.type).toBe('vignette');
+  });
+
   it('migrates a legacy `{ bloom }` record (a v1/v2 bundle, or an old preset) into a single-effect chain', () => {
     const legacy = { bloom: { enabled: true, strength: 1.5, radius: 0.4, threshold: 0.6 } };
 
@@ -384,11 +408,30 @@ describe('validateRender', () => {
     const render = {
       postProcessing: {
         enabled: true,
-        effects: [{ type: 'vignette', enabled: true, settings: {} }],
+        effects: [{ type: 'chromatic-aberration', enabled: true, settings: {} }],
       },
     };
 
     expect(validateRender(render).postProcessing.effects).toEqual([]);
+  });
+
+  it('accepts and clamps a Vignette effect', () => {
+    const render = {
+      postProcessing: {
+        enabled: true,
+        effects: [
+          {
+            type: 'vignette',
+            enabled: true,
+            settings: { intensity: 5, softness: -1, roundness: 2 },
+          },
+        ],
+      },
+    };
+
+    expect(validateRender(render).postProcessing.effects).toEqual([
+      { type: 'vignette', enabled: true, settings: { intensity: 1, softness: 0, roundness: 1 } },
+    ]);
   });
 
   it('keeps only the first instance of a duplicated effect type', () => {
