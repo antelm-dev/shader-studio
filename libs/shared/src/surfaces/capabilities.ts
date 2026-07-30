@@ -2,8 +2,10 @@
  * Explicit per-kind capability presets. No shared LCM base class — editor and
  * preview share geometry helpers only, never an impossible union of powers.
  *
- * Wave 1 coordinator: inspector / shader-browser / bottom-panel keep float:false
- * for MVP.
+ * Wave 1 coordinator: shader-browser / bottom-panel keep float:false for MVP.
+ * Inspector phase 1 turns float on (still right-dock only — see
+ * `allowedDockSides`) so it can join editor/preview as a contained floating
+ * surface without widening where it may dock.
  */
 
 import type { DockSide, SurfaceKind } from './types';
@@ -62,7 +64,7 @@ export const EDITOR_CAPABILITIES: SurfaceCapabilities = {
 export const INSPECTOR_CAPABILITIES: SurfaceCapabilities = {
   stage: false,
   dock: true,
-  float: false,
+  float: true,
   maximize: true,
   minimize: true,
   externalize: true,

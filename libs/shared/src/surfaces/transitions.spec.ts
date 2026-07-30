@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { isContainedPlacement } from './placement';
 import { createDefaultSurface } from './sanitize';
 import {
   canCreateInstance,
@@ -44,11 +45,20 @@ describe('transitions', () => {
       if (!result.ok) expect(result.code).toBe('capability-denied');
     });
 
-    it('rejects float for inspector / browser / bottom-panel', () => {
-      for (const kind of ['inspector', 'shader-browser', 'bottom-panel'] as const) {
+    it('rejects float for shader-browser / bottom-panel (still MVP rails)', () => {
+      for (const kind of ['shader-browser', 'bottom-panel'] as const) {
         const result = floatSurface(createDefaultSurface(kind));
         expect(result.ok).toBe(false);
         if (!result.ok) expect(result.code).toBe('capability-denied');
+      }
+    });
+
+    it('allows float for inspector (phase 1) without widening its dock side', () => {
+      const result = floatSurface(createDefaultSurface('inspector'));
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const placement = result.surface.placement;
+        expect(isContainedPlacement(placement) && placement.mode).toBe('floating');
       }
     });
 
