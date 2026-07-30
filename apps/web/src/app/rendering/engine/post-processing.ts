@@ -1,29 +1,34 @@
 import type * as THREE from 'three';
 import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import type { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import type { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import type { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 import {
   DEFAULT_RENDER,
-  getBloomEffect,
-  type BloomEffect,
+  type PostProcessingEffect,
+  type PostProcessingEffectType,
   type RenderSettings,
 } from '@shader-studio/shared';
 import type { GlContext } from '../gl-context';
+import { VIGNETTE_SHADER, setVignetteUniforms } from './vignette-pass';
+
+/** One built pass, whichever effect type it belongs to. */
+type EffectPass = UnrealBloomPass | ShaderPass;
 
 /**
  * What happens to a frame between the shader and the canvas: the ordered
  * `postProcessing` chain from `RenderSettings`, applied after the final Image
  * pass.
  *
- * Today the chain has one possible member — Bloom — and "nothing active" is
- * the case that matters: a shader with no active effect must reach the screen
- * through `renderer.render` exactly as it always did, with no composer
- * allocated, no extra render targets, and — this is the part worth protecting
- * — no post-processing code downloaded at all. `EffectComposer` and
- * `UnrealBloomPass` are imported dynamically, inside a method, so they stay out
- * of the initial bundle and are never evaluated on the server, where there is
- * no WebGL for them to touch.
+ * The chain has two possible members today — Bloom and Vignette — and
+ * "nothing active" is the case that matters: a shader with no active effect
+ * must reach the screen through `renderer.render` exactly as it always did,
+ * with no composer allocated, no extra render targets, and — this is the part
+ * worth protecting — no post-processing code downloaded at all.
+ * `EffectComposer` and its passes are imported dynamically, inside a method,
+ * so they stay out of the initial bundle and are never evaluated on the
+ * server, where there is no WebGL for them to touch.
  *
  * The composer is therefore built lazily, the first time the chain asks for an
  * active effect, and torn down the moment nothing in it is still active — the
@@ -31,11 +36,16 @@ import type { GlContext } from '../gl-context';
  * with the context: its render targets are GPU objects, so a lost context
  * leaves a husk that has to be dropped and rebuilt rather than resized.
  *
- * A settings update that leaves the *set* of active effects unchanged is a
- * uniform push into the passes already built (a slider drag); one that changes
- * it is structural — the composer is built or freed. That distinction is what
- * `activeBloom` exists to make, and it is the whole reason `setSettings` never
- * rebuilds on every call.
+ * A settings update that leaves the active chain's *types, in order*
+ * unchanged is a uniform push into the passes already built (a slider drag);
+ * one that changes that shape — an effect toggled, added, removed or
+ * reordered — is structural: the composer is torn down and rebuilt for the
+ * chain now in force. That distinction is what `activeEffects` exists to
+ * make, and it is the whole reason `setSettings` never rebuilds on every
+ * call. (ponytail: a structural change while a composer is already live drops
+ * one frame back to direct rendering while the rebuild completes, rather than
+ * patching passes in place — fine for an occasional rack edit, not for a
+ * per-frame hot path.)
  *
  * `render()` is the whole point of the type: callers hand over a scene and a
  * camera and never learn which of the two paths drew them.
@@ -51,6 +61,7 @@ export interface PostProcessingModules {
   EffectComposer: typeof EffectComposer;
   RenderPass: typeof RenderPass;
   UnrealBloomPass: typeof UnrealBloomPass;
+  ShaderPass: typeof ShaderPass;
 }
 
 export type PostProcessingLoader = () => Promise<PostProcessingModules>;
@@ -58,30 +69,43 @@ export type PostProcessingLoader = () => Promise<PostProcessingModules>;
 /**
  * The one place post-processing is pulled in. `import()` inside a function is
  * what keeps it out of the initial bundle and off the server: nothing here is
- * evaluated until something actually asks for bloom, which on the server is
- * never, because there is no renderer to ask.
+ * evaluated until something actually asks for an effect, which on the server
+ * is never, because there is no renderer to ask.
  */
 const loadPostProcessing: PostProcessingLoader = async () => {
-  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }] = await Promise.all([
-    import('three/examples/jsm/postprocessing/EffectComposer.js'),
-    import('three/examples/jsm/postprocessing/RenderPass.js'),
-    import('three/examples/jsm/postprocessing/UnrealBloomPass.js'),
-  ]);
-  return { EffectComposer, RenderPass, UnrealBloomPass };
+  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { ShaderPass }] =
+    await Promise.all([
+      import('three/examples/jsm/postprocessing/EffectComposer.js'),
+      import('three/examples/jsm/postprocessing/RenderPass.js'),
+      import('three/examples/jsm/postprocessing/UnrealBloomPass.js'),
+      import('three/examples/jsm/postprocessing/ShaderPass.js'),
+    ]);
+  return { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass };
 };
+
+/** Whether `a` and `b` name the same effect types in the same order. */
+function sameOrder(
+  a: readonly PostProcessingEffectType[],
+  b: readonly PostProcessingEffectType[],
+): boolean {
+  return a.length === b.length && a.every((type, index) => type === b[index]);
+}
 
 export class PostProcessing {
   private composer: EffectComposer | null = null;
-  private bloomPass: UnrealBloomPass | null = null;
+  /** One built pass per active effect type, keyed by `type`. */
+  private readonly passes = new Map<PostProcessingEffectType, EffectPass>();
+  /** The active-effect order the current composer was actually built for; `null` while there is none. */
+  private builtOrder: PostProcessingEffectType[] | null = null;
 
   private current: RenderSettings = DEFAULT_RENDER;
 
   private disposed = false;
   /**
    * Incremented whenever a pending composer creation is invalidated — either
-   * because bloom was disabled or the context was lost. `ensureComposer` records
-   * the generation it started with and discards its result if the value has
-   * changed by the time the dynamic import resolves.
+   * because the active chain changed shape or the context was lost.
+   * `ensureComposer` records the generation it started with and discards its
+   * result if the value has changed by the time the dynamic import resolves.
    */
   private generation = 0;
 
@@ -114,75 +138,82 @@ export class PostProcessing {
   }
 
   /**
-   * The chain's Bloom effect, but only if it would actually run: the master
-   * switch is on and the effect itself is enabled. `null` for either reason is
-   * the same "direct render" case to every caller — the one point that decides
-   * it, so nothing else has to know there are two ways to be off.
+   * The chain's effects, but only the ones that would actually run: the
+   * master switch is on and the effect itself is enabled. An empty array for
+   * either reason is the same "direct render" case to every caller — the one
+   * point that decides it, so nothing else has to know there are two ways to
+   * be off. Order matches the chain — it is what `ensureComposer` builds the
+   * composer's pass order from.
    */
-  private activeBloom(): BloomEffect | null {
-    if (!this.current.postProcessing.enabled) return null;
-    const bloom = getBloomEffect(this.current);
-    return bloom.enabled ? bloom : null;
+  private activeEffects(): PostProcessingEffect[] {
+    if (!this.current.postProcessing.enabled) return [];
+    return this.current.postProcessing.effects.filter((effect) => effect.enabled);
   }
 
   /**
-   * Adopt new render settings. Losing the active Bloom effect frees the
-   * composer rather than leaving it allocated and bypassed; gaining one
-   * downloads the passes if this is the first time anything has asked for
-   * them, and pushes the live values through either way — a slider drag is a
-   * uniform change, never a rebuild.
+   * Adopt new render settings. Losing every active effect frees the composer
+   * rather than leaving it allocated and bypassed. A settings update whose
+   * active types and order match what is already built is a uniform push
+   * (a slider drag); anything else — the first active effect, one toggled,
+   * added, removed or reordered — is structural, so any stale composer is
+   * freed and a fresh one is (re)built for the chain now in force.
    */
   setSettings(render: RenderSettings): void {
     this.current = render;
 
-    const bloom = this.activeBloom();
-    if (!bloom) {
+    const active = this.activeEffects();
+    if (active.length === 0) {
       const wasUsingComposer = this.composer !== null;
       this.disposeComposer();
       if (wasUsingComposer) this.onRenderPathChanged?.();
       return;
     }
 
-    void this.ensureComposer().then(() => {
-      // Re-derive from this.current rather than the captured `bloom`: a newer
-      // setSettings call may have resolved first and already written its
-      // values. Using the captured argument would let an older continuation
-      // overwrite a newer composer's settings.
-      const latest = this.activeBloom();
-      if (!this.bloomPass || !latest) return;
-      this.bloomPass.strength = latest.settings.strength;
-      this.bloomPass.radius = latest.settings.radius;
-      this.bloomPass.threshold = latest.settings.threshold;
-    });
+    if (
+      this.composer &&
+      this.builtOrder &&
+      sameOrder(
+        this.builtOrder,
+        active.map((effect) => effect.type),
+      )
+    ) {
+      for (const effect of active) this.applyUniforms(effect);
+      return;
+    }
+
+    this.disposeComposer();
+    void this.ensureComposer();
   }
 
   /**
-   * Draw, without telling the caller how. When Bloom is active and its
-   * composer is ready the frame goes through the chain; otherwise it goes
-   * straight at the canvas. The gap between "asked for it" and "composer
+   * Draw, without telling the caller how. When at least one effect is active
+   * and its composer is ready the frame goes through the chain; otherwise it
+   * goes straight at the canvas. The gap between "asked for it" and "composer
    * exists" is a real state — the import is in flight — and it renders
    * directly, which is what keeps a frame appearing during it.
    */
   render(scene: THREE.Scene, camera: THREE.Camera): void {
-    if (this.activeBloom() && this.composer) this.composer.render();
+    if (this.activeEffects().length > 0 && this.composer) this.composer.render();
     else this.context.renderer.render(scene, camera);
   }
 
   /**
    * Size the chain with the drawing buffer. `scale` is the pixel ratio: the
-   * composer takes CSS-ish size plus ratio, while bloom wants the resolution in
-   * real pixels, which is the two of them multiplied.
+   * composer takes CSS-ish size plus ratio. Only Bloom's kernel needs the
+   * resolution in real pixels — Vignette is pure UV math and needs no resize
+   * hook at all.
    */
   setSize(width: number, height: number, scale: number): void {
     this.composer?.setPixelRatio(scale);
     this.composer?.setSize(width, height);
-    this.bloomPass?.setSize(width * scale, height * scale);
+    const bloom = this.passes.get('bloom') as UnrealBloomPass | undefined;
+    bloom?.setSize(width * scale, height * scale);
   }
 
   /**
    * The context is gone and so are the composer's render targets. Drop it; a
-   * later `restore()` or `setSettings()` builds a fresh one if bloom is still
-   * wanted.
+   * later `restore()` or `setSettings()` builds a fresh one if an effect is
+   * still active.
    */
   invalidate(): void {
     this.disposeComposer();
@@ -204,42 +235,79 @@ export class PostProcessing {
 
   /** Post-processing is only downloaded if the chain actually has an active effect. */
   usesComposer(): boolean {
-    return this.activeBloom() !== null && this.composer !== null;
+    return this.activeEffects().length > 0 && this.composer !== null;
+  }
+
+  /** Builds one pass for `effect`, with its live settings already applied. */
+  private createPass(
+    effect: PostProcessingEffect,
+    modules: Pick<PostProcessingModules, 'UnrealBloomPass' | 'ShaderPass'>,
+  ): EffectPass {
+    if (effect.type === 'bloom') {
+      return new modules.UnrealBloomPass(
+        new this.context.three.Vector2(1, 1),
+        effect.settings.strength,
+        effect.settings.radius,
+        effect.settings.threshold,
+      );
+    }
+    const pass = new modules.ShaderPass(VIGNETTE_SHADER);
+    setVignetteUniforms(pass, effect.settings);
+    return pass;
+  }
+
+  /** Pushes `effect`'s live settings into its already-built pass. */
+  private applyUniforms(effect: PostProcessingEffect): void {
+    const pass = this.passes.get(effect.type);
+    if (!pass) return;
+    if (effect.type === 'bloom') {
+      const bloom = pass as UnrealBloomPass;
+      bloom.strength = effect.settings.strength;
+      bloom.radius = effect.settings.radius;
+      bloom.threshold = effect.settings.threshold;
+    } else {
+      setVignetteUniforms(pass as ShaderPass, effect.settings);
+    }
   }
 
   private async ensureComposer(): Promise<void> {
     if (this.composer || this.disposed) return;
 
     const startGeneration = this.generation;
-    const { EffectComposer, RenderPass, UnrealBloomPass } = await this.load();
+    const { EffectComposer, RenderPass, UnrealBloomPass, ShaderPass } = await this.load();
 
     // The await is long enough for the engine to have been disposed, the
-    // active effect to have dropped out, or the context to have been
+    // active chain to have changed shape again, or the context to have been
     // invalidated — any of which bumps the generation token.
     if (this.disposed || this.composer || this.generation !== startGeneration) return;
+
+    // Re-derive from this.current rather than a captured list: a newer
+    // setSettings call may have resolved first and already written its
+    // values. Using a captured list would let an older continuation install
+    // a stale chain shape.
+    const active = this.activeEffects();
 
     const composer = new EffectComposer(this.context.renderer);
     composer.addPass(new RenderPass(this.scene, this.camera));
 
-    const settings = getBloomEffect(this.current).settings;
-    const bloom = new UnrealBloomPass(
-      new this.context.three.Vector2(1, 1),
-      settings.strength,
-      settings.radius,
-      settings.threshold,
-    );
-    composer.addPass(bloom);
+    for (const effect of active) {
+      const pass = this.createPass(effect, { UnrealBloomPass, ShaderPass });
+      this.passes.set(effect.type, pass);
+      composer.addPass(pass);
+    }
 
     this.composer = composer;
-    this.bloomPass = bloom;
+    this.builtOrder = active.map((effect) => effect.type);
     this.onComposerCreated?.();
     this.onRenderPathChanged?.();
   }
 
   private disposeComposer(): void {
     this.generation++;
+    for (const pass of this.passes.values()) pass.dispose();
+    this.passes.clear();
     this.composer?.dispose();
     this.composer = null;
-    this.bloomPass = null;
+    this.builtOrder = null;
   }
 }
