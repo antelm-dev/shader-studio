@@ -64,7 +64,9 @@ try {
 
   await page.goto(BASE, { waitUntil: 'networkidle', timeout: 60_000 });
   await page.locator('mat-sidenav.drawer').waitFor({ state: 'visible', timeout: 30_000 });
-  await page.locator('aside.inspector').waitFor({ state: 'visible', timeout: 30_000 });
+  await page
+    .locator('app-inspector-shell.inspector')
+    .waitFor({ state: 'visible', timeout: 30_000 });
   await delay(1_200);
   await page
     .locator('.lil-gui .lil-controller')

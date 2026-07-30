@@ -6,6 +6,7 @@ export default defineConfig({
     environment: 'node',
     include: ['**/*.spec.ts'],
     exclude: ['**/node_modules/**', 'dist/**', 'dist-pack/**'],
-    testTimeout: 20_000,
+    // Packaging invokes npm in a fresh process and can exceed the default on CI runners.
+    testTimeout: 60_000,
   },
 });

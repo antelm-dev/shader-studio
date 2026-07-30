@@ -134,7 +134,6 @@ import { WorkspaceActions } from '../workspace-actions';
         </ng-template>
         <app-preset-panel />
       </mat-tab>
-
     </mat-tab-group>
   `,
   styles: `

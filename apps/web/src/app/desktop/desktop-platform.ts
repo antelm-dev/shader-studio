@@ -27,14 +27,10 @@ export class DesktopPlatform {
   private async subscribeWindowState(): Promise<void> {
     const state = await window.electron.bridge.window.state();
     this.windowStateSignal.set(state);
-    window.electron.bridge.window.onStateChanged((state) =>
-      this.windowStateSignal.set(state),
-    );
+    window.electron.bridge.window.onStateChanged((state) => this.windowStateSignal.set(state));
     const open = await window.electron.bridge.window.outputOpen();
     this.outputOpen.set(open);
-    window.electron.bridge.window.onOutputStateChanged((open) =>
-      this.outputOpen.set(open),
-    );
+    window.electron.bridge.window.onOutputStateChanged((open) => this.outputOpen.set(open));
   }
 
   async openBundle(): Promise<{ name: string; bundle: unknown } | null> {
@@ -47,10 +43,7 @@ export class DesktopPlatform {
 
   async saveBundle(filename: string, bundle: Bundle): Promise<boolean> {
     if (!this.available) return false;
-    const result = await window.electron.bridge.files.saveBundle(
-      filename,
-      bundle,
-    );
+    const result = await window.electron.bridge.files.saveBundle(filename, bundle);
     if (result.status === 'error') throw new Error(result.message);
     return result.status === 'ok';
   }
@@ -65,10 +58,7 @@ export class DesktopPlatform {
   async saveWallpaper(filename: string, archive: Blob): Promise<boolean> {
     if (!this.available) return false;
     const bytes = new Uint8Array(await archive.arrayBuffer());
-    const result = await window.electron.bridge.files.saveWallpaper(
-      filename,
-      bytes,
-    );
+    const result = await window.electron.bridge.files.saveWallpaper(filename, bytes);
     if (result.status === 'error') throw new Error(result.message);
     return result.status === 'ok';
   }
@@ -88,12 +78,10 @@ export class DesktopPlatform {
   }
 
   async commitVideo(id: string, bytes: Uint8Array): Promise<string> {
-    if (!this.available)
-      throw new Error('Desktop video export is not available');
+    if (!this.available) throw new Error('Desktop video export is not available');
     const result = await window.electron.bridge.files.commitVideo(id, bytes);
     if (result.status === 'error') throw new Error(result.message);
-    if (result.status !== 'ok')
-      throw new Error('The video export was cancelled');
+    if (result.status !== 'ok') throw new Error('The video export was cancelled');
     return result.value.path;
   }
 
@@ -115,25 +103,14 @@ export class DesktopPlatform {
     padding: number,
   ): Promise<{ id: string; directory: string } | null> {
     if (!this.available) return null;
-    const result = await window.electron.bridge.files.beginSequence(
-      stem,
-      padding,
-    );
+    const result = await window.electron.bridge.files.beginSequence(stem, padding);
     if (result.status === 'error') throw new Error(result.message);
     return result.status === 'ok' ? result.value : null;
   }
 
-  async writeFrame(
-    id: string,
-    index: number,
-    bytes: Uint8Array,
-  ): Promise<void> {
+  async writeFrame(id: string, index: number, bytes: Uint8Array): Promise<void> {
     if (!this.available) return;
-    const result = await window.electron.bridge.files.writeFrame(
-      id,
-      index,
-      bytes,
-    );
+    const result = await window.electron.bridge.files.writeFrame(id, index, bytes);
     if (result.status === 'error') throw new Error(result.message);
   }
 
@@ -143,10 +120,7 @@ export class DesktopPlatform {
     cancelled: boolean,
   ): Promise<{ directory: string; frames: number } | null> {
     if (!this.available) return null;
-    const result = await window.electron.bridge.files.endSequence(
-      id,
-      cancelled,
-    );
+    const result = await window.electron.bridge.files.endSequence(id, cancelled);
     if (result.status === 'error') throw new Error(result.message);
     return result.status === 'ok' ? result.value : null;
   }
@@ -161,17 +135,13 @@ export class DesktopPlatform {
   }
 
   /** Raw bytes for a shader's preview, or `null` if it has never been saved with one. */
-  async readThumbnail(
-    shaderId: string,
-  ): Promise<{ bytes: Uint8Array; ext: string } | null> {
+  async readThumbnail(shaderId: string): Promise<{ bytes: Uint8Array; ext: string } | null> {
     if (!this.available) return null;
     return window.electron.bridge.shader.readThumbnail(shaderId);
   }
 
   migrationPending(): Promise<boolean> {
-    return this.available
-      ? window.electron.bridge.migration.pending()
-      : Promise.resolve(false);
+    return this.available ? window.electron.bridge.migration.pending() : Promise.resolve(false);
   }
 
   async migrate(): Promise<string | null> {
@@ -214,8 +184,7 @@ export class DesktopPlatform {
 
   /** Opens an allowlisted Help destination in the system browser. */
   openSupportLink(destination: SupportLinkDestination): void {
-    if (this.available)
-      window.electron.bridge.window.openSupportLink(destination);
+    if (this.available) window.electron.bridge.window.openSupportLink(destination);
   }
 
   openOutput(): void {

@@ -37,7 +37,9 @@ import {
           <header class="overview-header">
             <div>
               <h3>{{ 'profiler.overview' | translate }}</h3>
-              <p class="budget">{{ 'profiler.budget' | translate }}: {{ targetFrameMs }} ms (60 FPS)</p>
+              <p class="budget">
+                {{ 'profiler.budget' | translate }}: {{ targetFrameMs }} ms (60 FPS)
+              </p>
             </div>
             @switch (data.gpuSupport) {
               @case ('warming') {

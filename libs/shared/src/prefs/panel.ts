@@ -12,11 +12,7 @@
 /** Which section of the inspector is showing. */
 export type InspectorTab = 'controls' | 'textures' | 'presets';
 
-export const INSPECTOR_TABS: readonly InspectorTab[] = [
-  'controls',
-  'textures',
-  'presets',
-];
+export const INSPECTOR_TABS: readonly InspectorTab[] = ['controls', 'textures', 'presets'];
 
 /**
  * How wide a panel may be dragged.
