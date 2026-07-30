@@ -1,6 +1,10 @@
 import {
   DEFAULT_BLOOM,
+  createBloomEffect,
+  type BloomEffect,
+  type BloomSettings,
   type ParamValue,
+  type PostProcessingEffect,
   type Preset,
   type RenderSettings,
   type ShaderControl,
@@ -231,15 +235,83 @@ function clamp(value: unknown, min: number, max: number, fallback: number): numb
   return Math.min(Math.max(value, min), max);
 }
 
-export function validateRender(input: unknown): RenderSettings {
-  const bloomInput = isRecord(input) && isRecord(input['bloom']) ? input['bloom'] : {};
+function clampBloomSettings(input: unknown): BloomSettings {
+  const record = isRecord(input) ? input : {};
   return {
-    bloom: {
-      enabled:
-        typeof bloomInput['enabled'] === 'boolean' ? bloomInput['enabled'] : DEFAULT_BLOOM.enabled,
-      strength: clamp(bloomInput['strength'], 0, 3, DEFAULT_BLOOM.strength),
-      radius: clamp(bloomInput['radius'], 0, 1, DEFAULT_BLOOM.radius),
-      threshold: clamp(bloomInput['threshold'], 0, 1, DEFAULT_BLOOM.threshold),
+    strength: clamp(record['strength'], 0, 3, DEFAULT_BLOOM.strength),
+    radius: clamp(record['radius'], 0, 1, DEFAULT_BLOOM.radius),
+    threshold: clamp(record['threshold'], 0, 1, DEFAULT_BLOOM.threshold),
+  };
+}
+
+/** One entry of a canonical `postProcessing.effects` array. Unknown `type`s are discarded. */
+function validateEffect(input: unknown): PostProcessingEffect | null {
+  if (!isRecord(input)) return null;
+  if (input['type'] !== 'bloom') return null;
+  return {
+    type: 'bloom',
+    enabled: typeof input['enabled'] === 'boolean' ? input['enabled'] : false,
+    settings: clampBloomSettings(input['settings']),
+  };
+}
+
+/**
+ * A whole `postProcessing.effects` array: considers at most
+ * `LIMITS.postProcessingEffectCount` entries (an oversized array is truncated
+ * rather than scanned in full), drops anything of an unrecognized shape, and
+ * keeps at most one instance per `type` — the first one seen wins, so a
+ * duplicate is discarded deterministically rather than by whichever happened
+ * to parse last.
+ */
+function validateEffects(input: unknown): PostProcessingEffect[] {
+  if (!Array.isArray(input)) return [];
+
+  const seen = new Set<string>();
+  const effects: PostProcessingEffect[] = [];
+  for (const entry of input.slice(0, LIMITS.postProcessingEffectCount)) {
+    const effect = validateEffect(entry);
+    if (!effect || seen.has(effect.type)) continue;
+    seen.add(effect.type);
+    effects.push(effect);
+  }
+  return effects;
+}
+
+/** A pre-chain `{ enabled, strength, radius, threshold }` bloom record — a v1/v2 bundle or an old preset snapshot. */
+function legacyBloomEffect(input: unknown): BloomEffect | null {
+  if (!isRecord(input)) return null;
+  return {
+    type: 'bloom',
+    enabled: typeof input['enabled'] === 'boolean' ? input['enabled'] : false,
+    settings: clampBloomSettings(input),
+  };
+}
+
+/**
+ * The compatibility boundary for the render contract. Accepts the canonical
+ * `{ postProcessing: { enabled, effects } }` chain, the legacy `{ bloom }`
+ * shape (a v1/v2 bundle, or an old preset's captured render), or nothing at
+ * all — every case is clamped and normalized into a legal `RenderSettings`,
+ * and none of them can fail. Never mutates `input`.
+ */
+export function validateRender(input: unknown): RenderSettings {
+  const record = isRecord(input) ? input : {};
+
+  const postProcessing = record['postProcessing'];
+  if (isRecord(postProcessing)) {
+    return {
+      postProcessing: {
+        enabled: typeof postProcessing['enabled'] === 'boolean' ? postProcessing['enabled'] : true,
+        effects: validateEffects(postProcessing['effects']),
+      },
+    };
+  }
+
+  const legacy = legacyBloomEffect(record['bloom']);
+  return {
+    postProcessing: {
+      enabled: true,
+      effects: legacy ? [legacy] : [createBloomEffect()],
     },
   };
 }

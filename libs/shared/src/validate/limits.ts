@@ -11,6 +11,8 @@ export const LIMITS = {
   selectOptionCount: 64,
   presetCount: 200,
   bundleShaderCount: 200,
+  /** Cap on `RenderSettings.postProcessing.effects`. Generous: Phase 1 has one effect type and one instance of it. */
+  postProcessingEffectCount: 16,
   textureBytes: 4 * 1024 * 1024,
   thumbnailBytes: 512 * 1024,
   textureDimension: 4096,

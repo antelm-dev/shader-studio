@@ -11,6 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 
+import { DEFAULT_RENDER } from '@shader-studio/shared/model';
 import { composePass } from '@shader-studio/shared/pass-source';
 import { Preferences } from '../prefs/preferences';
 import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
@@ -257,9 +258,7 @@ export class ShaderCanvas {
             vertex: this.store.vertex(),
             controls,
             params: this.store.params(),
-            render: draft?.render ?? {
-              bloom: { enabled: false, strength: 0, radius: 0, threshold: 1 },
-            },
+            render: draft?.render ?? DEFAULT_RENDER,
             passes,
             textures: channelState.shaderId === shaderId ? channelState.sources : EMPTY_CHANNELS,
           },

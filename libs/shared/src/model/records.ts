@@ -8,8 +8,23 @@ import type {
 } from './textures';
 import type { ShaderProject } from '../project/types';
 
-/** Format tag written into every exported bundle. Bump on a breaking change. */
-export const BUNDLE_FORMAT = 'shader-studio/v2';
+/**
+ * Format tag written into every exported bundle. Bump on a breaking change.
+ *
+ * Bumped from v2 to v3 because the canonical render shape changed:
+ * `RenderSettings` is now an ordered `postProcessing` chain rather than a bare
+ * `bloom` object. v1 and v2 are still accepted on import — `validateRender`
+ * normalizes a v1/v2 shader's or preset's `{ bloom }` into a single-effect
+ * chain the same way it fills in one that is missing entirely.
+ */
+export const BUNDLE_FORMAT = 'shader-studio/v3';
+
+/**
+ * The format between v1 and v3: has a `project` field, but `render` is still
+ * the pre-chain `{ bloom }` object. Still accepted on import for the same
+ * reason v1 is.
+ */
+export const LEGACY_BUNDLE_FORMAT_V2 = 'shader-studio/v2';
 
 /**
  * The previous bundle format, from before a shader's project (its buffers,

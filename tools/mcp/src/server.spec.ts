@@ -13,7 +13,12 @@ import type {
   SetParamsResult,
   TextEdit,
 } from '@shader-studio/shared/mcp-protocol';
-import type { ParamValue, Preset, ShaderSummary } from '@shader-studio/shared/model';
+import {
+  DEFAULT_RENDER,
+  type ParamValue,
+  type Preset,
+  type ShaderSummary,
+} from '@shader-studio/shared/model';
 
 import { buildServer } from './server';
 
@@ -87,7 +92,7 @@ class FakeController implements ShaderStudioController {
       params: {},
       presets: [],
       activePresetId: null,
-      render: { bloom: { enabled: false, strength: 0.3, radius: 0.5, threshold: 0.85 } },
+      render: DEFAULT_RENDER,
       diagnostics: [],
       hasErrors: false,
     };

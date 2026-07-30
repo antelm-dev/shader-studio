@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BUNDLE_FORMAT,
+  DEFAULT_BLOOM,
   DEFAULT_CHANNELS,
+  DEFAULT_RENDER,
   LEGACY_BUNDLE_FORMAT,
+  LEGACY_BUNDLE_FORMAT_V2,
   type ShaderControl,
   type ShaderPayload,
 } from '../model';
 import { addBuffer, imagePass, migrateLegacyProject } from '../project';
 import {
+  LIMITS,
   buildCollectionBundle,
   buildShaderBundle,
   defaultParams,
@@ -21,6 +25,7 @@ import {
   validateName,
   validateParamValue,
   validatePreset,
+  validateRender,
   validateSource,
 } from './index';
 
@@ -40,7 +45,7 @@ function payload(overrides: Partial<ShaderPayload> = {}): ShaderPayload {
     name: 'Demo',
     description: '',
     controls,
-    render: { bloom: { enabled: false, strength: 0.3, radius: 0.5, threshold: 0.85 } },
+    render: structuredClone(DEFAULT_RENDER),
     fragment: FRAGMENT,
     vertex: VERTEX,
     presets: [],
@@ -297,7 +302,12 @@ describe('validatePreset', () => {
     );
 
     expect(result.ok && result.value.render).toEqual({
-      bloom: { enabled: true, strength: 3, radius: 0.4, threshold: 0.7 },
+      postProcessing: {
+        enabled: true,
+        effects: [
+          { type: 'bloom', enabled: true, settings: { strength: 3, radius: 0.4, threshold: 0.7 } },
+        ],
+      },
     });
   });
 
@@ -307,6 +317,132 @@ describe('validatePreset', () => {
     const result = validatePreset({ name: 'Plain', values: {} }, controls, 'plain');
 
     expect(result.ok && 'render' in result.value).toBe(false);
+  });
+});
+
+describe('validateRender', () => {
+  it('round-trips the canonical postProcessing chain', () => {
+    const render = {
+      postProcessing: {
+        enabled: false,
+        effects: [
+          {
+            type: 'bloom',
+            enabled: true,
+            settings: { strength: 1.2, radius: 0.4, threshold: 0.6 },
+          },
+        ],
+      },
+    };
+
+    expect(validateRender(render)).toEqual(render);
+  });
+
+  it('migrates a legacy `{ bloom }` record (a v1/v2 bundle, or an old preset) into a single-effect chain', () => {
+    const legacy = { bloom: { enabled: true, strength: 1.5, radius: 0.4, threshold: 0.6 } };
+
+    expect(validateRender(legacy)).toEqual({
+      postProcessing: {
+        enabled: true,
+        effects: [
+          {
+            type: 'bloom',
+            enabled: true,
+            settings: { strength: 1.5, radius: 0.4, threshold: 0.6 },
+          },
+        ],
+      },
+    });
+  });
+
+  it('clamps a legacy bloom record out of range', () => {
+    const legacy = { bloom: { enabled: true, strength: 99, radius: -1, threshold: 2 } };
+
+    expect(validateRender(legacy).postProcessing.effects[0]).toEqual({
+      type: 'bloom',
+      enabled: true,
+      settings: { strength: 3, radius: 0, threshold: 1 },
+    });
+  });
+
+  it('falls back to the default chain (a disabled bloom effect) for missing or garbage input', () => {
+    for (const input of [undefined, null, {}, 'nope', 42]) {
+      expect(validateRender(input)).toEqual(DEFAULT_RENDER);
+    }
+  });
+
+  it('never mutates its input', () => {
+    const legacy = { bloom: { enabled: true, strength: 1, radius: 0.5, threshold: 0.5 } };
+    const clone = structuredClone(legacy);
+
+    validateRender(legacy);
+
+    expect(legacy).toEqual(clone);
+  });
+
+  it('drops an unrecognized effect type rather than failing', () => {
+    const render = {
+      postProcessing: {
+        enabled: true,
+        effects: [{ type: 'vignette', enabled: true, settings: {} }],
+      },
+    };
+
+    expect(validateRender(render).postProcessing.effects).toEqual([]);
+  });
+
+  it('keeps only the first instance of a duplicated effect type', () => {
+    const render = {
+      postProcessing: {
+        enabled: true,
+        effects: [
+          { type: 'bloom', enabled: true, settings: { strength: 1, radius: 0.1, threshold: 0.1 } },
+          { type: 'bloom', enabled: false, settings: { strength: 2, radius: 0.2, threshold: 0.2 } },
+        ],
+      },
+    };
+
+    const effects = validateRender(render).postProcessing.effects;
+    expect(effects).toHaveLength(1);
+    expect(effects[0]).toEqual({
+      type: 'bloom',
+      enabled: true,
+      settings: { strength: 1, radius: 0.1, threshold: 0.1 },
+    });
+  });
+
+  it('caps the number of effects considered, not just accepted', () => {
+    // Every entry is `unknown` except the very last one, past the cap — a
+    // valid effect that far in must not be reached at all, not merely dropped
+    // for being a duplicate.
+    const oversized = {
+      postProcessing: {
+        enabled: true,
+        effects: [
+          ...Array.from({ length: LIMITS.postProcessingEffectCount + 50 }, () => ({
+            type: 'unknown',
+            enabled: true,
+            settings: {},
+          })),
+          { type: 'bloom', enabled: true, settings: {} },
+        ],
+      },
+    };
+
+    expect(validateRender(oversized).postProcessing.effects).toEqual([]);
+  });
+
+  it('accepts up to the effect-count cap', () => {
+    const atCap = {
+      postProcessing: {
+        enabled: true,
+        effects: [{ type: 'bloom', enabled: true, settings: {} }],
+      },
+    };
+
+    expect(validateRender(atCap).postProcessing.effects).toEqual([
+      { type: 'bloom', enabled: true, settings: DEFAULT_BLOOM },
+    ]);
   });
 });
 
@@ -458,5 +594,35 @@ describe('parseBundle', () => {
       { kind: 'texture', slot: 2 },
       { kind: 'texture', slot: 3 },
     ]);
+  });
+
+  it('accepts a shader-studio/v2 bundle, migrating its bare `bloom` render into a chain', () => {
+    // A v2 bundle has a `project` field, but predates the postProcessing
+    // chain: its `render` is still the bare `{ bloom }` shape.
+    const v2Shader = {
+      ...payload(),
+      render: { bloom: { enabled: true, strength: 1.4, radius: 0.3, threshold: 0.6 } },
+    };
+    const bundle = {
+      format: LEGACY_BUNDLE_FORMAT_V2,
+      kind: 'shader',
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      shader: v2Shader,
+    };
+
+    const parsed = parseBundle(bundle);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok === true && parsed.value[0].render).toEqual({
+      postProcessing: {
+        enabled: true,
+        effects: [
+          {
+            type: 'bloom',
+            enabled: true,
+            settings: { strength: 1.4, radius: 0.3, threshold: 0.6 },
+          },
+        ],
+      },
+    });
   });
 });

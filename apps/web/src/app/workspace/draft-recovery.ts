@@ -1,8 +1,8 @@
 import { isPlatformBrowser } from '@angular/common';
 import { DOCUMENT, Injectable, PLATFORM_ID, inject } from '@angular/core';
 
-import type { RenderSettings } from '@shader-studio/shared/model';
 import { sanitizeProject, type ShaderProject } from '@shader-studio/shared/project';
+import { validateRender } from '@shader-studio/shared/validate';
 import type { ShaderDraft } from './shader-store';
 
 const STORAGE_KEY = 'shader-studio.recovered-drafts';
@@ -39,7 +39,12 @@ export class DraftRecovery {
       if (value) this.remove(shaderId);
       return null;
     }
-    return structuredClone(value);
+    const draft = structuredClone(value);
+    // Normalize rather than reject: a render field from before the chain
+    // existed, or one that is simply garbage, is not a reason to throw away
+    // the rest of the draft — `validateRender` never fails.
+    draft.render = validateRender(draft.render);
+    return draft;
   }
 
   put(shaderId: string, baselineUpdatedAt: string, draft: ShaderDraft): void {
@@ -115,8 +120,7 @@ export class DraftRecovery {
       typeof draft.baselineUpdatedAt === 'string' &&
       typeof draft.draftUpdatedAt === 'string' &&
       typeof draft.controlsText === 'string' &&
-      this.validProject(draft.project) &&
-      this.validRender(draft.render)
+      this.validProject(draft.project)
     );
   }
 
@@ -137,17 +141,5 @@ export class DraftRecovery {
     (value as ShaderProject).files = repaired.files;
     (value as ShaderProject).version = repaired.version;
     return true;
-  }
-
-  private validRender(value: unknown): value is RenderSettings {
-    if (!value || typeof value !== 'object') return false;
-    const bloom = (value as Partial<RenderSettings>).bloom;
-    return (
-      !!bloom &&
-      typeof bloom.enabled === 'boolean' &&
-      [bloom.strength, bloom.radius, bloom.threshold].every(
-        (entry) => typeof entry === 'number' && Number.isFinite(entry),
-      )
-    );
   }
 }

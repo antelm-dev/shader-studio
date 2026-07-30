@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_CHANNELS,
   DEFAULT_RENDER,
+  getBloomEffect,
   toSummary,
+  withBloomEffect,
   type ImportResult,
   type Preset,
   type RenderSettings,
@@ -299,7 +301,9 @@ describe('ShaderStore: dirty', () => {
     expect(store.dirty()).toBe(true);
 
     store.setVertex(record.vertex);
-    store.setRender({ bloom: { ...record.render.bloom, enabled: true } });
+    store.setRender(
+      withBloomEffect(record.render, { ...getBloomEffect(record.render).settings, enabled: true }),
+    );
     expect(store.dirty()).toBe(true);
 
     store.setRender(structuredClone(record.render));
@@ -599,12 +603,15 @@ describe('ShaderStore: presets', () => {
     const { store } = setup(makeRecord());
     await store.initialize();
 
-    store.setRender({ bloom: { enabled: true, strength: 1, radius: 0.5, threshold: 0.8 } });
+    store.setRender(
+      withBloomEffect(DEFAULT_RENDER, { enabled: true, strength: 1, radius: 0.5, threshold: 0.8 }),
+    );
     await store.savePreset('Values only');
     await store.savePreset('With bloom', true);
 
     expect(store.presets()[0].render).toBeUndefined();
-    expect(store.presets()[1].render?.bloom.enabled).toBe(true);
+    const captured = store.presets()[1].render;
+    expect(captured && getBloomEffect(captured).enabled).toBe(true);
   });
 
   it('restores the render settings a preset captured, leaving the draft dirty', async () => {
@@ -613,18 +620,23 @@ describe('ShaderStore: presets', () => {
       name: 'Glow',
       createdAt: '2024-01-01T00:00:00.000Z',
       values: { speed: 2, glow: true },
-      render: { bloom: { enabled: true, strength: 1.2, radius: 0.4, threshold: 0.7 } },
+      render: withBloomEffect(DEFAULT_RENDER, {
+        enabled: true,
+        strength: 1.2,
+        radius: 0.4,
+        threshold: 0.7,
+      }),
     };
     const { store } = setup(makeRecord({ presets: [glow] }));
     await store.initialize();
 
     store.applyPreset('glow');
 
-    expect(store.draft()?.render.bloom).toEqual({
+    const draftRender = store.draft()?.render;
+    expect(draftRender && getBloomEffect(draftRender)).toEqual({
+      type: 'bloom',
       enabled: true,
-      strength: 1.2,
-      radius: 0.4,
-      threshold: 0.7,
+      settings: { strength: 1.2, radius: 0.4, threshold: 0.7 },
     });
     // Bloom is part of the saved shader, so restoring it is an unsaved edit —
     // pretending otherwise would drop it on the next load.
@@ -634,11 +646,14 @@ describe('ShaderStore: presets', () => {
   it('leaves the render settings alone for a preset that captured none', async () => {
     const { store } = setup(makeRecord({ presets: [preset] }));
     await store.initialize();
-    store.setRender({ bloom: { enabled: true, strength: 1, radius: 0.5, threshold: 0.8 } });
+    store.setRender(
+      withBloomEffect(DEFAULT_RENDER, { enabled: true, strength: 1, radius: 0.5, threshold: 0.8 }),
+    );
 
     store.applyPreset('calm');
 
-    expect(store.draft()?.render.bloom.enabled).toBe(true);
+    const draftRender = store.draft()?.render;
+    expect(draftRender && getBloomEffect(draftRender).enabled).toBe(true);
   });
 });
 
@@ -767,7 +782,9 @@ describe('ShaderStore: revisions and compile completion', () => {
     store.setFragment('void main() { gl_FragColor = vec4(0.5); }');
     expect(store.draftRevision()).toBe(initial + 1);
 
-    store.setRender({ bloom: { enabled: true, strength: 1, radius: 1, threshold: 1 } });
+    store.setRender(
+      withBloomEffect(DEFAULT_RENDER, { enabled: true, strength: 1, radius: 1, threshold: 1 }),
+    );
     expect(store.draftRevision()).toBe(initial + 2);
   });
 
