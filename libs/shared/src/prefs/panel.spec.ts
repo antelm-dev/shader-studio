@@ -68,7 +68,6 @@ describe('clampPanelWidth', () => {
 describe('sanitizeInspectorTab', () => {
   it('keeps a known tab', () => {
     expect(sanitizeInspectorTab('textures')).toBe('textures');
-    expect(sanitizeInspectorTab('profiler')).toBe('profiler');
   });
 
   it.each([['presets-old'], [''], [null], [3]])('falls back to controls for %s', (value) => {
@@ -80,6 +79,7 @@ describe('sanitizeBottomPanelTab', () => {
   it('keeps a known tab', () => {
     expect(sanitizeBottomPanelTab('output')).toBe('output');
     expect(sanitizeBottomPanelTab('problems')).toBe('problems');
+    expect(sanitizeBottomPanelTab('profiler')).toBe('profiler');
   });
 
   it.each([['diagnostics'], [''], [null], [undefined], [1]])(

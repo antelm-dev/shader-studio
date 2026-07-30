@@ -27,11 +27,12 @@ import { PointerGesture } from '../layout/pointer-gesture';
 import { ShaderStore } from '../../workspace/shader-store';
 import { OutputPanel } from './output-panel';
 import { ProblemsPanel } from './problems-panel';
+import { ProfilerPanel } from '../inspector/profiler-panel';
 
-const TABS: readonly BottomPanelTab[] = ['problems', 'output'];
+const TABS: readonly BottomPanelTab[] = ['problems', 'output', 'profiler'];
 
 /**
- * The bottom-docked workspace surface: Problems and Output.
+ * The bottom-docked workspace surface: Problems, Output, and Profiler.
  *
  * Deliberately not a mode of `EditorShell` / `EditorWindow` — the source
  * editor and this panel are two independent surfaces that happen to share an
@@ -52,6 +53,7 @@ const TABS: readonly BottomPanelTab[] = ['problems', 'output'];
     MatTooltipModule,
     OutputPanel,
     ProblemsPanel,
+    ProfilerPanel,
     TranslatePipe,
   ],
   template: `
@@ -117,6 +119,22 @@ const TABS: readonly BottomPanelTab[] = ['problems', 'output'];
           <mat-icon aria-hidden="true">terminal</mat-icon>
           <span>{{ 'panel.output' | translate }}</span>
         </button>
+
+        <button
+          #profilerTab
+          type="button"
+          role="tab"
+          id="bottom-panel-tab-profiler"
+          class="tab"
+          [class.active]="tab() === 'profiler'"
+          [attr.aria-selected]="tab() === 'profiler'"
+          aria-controls="bottom-panel-panel-profiler"
+          [tabindex]="tab() === 'profiler' ? 0 : -1"
+          (click)="selectTab('profiler')"
+        >
+          <mat-icon aria-hidden="true">query_stats</mat-icon>
+          <span>{{ 'panel.profiler' | translate }}</span>
+        </button>
       </div>
 
       <span class="spacer"></span>
@@ -151,6 +169,15 @@ const TABS: readonly BottomPanelTab[] = ['problems', 'output'];
         [hidden]="tab() !== 'output'"
       >
         <app-output-panel />
+      </div>
+      <div
+        id="bottom-panel-panel-profiler"
+        class="tabpanel"
+        role="tabpanel"
+        aria-labelledby="bottom-panel-tab-profiler"
+        [hidden]="tab() !== 'profiler'"
+      >
+        <app-profiler-panel />
       </div>
     </div>
   `,
@@ -350,6 +377,7 @@ export class BottomPanel {
 
   private readonly problemsTab = viewChild<ElementRef<HTMLButtonElement>>('problemsTab');
   private readonly outputTab = viewChild<ElementRef<HTMLButtonElement>>('outputTab');
+  private readonly profilerTab = viewChild<ElementRef<HTMLButtonElement>>('profilerTab');
 
   protected readonly tab = computed(() => this.preferences.value().bottomPanelTab);
 
@@ -428,7 +456,12 @@ export class BottomPanel {
   }
 
   private focusTab(tab: BottomPanelTab): void {
-    const ref = tab === 'problems' ? this.problemsTab() : this.outputTab();
+    const ref =
+      tab === 'problems'
+        ? this.problemsTab()
+        : tab === 'output'
+          ? this.outputTab()
+          : this.profilerTab();
     ref?.nativeElement.focus();
   }
 

@@ -218,19 +218,19 @@ describe('ProfilerPanel', () => {
     fixture.detectChanges();
     expect(setProfilingEnabled).toHaveBeenCalledWith(false);
 
-    patch({ inspectorTab: 'profiler' });
+    patch({ bottomPanelTab: 'profiler' });
     fixture.detectChanges();
     await fixture.whenStable();
     expect(setProfilingEnabled).toHaveBeenCalledWith(true);
 
-    patch({ inspectorTab: 'controls' });
+    patch({ bottomPanelTab: 'output' });
     fixture.detectChanges();
     await fixture.whenStable();
     expect(setProfilingEnabled).toHaveBeenLastCalledWith(false);
   });
 
   it('renders unsupported and empty states without a live region on the whole panel', async () => {
-    patch({ inspectorTab: 'profiler' });
+    patch({ bottomPanelTab: 'profiler' });
     snapshot.set(emptySnapshot({ gpuSupport: 'unavailable' }));
 
     const fixture = TestBed.createComponent(ProfilerPanel);
@@ -250,7 +250,7 @@ describe('ProfilerPanel', () => {
   });
 
   it('clears a stale snapshot synchronously when the active engine is replaced', async () => {
-    patch({ inspectorTab: 'profiler' });
+    patch({ bottomPanelTab: 'profiler' });
     snapshot.set(emptySnapshot({ sampleCount: 12, gpuSupport: 'warming' }));
 
     const fixture = TestBed.createComponent(ProfilerPanel);
@@ -269,7 +269,7 @@ describe('ProfilerPanel', () => {
   });
 
   it('applies one recommendation once and announces without suggesting again from stale samples', async () => {
-    patch({ inspectorTab: 'profiler', resolutionScale: 1 });
+    patch({ bottomPanelTab: 'profiler', resolutionScale: 1 });
     snapshot.set(
       emptySnapshot({
         gpuSupport: 'supported',
@@ -330,7 +330,7 @@ describe('ProfilerPanel', () => {
   });
 
   it('clears stale values when the profiler generation advances (context/capture)', async () => {
-    patch({ inspectorTab: 'profiler' });
+    patch({ bottomPanelTab: 'profiler' });
     snapshot.set(emptySnapshot({ sampleCount: 40, gpuSupport: 'supported' }));
 
     const fixture = TestBed.createComponent(ProfilerPanel);
@@ -347,7 +347,7 @@ describe('ProfilerPanel', () => {
   });
 
   it('renders pass, memory, and compile details from a supported snapshot', async () => {
-    patch({ inspectorTab: 'profiler' });
+    patch({ bottomPanelTab: 'profiler' });
     snapshot.set(
       emptySnapshot({
         gpuSupport: 'supported',
@@ -408,7 +408,7 @@ describe('ProfilerPanel', () => {
   });
 
   it('guards frame-share edges for zero totals and missing medians', async () => {
-    patch({ inspectorTab: 'profiler' });
+    patch({ bottomPanelTab: 'profiler' });
     snapshot.set(
       emptySnapshot({
         gpuSupport: 'unavailable',

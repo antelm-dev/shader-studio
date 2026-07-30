@@ -10,13 +10,12 @@
  */
 
 /** Which section of the inspector is showing. */
-export type InspectorTab = 'controls' | 'textures' | 'presets' | 'profiler';
+export type InspectorTab = 'controls' | 'textures' | 'presets';
 
 export const INSPECTOR_TABS: readonly InspectorTab[] = [
   'controls',
   'textures',
   'presets',
-  'profiler',
 ];
 
 /**
@@ -63,9 +62,9 @@ export function sanitizeInspectorTab(value: unknown): InspectorTab {
 // ---------------------------------------------------------------------------
 
 /** Which tab of the bottom panel is showing. */
-export type BottomPanelTab = 'problems' | 'output';
+export type BottomPanelTab = 'problems' | 'output' | 'profiler';
 
-export const BOTTOM_PANEL_TABS: readonly BottomPanelTab[] = ['problems', 'output'];
+export const BOTTOM_PANEL_TABS: readonly BottomPanelTab[] = ['problems', 'output', 'profiler'];
 
 /**
  * How tall the bottom panel may be dragged, in pixels.

@@ -10,7 +10,6 @@ import { GuiPanel } from './gui-panel';
 import { InspectorWindowControls } from './inspector-window-controls';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { PresetPanel } from './preset-panel';
-import { ProfilerPanel } from './profiler-panel';
 import { TexturePanel } from './texture-panel';
 import { SurfaceLayoutService } from '../../surfaces';
 import { WorkspaceActions } from '../workspace-actions';
@@ -42,7 +41,6 @@ import { WorkspaceActions } from '../workspace-actions';
     MatTabsModule,
     MatTooltipModule,
     PresetPanel,
-    ProfilerPanel,
     TexturePanel,
     TranslatePipe,
   ],
@@ -137,12 +135,6 @@ import { WorkspaceActions } from '../workspace-actions';
         <app-preset-panel />
       </mat-tab>
 
-      <mat-tab>
-        <ng-template mat-tab-label>
-          {{ 'inspector.profiler' | translate }}
-        </ng-template>
-        <app-profiler-panel />
-      </mat-tab>
     </mat-tab-group>
   `,
   styles: `
@@ -207,8 +199,7 @@ import { WorkspaceActions } from '../workspace-actions';
        when its own content is short. */
     .tabs ::ng-deep .mat-mdc-tab-body-content > app-gui-panel,
     .tabs ::ng-deep .mat-mdc-tab-body-content > app-texture-panel,
-    .tabs ::ng-deep .mat-mdc-tab-body-content > app-preset-panel,
-    .tabs ::ng-deep .mat-mdc-tab-body-content > app-profiler-panel {
+    .tabs ::ng-deep .mat-mdc-tab-body-content > app-preset-panel {
       box-sizing: border-box;
       height: 100%;
     }

@@ -140,7 +140,7 @@ export const TRANSLATION_KEYS = [
   'inspector.controls',
   'inspector.textures',
   'inspector.presets',
-  'inspector.profiler',
+  'panel.profiler',
   'inspector.presetWithRender',
   'inspector.presetValuesOnly',
   'inspector.presetsEmpty',

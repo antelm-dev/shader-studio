@@ -76,13 +76,20 @@ try {
   await page.locator('app-editor-shell').waitFor({ state: 'visible', timeout: 30_000 });
   await page.locator('.monaco-editor').waitFor({ state: 'visible', timeout: 30_000 });
 
-  // Bounded Profiler path: open the tab, assert honest content, then leave and
+  // Bounded Profiler path: open the bottom-panel tab, assert honest content, then leave and
   // confirm the panel is no longer active. Headless Chromium typically lacks
   // EXT_disjoint_timer_query_webgl2, so the unsupported/empty copy is the
   // supported-path stand-in; deterministic unit tests cover the timing path.
-  const inspector = page.locator('aside.inspector');
-  await inspector.getByRole('tab', { name: /Profiler/i }).click({ force: true });
-  const profiler = inspector.locator('app-profiler-panel');
+  await page.keyboard.press('Control+J');
+  const bottomPanel = page.locator('app-bottom-panel');
+  await bottomPanel.waitFor({ state: 'visible', timeout: 10_000 });
+  await page.evaluate(`(() => {
+    const tab = [...document.querySelectorAll('app-bottom-panel [role="tab"]')]
+      .find((item) => /Profiler/i.test(item.textContent ?? ''));
+    if (!(tab instanceof HTMLElement)) throw new Error('Profiler tab not found');
+    tab.click();
+  })()`);
+  const profiler = bottomPanel.locator('app-profiler-panel');
   await profiler.waitFor({ state: 'visible', timeout: 15_000 });
   const profilerStatePattern =
     /GPU timing is unavailable|Collecting GPU samples|Waiting for the active preview|GPU timing was interrupted by the driver/i;
@@ -91,26 +98,23 @@ try {
   log.info(`Profiler state observed: ${observedProfilerState}`);
 
   // Force-path DOM click: the preview canvas can intercept Playwright hit-testing
-  // even when the tab is scrolled into view inside the inspector rail.
+  // even when the tab is scrolled into view inside the docked panel.
   await page.evaluate(`(() => {
-    const tabs = document.querySelectorAll('aside.inspector [role="tab"]');
-    const controls = [...tabs].find((tab) => /Controls/i.test(tab.textContent ?? ''));
-    if (!(controls instanceof HTMLElement)) throw new Error('Controls tab not found');
-    controls.click();
+    const tabs = document.querySelectorAll('app-bottom-panel [role="tab"]');
+    const output = [...tabs].find((tab) => /Output/i.test(tab.textContent ?? ''));
+    if (!(output instanceof HTMLElement)) throw new Error('Output tab not found');
+    output.click();
   })()`);
   await waitForMatch(
     async () =>
       [
-        await inspector.getByRole('tab', { name: /Profiler/i }).getAttribute('aria-selected'),
-        await inspector.getByRole('tab', { name: /Controls/i }).getAttribute('aria-selected'),
+        await bottomPanel.getByRole('tab', { name: /Profiler/i }).getAttribute('aria-selected'),
+        await bottomPanel.getByRole('tab', { name: /Output/i }).getAttribute('aria-selected'),
       ].join(','),
     /^false,true$/,
     5_000,
   );
-  await inspector
-    .locator('.lil-gui .lil-controller')
-    .first()
-    .waitFor({ state: 'visible', timeout: 10_000 });
+  await bottomPanel.locator('app-output-panel').waitFor({ state: 'visible', timeout: 10_000 });
   // preserveContent keeps ProfilerPanel mounted; disable-on-leave is covered by
   // mounted unit tests via setProfilingEnabled(false). Smoke asserts the tab left.
 

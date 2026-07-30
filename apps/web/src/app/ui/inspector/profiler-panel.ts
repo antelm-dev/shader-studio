@@ -33,46 +33,50 @@ import {
     <section class="profiler">
       <p class="status" role="status" aria-live="polite">{{ statusText() }}</p>
       @if (snapshot(); as data) {
-        <header class="section">
-          <h3>{{ 'profiler.overview' | translate }}</h3>
-          <p class="budget">{{ 'profiler.budget' | translate }}: {{ targetFrameMs }} ms (60 FPS)</p>
-          @switch (data.gpuSupport) {
-            @case ('warming') {
-              <p class="state">{{ 'profiler.warming' | translate }}</p>
+        <section class="section overview">
+          <header class="overview-header">
+            <div>
+              <h3>{{ 'profiler.overview' | translate }}</h3>
+              <p class="budget">{{ 'profiler.budget' | translate }}: {{ targetFrameMs }} ms (60 FPS)</p>
+            </div>
+            @switch (data.gpuSupport) {
+              @case ('warming') {
+                <p class="state">{{ 'profiler.warming' | translate }}</p>
+              }
+              @case ('unavailable') {
+                <p class="state">{{ 'profiler.gpuUnavailable' | translate }}</p>
+              }
+              @case ('disjoint') {
+                <p class="state">{{ 'profiler.gpuDisjoint' | translate }}</p>
+              }
             }
-            @case ('unavailable') {
-              <p class="state">{{ 'profiler.gpuUnavailable' | translate }}</p>
-            }
-            @case ('disjoint') {
-              <p class="state">{{ 'profiler.gpuDisjoint' | translate }}</p>
-            }
-          }
-        </header>
+          </header>
 
-        <dl class="metrics">
-          <div>
-            <dt>{{ 'profiler.cpuSubmission' | translate }}</dt>
-            <dd>
-              {{ formatMs(data.cpuSubmission.medianMs) }} /
-              {{ formatMs(data.cpuSubmission.p95Ms) }}
-            </dd>
-          </div>
-          <div>
-            <dt>{{ 'profiler.gpuTotal' | translate }}</dt>
-            <dd>
-              {{ formatMs(data.totalGpu.medianMs) }} /
-              {{ formatMs(data.totalGpu.p95Ms) }}
-            </dd>
-          </div>
-          <div>
-            <dt>{{ 'profiler.samples' | translate }}</dt>
-            <dd>{{ data.sampleCount }}</dd>
-          </div>
-          <div>
-            <dt>{{ 'profiler.sampleAge' | translate }}</dt>
-            <dd>{{ formatMs(data.lastSampleAgeMs) }}</dd>
-          </div>
-        </dl>
+          <dl class="metrics">
+            <div>
+              <dt>{{ 'profiler.cpuSubmission' | translate }}</dt>
+              <dd>
+                {{ formatMs(data.cpuSubmission.medianMs) }} /
+                {{ formatMs(data.cpuSubmission.p95Ms) }}
+              </dd>
+            </div>
+            <div>
+              <dt>{{ 'profiler.gpuTotal' | translate }}</dt>
+              <dd>
+                {{ formatMs(data.totalGpu.medianMs) }} /
+                {{ formatMs(data.totalGpu.p95Ms) }}
+              </dd>
+            </div>
+            <div>
+              <dt>{{ 'profiler.samples' | translate }}</dt>
+              <dd>{{ data.sampleCount }}</dd>
+            </div>
+            <div>
+              <dt>{{ 'profiler.sampleAge' | translate }}</dt>
+              <dd>{{ formatMs(data.lastSampleAgeMs) }}</dd>
+            </div>
+          </dl>
+        </section>
 
         <section class="section">
           <h3>{{ 'profiler.passes' | translate }}</h3>
@@ -110,37 +114,39 @@ import {
           }
         </section>
 
-        <section class="section">
-          <h3>{{ 'profiler.memory' | translate }}</h3>
-          <p class="note">{{ 'profiler.memoryEstimate' | translate }}</p>
-          <dl class="metrics">
-            <div>
-              <dt>{{ 'profiler.renderTargets' | translate }}</dt>
-              <dd>{{ formatBytes(data.renderTargetBytes) }}</dd>
-            </div>
-            <div>
-              <dt>{{ 'profiler.textures' | translate }}</dt>
-              <dd>{{ formatBytes(data.textureBytes) }}</dd>
-            </div>
-          </dl>
-        </section>
-
-        @if (data.compiles.length > 0) {
-          <section class="section">
-            <h3>{{ 'profiler.compiles' | translate }}</h3>
-            <ul class="compile-list">
-              @for (entry of data.compiles; track entry.passId) {
-                <li>
-                  <span>{{ entry.passId }}</span>
-                  <span>{{ formatMs(entry.durationMs) }}</span>
-                  <span>{{
-                    (entry.success ? 'profiler.compileOk' : 'profiler.compileFailed') | translate
-                  }}</span>
-                </li>
-              }
-            </ul>
+        <div class="details">
+          <section class="section memory">
+            <h3>{{ 'profiler.memory' | translate }}</h3>
+            <p class="note">{{ 'profiler.memoryEstimate' | translate }}</p>
+            <dl class="metrics">
+              <div>
+                <dt>{{ 'profiler.renderTargets' | translate }}</dt>
+                <dd>{{ formatBytes(data.renderTargetBytes) }}</dd>
+              </div>
+              <div>
+                <dt>{{ 'profiler.textures' | translate }}</dt>
+                <dd>{{ formatBytes(data.textureBytes) }}</dd>
+              </div>
+            </dl>
           </section>
-        }
+
+          @if (data.compiles.length > 0) {
+            <section class="section compiles">
+              <h3>{{ 'profiler.compiles' | translate }}</h3>
+              <ul class="compile-list">
+                @for (entry of data.compiles; track entry.passId) {
+                  <li>
+                    <span>{{ entry.passId }}</span>
+                    <span>{{ formatMs(entry.durationMs) }}</span>
+                    <span [class.failed]="!entry.success">{{
+                      (entry.success ? 'profiler.compileOk' : 'profiler.compileFailed') | translate
+                    }}</span>
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+        </div>
 
         @if (suggestion(); as scale) {
           <section class="section suggestion">
@@ -160,7 +166,7 @@ import {
       display: block;
       min-width: 0;
       max-width: 100%;
-      padding: 0 12px 12px;
+      padding: 12px;
       overflow-x: clip;
     }
 
@@ -169,13 +175,36 @@ import {
       flex-direction: column;
       min-width: 0;
       max-width: 100%;
-      gap: 16px;
+      gap: 12px;
       font: var(--mat-sys-body-medium);
     }
 
     .section h3 {
-      margin: 0 0 8px;
+      margin: 0;
       font: var(--mat-sys-title-small);
+    }
+
+    .overview,
+    .memory,
+    .compiles,
+    .suggestion {
+      padding: 12px;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--mat-sys-surface-container-low) 78%, transparent);
+    }
+
+    .overview {
+      display: grid;
+      grid-template-columns: minmax(170px, 0.72fr) minmax(0, 2.28fr);
+      align-items: center;
+      gap: 16px;
+    }
+
+    .overview-header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
 
     .budget,
@@ -186,17 +215,26 @@ import {
       font: var(--mat-sys-body-small);
     }
 
+    .state {
+      max-width: 52ch;
+    }
+
     .metrics {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px 12px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
       margin: 0;
     }
 
     .metrics div {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      justify-content: center;
+      min-height: 48px;
+      padding: 6px 10px;
+      border-radius: 7px;
+      background: color-mix(in srgb, var(--mat-sys-surface-container-high) 72%, transparent);
+      gap: 3px;
     }
 
     .metrics dt {
@@ -206,6 +244,13 @@ import {
 
     .metrics dd {
       margin: 0;
+      font: var(--mat-sys-title-small);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .memory .metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 10px;
     }
 
     .status {
@@ -224,12 +269,15 @@ import {
       width: 100%;
       table-layout: fixed;
       border-collapse: collapse;
+      overflow: hidden;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 8px;
       font: var(--mat-sys-body-small);
     }
 
     .pass-table th,
     .pass-table td {
-      padding: 4px 6px;
+      padding: 7px 10px;
       overflow-wrap: anywhere;
       text-align: left;
       vertical-align: top;
@@ -239,6 +287,22 @@ import {
     .pass-table th:first-child,
     .pass-table td:first-child {
       width: 24%;
+    }
+
+    .pass-table th {
+      color: var(--mat-sys-on-surface-variant);
+      font: var(--mat-sys-label-small);
+      background: color-mix(in srgb, var(--mat-sys-surface-container-high) 74%, transparent);
+    }
+
+    .pass-table tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .details {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
     }
 
     .compile-list {
@@ -255,12 +319,52 @@ import {
       display: grid;
       grid-template-columns: 1fr auto auto;
       gap: 8px;
+      align-items: center;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--mat-sys-surface-container-high) 62%, transparent);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .compile-list li span:last-child {
+      color: var(--mat-sys-primary);
+      font: var(--mat-sys-label-small);
+    }
+
+    .compile-list li span.failed {
+      color: var(--mat-sys-error);
     }
 
     .suggestion {
-      padding: 12px;
-      border-radius: 8px;
-      background: var(--mat-sys-surface-container);
+      border-color: color-mix(in srgb, var(--mat-sys-primary) 45%, var(--mat-sys-outline-variant));
+    }
+
+    .suggestion p {
+      margin: 0 0 8px;
+    }
+
+    @media (max-width: 760px) {
+      .overview,
+      .details {
+        grid-template-columns: 1fr;
+      }
+
+      .metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 420px) {
+      :host {
+        padding: 8px;
+      }
+
+      .overview,
+      .memory,
+      .compiles,
+      .suggestion {
+        padding: 10px;
+      }
     }
   `,
 })
@@ -286,7 +390,7 @@ export class ProfilerPanel implements OnInit, OnDestroy {
 
   constructor() {
     effect(() => {
-      const active = this.preferences.value().inspectorTab === 'profiler';
+      const active = this.preferences.value().bottomPanelTab === 'profiler';
       this.handle.setProfilingEnabled(active);
       if (!active) {
         this.snapshot.set(null);
@@ -299,7 +403,7 @@ export class ProfilerPanel implements OnInit, OnDestroy {
     });
 
     effect(() => {
-      if (this.preferences.value().inspectorTab !== 'profiler') return;
+      if (this.preferences.value().bottomPanelTab !== 'profiler') return;
 
       // Track engine replacement and lifecycle generations so stale snapshots clear immediately.
       void this.handle.engine();
@@ -338,7 +442,7 @@ export class ProfilerPanel implements OnInit, OnDestroy {
   }
 
   private refresh(): void {
-    if (this.preferences.value().inspectorTab !== 'profiler') return;
+    if (this.preferences.value().bottomPanelTab !== 'profiler') return;
 
     const data = this.handle.profilerSnapshot();
     this.snapshot.set(data);

@@ -1,8 +1,21 @@
 packages:
-  - '.'
-  - 'apps/*'
-  - 'libs/*'
-  - 'tools/*'
+  - .
+  - apps/*
+  - libs/*
+  - tools/*
+
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - electron
+  - electron-ipc-module
+  - electron-winstaller
+  - esbuild
+  - less
+  - lmdb
+  - msgpackr-extract
+  - nx
+  - rollup-plugin-electron-run
+  - unrs-resolver
 
 packageExtensions:
   electron-ipc-module@*:
@@ -12,16 +25,4 @@ packageExtensions:
     dependencies:
       typescript: ~6.0.2
 
-# Git-hosted dependencies run their own temporary `pnpm install` during
-# preparation. That nested project cannot inherit this workspace's allowlist,
-# so keep its unreviewed dev-dependency builds skipped instead of failing.
 strictDepBuilds: false
-
-onlyBuiltDependencies:
-  - '@parcel/watcher'
-  - electron
-  - electron-ipc-module
-  - electron-winstaller
-  - esbuild
-  - nx
-  - rollup-plugin-electron-run
