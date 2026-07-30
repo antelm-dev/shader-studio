@@ -19,7 +19,13 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
  */
 @Component({
   selector: 'app-desktop-version-dialog',
-  imports: [MatButtonModule, MatDialogModule, MatIconModule, MatProgressBarModule, TranslatePipe],
+  imports: [
+    MatButtonModule,
+    MatDialogModule,
+    MatIconModule,
+    MatProgressBarModule,
+    TranslatePipe,
+  ],
   template: `
     <h2 mat-dialog-title>{{ 'desktop.versionTitle' | translate }}</h2>
     <mat-dialog-content>
@@ -28,34 +34,51 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
         <div>
           <strong>Shader Studio</strong>
           <span>{{
-            'desktop.versionLabel' | translate: { version: updater.state().currentVersion || '—' }
+            'desktop.versionLabel'
+              | translate: { version: updater.state().currentVersion || '—' }
           }}</span>
         </div>
       </div>
-      <div class="status" role="status" aria-live="polite">
-        <mat-icon [class.error]="updater.state().status === 'error'">{{ statusIcon() }}</mat-icon>
+      <div
+        class="status"
+        [class]="updater.state().status"
+        role="status"
+        aria-live="polite"
+      >
+        <mat-icon>{{ statusIcon() }}</mat-icon>
         <span>{{ statusText() }}</span>
       </div>
       @if (updater.state().status === 'downloading') {
         <mat-progress-bar
           mode="determinate"
           [value]="updater.state().progress ?? 0"
-          [attr.aria-label]="'desktop.downloadProgress' | translate: { progress: progressLabel() }"
+          [attr.aria-label]="
+            'desktop.downloadProgress'
+              | translate: { progress: progressLabel() }
+          "
         />
         <span class="progress">{{ progressLabel() }}</span>
       }
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button matButton type="button" mat-dialog-close>{{ 'action.close' | translate }}</button>
-      <button matButton="filled" type="button" [disabled]="actionDisabled()" (click)="runAction()">
-        <mat-icon [class.spin]="isBusy()">{{ isBusy() ? 'sync' : actionIcon() }}</mat-icon>
+      <button matButton type="button" mat-dialog-close>
+        {{ 'action.close' | translate }}
+      </button>
+      <button
+        matButton="filled"
+        type="button"
+        [disabled]="actionDisabled()"
+        (click)="runAction()"
+      >
+        <mat-icon [class.spin]="isBusy()">{{
+          isBusy() ? 'sync' : actionIcon()
+        }}</mat-icon>
         {{ actionLabel() }}
       </button>
     </mat-dialog-actions>
   `,
   styles: `
     mat-dialog-content {
-      width: min(420px, 78vw);
       padding-top: 8px;
     }
     .identity {
@@ -84,7 +107,7 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
     }
     .status {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       gap: 10px;
       min-height: 48px;
       padding: 12px;
@@ -93,9 +116,23 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
       color: var(--mat-sys-on-surface-variant);
     }
     .status mat-icon {
+      flex: 0 0 auto;
       color: var(--mat-sys-primary);
     }
-    .status mat-icon.error {
+    .status.available,
+    .status.downloaded {
+      background: var(--mat-sys-primary-container);
+      color: var(--mat-sys-on-primary-container);
+    }
+    .status.available mat-icon,
+    .status.downloaded mat-icon {
+      color: var(--mat-sys-on-primary-container);
+    }
+    .status.error {
+      background: var(--mat-sys-error-container);
+      color: var(--mat-sys-on-error-container);
+    }
+    .status.error mat-icon {
       color: var(--mat-sys-error);
     }
     mat-progress-bar {
@@ -137,11 +174,17 @@ export class DesktopVersionDialog {
       case 'up-to-date':
         return this.i18n.t('desktop.upToDate');
       case 'available':
-        return this.i18n.t('desktop.available', { version: state.availableVersion ?? '' });
+        return this.i18n.t('desktop.available', {
+          version: state.availableVersion ?? '',
+        });
       case 'downloading':
-        return this.i18n.t('desktop.downloading', { version: state.availableVersion ?? '' });
+        return this.i18n.t('desktop.downloading', {
+          version: state.availableVersion ?? '',
+        });
       case 'downloaded':
-        return this.i18n.t('desktop.downloaded', { version: state.availableVersion ?? '' });
+        return this.i18n.t('desktop.downloaded', {
+          version: state.availableVersion ?? '',
+        });
       case 'error':
         return this.i18n.t('desktop.checkFailedGeneric');
     }
