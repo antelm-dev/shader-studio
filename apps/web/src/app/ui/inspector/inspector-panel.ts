@@ -1,17 +1,18 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { INSPECTOR_TABS, type InspectorTab } from '@shader-studio/shared/panel-prefs';
-import { Preferences } from '../../prefs/preferences';
 import { ShaderStore } from '../../workspace/shader-store';
 import { GuiPanel } from './gui-panel';
+import { InspectorWindowControls } from './inspector-window-controls';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { PresetPanel } from './preset-panel';
 import { ProfilerPanel } from './profiler-panel';
 import { TexturePanel } from './texture-panel';
+import { SurfaceLayoutService } from '../../surfaces';
 import { WorkspaceActions } from '../workspace-actions';
 
 /**
@@ -35,6 +36,7 @@ import { WorkspaceActions } from '../workspace-actions';
   selector: 'app-inspector-panel',
   imports: [
     GuiPanel,
+    InspectorWindowControls,
     MatButtonModule,
     MatIconModule,
     MatTabsModule,
@@ -45,7 +47,11 @@ import { WorkspaceActions } from '../workspace-actions';
     TranslatePipe,
   ],
   template: `
-    <header class="inspector-header">
+    <header
+      class="inspector-header"
+      [class.draggable]="dragEnabled()"
+      (pointerdown)="onHeaderPointerDown($event)"
+    >
       <button
         matIconButton
         type="button"
@@ -90,10 +96,13 @@ import { WorkspaceActions } from '../workspace-actions';
           </button>
         }
       }
+
+      <app-inspector-window-controls />
     </header>
 
     <mat-tab-group
       class="tabs"
+      [class.collapsed]="collapsed()"
       [preserveContent]="true"
       [selectedIndex]="index()"
       (selectedIndexChange)="selectTab($event)"
@@ -151,6 +160,13 @@ import { WorkspaceActions } from '../workspace-actions';
       align-items: center;
       flex: 0 0 auto;
       gap: 4px;
+      user-select: none;
+    }
+
+    /* Draggable only while floating — see InspectorShell — mirroring the
+       editor toolbar's own drag-region convention. */
+    .inspector-header.draggable {
+      cursor: move;
     }
 
     .spacer {
@@ -162,6 +178,15 @@ import { WorkspaceActions } from '../workspace-actions';
       flex-direction: column;
       flex: 1;
       min-height: 0;
+    }
+
+    /* Minimized: the header (and its window controls) stays visible so the
+       inspector can be expanded again; only the tab content collapses. */
+    .tabs.collapsed {
+      flex: 0 0 0;
+      height: 0;
+      overflow: hidden;
+      visibility: hidden;
     }
 
     /* Material sizes the body to its content by default; here it has to take the
@@ -212,9 +237,15 @@ export class InspectorPanel {
   protected readonly store = inject(ShaderStore);
   protected readonly workspace = inject(WorkspaceActions);
 
-  private readonly preferences = inject(Preferences);
+  private readonly layout = inject(SurfaceLayoutService);
 
-  protected readonly tab = computed<InspectorTab>(() => this.preferences.value().inspectorTab);
+  /** Hides the tab content while the surface is minimized; header stays put. */
+  readonly collapsed = input(false);
+  /** Drag-enabled while floating — see InspectorShell. */
+  readonly dragEnabled = input(false);
+  readonly dragStart = output<PointerEvent>();
+
+  protected readonly tab = computed<InspectorTab>(() => this.layout.inspectorTab());
   protected readonly index = computed(() => INSPECTOR_TABS.indexOf(this.tab()));
 
   /** How many of the four channels have an image bound. */
@@ -224,10 +255,19 @@ export class InspectorPanel {
 
   protected selectTab(index: number): void {
     const tab = INSPECTOR_TABS[index];
-    if (tab) this.preferences.patch({ inspectorTab: tab });
+    if (tab) this.layout.setInspectorTab(tab);
   }
 
   protected collapse(): void {
-    this.preferences.patch({ guiVisible: false });
+    this.layout.close(this.layout.inspectorId);
+  }
+
+  protected onHeaderPointerDown(event: PointerEvent): void {
+    if (!this.dragEnabled() || event.button !== 0) return;
+
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, a, input, [role="menuitem"]')) return;
+
+    this.dragStart.emit(event);
   }
 }

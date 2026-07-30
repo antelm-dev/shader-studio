@@ -37,6 +37,7 @@ describe('GlobalShortcuts', () => {
   const save = vi.fn();
   const createFile = vi.fn();
   const toggle = vi.fn();
+  const toggleInspectorOpen = vi.fn();
   const captureImage = vi.fn();
   const close = vi.fn();
   const cycle = vi.fn();
@@ -50,6 +51,7 @@ describe('GlobalShortcuts', () => {
     save.mockReset();
     createFile.mockReset();
     toggle.mockReset();
+    toggleInspectorOpen.mockReset();
     captureImage.mockReset();
     close.mockReset();
     cycle.mockReset();
@@ -91,7 +93,7 @@ describe('GlobalShortcuts', () => {
         },
         {
           provide: MenuCommands,
-          useValue: { toggle, captureImage },
+          useValue: { toggle, toggleInspectorOpen, captureImage },
         },
         {
           provide: WorkspaceActions,
@@ -181,9 +183,15 @@ describe('GlobalShortcuts', () => {
     document.body.appendChild(input);
     try {
       window.dispatchEvent(chordEvent('h', { target: input }));
-      expect(toggle).not.toHaveBeenCalled();
+      expect(toggleInspectorOpen).not.toHaveBeenCalled();
     } finally {
       input.remove();
     }
+  });
+
+  it('toggles the inspector through the layout-aware command on H', () => {
+    window.dispatchEvent(chordEvent('h'));
+    expect(toggleInspectorOpen).toHaveBeenCalledOnce();
+    expect(toggle).not.toHaveBeenCalled();
   });
 });

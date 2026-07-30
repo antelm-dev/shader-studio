@@ -51,7 +51,7 @@ export class GlobalShortcuts {
         this.preferences.patch({ paused: !this.preferences.value().paused });
         break;
       case 'h':
-        this.commands.toggle('guiVisible');
+        this.commands.toggleInspectorOpen();
         break;
       case 's':
         this.commands.captureImage();

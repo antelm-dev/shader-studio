@@ -73,6 +73,17 @@ export class MenuCommands {
     this.preferences.patch({ [key]: !this.preferences.value()[key] });
   }
 
+  /**
+   * The "show controls" affordance, wherever it appears (toolbar, title bar,
+   * H shortcut): reopens a closed inspector, restores a minimized one, or
+   * closes an otherwise-visible one. Routed through the layout service so it
+   * stays correct once the inspector can float — a plain preference flip
+   * would strand a minimized inspector "open" but invisible.
+   */
+  toggleInspectorOpen(): void {
+    this.layout.toggleInspectorOpen();
+  }
+
   importShader(mode: ImportMode): void {
     if (this.desktop.available) void this.workspace.importDesktop(mode);
     else this.filePicker?.(mode);

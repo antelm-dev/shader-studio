@@ -134,11 +134,10 @@ import { PreviewWindowControls } from './preview-window-controls';
 
       <mat-divider />
 
-      <button mat-menu-item type="button" (click)="commands.toggle('guiVisible')">
-        <mat-icon>{{ preferences.value().guiVisible ? 'visibility_off' : 'tune' }}</mat-icon>
+      <button mat-menu-item type="button" (click)="commands.toggleInspector()">
+        <mat-icon>{{ layout.inspectorOpen() ? 'visibility_off' : 'tune' }}</mat-icon>
         <span>{{
-          (preferences.value().guiVisible ? 'action.hideControls' : 'action.showControls')
-            | translate
+          (layout.inspectorOpen() ? 'action.hideControls' : 'action.showControls') | translate
         }}</span>
         <span class="hint">H</span>
       </button>

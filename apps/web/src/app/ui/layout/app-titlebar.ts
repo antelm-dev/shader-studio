@@ -16,6 +16,7 @@ import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { DocumentStatus } from '../editor/document-status';
 import { MenuCommands, type MenuCommand } from '../menu-commands';
+import { SurfaceLayoutService } from '../../surfaces';
 import { WorkspaceActions } from '../workspace-actions';
 
 @Component({
@@ -340,6 +341,7 @@ export class AppTitlebar {
   protected readonly status = inject(DocumentStatus);
   protected readonly i18n = inject(I18n);
   private readonly commands = inject(MenuCommands);
+  private readonly layout = inject(SurfaceLayoutService);
 
   protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
   protected readonly themeIcon = computed(() =>
@@ -375,11 +377,9 @@ export class AppTitlebar {
       id: 'toggle-controls',
       icon: () => 'tune',
       label: () =>
-        this.i18n.t(
-          this.preferences.value().guiVisible ? 'action.hideControls' : 'action.showControls',
-        ),
+        this.i18n.t(this.layout.inspectorOpen() ? 'action.hideControls' : 'action.showControls'),
       shortcut: 'H',
-      action: () => this.commands.toggle('guiVisible'),
+      action: () => this.layout.toggleInspectorOpen(),
     },
     this.commands.toggleEditor,
   ];

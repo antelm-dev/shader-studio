@@ -24,7 +24,6 @@
 .inspector,
 .inspector-rail,
 .browser-handle,
-.inspector-handle,
 .editor,
 .bottom-panel,
 .loading,
@@ -308,33 +307,11 @@ app-titlebar {
   grid-area: bottom-panel;
 }
 
+// InspectorShell owns its own positioning, chrome and resize handle — see
+// `inspector-shell.ts` — the same split as `.editor` below. This is only the
+// inspector's slot in the workspace grid.
 .inspector {
-  grid-area: inspector;
-  // Bound from preferences; this is the fallback for the first render.
-  width: 300px;
-  // The border is part of the width the user dragged to, not 2px on top of it —
-  // otherwise the rail renders wider than the number it persisted, and the
-  // separator sits beside its own border rather than on it.
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  margin: 12px;
-  // The rail itself never scrolls — the open tab does. See InspectorPanel.
-  overflow: hidden;
-  border-radius: var(--mat-sys-corner-small);
-  border: 1px solid var(--mat-sys-outline-variant);
-  background: color-mix(in srgb, var(--mat-sys-surface-container) 80%, transparent);
-  backdrop-filter: blur(18px);
-  box-shadow: var(--mat-sys-level2);
-
   --mat-chip-container-shape-radius: var(--mat-sys-corner-small);
-}
-
-// The separator sits in the gutter, straddling the rail's left border. `right`
-// is bound, because the gutter moves with the rail.
-.inspector-handle {
-  grid-area: inspector;
 }
 
 // The content box starts where the drawer ends, so the browser's separator is
@@ -396,15 +373,20 @@ app-titlebar {
   }
 
   // Stacked rather than side by side, so a width is no longer a thing you can
-  // drag — and the separators have nothing left to separate.
-  .inspector {
+  // drag — and the separators have nothing left to separate. Only the docked
+  // and minimized states are pinned into the stacked sheet here: floating and
+  // maximized inspectors already project as docked below `InspectorShell`'s
+  // own compact threshold (see `projectSurfaceFrame`), so by the time a
+  // screen is this narrow a floating inspector cannot be created, and any
+  // that survives from a wider layout still clamps to the viewport.
+  .inspector.docked,
+  .inspector.minimized {
     width: auto !important;
     max-height: 42dvh;
-    margin: 8px;
+    margin: 8px !important;
   }
 
-  .browser-handle,
-  .inspector-handle {
+  .browser-handle {
     display: none;
   }
 
