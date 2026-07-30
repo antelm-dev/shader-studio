@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.1.0](https://github.com/antelm-dev/shader-studio/compare/v1.0.0...v1.1.0) (2026-07-30)
+
+
+### Features
+
+* **inspector:** add contained floating inspector surface ([c798cec](https://github.com/antelm-dev/shader-studio/commit/c798cec8dd5d526916064e4b0271f2acd31dc0b6))
+* **inspector:** contained floating inspector surface ([7b9f623](https://github.com/antelm-dev/shader-studio/commit/7b9f62301e6dda3e82434a9ef164c7f04f422b55))
+* **panel:** integrate profiler into bottom panel and update inspector references ([20d0f24](https://github.com/antelm-dev/shader-studio/commit/20d0f241f91d60cb926490417045cd7546567cd9))
+* **rendering:** add dormant performance profiler telemetry ([a345b68](https://github.com/antelm-dev/shader-studio/commit/a345b688cf533429aa536c6d303abe74de731cf8))
+* **surfaces:** enable inspector float capability (phase 1) ([d135a07](https://github.com/antelm-dev/shader-studio/commit/d135a07f79ac32ff7ebbceab3896f3621e8b4efe))
+* **surfaces:** register the inspector in SurfaceLayoutService ([be3f403](https://github.com/antelm-dev/shader-studio/commit/be3f40368382fc4f74f97a5a522c57bca6d02aef))
+* **web:** add performance profiler ([2ff9598](https://github.com/antelm-dev/shader-studio/commit/2ff95981411655dc7c4c83e32d6cd28623b3ec91))
+* **web:** add profiler inspector tab and downscale advisory ([a75de09](https://github.com/antelm-dev/shader-studio/commit/a75de092ed0487275986b3b5c01d8400de0ac6a1))
+
+
+### Bug Fixes
+
+* **ci:** repair smoke selector, formatting, and MCP tarball timeout ([e9ef803](https://github.com/antelm-dev/shader-studio/commit/e9ef803a5224f3b206dbb8ccaa8be8002b8cca2b))
+* **renderer:** overflow in problems and output panels ([9b5069d](https://github.com/antelm-dev/shader-studio/commit/9b5069d77032db706a73b7cddd5d52e1347560dd))
+* **rendering:** cancel stale composer loads with a generation token ([6dbf7a6](https://github.com/antelm-dev/shader-studio/commit/6dbf7a6fb21f850f7ab51461a289f46074204cd9))
+* **rendering:** harden profiler query semantics and lifecycle ([57eff67](https://github.com/antelm-dev/shader-studio/commit/57eff670a2d33bdcf8fe661664d61a90536cdd6f))
+* **rendering:** keep compile IDs and memory estimates coherent ([40682ce](https://github.com/antelm-dev/shader-studio/commit/40682ce0675b0d1a3ff748d67fec364a8c5813aa))
+* **rendering:** read current bloom settings in continuation, not captured argument ([453adb4](https://github.com/antelm-dev/shader-studio/commit/453adb47f456d7f26c2955dc22f0225b32badc44))
+* **rendering:** reset pending queries and sync profiling idempotently ([319c54c](https://github.com/antelm-dev/shader-studio/commit/319c54c017d90bb288b2d26248ef22c8f00f95f8))
+* **rendering:** reset profiler for live workload changes ([ab521f9](https://github.com/antelm-dev/shader-studio/commit/ab521f90c66004fd5a471a00ce70274fc5d956c5))
+* **rendering:** reset profiler samples after context restore ([07241c1](https://github.com/antelm-dev/shader-studio/commit/07241c1024f1dcc0d5dd9de60ed32fd281698d90))
+* **web:** clear stale profiler UI and cover lifecycle paths ([e0b0af6](https://github.com/antelm-dev/shader-studio/commit/e0b0af610290bee872003f0d66b0951759b688fc))
+* **web:** contain profiler table overflow ([4b114ee](https://github.com/antelm-dev/shader-studio/commit/4b114ee5ab3bb67ec2b306a43614fe050ab25e76))
+* **web:** tighten profiler advisory and accessibility ([8f4306f](https://github.com/antelm-dev/shader-studio/commit/8f4306f94d1ee13e36e56a8ffe8f4ca1edfa6bee))
+
 ## 1.0.0 (2026-07-28)
 
 ### Features
