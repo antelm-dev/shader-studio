@@ -143,9 +143,7 @@ export class DesktopVersionDialog {
       case 'downloaded':
         return this.i18n.t('desktop.downloaded', { version: state.availableVersion ?? '' });
       case 'error':
-        return state.message
-          ? this.i18n.t('desktop.checkFailed', { error: state.message })
-          : this.i18n.t('desktop.checkFailedGeneric');
+        return this.i18n.t('desktop.checkFailedGeneric');
     }
   });
 

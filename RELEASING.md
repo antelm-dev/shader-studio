@@ -33,9 +33,10 @@ request from Conventional Commits:
 
 The first release starts at `1.0.0`. Merge the generated release pull request
 when the accumulated changes are ready. Release Please updates `CHANGELOG.md`
-and `package.json`, creates the `v<version>` tag and GitHub Release, and the
-Windows job attaches the NSIS installer, portable executable, blockmap, and
-`latest.yml`.
+and `package.json`, creates the `v<version>` tag and a draft GitHub Release.
+The Windows job attaches the NSIS installer, portable executable, blockmap, and
+`latest.yml`, then publishes the release. This prevents installed copies from
+seeing a release before its update manifest is available.
 
 Stable installers consume the `latest` update channel.
 

@@ -3,6 +3,7 @@
   "release-type": "node",
   "include-component-in-tag": false,
   "include-v-in-tag": true,
+  "draft": true,
   "packages": {
     ".": {
       "package-name": "shader-studio",

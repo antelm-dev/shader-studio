@@ -64,3 +64,10 @@ jobs:
         env:
           ELECTRON_BUILDER_PUBLISH: always
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false

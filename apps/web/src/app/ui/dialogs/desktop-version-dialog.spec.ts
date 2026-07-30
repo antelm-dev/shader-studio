@@ -185,7 +185,7 @@ describe('DesktopVersionDialog', () => {
     expect(action?.disabled).toBe(true);
   });
 
-  it('retries an update check from the error action', async () => {
+  it('retries an update check from the error action without exposing the raw updater error', async () => {
     updateState.set({
       status: 'error',
       currentVersion: '1.2.3',
@@ -194,7 +194,8 @@ describe('DesktopVersionDialog', () => {
     const fixture = await mount('en');
     const root = fixture.nativeElement as HTMLElement;
 
-    expect(root.textContent).toContain('Update check failed: network down');
+    expect(root.textContent).toContain('Update check failed.');
+    expect(root.textContent).not.toContain('network down');
     const retry = [...root.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('Retry'),
     );
