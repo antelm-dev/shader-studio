@@ -325,26 +325,10 @@
             (commit)="commitBrowserWidth($event)"
           />
           } @if (inspectorOpen()) {
-          <aside
-            class="inspector"
-            [style.width.px]="inspectorWidth()"
-            [attr.aria-label]="'workspace.inspector' | translate"
-          >
-            <app-inspector-panel />
-          </aside>
-
-          <app-resize-handle
-            class="inspector-handle"
-            grow="w"
-            [label]="'workspace.resizeInspector' | translate"
-            [style.right.px]="inspectorWidth() + 7"
-            [value]="inspectorWidth()"
-            [min]="panelLimits.inspectorWidth.min"
-            [max]="panelLimits.inspectorWidth.max"
-            [defaultValue]="defaultWidths.inspector"
-            (preview)="liveInspectorWidth.set($event)"
-            (commit)="commitInspectorWidth($event)"
-          />
+          <!-- Docked, floating, minimized or maximized — InspectorShell owns
+             its own positioning, dragging and resize the same way EditorShell
+             does; this is just the inspector's slot in the workspace grid. -->
+          <app-inspector-shell class="inspector" />
           } @else {
           <!-- Collapsing the inspector has to leave something behind to open it
              again, or the only way back is a keyboard shortcut and a menu item. -->
@@ -353,7 +337,7 @@
             class="inspector-rail"
             [matTooltip]="'workspace.showInspectorShortcut' | translate"
             [attr.aria-label]="'action.showInspector' | translate"
-            (click)="commands.toggle('guiVisible')"
+            (click)="layout.open(layout.inspectorId)"
           >
             <mat-icon>tune</mat-icon>
           </button>

@@ -39,7 +39,7 @@ import { BottomPanel } from './ui/bottom-panel/bottom-panel';
 import { AppTitlebar } from './ui/layout/app-titlebar';
 import { DocumentStatus } from './ui/editor/document-status';
 import { GlobalShortcuts } from './ui/layout/global-shortcuts';
-import { InspectorPanel } from './ui/inspector/inspector-panel';
+import { InspectorShell } from './ui/inspector/inspector-shell';
 import { MenuCommands, type MenuCommand } from './ui/menu-commands';
 import { isOutputWindow } from './output-mode';
 import { PreviewShell } from './ui/preview/preview-shell';
@@ -58,7 +58,7 @@ import { TranslatePipe } from './i18n/translate.pipe';
     AppTitlebar,
     BottomPanel,
     EditorShell,
-    InspectorPanel,
+    InspectorShell,
     TranslatePipe,
     MatButtonModule,
     MatDividerModule,
@@ -117,7 +117,7 @@ export class App {
     colorSchemeIcon(this.preferences.value().colorScheme),
   );
 
-  protected readonly inspectorOpen = computed(() => this.preferences.value().guiVisible);
+  protected readonly inspectorOpen = computed(() => this.layout.inspectorOpen());
 
   // --- Menus --------------------------------------------------------------
   // One section of the "More actions" menu each. The items that are not plain
@@ -128,11 +128,9 @@ export class App {
     id: 'toggle-inspector',
     icon: () => 'tune',
     label: () =>
-      this.i18n.t(
-        this.preferences.value().guiVisible ? 'action.hideInspector' : 'action.showInspector',
-      ),
+      this.i18n.t(this.inspectorOpen() ? 'action.hideInspector' : 'action.showInspector'),
     shortcut: 'H',
-    action: () => this.commands.toggle('guiVisible'),
+    action: () => this.layout.toggleInspectorOpen(),
   };
 
   private readonly captureImage: MenuCommand = {
@@ -231,13 +229,9 @@ export class App {
    * which is only written once the gesture ends — see `ResizeHandle`.
    */
   protected readonly liveBrowserWidth = signal<number | null>(null);
-  protected readonly liveInspectorWidth = signal<number | null>(null);
 
   protected readonly browserWidth = computed(
     () => this.liveBrowserWidth() ?? this.preferences.value().browserWidth,
-  );
-  protected readonly inspectorWidth = computed(
-    () => this.liveInspectorWidth() ?? this.preferences.value().inspectorWidth,
   );
 
   private readonly sidenavContainer = viewChild.required(MatSidenavContainer);
@@ -296,11 +290,6 @@ export class App {
   protected commitBrowserWidth(width: number): void {
     this.liveBrowserWidth.set(null);
     this.preferences.patch({ browserWidth: width });
-  }
-
-  protected commitInspectorWidth(width: number): void {
-    this.liveInspectorWidth.set(null);
-    this.preferences.patch({ inspectorWidth: width });
   }
 
   protected setColorScheme(colorScheme: ColorScheme): void {

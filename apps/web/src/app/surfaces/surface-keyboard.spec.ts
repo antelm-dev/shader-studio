@@ -37,6 +37,28 @@ describe('surface-keyboard', () => {
     expect(size).toBe(336);
   });
 
+  it('resizes the inspector docked-right free edge with ArrowLeft', () => {
+    const size = keyboardResizeDocked(
+      'inspector',
+      'right',
+      300,
+      { key: 'ArrowLeft', shiftKey: false },
+      { width: 1200, height: 800 },
+    );
+    expect(size).toBe(316);
+  });
+
+  it('resizes a floating inspector edge with the arrow keys', () => {
+    const rect = keyboardResizeFloating(
+      'inspector',
+      { x: 40, y: 40, width: 360, height: 300 },
+      'e',
+      { key: 'ArrowRight', shiftKey: false },
+      { width: 1200, height: 800 },
+    );
+    expect(rect?.width).toBe(376);
+  });
+
   it('returns null for non-arrow keys', () => {
     expect(
       keyboardResizeFloating('preview', { x: 0, y: 0, width: 400, height: 300 }, 'n', {

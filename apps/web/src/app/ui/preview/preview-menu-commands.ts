@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 
 import { I18n } from '../../i18n/i18n';
-import { Preferences, type ColorScheme, type WorkspacePreferences } from '../../prefs/preferences';
+import { Preferences, type ColorScheme } from '../../prefs/preferences';
 import { RendererHandle } from '../../rendering/renderer-handle';
 import { SurfaceLayoutService } from '../../surfaces/surface-layout';
 import { ShaderStore } from '../../workspace/shader-store';
@@ -14,10 +14,8 @@ export class PreviewMenuCommands {
   private readonly i18n = inject(I18n);
   private readonly layout = inject(SurfaceLayoutService);
 
-  toggle(key: 'guiVisible'): void {
-    this.preferences.patch({
-      [key]: !this.preferences.value()[key],
-    } as Partial<WorkspacePreferences>);
+  toggleInspector(): void {
+    this.layout.toggleInspectorOpen();
   }
 
   toggleEditor(): void {

@@ -88,9 +88,15 @@ describe('capability presets', () => {
   });
 
   it('keeps rail float disabled for MVP (coordinator decision)', () => {
-    expect(CAPABILITY_PRESETS.inspector.float).toBe(false);
     expect(CAPABILITY_PRESETS['shader-browser'].float).toBe(false);
     expect(CAPABILITY_PRESETS['bottom-panel'].float).toBe(false);
+  });
+
+  it('enables inspector float in phase 1 without widening its dock side', () => {
+    const caps = CAPABILITY_PRESETS.inspector;
+    expect(caps.float).toBe(true);
+    expect(caps.dock).toBe(true);
+    expect(caps.allowedDockSides).toEqual(['right']);
   });
 
   it('marks preview as singleton GPU host that cannot close or dock', () => {

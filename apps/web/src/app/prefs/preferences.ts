@@ -37,6 +37,7 @@ import {
 } from '@shader-studio/shared/preview-prefs';
 import {
   DEFAULT_EDITOR_GROUP_ID,
+  WELL_KNOWN_SURFACE_IDS,
   editorSurfaceId,
   migrateLayoutFromPreferences,
   type LayoutPreferences,
@@ -271,6 +272,18 @@ export class Preferences {
       );
       const editorOpen = editorSurface?.open ?? editorOpenLegacy;
 
+      // The inspector surface is the durable source once migrated — mirror it
+      // back onto the legacy fields so code that still reads `guiVisible` /
+      // `inspectorTab` directly (e.g. the profiler tab) sees the same state.
+      const inspectorSurface = surfacesLayout.surfaces.find(
+        (surface) => surface.id === WELL_KNOWN_SURFACE_IDS.inspector,
+      );
+      const resolvedGuiVisible = inspectorSurface?.open ?? guiVisible;
+      const resolvedInspectorTab =
+        inspectorSurface?.chrome.kind === 'inspector'
+          ? inspectorSurface.chrome.tab
+          : sanitizeInspectorTab(parsed.inspectorTab);
+
       return {
         language: sanitizeLanguage(parsed.language),
         lastShaderId:
@@ -281,10 +294,10 @@ export class Preferences {
             : DEFAULTS.shadertoyApiKey,
         browserOpen,
         editorOpen,
-        guiVisible,
+        guiVisible: resolvedGuiVisible,
         browserWidth,
         inspectorWidth,
-        inspectorTab: sanitizeInspectorTab(parsed.inspectorTab),
+        inspectorTab: resolvedInspectorTab,
         bottomPanelOpen,
         bottomPanelHeight,
         bottomPanelTab: sanitizeBottomPanelTab(parsed.bottomPanelTab),
