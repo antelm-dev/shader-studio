@@ -101,8 +101,20 @@ const bloomEffectSchema = z.object({
     threshold: z.number(),
   }),
 });
-/** Phase 1 has exactly one effect type; extend this union for the next one. */
-const postProcessingEffectSchema = z.discriminatedUnion('type', [bloomEffectSchema]);
+const vignetteEffectSchema = z.object({
+  type: z.literal('vignette'),
+  enabled: z.boolean(),
+  settings: z.object({
+    intensity: z.number(),
+    softness: z.number(),
+    roundness: z.number(),
+  }),
+});
+/** Phase 2 has two effect types; extend this union for the next one. */
+const postProcessingEffectSchema = z.discriminatedUnion('type', [
+  bloomEffectSchema,
+  vignetteEffectSchema,
+]);
 const renderSettingsSchema = z.object({
   postProcessing: z.object({
     enabled: z.boolean(),

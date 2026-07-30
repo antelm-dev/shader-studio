@@ -1,5 +1,6 @@
 import {
   DEFAULT_BLOOM,
+  DEFAULT_VIGNETTE,
   createBloomEffect,
   type BloomEffect,
   type BloomSettings,
@@ -9,6 +10,7 @@ import {
   type RenderSettings,
   type ShaderControl,
   type ShaderParams,
+  type VignetteSettings,
 } from '../model';
 import { LIMITS } from './limits';
 import { isFiniteNumber, isRecord, validateName, validateOptionalText } from './primitives';
@@ -244,15 +246,26 @@ function clampBloomSettings(input: unknown): BloomSettings {
   };
 }
 
+function clampVignetteSettings(input: unknown): VignetteSettings {
+  const record = isRecord(input) ? input : {};
+  return {
+    intensity: clamp(record['intensity'], 0, 1, DEFAULT_VIGNETTE.intensity),
+    softness: clamp(record['softness'], 0, 1, DEFAULT_VIGNETTE.softness),
+    roundness: clamp(record['roundness'], 0, 1, DEFAULT_VIGNETTE.roundness),
+  };
+}
+
 /** One entry of a canonical `postProcessing.effects` array. Unknown `type`s are discarded. */
 function validateEffect(input: unknown): PostProcessingEffect | null {
   if (!isRecord(input)) return null;
-  if (input['type'] !== 'bloom') return null;
-  return {
-    type: 'bloom',
-    enabled: typeof input['enabled'] === 'boolean' ? input['enabled'] : false,
-    settings: clampBloomSettings(input['settings']),
-  };
+  const enabled = typeof input['enabled'] === 'boolean' ? input['enabled'] : false;
+  if (input['type'] === 'bloom') {
+    return { type: 'bloom', enabled, settings: clampBloomSettings(input['settings']) };
+  }
+  if (input['type'] === 'vignette') {
+    return { type: 'vignette', enabled, settings: clampVignetteSettings(input['settings']) };
+  }
+  return null;
 }
 
 /**
