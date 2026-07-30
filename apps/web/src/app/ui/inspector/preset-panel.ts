@@ -35,7 +35,7 @@ import { WorkspaceActions } from '../workspace-actions';
             [matContextMenuTriggerData]="{ preset }"
           >
             @if (preset.render) {
-              <mat-icon matChipAvatar aria-hidden="true">blur_on</mat-icon>
+              <mat-icon matChipAvatar aria-hidden="true">tune</mat-icon>
             }
             {{ preset.name }}
           </mat-chip-option>

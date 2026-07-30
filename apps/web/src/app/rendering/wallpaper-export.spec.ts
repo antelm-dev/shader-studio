@@ -76,7 +76,7 @@ describe('Wallpaper Engine HTML export', () => {
       controls: [{ key: 'speed_rate', type: 'number', default: 1, min: 0, max: 4 }],
       params: { speed_rate: 2.5 },
       channels,
-      bloomEnabled: false,
+      postProcessingActive: false,
     });
     const html = await result.document.text();
     expect(result.filename).toBe('Neon-Rain-wallpaper-engine.html');
@@ -101,18 +101,18 @@ describe('Wallpaper Engine HTML export', () => {
     expect(() => new Function(WALLPAPER_RUNTIME)).not.toThrow();
   });
 
-  it('reports bloom as an explicit compatibility warning', async () => {
+  it('reports an active post-processing chain as one generic compatibility warning', async () => {
     const result = buildWallpaperDocument({
-      name: 'Bloom',
+      name: 'Glow',
       project: project(),
       controls: [],
       params: {},
       channels,
-      bloomEnabled: true,
+      postProcessingActive: true,
     });
 
     expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]).toContain('Bloom is not included');
+    expect(result.warnings[0]).toContain('Post-processing is not included');
   });
 
   it('ships a self-contained runtime with Wallpaper Engine property and multipass support', () => {

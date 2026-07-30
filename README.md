@@ -35,7 +35,8 @@ last valid version running and places compiler diagnostics in the editor.
 - **Wallpaper Engine HTML** — export the current shader as one self-contained,
   live WebGL document and drag it directly into Wallpaper Engine.
 - **Interactive previews** — pointer velocity, click ripples, pause, screenshots,
-  bloom, render scaling, and texture inputs are built in.
+  a configurable post-processing chain (Bloom, Vignette), render scaling, and
+  texture inputs are built in.
 - **Web and desktop** — run the SSR web app on your own machine or package the
   Electron desktop app for Windows.
 - **MCP server** — let Claude Code, Codex, or Cursor drive a running Shader
@@ -262,14 +263,26 @@ Typing offers snippets for the things you would otherwise be looking up: `main`,
 `uv`, `ripple` (the `u_clickData` loop), `channel`, `palette`, `hash21`, `noise`,
 `fbm`, `rot2` and `uniform`.
 
+### Post-processing
+
+The **Effects Rack**, above the parameter controls in the Controls tab, is the
+configurable chain applied after the shader's own Image pass (never to Buffer
+A-D): **Bloom** and **Vignette** today, at most one instance of each. A master
+switch bypasses the whole chain without touching any effect's own settings;
+each effect has its own enable toggle, a reset to defaults, and remove/add.
+Reordering (drag, or the move-up/move-down buttons) changes the order the
+effects are actually applied in — order is part of the chain, not just the
+rack's display. Every change to the rack is a draft edit like any parameter:
+it marks the shader unsaved and is undone by discarding the draft.
+
 ### Presets
 
 A preset captures the live parameter values under a name. Ticking **Also capture
-the render settings** when saving stores the shader's bloom alongside them, and
-applying that preset brings it back — which, since bloom belongs to the shader
-rather than to the knobs, leaves the document with unsaved changes. Presets
-saved without it never touch bloom. The ones that carry it are marked with a
-bloom icon on their chip.
+the render settings** when saving stores the shader's post-processing chain
+alongside them, and applying that preset brings it back — which, since the
+chain belongs to the shader rather than to the knobs, leaves the document with
+unsaved changes. Presets saved without it never touch the chain. The ones that
+carry it are marked with an icon on their chip.
 
 On desktop, **More actions → Open output window** opens a clean, independently
 resizable render surface. It follows the active draft, live parameters, pause
@@ -444,10 +457,21 @@ shader changes its display name only; the id, and therefore the path, is stable.
   "updatedAt": "2026-07-12T00:00:00.000Z",
   "controls": [/* see below */],
   "render": {
-    "bloom": { "enabled": true, "strength": 0.55, "radius": 0.55, "threshold": 0.65 }
+    "postProcessing": {
+      "enabled": true,
+      "effects": [
+        { "type": "bloom", "enabled": true, "settings": { "strength": 0.55, "radius": 0.55, "threshold": 0.65 } },
+        { "type": "vignette", "enabled": false, "settings": { "intensity": 0.4, "softness": 0.5, "roundness": 1 } }
+      ]
+    }
   }
 }
 ```
+
+`postProcessing.effects` is ordered — that order is what the renderer applies
+the chain in, not just how the rack displays it. Older `render` shapes,
+including a bare `{ "bloom": {...} }` (pre-chain) record, still import; see
+[Import and export](#import-and-export).
 
 ### `presets.json`
 
@@ -460,7 +484,12 @@ shader changes its display name only; the id, and therefore the path, is stable.
       "createdAt": "2026-07-12T00:00:00.000Z",
       "values": { "timeScale": 1.4, "colorLine": "#ff7a3d" },
       "render": {
-        "bloom": { "enabled": true, "strength": 1.2, "radius": 0.4, "threshold": 0.7 }
+        "postProcessing": {
+          "enabled": true,
+          "effects": [
+            { "type": "bloom", "enabled": true, "settings": { "strength": 1.2, "radius": 0.4, "threshold": 0.7 } }
+          ]
+        }
       }
     }
   ]
@@ -468,10 +497,10 @@ shader changes its display name only; the id, and therefore the path, is stable.
 ```
 
 `render` is optional and usually absent: a preset without it restores the values
-and leaves the shader's own bloom alone. `values` are projected onto the current
-control schema when applied — anything the schema no longer declares is dropped,
-and a number outside a narrowed range is clamped rather than discarded, so a
-preset outlives the edits made to the shader underneath it.
+and leaves the shader's own post-processing chain alone. `values` are projected
+onto the current control schema when applied — anything the schema no longer
+declares is dropped, and a number outside a narrowed range is clamped rather
+than discarded, so a preset outlives the edits made to the shader underneath it.
 
 ---
 
@@ -569,7 +598,7 @@ Everything needed to reproduce a shader elsewhere is in it: the whole project
 
 ```json
 {
-  "format": "shader-studio/v2",
+  "format": "shader-studio/v3",
   "kind": "shader",
   "exportedAt": "2026-07-12T12:00:00.000Z",
   "shader": {
@@ -578,7 +607,7 @@ Everything needed to reproduce a shader elsewhere is in it: the whole project
     "description": "...",
     "author": "Shader Studio",
     "controls": [/* the schema */],
-    "render": { "bloom": {/* ... */} },
+    "render": { "postProcessing": { "enabled": true, "effects": [/* see meta.json above */] } },
     "fragment": "precision highp float; ...",
     "vertex": "varying vec2 vUv; ...",
     "project": {
@@ -606,10 +635,13 @@ two-string shape.
 `GET /api/export` returns the same thing with `"kind": "collection"` and a
 `"shaders": [ ... ]` array of those payloads. Import accepts either kind.
 
-**`shader-studio/v1` bundles still import.** They predate `project` entirely; on
-import, a project is synthesized from `fragment`/`vertex` the same way a shader
-that predates `project.json` on disk does — one Image pass, an empty Common pass,
-and the four `iChannel`s bound exactly as the old single-pass engine bound them.
+**`shader-studio/v1` and `v2` bundles still import.** `v1` predates `project`
+entirely; on import, a project is synthesized from `fragment`/`vertex` the same
+way a shader that predates `project.json` on disk does — one Image pass, an
+empty Common pass, and the four `iChannel`s bound exactly as the old
+single-pass engine bound them. `v2` has `project` but predates the
+post-processing chain: its bare `{ "bloom": {...} }` `render` is migrated into
+a single-effect chain the same way a `render` missing entirely is filled in.
 
 **Import modes.** `rename` (the default) never destroys anything: a shader whose id
 already exists is given a fresh, suffixed one. `overwrite` replaces the shader
@@ -630,9 +662,10 @@ contains its WebGL runtime, composed Image and buffer passes, current parameter
 values, and base64-embedded channel textures; it has no CDN or network dependency.
 
 Time, resolution, pointer velocity, click ripples, texture sampling, fixed/scaled
-buffer resolutions, and multipass feedback are supported. Bloom post-processing
-is not currently reproduced by the standalone runtime, and the export reports a
-warning when the source project has bloom enabled.
+buffer resolutions, and multipass feedback are supported. The post-processing
+chain (Bloom, Vignette) is not currently reproduced by the standalone runtime,
+and the export reports one generic compatibility warning whenever the source
+shader has any post-processing effect enabled.
 
 Shader controls are exported with stable Wallpaper Engine property keys. Their
 current values work immediately. To expose a control in Wallpaper Engine's user
@@ -771,9 +804,10 @@ pnpm test
 - **No auth, no multi-user.** The web API uses PostgreSQL or SQLite and assumes a
   single trusted user. It is a studio, not a public service; expose it only
   behind an authenticated proxy or private access layer.
-- **Bloom is the only built-in post effect.** A preset can optionally capture
-  the complete render settings, including bloom, but there is no configurable
-  post-processing chain yet.
+- **Bloom and Vignette are the only built-in post effects**, at most one
+  instance of each. Tone mapping, color grading, chromatic aberration, FXAA
+  and LUTs are not implemented. A preset can optionally capture the complete
+  render settings, including the chain.
 - **Monaco's stylesheet is global** (~88 kB gzipped), not lazy: the CSS its ESM
   modules import lands in a chunk nothing links, so the editor comes out
   structurally unstyled if you rely on it. The editor's _code_ is still lazy.

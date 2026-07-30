@@ -15,7 +15,7 @@ import type { Controller } from 'lil-gui';
 import { Preferences } from '../../prefs/preferences';
 import { ShaderStore } from '../../workspace/shader-store';
 import { RendererHandle } from '../../rendering/renderer-handle';
-import { getBloomEffect, withBloomEffect, type ShaderControl } from '@shader-studio/shared/model';
+import type { ShaderControl } from '@shader-studio/shared/model';
 
 /**
  * The parameter panel, generated entirely from the shader's control schema.
@@ -177,7 +177,6 @@ export class GuiPanel {
       });
     }
 
-    this.addRenderFolder(gui);
     this.addSystemFolder(gui);
   }
 
@@ -197,30 +196,6 @@ export class GuiPanel {
         // arriving from disk is only as trustworthy as the validator.
         throw new Error(`Unsupported control type: ${JSON.stringify(control)}`);
     }
-  }
-
-  /**
-   * Bloom belongs to the shader, so it is a draft edit rather than a param.
-   * Reads and writes the Bloom entry of the canonical `postProcessing` chain —
-   * this folder is the chain's only UI in Phase 1, there is no rack yet.
-   */
-  private addRenderFolder(gui: GUI): void {
-    const render = this.store.draft()?.render;
-    if (!render) return;
-
-    const effect = getBloomEffect(render);
-    const bloom = { enabled: effect.enabled, ...effect.settings };
-    // Re-reads the draft at apply time rather than closing over `render`, so a
-    // change elsewhere in the chain while this folder is open is not clobbered.
-    const apply = (): void =>
-      this.store.setRender(withBloomEffect(this.store.draft()?.render ?? render, { ...bloom }));
-
-    const folder = gui.addFolder('Bloom');
-    folder.add(bloom, 'enabled').name('Enabled').onChange(apply);
-    folder.add(bloom, 'strength', 0, 2).name('Strength').onChange(apply);
-    folder.add(bloom, 'radius', 0, 1).name('Radius').onChange(apply);
-    folder.add(bloom, 'threshold', 0, 1).name('Threshold').onChange(apply);
-    folder.close();
   }
 
   private addSystemFolder(gui: GUI): void {

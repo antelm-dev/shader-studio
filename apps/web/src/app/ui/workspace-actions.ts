@@ -2,7 +2,11 @@ import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 
-import { getBloomEffect, type ImportMode, type ShaderBundle } from '@shader-studio/shared/model';
+import {
+  hasActivePostProcessing,
+  type ImportMode,
+  type ShaderBundle,
+} from '@shader-studio/shared/model';
 import { composePass } from '@shader-studio/shared/pass-source';
 import { imagePass } from '@shader-studio/shared/project';
 import { DesktopPlatform } from '../desktop/desktop-platform';
@@ -513,7 +517,7 @@ export class WorkspaceActions {
         controls: this.store.controls(),
         params: this.store.params(),
         channels: bundle.shader.channels,
-        bloomEnabled: getBloomEffect(draft.render).enabled,
+        postProcessingActive: hasActivePostProcessing(draft.render),
       });
 
       if (this.desktop.available) {
