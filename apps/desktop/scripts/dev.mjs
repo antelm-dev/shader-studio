@@ -1,27 +1,50 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { get } from 'node:http';
 
 import { createLogger } from './_lib/logger.mjs';
 
-const commands = [
-  {
+const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+const devServerUrl = 'http://localhost:4201';
+const commands = {
+  angular: {
     name: 'angular',
-    entry: process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+    entry: pnpm,
     args: ['--filter', '@shader-studio/web', 'dev:desktop'],
     stdin: 'ignore',
   },
-  {
+  rollup: {
     name: 'rollup',
-    entry: process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+    entry: pnpm,
     args: ['exec', 'rollup', '-c', '--environment', 'NODE_ENV:development', '--watch'],
     stdin: 'inherit',
   },
-];
+};
 
 const children = new Map();
 let stopping = false;
 let exitCode = 0;
 
-for (const command of commands) {
+start(commands.angular);
+void startElectronAfterDevServerIsReady();
+
+async function startElectronAfterDevServerIsReady() {
+  const log = createLogger('angular');
+  log.info(`Waiting for ${devServerUrl}`);
+
+  try {
+    await waitForServer(devServerUrl);
+  } catch (error) {
+    if (!stopping) {
+      log.error('Development server did not become ready', error);
+      stop(1);
+    }
+    return;
+  }
+
+  if (!stopping) start(commands.rollup);
+}
+
+function start(command) {
   const log = createLogger(command.name);
   log.info(command.args.join(' '));
 
@@ -48,6 +71,36 @@ for (const command of commands) {
     }
 
     finishWhenStopped();
+  });
+}
+
+function waitForServer(url, timeoutMs = 120_000, retryMs = 250) {
+  const deadline = Date.now() + timeoutMs;
+
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (stopping) {
+        reject(new Error('Development launch was stopped'));
+        return;
+      }
+      if (Date.now() >= deadline) {
+        reject(new Error(`Timed out waiting for ${url}`));
+        return;
+      }
+
+      const request = get(url, (response) => {
+        response.resume();
+        if (response.statusCode && response.statusCode >= 200 && response.statusCode < 400) {
+          resolve();
+        } else {
+          setTimeout(check, retryMs);
+        }
+      });
+      request.setTimeout(1_000, () => request.destroy());
+      request.once('error', () => setTimeout(check, retryMs));
+    };
+
+    check();
   });
 }
 

@@ -41,8 +41,8 @@ importers:
         specifier: workspace:*
         version: link:../../libs/shared
       electron-ipc-module:
-        specifier: github:antelm-dev/electron-ipc-module#d9539352d3872c9d1924fbb370edcd2072225b61
-        version: https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/d9539352d3872c9d1924fbb370edcd2072225b61(electron@40.10.6)
+        specifier: ^0.2.0
+        version: 0.2.0(electron@40.10.6)
       electron-updater:
         specifier: 6.8.9
         version: 6.8.9
@@ -5045,9 +5045,8 @@ packages:
     engines: {node: '>=14.0.0'}
     hasBin: true
 
-  electron-ipc-module@https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/d9539352d3872c9d1924fbb370edcd2072225b61:
-    resolution: {tarball: https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/d9539352d3872c9d1924fbb370edcd2072225b61}
-    version: 0.1.0
+  electron-ipc-module@0.2.0:
+    resolution: {integrity: sha512-Wfl7P2zbjhrqTsO16pxdBQ4nZdjBGBK2yyMpNvD5Q0nTTU9wJvKzQHP66oSDzqtZWVWKyqXU6YCmibAL/qHXeA==}
     engines: {node: 20 || >=22}
     hasBin: true
     peerDependencies:
@@ -13766,7 +13765,7 @@ snapshots:
       - electron-builder-squirrel-windows
       - supports-color
 
-  electron-ipc-module@https://codeload.github.com/antelm-dev/electron-ipc-module/tar.gz/d9539352d3872c9d1924fbb370edcd2072225b61(electron@40.10.6):
+  electron-ipc-module@0.2.0(electron@40.10.6):
     dependencies:
       electron: 40.10.6
       glob: 11.1.0
