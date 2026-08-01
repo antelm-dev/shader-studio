@@ -689,6 +689,9 @@ HTML contains the key mapping in `window.__SHADER_STUDIO_WALLPAPER__.controls`.
 
 ## API
 
+Interactive docs are served by the running app at `/api/docs` (OpenAPI JSON at
+`/api/docs-json`).
+
 All errors are `{ "error": { "code", "message", "details"? } }`.
 `400` invalid · `404` not found · `409` conflict.
 

@@ -1,4 +1,4 @@
-import { ArgumentsHost, Catch, HttpException, type ExceptionFilter } from '@nestjs/common';
+import { ArgumentsHost, Catch, HttpException, Logger, type ExceptionFilter } from '@nestjs/common';
 import type { Response } from 'express';
 
 import { StorageError } from '@shader-studio/backend/library';
@@ -6,12 +6,16 @@ import type { ApiErrorBody } from '@shader-studio/shared/model';
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger('api');
+
   catch(error: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
 
     if (response.headersSent) return;
 
     if (error instanceof StorageError) {
+      // The access log already carries the status; this adds the reason behind it.
+      this.logger.debug(`${error.code}: ${error.message}`);
       const body: ApiErrorBody = {
         error: {
           code: error.code,
@@ -47,7 +51,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    console.error('[api] unhandled error', error);
+    this.logger.error('unhandled error', error instanceof Error ? error.stack : String(error));
     const body: ApiErrorBody = {
       error: { code: 'internal', message: 'Internal server error' },
     };

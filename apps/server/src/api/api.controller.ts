@@ -6,6 +6,7 @@ import {
   Header,
   HttpCode,
   Inject,
+  Logger,
   Param,
   Post,
   Put,
@@ -13,6 +14,7 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
+import { ApiBody, ApiConsumes, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
 import { I18N_LOCALES, loadI18nCatalog } from '@shader-studio/backend/i18n';
@@ -28,13 +30,23 @@ import {
 } from '@shader-studio/shared/validate';
 
 import { SHADER_LIBRARY } from './api.constants';
+import { ApiErrors, IMAGE_BODY_SCHEMA, SHADER_BODY_SCHEMA } from './swagger';
 
 type JsonBody = Record<string, unknown>;
 
+@ApiTags('shaders')
 @Controller()
 export class ApiController {
+  private readonly logger = new Logger('api');
+
   constructor(@Inject(SHADER_LIBRARY) private readonly storage: ShaderLibrary) {}
 
+  @ApiTags('i18n')
+  @ApiOperation({
+    summary: 'Read a translation catalog',
+    description: 'Returns `{ locale, catalog }` for a supported locale.',
+  })
+  @ApiErrors(400, 500)
   @Get('i18n/:locale')
   async i18n(@Param('locale') locale: string): Promise<unknown> {
     if (!(I18N_LOCALES as readonly string[]).includes(locale)) {
@@ -50,11 +62,18 @@ export class ApiController {
     }
   }
 
+  @ApiOperation({ summary: 'List every shader', description: 'Summaries only, not full sources.' })
   @Get('shaders')
   async list(): Promise<unknown> {
     return { shaders: await this.storage.list() };
   }
 
+  @ApiOperation({
+    summary: 'Create a shader',
+    description: 'The id is slugged from the name; defaults fill in anything omitted.',
+  })
+  @ApiBody({ schema: SHADER_BODY_SCHEMA })
+  @ApiErrors(400)
   @Post('shaders')
   async create(@Body() body: JsonBody | undefined, @Res() response: Response): Promise<void> {
     const input = body ?? {};
@@ -67,14 +86,26 @@ export class ApiController {
       vertex: input['vertex'],
       ...('project' in input ? { project: input['project'] } : {}),
     });
+    // The generated id is not in the request URL, so the access log cannot show it.
+    this.logger.log(`created shader "${created.id}"`);
     response.status(201).json({ shader: created });
   }
 
+  @ApiOperation({ summary: 'Read one shader', description: 'Full record, including presets.' })
+  @ApiErrors(404)
   @Get('shaders/:id')
   async read(@Param('id') id: string): Promise<unknown> {
     return { shader: await this.storage.read(id) };
   }
 
+  @ApiOperation({
+    summary: 'Update a shader',
+    description:
+      'Only the fields present in the body are written. Pass `expectedRevision` to be ' +
+      'told with a 409 when someone else has saved since you read.',
+  })
+  @ApiBody({ schema: SHADER_BODY_SCHEMA })
+  @ApiErrors(400, 404, 409)
   @Put('shaders/:id')
   async update(@Param('id') id: string, @Body() body: JsonBody | undefined): Promise<unknown> {
     const input = body ?? {};
@@ -92,12 +123,27 @@ export class ApiController {
     return { shader: updated };
   }
 
+  @ApiOperation({
+    summary: 'Delete a shader',
+    description: 'Removes the shader with its presets, textures and thumbnail.',
+  })
+  @ApiErrors(404)
   @Delete('shaders/:id')
   @HttpCode(204)
   async remove(@Param('id') id: string): Promise<void> {
     await this.storage.remove(id);
+    this.logger.log(`deleted shader "${id}"`);
   }
 
+  @ApiOperation({
+    summary: 'Duplicate a shader',
+    description: 'Copies sources, presets and textures under a new id.',
+  })
+  @ApiBody({
+    required: false,
+    schema: { type: 'object', properties: { name: { type: 'string' } } },
+  })
+  @ApiErrors(400, 404)
   @Post('shaders/:id/duplicate')
   async duplicate(
     @Param('id') id: string,
@@ -105,14 +151,35 @@ export class ApiController {
     @Res() response: Response,
   ): Promise<void> {
     const copy = await this.storage.duplicate(id, body?.['name']);
+    this.logger.log(`duplicated shader "${id}" to "${copy.id}"`);
     response.status(201).json({ shader: copy });
   }
 
+  @ApiTags('presets')
+  @ApiOperation({ summary: "List a shader's presets" })
+  @ApiErrors(404)
   @Get('shaders/:id/presets')
   async presets(@Param('id') id: string): Promise<unknown> {
     return { presets: (await this.storage.read(id)).presets };
   }
 
+  @ApiTags('presets')
+  @ApiOperation({
+    summary: 'Save a preset',
+    description: 'Stores a named snapshot of the control values and render settings.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['name', 'values'],
+      properties: {
+        name: { type: 'string' },
+        values: { type: 'object', description: 'Control values, keyed by uniform name.' },
+        render: { type: 'object', description: 'Optional render settings to store with it.' },
+      },
+    },
+  })
+  @ApiErrors(400, 404)
   @Post('shaders/:id/presets')
   async savePreset(
     @Param('id') id: string,
@@ -128,12 +195,23 @@ export class ApiController {
     response.status(201).json({ preset });
   }
 
+  @ApiTags('presets')
+  @ApiOperation({ summary: 'Delete a preset' })
+  @ApiErrors(404)
   @Delete('shaders/:id/presets/:presetId')
   @HttpCode(204)
   async deletePreset(@Param('id') id: string, @Param('presetId') presetId: string): Promise<void> {
     await this.storage.deletePreset(id, presetId);
   }
 
+  @ApiTags('textures')
+  @ApiOperation({
+    summary: 'Upload a channel texture',
+    description: 'Raw image bytes for channel 0-3, with the pixel size as query parameters.',
+  })
+  @ApiConsumes('image/png', 'image/jpeg', 'image/webp', 'image/gif')
+  @ApiBody({ schema: IMAGE_BODY_SCHEMA })
+  @ApiErrors(400, 404)
   @Put('shaders/:id/textures/:channel')
   async setTexture(
     @Param('id') id: string,
@@ -155,6 +233,9 @@ export class ApiController {
     return { shader };
   }
 
+  @ApiTags('textures')
+  @ApiOperation({ summary: 'Clear a channel texture' })
+  @ApiErrors(400, 404)
   @Delete('shaders/:id/textures/:channel')
   async clearTexture(
     @Param('id') id: string,
@@ -163,6 +244,13 @@ export class ApiController {
     return { shader: await this.storage.clearTexture(id, channel(rawChannel)) };
   }
 
+  @ApiTags('textures')
+  @ApiOperation({
+    summary: 'Download a channel texture',
+    description: 'The image bytes, or 404 when the channel is empty.',
+  })
+  @ApiProduces('image/png', 'image/jpeg', 'image/webp', 'image/gif')
+  @ApiErrors(400, 404)
   @Get('shaders/:id/textures/:channel')
   async texture(
     @Param('id') id: string,
@@ -180,6 +268,11 @@ export class ApiController {
       .send(Buffer.from(texture.bytes));
   }
 
+  @ApiTags('textures')
+  @ApiOperation({ summary: 'Upload the shader thumbnail' })
+  @ApiConsumes('image/png', 'image/jpeg', 'image/webp')
+  @ApiBody({ schema: IMAGE_BODY_SCHEMA })
+  @ApiErrors(400, 404)
   @Put('shaders/:id/thumbnail')
   async setThumbnail(@Param('id') id: string, @Req() request: Request): Promise<unknown> {
     const body = request.body as unknown;
@@ -194,6 +287,10 @@ export class ApiController {
     };
   }
 
+  @ApiTags('textures')
+  @ApiOperation({ summary: 'Download the shader thumbnail' })
+  @ApiProduces('image/png', 'image/jpeg', 'image/webp')
+  @ApiErrors(404)
   @Get('shaders/:id/thumbnail')
   async thumbnail(@Param('id') id: string, @Res() response: Response): Promise<void> {
     const thumbnail = await this.storage.readThumbnail(id);
@@ -207,6 +304,12 @@ export class ApiController {
       .send(Buffer.from(thumbnail.bytes));
   }
 
+  @ApiTags('transfer')
+  @ApiOperation({
+    summary: 'Export one shader',
+    description: 'A `shader-studio/v3` bundle, served as a file attachment.',
+  })
+  @ApiErrors(404)
   @Get('shaders/:id/export')
   async exportShader(@Param('id') id: string, @Res() response: Response): Promise<void> {
     const payload = await this.storage.exportOne(id);
@@ -215,12 +318,31 @@ export class ApiController {
       .json(buildShaderBundle(payload));
   }
 
+  @ApiTags('transfer')
+  @ApiOperation({ summary: 'Export the whole library', description: 'A collection bundle.' })
   @Get('export')
   @Header('Content-Disposition', 'attachment; filename="shader-studio-collection.shader.json"')
   async exportAll(): Promise<unknown> {
     return buildCollectionBundle(await this.storage.exportAll());
   }
 
+  @ApiTags('transfer')
+  @ApiOperation({
+    summary: 'Import a bundle',
+    description:
+      'Accepts a shader or collection bundle, either wrapped as `{ bundle }` or posted bare. ' +
+      '`rename` keeps existing shaders and imports alongside them; `overwrite` replaces on id.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        bundle: { type: 'object', description: 'The bundle; omit to post it at the top level.' },
+        mode: { type: 'string', enum: ['rename', 'overwrite'], default: 'rename' },
+      },
+    },
+  })
+  @ApiErrors(400)
   @Post('import')
   async import(@Body() body: JsonBody | undefined, @Res() response: Response): Promise<void> {
     const input = body ?? {};
@@ -233,9 +355,32 @@ export class ApiController {
       throw new StorageError('invalid', 'The bundle could not be imported', parsed.errors);
     }
 
-    response.status(201).json(await this.storage.importPayloads(parsed.value, mode.value));
+    const result = await this.storage.importPayloads(parsed.value, mode.value);
+    const replaced = result.imported.filter((entry) => entry.replaced).length;
+    this.logger.log(
+      `imported ${result.imported.length} shader(s) in "${mode.value}" mode (${replaced} replaced)`,
+    );
+    response.status(201).json(result);
   }
 
+  @ApiTags('transfer')
+  @ApiOperation({
+    summary: 'Convert a Shadertoy shader',
+    description:
+      'Fetches the shader from the Shadertoy API with the caller’s own key and returns it as a ' +
+      'bundle plus any conversion warnings. Nothing is stored — POST the bundle to /import to keep it.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['idOrUrl', 'apiKey'],
+      properties: {
+        idOrUrl: { type: 'string', example: 'https://www.shadertoy.com/view/Ms2SD1' },
+        apiKey: { type: 'string', description: 'Your Shadertoy API key. Never stored.' },
+      },
+    },
+  })
+  @ApiErrors(400, 500)
   @Post('import/shadertoy')
   async importShadertoy(
     @Body() body: JsonBody | undefined,
@@ -250,7 +395,12 @@ export class ApiController {
       const { importShadertoyShader } = await import('@shader-studio/shared/shadertoy-api');
       result = await importShadertoyShader(idOrUrl, apiKey, { fetch });
     } catch (error) {
+      this.logger.warn(`shadertoy import of "${idOrUrl}" failed: ${String(error)}`);
       throw new StorageError('io', error instanceof Error ? error.message : String(error));
+    }
+
+    for (const warning of result.warnings) {
+      this.logger.warn(`shadertoy import of "${idOrUrl}": ${warning}`);
     }
 
     response

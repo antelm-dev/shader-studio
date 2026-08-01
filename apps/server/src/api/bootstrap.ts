@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter, type NestExpressApplication } from '@nestjs/platform-express';
 import express, { type Application, type NextFunction, type Request, type Response } from 'express';
@@ -7,6 +8,8 @@ import type { ShaderLibrary } from '@shader-studio/backend/library';
 import { ApiExceptionFilter } from './api-exception.filter';
 import { BODY_LIMIT, TEXTURE_BODY_LIMIT, THUMBNAIL_BODY_LIMIT } from './api.constants';
 import { ApiModule } from './api.module';
+import { logLevels } from './logger';
+import { setupSwagger } from './swagger';
 
 export interface NestApi {
   handler: Application;
@@ -14,6 +17,7 @@ export interface NestApi {
 }
 
 export async function createNestApi(library: ShaderLibrary): Promise<NestApi> {
+  const logger = new Logger('api');
   const handler = express();
 
   handler.use(express.json({ limit: BODY_LIMIT }));
@@ -29,10 +33,12 @@ export async function createNestApi(library: ShaderLibrary): Promise<NestApi> {
   const app = await NestFactory.create<NestExpressApplication>(
     ApiModule.forLibrary(library),
     new ExpressAdapter(handler),
-    { bodyParser: false },
+    { bodyParser: false, logger: logLevels() },
   );
   app.useGlobalFilters(new ApiExceptionFilter());
+  setupSwagger(app);
   await app.init();
+  logger.log('shader API ready — docs on /api/docs');
 
   // Body-parser errors happen before a Nest route is entered, so they cannot
   // reach the Nest exception filter. Keep their public envelope identical.
@@ -47,7 +53,10 @@ export async function createNestApi(library: ShaderLibrary): Promise<NestApi> {
         .json({ error: { code: 'invalid', message: 'Request body is not valid JSON' } });
       return;
     }
-    console.error('[api] unhandled body parser error', error);
+    logger.error(
+      'unhandled body parser error',
+      error instanceof Error ? error.stack : String(error),
+    );
     response.status(500).json({ error: { code: 'internal', message: 'Internal server error' } });
   });
 

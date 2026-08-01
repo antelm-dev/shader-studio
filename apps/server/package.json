@@ -15,6 +15,7 @@
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
+    "@nestjs/swagger": "^11.4.6",
     "@shader-studio/backend": "workspace:*",
     "@shader-studio/shared": "workspace:*",
     "express": "^5.1.0",

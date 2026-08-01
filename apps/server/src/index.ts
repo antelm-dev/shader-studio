@@ -17,6 +17,7 @@ import {
   isMainModule,
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
+import { Logger } from '@nestjs/common';
 import express, { type Application } from 'express';
 import { join } from 'node:path';
 
@@ -32,6 +33,7 @@ const allowedHosts = (process.env['NG_ALLOWED_HOSTS'] ?? 'localhost,127.0.0.1,[:
 
 const app = express();
 const angularApp = new AngularNodeAppEngine({ allowedHosts });
+const logger = new Logger('server');
 
 // Storage is initialised lazily, on the first /api request. Doing it here rather
 // than at module load keeps it out of Angular's build-time route extraction
@@ -42,7 +44,10 @@ function ensureRouter(): Promise<Application> {
   routerPromise ??= createLibrary()
     .then(async (library) => (await createNestApi(library)).handler)
     .catch((error: unknown) => {
-      console.error('[server] failed to initialise shader storage', error);
+      logger.error(
+        'failed to initialise shader storage',
+        error instanceof Error ? error.stack : String(error),
+      );
       routerPromise = null; // let the next request retry
       throw error;
     });
@@ -77,7 +82,7 @@ if (isMainModule(import.meta.url) || process.env['pm_id']) {
       throw error;
     }
 
-    console.log(`Shader Studio listening on http://localhost:${port}`);
+    logger.log(`Shader Studio listening on http://localhost:${port}`);
   });
 }
 

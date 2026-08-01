@@ -6,6 +6,7 @@
  * the connection string never leaves this process.
  */
 
+import { Logger } from '@nestjs/common';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -14,12 +15,15 @@ import { ShaderLibrary } from '@shader-studio/backend/library';
 import { createLegacyReader } from '@shader-studio/backend/persistence/legacy';
 import type { ShaderRepository } from '@shader-studio/backend/persistence';
 
+const logger = new Logger('library');
+
 export async function createLibrary(): Promise<ShaderLibrary> {
   const repo = await createRepository();
   const library = new ShaderLibrary(repo);
   await library.init();
 
   const seed = process.env['SHADER_SEED'] !== '0';
+  logger.log(`storage ready (example seeding ${seed ? 'on' : 'off'})`);
   await library.installExamples(createLegacyReader(examplesDir()), seed);
   return library;
 }
@@ -31,6 +35,7 @@ async function createRepository(): Promise<ShaderRepository> {
     // in particular, Angular's build-time route extraction (no DATABASE_URL)
     // must never try to resolve the external `pg` package.
     const { PostgresRepository } = await import('@shader-studio/backend/persistence/postgres');
+    logger.log('using PostgreSQL (DATABASE_URL is set)');
     return new PostgresRepository({
       connectionString: url,
       maxPoolSize: Number(process.env['DATABASE_POOL_MAX'] ?? 10),
@@ -42,7 +47,7 @@ async function createRepository(): Promise<ShaderRepository> {
   const { SqliteRepository } = await import('@shader-studio/backend/persistence/sqlite');
   const dir = process.env['SHADER_DATA_DIR'] ?? join(process.cwd(), 'data');
   await mkdir(dir, { recursive: true });
-  console.warn(`[server] DATABASE_URL is not set — using a local SQLite database in ${dir}`);
+  logger.warn(`DATABASE_URL is not set — using a local SQLite database in ${dir}`);
   return new SqliteRepository({ location: join(dir, 'shader-studio.sqlite') });
 }
 
