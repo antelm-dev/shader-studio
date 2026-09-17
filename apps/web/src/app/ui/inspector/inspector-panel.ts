@@ -107,6 +107,7 @@ import { WorkspaceActions } from '../workspace-actions';
       [selectedIndex]="index()"
       (selectedIndexChange)="selectTab($event)"
     >
+
       <mat-tab>
         <ng-template mat-tab-label>
           {{ 'inspector.controls' | translate }}
@@ -114,7 +115,6 @@ import { WorkspaceActions } from '../workspace-actions';
             <span class="badge">{{ count }}</span>
           }
         </ng-template>
-        <app-post-processing-panel />
         <app-gui-panel />
       </mat-tab>
 
@@ -126,6 +126,16 @@ import { WorkspaceActions } from '../workspace-actions';
           }
         </ng-template>
         <app-texture-panel />
+      </mat-tab>
+
+      <mat-tab>
+        <ng-template mat-tab-label>
+          {{ 'inspector.postProcessing' | translate }}
+          @if (store.controls().length; as count) {
+            <span class="badge">{{ count }}</span>
+          }
+        </ng-template>
+        <app-post-processing-panel />
       </mat-tab>
 
       <mat-tab>
@@ -192,8 +202,9 @@ import { WorkspaceActions } from '../workspace-actions';
 
     .tabs ::ng-deep .mat-mdc-tab-body-content {
       box-sizing: border-box;
-      height: 100%;
       overflow-y: auto;
+      overflow-x: hidden;
+      height: 100%;
       padding: 12px 0 4px;
     }
 

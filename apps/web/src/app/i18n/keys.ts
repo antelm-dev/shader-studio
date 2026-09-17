@@ -138,6 +138,7 @@ export const TRANSLATION_KEYS = [
   'inspector.savePresetTooltip',
   'inspector.savePresetAria',
   'inspector.controls',
+  'inspector.postProcessing',
   'inspector.textures',
   'inspector.presets',
   'panel.profiler',

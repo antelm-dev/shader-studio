@@ -136,6 +136,7 @@
   "inspector.savePresetTooltip": "Enregistrer les valeurs actuelles comme préréglage",
   "inspector.savePresetAria": "Enregistrer un préréglage de paramètres",
   "inspector.controls": "Contrôles",
+  "inspector.postProcessing": "Post-traitement",
   "inspector.textures": "Textures",
   "inspector.presets": "Préréglages",
   "inspector.presetWithRender": "Restaure les paramètres et les réglages de rendu. Clic droit pour supprimer",

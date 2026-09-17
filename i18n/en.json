@@ -136,6 +136,7 @@
   "inspector.savePresetTooltip": "Save the current parameter values as a preset",
   "inspector.savePresetAria": "Save parameter preset",
   "inspector.controls": "Controls",
+  "inspector.postProcessing": "Post-processing",
   "inspector.textures": "Textures",
   "inspector.presets": "Presets",
   "inspector.presetWithRender": "Restores the parameter values and the render settings. Right-click to delete",
