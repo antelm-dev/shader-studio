@@ -633,6 +633,45 @@ export function runShaderLibraryConformance(
         expect(first.revision).toBe(2);
       });
 
+      describe('templates', () => {
+        const source: PayloadSource = {
+          listIds: async () => ['example'],
+          exportOne: async () => payloadOf('example', 'Bundled Example'),
+        };
+
+        beforeEach(async () => {
+          await lib.as({ userId: 'system' }).installExamples(source, true, 'template');
+        });
+
+        it('shows the same templates to everyone, marked as such', async () => {
+          for (const who of [ALICE, BOB]) {
+            const listed = await lib.as(who).list();
+            expect(listed.map((entry) => `${entry.id}:${entry.kind}`)).toEqual([
+              'example:template',
+            ]);
+          }
+        });
+
+        it('forks a template on the first edit instead of writing to it', async () => {
+          const edited = await lib.as(ALICE).update('example', { name: 'My Version' });
+
+          expect(edited.id).not.toBe('example');
+          expect(edited.kind).toBe('shader');
+          expect(edited.name).toBe('My Version');
+
+          // The example is untouched, and Bob sees no trace of Alice's copy.
+          expect((await lib.as(BOB).read('example')).name).toBe('Bundled Example');
+          expect((await lib.as(BOB).list()).map((entry) => entry.id)).toEqual(['example']);
+        });
+
+        it('refuses to delete a template', async () => {
+          await expect(lib.as(ALICE).remove('example')).rejects.toMatchObject({
+            code: 'not_found',
+          });
+          expect((await lib.as(BOB).read('example')).name).toBe('Bundled Example');
+        });
+      });
+
       it('gives a second user their own id when a slug is globally taken', async () => {
         const mine = await lib.as(ALICE).create({ name: 'Nebula' });
         const theirs = await lib.as(BOB).create({ name: 'Nebula' });

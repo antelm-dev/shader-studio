@@ -8,7 +8,7 @@
  * history avoids a second migration tool treating live tables as uninitialized.
  */
 
-import { and, asc, count, eq, sql } from 'drizzle-orm';
+import { and, asc, count, eq, or, sql } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { alias } from 'drizzle-orm/pg-core';
 import { Pool } from 'pg';
@@ -32,6 +32,15 @@ import type { UserScope } from '../user-scope';
 import { postgresAuthSchema } from './auth-schema';
 import { POSTGRES_MIGRATIONS } from './migrations';
 import { assets, postgresSchema, presets, shaders, storageMetadata } from './schema';
+
+/**
+ * What a scope may read: its own shaders, plus the shared templates. The
+ * mirror-image predicate for writes is spelled out inline at each write, and is
+ * always `ownerUserId = scope.userId` alone.
+ */
+function readable(scope: UserScope) {
+  return or(eq(shaders.ownerUserId, scope.userId), eq(shaders.kind, 'template'));
+}
 
 /** Arbitrary but stable key for the migration advisory lock. */
 const MIGRATION_LOCK_KEY = 0x5_4d1_9a70;
@@ -178,7 +187,7 @@ class PgOps implements ShaderTx {
         thumbnails,
         and(eq(thumbnails.shaderId, shaders.id), eq(thumbnails.assetKey, 'thumbnail')),
       )
-      .where(eq(shaders.ownerUserId, scope.userId))
+      .where(readable(scope))
       .groupBy(
         shaders.id,
         shaders.kind,
@@ -215,10 +224,11 @@ class PgOps implements ShaderTx {
   }
 
   async loadShader(scope: UserScope, id: string): Promise<StoredShader | null> {
+    // Reads admit the shared templates; writes never do — see updateShader.
     const [row] = await this.db
       .select()
       .from(shaders)
-      .where(and(eq(shaders.id, id), eq(shaders.ownerUserId, scope.userId)))
+      .where(and(eq(shaders.id, id), readable(scope)))
       .limit(1);
     if (!row) return null;
 
@@ -272,13 +282,7 @@ class PgOps implements ShaderTx {
       .select({ asset: assets })
       .from(assets)
       .innerJoin(shaders, eq(shaders.id, assets.shaderId))
-      .where(
-        and(
-          eq(assets.shaderId, id),
-          eq(assets.assetKey, key),
-          eq(shaders.ownerUserId, scope.userId),
-        ),
-      )
+      .where(and(eq(assets.shaderId, id), eq(assets.assetKey, key), readable(scope)))
       .limit(1);
     if (!row) return null;
     return { ...toAssetMeta(row.asset), data: row.asset.data };

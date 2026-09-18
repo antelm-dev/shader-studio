@@ -36,6 +36,14 @@ import type { UserScope } from '../user-scope';
 import { sqliteAuthSchema } from './auth-schema';
 import { SQLITE_MIGRATIONS } from './migrations';
 
+/**
+ * What a scope may read: its own shaders, plus the shared templates. The
+ * mirror-image predicate for writes is spelled out inline at each write, and is
+ * always `owner_user_id = ?` alone.
+ */
+const READABLE_SHADER =
+  "SELECT * FROM shaders WHERE id = ? AND (owner_user_id = ? OR kind = 'template')";
+
 /** Serializes transactions so two never open a nested BEGIN on the one connection. */
 class Mutex {
   private tail: Promise<unknown> = Promise.resolve();
@@ -168,7 +176,7 @@ export class SqliteRepository implements ShaderRepository {
                 t.extension AS thumb_ext, t.updated_at AS thumb_updated
          FROM shaders s
          LEFT JOIN assets t ON t.shader_id = s.id AND t.asset_key = 'thumbnail'
-         WHERE s.owner_user_id = ?`,
+         WHERE s.owner_user_id = ? OR s.kind = 'template'`,
       )
       .all(scope.userId);
     return rows.map(toSummaryRow);
@@ -208,9 +216,8 @@ class SqliteTx implements ShaderTx {
   }
 
   async loadShader(scope: UserScope, id: string): Promise<StoredShader | null> {
-    const row = this.db
-      .prepare('SELECT * FROM shaders WHERE id = ? AND owner_user_id = ?')
-      .get(id, scope.userId);
+    // Reads admit the shared templates; writes never do — see updateShader.
+    const row = this.db.prepare(READABLE_SHADER).get(id, scope.userId);
     if (!row) return null;
 
     const presets = this.db
@@ -236,7 +243,8 @@ class SqliteTx implements ShaderTx {
         `SELECT a.asset_key, a.extension, a.width, a.height, a.updated_at, a.data
          FROM assets a
          JOIN shaders s ON s.id = a.shader_id
-         WHERE a.shader_id = ? AND a.asset_key = ? AND s.owner_user_id = ?`,
+         WHERE a.shader_id = ? AND a.asset_key = ?
+           AND (s.owner_user_id = ? OR s.kind = 'template')`,
       )
       .get(id, key, scope.userId);
     if (!row) return null;

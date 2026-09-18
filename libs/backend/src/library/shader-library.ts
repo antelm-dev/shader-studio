@@ -136,6 +136,7 @@ export class ShaderLibrary {
       .map(
         (row): ShaderSummary => ({
           id: row.id,
+          kind: row.kind,
           name: row.name,
           description: row.description,
           updatedAt: row.updatedAt,
@@ -252,6 +253,12 @@ export class ShaderLibrary {
     const render = patch.render === undefined ? undefined : validateRender(patch.render);
     const channelsPatch =
       patch.channels === undefined ? undefined : validateChannelSettingsPatch(patch.channels);
+
+    // Editing a bundled example gives you a copy of it, in your own library.
+    // Done before the write transaction opens so the rest of this method only
+    // ever deals with a shader the caller owns.
+    const target = await this.materialize(validId, id);
+    if (target !== validId) return this.update(target, patch);
 
     await this.repo.transaction(async (tx) => {
       const stored = await tx.loadShader(this.scope, validId);
@@ -735,6 +742,28 @@ export class ShaderLibrary {
     }
   }
 
+  /**
+   * Returns an id this scope may write to.
+   *
+   * A template is readable by everyone and writable by nobody, so the first
+   * edit of one forks it: the caller gets a copy in their own library and the
+   * example stays as it was for everybody else. Any other shader — including
+   * one that simply is not yours — is returned unchanged, so the write that
+   * follows fails on ownership exactly as it did before.
+   */
+  private async materialize(validId: string, rawId: string): Promise<string> {
+    const stored = await this.repo.loadShader(this.scope, validId);
+    if (!stored) throw new StorageError('not_found', `Shader "${rawId}" was not found`);
+    if (stored.row.kind !== 'template' || stored.row.ownerUserId === this.scope.userId) {
+      return validId;
+    }
+
+    const source = await this.exportOne(validId);
+    return this.insertUnique(uniqueId(source.id, await this.ids()), (tx, candidate) =>
+      this.insertPayload(tx, { ...source, id: candidate }),
+    );
+  }
+
   private async ids(): Promise<string[]> {
     return (await this.repo.listShaders(this.scope)).map((row) => row.id);
   }
@@ -883,6 +912,7 @@ export class ShaderLibrary {
 
     return {
       id: row.id,
+      kind: row.kind,
       name: row.name,
       description: row.description,
       ...(row.author ? { author: row.author } : {}),

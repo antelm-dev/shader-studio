@@ -44,6 +44,7 @@ const VERTEX = 'void main() { gl_Position = vec4(position, 1.0); }';
 function makeRecord(overrides: Partial<ShaderRecord> = {}): ShaderRecord {
   return {
     id: 'waves',
+    kind: 'shader',
     name: 'Waves',
     description: '',
     createdAt: '2024-01-01T00:00:00.000Z',

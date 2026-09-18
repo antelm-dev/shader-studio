@@ -25,6 +25,7 @@ const VERTEX = 'void main() { gl_Position = vec4(position, 1.0); }';
 function makeRecord(): ShaderRecord {
   return {
     id: 'waves',
+    kind: 'shader',
     name: 'Waves',
     description: '',
     createdAt: '2024-01-01T00:00:00.000Z',
@@ -48,6 +49,7 @@ class FakeApi implements Partial<ShaderApi> {
     Promise.resolve([
       {
         id: this.record.id,
+        kind: this.record.kind,
         name: this.record.name,
         description: this.record.description,
         controlCount: this.record.controls.length,

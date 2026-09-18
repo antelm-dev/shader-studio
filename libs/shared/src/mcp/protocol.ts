@@ -44,8 +44,12 @@ const shaderParamsSchema = z.record(z.string(), paramValueSchema);
 
 const thumbnailMetaSchema = z.object({ ext: z.string(), updatedAt: z.string() });
 
+/** A bundled example everyone can read, or a document in one library. */
+const shaderKindSchema = z.enum(['shader', 'template']);
+
 const shaderSummarySchema = z.object({
   id: z.string(),
+  kind: shaderKindSchema,
   name: z.string(),
   description: z.string(),
   updatedAt: z.string(),
@@ -147,6 +151,7 @@ const textureChannelsSchema = z.tuple([
 
 const shaderRecordSchema = z.object({
   id: z.string(),
+  kind: shaderKindSchema,
   name: z.string(),
   description: z.string(),
   author: z.string().optional(),
