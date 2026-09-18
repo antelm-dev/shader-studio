@@ -30,6 +30,7 @@
     "@shader-studio/backend": "workspace:*",
     "@shader-studio/desktop-api": "workspace:*",
     "@shader-studio/shared": "workspace:*",
+    "better-auth": "^1.7.5",
     "express": "^5.1.0",
     "lil-gui": "^0.21.0",
     "mediabunny": "^1.50.8",

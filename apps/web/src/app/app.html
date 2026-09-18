@@ -126,17 +126,49 @@
       <mat-icon>more_vert</mat-icon>
     </button>
 
+    <!-- Hidden on the desktop app, which is offline and single-user: there is
+         no account to sign in to, so offering one would only be a dead end. -->
+    @if (cloudAccounts) { @if (auth.authenticated()) {
     <button
       matButton="tonal"
       type="button"
       class="account"
+      [matTooltip]="'auth.accountMenu' | translate"
+      [attr.aria-label]="'auth.accountMenu' | translate"
+      [matMenuTriggerFor]="accountMenu"
+    >
+      <mat-icon>person</mat-icon>
+      <span>{{ auth.displayName() }}</span>
+    </button>
+
+    <mat-menu #accountMenu="matMenu">
+      <button mat-menu-item type="button" (click)="openAccount()">
+        <mat-icon>manage_accounts</mat-icon>
+        <span>{{ 'auth.profile' | translate }}</span>
+      </button>
+      <button mat-menu-item type="button" (click)="openAccount()">
+        <mat-icon>devices</mat-icon>
+        <span>{{ 'auth.sessionsTitle' | translate }}</span>
+      </button>
+      <button mat-menu-item type="button" (click)="signOut()">
+        <mat-icon>logout</mat-icon>
+        <span>{{ 'auth.signOut' | translate }}</span>
+      </button>
+    </mat-menu>
+    } @else {
+    <button
+      matButton="tonal"
+      type="button"
+      class="account"
+      [disabled]="auth.status() === 'loading'"
       [matTooltip]="'auth.accountTooltip' | translate"
       [attr.aria-label]="'auth.accountTooltip' | translate"
-      (click)="openAuthPreview()"
+      (click)="openSignIn()"
     >
       <mat-icon>person</mat-icon>
       <span>{{ 'auth.login' | translate }}</span>
     </button>
+    } }
 
     <!-- Four sections, because a flat list of nine commands is a list you read
          rather than a menu you scan. -->
