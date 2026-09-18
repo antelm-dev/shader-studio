@@ -28,7 +28,13 @@ export type AuditEvent =
   | 'shader.deleted';
 
 export interface AuditDetails {
-  /** The acting account, when one is known. */
+  /**
+   * The acting account, when one is known.
+   *
+   * Absent on sign-out: by the time the event is observed the session it names
+   * has already been destroyed, so there is nothing left to read the id from.
+   * Correlate those lines by IP and user agent, or by the preceding sign-in.
+   */
   userId?: string;
   /** Only on sign-in failure, where there may be no user id to name. */
   email?: string;
