@@ -20,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^20.17.19",
     "electron": "^40.8.0",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "electron-ipc-module": "1.1.0"
   }
 }

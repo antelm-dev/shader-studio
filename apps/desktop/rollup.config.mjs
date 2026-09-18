@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { defineConfig } from 'rollup';
-import electronRun from 'electron-run/rollup-plugin';
+import electronRun from 'vite-plugin-electron-run/rollup-plugin';
 import ipcBridge from 'electron-ipc-module/rollup-plugin';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
