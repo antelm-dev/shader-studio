@@ -64,6 +64,7 @@ import {
 } from '@shader-studio/shared/templates';
 
 import { expect, StorageError } from './storage-error';
+import type { ShaderKind, UserScope } from '../persistence/user-scope';
 import {
   textureAssetKey,
   THUMBNAIL_ASSET_KEY,
@@ -98,7 +99,25 @@ export interface LegacyMigrationSummary {
 }
 
 export class ShaderLibrary {
-  constructor(private readonly repo: ShaderRepository) {}
+  /**
+   * Every shader operation runs as exactly one user. The scope is bound here
+   * rather than passed per call so no caller can forget it: a controller takes
+   * the request's principal, calls {@link as}, and works with a library that
+   * cannot see another account's rows at all.
+   */
+  constructor(
+    private readonly repo: ShaderRepository,
+    private readonly scope: UserScope,
+  ) {}
+
+  /** The same store, seen as another user. Cheap — the repository is shared. */
+  as(scope: UserScope): ShaderLibrary {
+    return new ShaderLibrary(this.repo, scope);
+  }
+
+  get userId(): string {
+    return this.scope.userId;
+  }
 
   /** Opens the store and brings the schema to the current version. */
   init(): Promise<void> {
@@ -112,7 +131,7 @@ export class ShaderLibrary {
   // --- Reads ---------------------------------------------------------------
 
   async list(): Promise<ShaderSummary[]> {
-    const rows = await this.repo.listShaders();
+    const rows = await this.repo.listShaders(this.scope);
     return rows
       .map(
         (row): ShaderSummary => ({
@@ -132,7 +151,7 @@ export class ShaderLibrary {
 
   async read(id: string): Promise<ShaderRecord> {
     const validId = this.validId(id);
-    const stored = await this.repo.loadShader(validId);
+    const stored = await this.repo.loadShader(this.scope, validId);
     if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
     return this.mapRecord(stored);
   }
@@ -169,10 +188,10 @@ export class ShaderLibrary {
     const render =
       input.render === undefined ? { ...DEFAULT_RENDER } : validateRender(input.render);
 
-    const id = uniqueId(slugify(name), await this.ids());
     const now = new Date().toISOString();
-    const row: ShaderRow = {
-      id,
+    const row: Omit<ShaderRow, 'id'> = {
+      ownerUserId: this.scope.userId,
+      kind: 'shader',
       name,
       description,
       author: null,
@@ -185,7 +204,9 @@ export class ShaderLibrary {
       channelsJson: JSON.stringify(cloneDefaultChannels()),
     };
 
-    await this.repo.transaction((tx) => tx.insertShader(row));
+    const id = await this.insertUnique(uniqueId(slugify(name), await this.ids()), (tx, candidate) =>
+      tx.insertShader({ ...row, id: candidate }),
+    );
     return this.read(id);
   }
 
@@ -233,7 +254,7 @@ export class ShaderLibrary {
       patch.channels === undefined ? undefined : validateChannelSettingsPatch(patch.channels);
 
     await this.repo.transaction(async (tx) => {
-      const stored = await tx.loadShader(validId);
+      const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
       const current = this.mapRecord(stored);
 
@@ -274,7 +295,7 @@ export class ShaderLibrary {
         channelsJson: JSON.stringify(channels),
       };
 
-      await tx.updateShader(validId, fields, expectedRevision);
+      await tx.updateShader(this.scope, validId, fields, expectedRevision);
 
       // Re-project presets against a changed schema, exactly as the file store did.
       if (controls !== undefined) {
@@ -292,7 +313,7 @@ export class ShaderLibrary {
   async remove(id: string): Promise<void> {
     const validId = this.validId(id);
     await this.repo.transaction(async (tx) => {
-      const existed = await tx.deleteShader(validId);
+      const existed = await tx.deleteShader(this.scope, validId);
       if (!existed) throw new StorageError('not_found', `Shader "${id}" was not found`);
     });
   }
@@ -303,10 +324,9 @@ export class ShaderLibrary {
       validateName(name ?? `${source.name} copy`.slice(0, LIMITS.nameLength)),
       'Invalid shader name',
     );
-    const copyId = uniqueId(slugify(copyName), await this.ids());
-
-    await this.repo.transaction((tx) =>
-      this.insertPayload(tx, { ...source, id: copyId, name: copyName }),
+    const copyId = await this.insertUnique(
+      uniqueId(slugify(copyName), await this.ids()),
+      (tx, candidate) => this.insertPayload(tx, { ...source, id: candidate, name: copyName }),
     );
     return this.read(copyId);
   }
@@ -349,7 +369,7 @@ export class ShaderLibrary {
     }
 
     await this.repo.transaction(async (tx) => {
-      const stored = await tx.loadShader(validId);
+      const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
       const current = this.mapRecord(stored);
       const now = new Date().toISOString();
@@ -369,7 +389,7 @@ export class ShaderLibrary {
           : current.channels[index],
       ) as unknown as TextureChannels;
 
-      await tx.updateShader(validId, this.fieldsWithChannels(current, channels, now));
+      await tx.updateShader(this.scope, validId, this.fieldsWithChannels(current, channels, now));
     });
 
     return this.read(id);
@@ -382,7 +402,7 @@ export class ShaderLibrary {
     }
 
     await this.repo.transaction(async (tx) => {
-      const stored = await tx.loadShader(validId);
+      const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
       const current = this.mapRecord(stored);
       const now = new Date().toISOString();
@@ -393,7 +413,7 @@ export class ShaderLibrary {
         index === channel ? { ...DEFAULT_TEXTURE_CHANNEL } : current.channels[index],
       ) as unknown as TextureChannels;
 
-      await tx.updateShader(validId, this.fieldsWithChannels(current, channels, now));
+      await tx.updateShader(this.scope, validId, this.fieldsWithChannels(current, channels, now));
     });
 
     return this.read(id);
@@ -405,7 +425,7 @@ export class ShaderLibrary {
     channel: number,
   ): Promise<{ bytes: Uint8Array; ext: string } | null> {
     if (!isChannelIndex(channel)) return null;
-    const asset = await this.repo.loadAsset(this.validId(id), textureAssetKey(channel));
+    const asset = await this.repo.loadAsset(this.scope, this.validId(id), textureAssetKey(channel));
     return asset ? { bytes: asset.data, ext: asset.extension } : null;
   }
 
@@ -434,7 +454,7 @@ export class ShaderLibrary {
     }
 
     await this.repo.transaction(async (tx) => {
-      const stored = await tx.loadShader(validId);
+      const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
       await tx.putAsset(validId, {
         key: THUMBNAIL_ASSET_KEY,
@@ -451,7 +471,7 @@ export class ShaderLibrary {
 
   /** The preview's raw image bytes, for serving to the client. */
   async readThumbnail(id: string): Promise<{ bytes: Uint8Array; ext: string } | null> {
-    const asset = await this.repo.loadAsset(this.validId(id), THUMBNAIL_ASSET_KEY);
+    const asset = await this.repo.loadAsset(this.scope, this.validId(id), THUMBNAIL_ASSET_KEY);
     return asset ? { bytes: asset.data, ext: asset.extension } : null;
   }
 
@@ -465,7 +485,7 @@ export class ShaderLibrary {
     const name = expect(validateName(input.name, 'preset.name'), 'Invalid preset name');
 
     return this.repo.transaction(async (tx) => {
-      const stored = await tx.loadShader(validId);
+      const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
       const shader = this.mapRecord(stored);
 
@@ -509,7 +529,7 @@ export class ShaderLibrary {
     expect(validateId(presetId), `Invalid preset id "${presetId}"`);
 
     await this.repo.transaction(async (tx) => {
-      const stored = await tx.loadShader(validId);
+      const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
       const shader = this.mapRecord(stored);
 
@@ -533,7 +553,7 @@ export class ShaderLibrary {
       CHANNEL_INDICES.map(async (channel) => {
         const entry = payload.channels[channel];
         if (entry.ext === null) return entry;
-        const asset = await this.repo.loadAsset(record.id, textureAssetKey(channel));
+        const asset = await this.repo.loadAsset(this.scope, record.id, textureAssetKey(channel));
         if (!asset) {
           console.warn(`[storage] texture ${channel} of "${id}" is missing`);
           return { ...DEFAULT_TEXTURE_CHANNEL, data: null };
@@ -544,7 +564,7 @@ export class ShaderLibrary {
 
     let thumbnail = payload.thumbnail;
     if (record.thumbnail) {
-      const asset = await this.repo.loadAsset(record.id, THUMBNAIL_ASSET_KEY);
+      const asset = await this.repo.loadAsset(this.scope, record.id, THUMBNAIL_ASSET_KEY);
       thumbnail = asset
         ? {
             ext: record.thumbnail.ext,
@@ -562,7 +582,7 @@ export class ShaderLibrary {
   }
 
   async exportAll(): Promise<ShaderPayload[]> {
-    const summaries = await this.repo.listShaders();
+    const summaries = await this.repo.listShaders(this.scope);
     const payloads: ShaderPayload[] = [];
     for (const summary of summaries) {
       try {
@@ -581,11 +601,11 @@ export class ShaderLibrary {
     for (const payload of payloads) {
       const collides = taken.has(payload.id);
       const replaced = collides && mode === 'overwrite';
-      const id = replaced || !collides ? payload.id : uniqueId(payload.id, taken);
+      const wanted = replaced || !collides ? payload.id : uniqueId(payload.id, taken);
 
-      await this.repo.transaction(async (tx) => {
-        if (replaced) await tx.deleteShader(id);
-        await this.insertPayload(tx, { ...payload, id });
+      const id = await this.insertUnique(wanted, async (tx, candidate) => {
+        if (replaced && candidate === wanted) await tx.deleteShader(this.scope, candidate);
+        await this.insertPayload(tx, { ...payload, id: candidate });
       });
 
       taken.add(id);
@@ -603,7 +623,11 @@ export class ShaderLibrary {
    * user's shader, and it records the seed version so a deleted example does not
    * come back on the next start. Gated by `enabled` (SHADER_SEED).
    */
-  async installExamples(source: PayloadSource, enabled: boolean): Promise<void> {
+  async installExamples(
+    source: PayloadSource,
+    enabled: boolean,
+    kind: ShaderKind = 'shader',
+  ): Promise<void> {
     if (!enabled) return;
     const stored = Number((await this.repo.getMeta('seed_version')) ?? -1);
     if (stored >= SEED_VERSION) return;
@@ -625,10 +649,10 @@ export class ShaderLibrary {
     }
 
     await this.repo.transaction(async (tx) => {
-      const existing = new Set(await tx.listIds());
+      const existing = new Set(await tx.listIds(this.scope));
       for (const payload of examples) {
         if (existing.has(payload.id)) continue;
-        await this.insertPayload(tx, payload);
+        await this.insertPayload(tx, payload, kind);
         existing.add(payload.id);
       }
       await tx.setMeta('seed_version', String(SEED_VERSION));
@@ -659,7 +683,7 @@ export class ShaderLibrary {
     }
 
     await this.repo.transaction(async (tx) => {
-      const existing = new Set(await tx.listIds());
+      const existing = new Set(await tx.listIds(this.scope));
       for (const payload of payloads) {
         const id = existing.has(payload.id) ? uniqueId(payload.id, existing) : payload.id;
         await this.insertPayload(tx, { ...payload, id });
@@ -682,8 +706,37 @@ export class ShaderLibrary {
 
   // --- Internals -----------------------------------------------------------
 
+  /**
+   * Writes under `wanted`, an id the caller already picked as free *in this
+   * user's library*, and retries with a random suffix if the row id — still
+   * globally unique — turns out to belong to someone else's shader. Retrying
+   * rather than probing keeps the scoped listing the only readable thing: a
+   * collision yields an unguessable id instead of an incrementing one that
+   * would let a user count strangers' shaders.
+   *
+   * ponytail: per-user slugs would need a composite (owner, id) primary key
+   * across shaders/presets/assets. Revisit if collisions show up in logs.
+   */
+  private async insertUnique(
+    wanted: string,
+    write: (tx: ShaderTx, id: string) => Promise<void>,
+  ): Promise<string> {
+    const base = wanted;
+    let candidate = wanted;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await this.repo.transaction((tx) => write(tx, candidate));
+        return candidate;
+      } catch (error) {
+        const collision = error instanceof StorageError && error.code === 'conflict';
+        if (!collision || attempt >= 4) throw error;
+        candidate = `${base}-${randomSuffix()}`;
+      }
+    }
+  }
+
   private async ids(): Promise<string[]> {
-    return (await this.repo.listShaders()).map((row) => row.id);
+    return (await this.repo.listShaders(this.scope)).map((row) => row.id);
   }
 
   private validId(id: string): string {
@@ -691,7 +744,7 @@ export class ShaderLibrary {
   }
 
   private async touch(tx: ShaderTx, current: ShaderRecord): Promise<void> {
-    await tx.updateShader(current.id, this.fields(current, new Date().toISOString()));
+    await tx.updateShader(this.scope, current.id, this.fields(current, new Date().toISOString()));
   }
 
   /** The current record's mutable columns, with a fresh `updatedAt`. */
@@ -717,7 +770,11 @@ export class ShaderLibrary {
   }
 
   /** Writes a full payload (shader row, presets and asset bytes) inside a transaction. */
-  private async insertPayload(tx: ShaderTx, payload: ShaderPayload): Promise<void> {
+  private async insertPayload(
+    tx: ShaderTx,
+    payload: ShaderPayload,
+    kind: ShaderKind = 'shader',
+  ): Promise<void> {
     const project = sanitizeProject(payload.project, payload.fragment, payload.vertex);
     const controls = expect(
       validateControls(payload.controls),
@@ -739,6 +796,8 @@ export class ShaderLibrary {
 
     const row: ShaderRow = {
       id: payload.id,
+      ownerUserId: this.scope.userId,
+      kind,
       name: payload.name,
       description: payload.description,
       author: payload.author ?? null,
@@ -780,7 +839,7 @@ export class ShaderLibrary {
   }
 
   private async verifyImported(tx: ShaderTx, payload: ShaderPayload, id: string): Promise<void> {
-    const stored = await tx.loadShader(id);
+    const stored = await tx.loadShader(this.scope, id);
     if (!stored) {
       throw new StorageError('io', `Migration verification failed: shader "${id}" is missing`);
     }
@@ -874,6 +933,11 @@ export class ShaderLibrary {
     }
     return presets;
   }
+}
+
+/** Six base-36 characters — enough that a retry practically never repeats. */
+function randomSuffix(): string {
+  return Math.random().toString(36).slice(2, 8).padEnd(6, '0');
 }
 
 function mergeChannelSettings(

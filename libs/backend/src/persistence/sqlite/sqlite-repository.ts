@@ -30,6 +30,7 @@ import {
   type StoredAsset,
   type StoredShader,
 } from '../shader-repository';
+import type { UserScope } from '../user-scope';
 import { SQLITE_MIGRATIONS } from './migrations';
 
 /** Serializes transactions so two never open a nested BEGIN on the one connection. */
@@ -121,25 +122,26 @@ export class SqliteRepository implements ShaderRepository {
     });
   }
 
-  async listShaders(): Promise<ShaderSummaryRow[]> {
+  async listShaders(scope: UserScope): Promise<ShaderSummaryRow[]> {
     const rows = this.database()
       .prepare(
-        `SELECT s.id, s.name, s.description, s.updated_at, s.controls_json,
+        `SELECT s.id, s.kind, s.name, s.description, s.updated_at, s.controls_json,
                 (SELECT COUNT(*) FROM presets p WHERE p.shader_id = s.id) AS preset_count,
                 t.extension AS thumb_ext, t.updated_at AS thumb_updated
          FROM shaders s
-         LEFT JOIN assets t ON t.shader_id = s.id AND t.asset_key = 'thumbnail'`,
+         LEFT JOIN assets t ON t.shader_id = s.id AND t.asset_key = 'thumbnail'
+         WHERE s.owner_user_id = ?`,
       )
-      .all();
+      .all(scope.userId);
     return rows.map(toSummaryRow);
   }
 
-  async loadShader(id: string): Promise<StoredShader | null> {
-    return new SqliteTx(this.database()).loadShader(id);
+  async loadShader(scope: UserScope, id: string): Promise<StoredShader | null> {
+    return new SqliteTx(this.database()).loadShader(scope, id);
   }
 
-  async loadAsset(id: string, key: AssetKey): Promise<StoredAsset | null> {
-    return new SqliteTx(this.database()).loadAsset(id, key);
+  async loadAsset(scope: UserScope, id: string, key: AssetKey): Promise<StoredAsset | null> {
+    return new SqliteTx(this.database()).loadAsset(scope, id, key);
   }
 
   async getMeta(key: string): Promise<string | null> {
@@ -160,15 +162,17 @@ export class SqliteRepository implements ShaderRepository {
 class SqliteTx implements ShaderTx {
   constructor(private readonly db: DatabaseSync) {}
 
-  async listIds(): Promise<string[]> {
+  async listIds(scope: UserScope): Promise<string[]> {
     return this.db
-      .prepare('SELECT id FROM shaders ORDER BY id')
-      .all()
+      .prepare('SELECT id FROM shaders WHERE owner_user_id = ? ORDER BY id')
+      .all(scope.userId)
       .map((row) => String(row['id']));
   }
 
-  async loadShader(id: string): Promise<StoredShader | null> {
-    const row = this.db.prepare('SELECT * FROM shaders WHERE id = ?').get(id);
+  async loadShader(scope: UserScope, id: string): Promise<StoredShader | null> {
+    const row = this.db
+      .prepare('SELECT * FROM shaders WHERE id = ? AND owner_user_id = ?')
+      .get(id, scope.userId);
     if (!row) return null;
 
     const presets = this.db
@@ -188,24 +192,30 @@ class SqliteTx implements ShaderTx {
     return { row: toShaderRow(row), presets, assets };
   }
 
-  async loadAsset(id: string, key: AssetKey): Promise<StoredAsset | null> {
+  async loadAsset(scope: UserScope, id: string, key: AssetKey): Promise<StoredAsset | null> {
     const row = this.db
       .prepare(
-        'SELECT asset_key, extension, width, height, updated_at, data FROM assets WHERE shader_id = ? AND asset_key = ?',
+        `SELECT a.asset_key, a.extension, a.width, a.height, a.updated_at, a.data
+         FROM assets a
+         JOIN shaders s ON s.id = a.shader_id
+         WHERE a.shader_id = ? AND a.asset_key = ? AND s.owner_user_id = ?`,
       )
-      .get(id, key);
+      .get(id, key, scope.userId);
     if (!row) return null;
     return { ...toAssetMeta(row), data: toBytes(row['data']) };
   }
 
   async insertShader(row: ShaderRow): Promise<void> {
     this.exec(
-      `INSERT INTO shaders (id, name, description, author, created_at, updated_at, revision,
+      `INSERT INTO shaders (id, owner_user_id, kind, name, description, author,
+                            created_at, updated_at, revision,
                             project_json, controls_json, render_json, channels_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       (stmt) =>
         stmt.run(
           row.id,
+          row.ownerUserId,
+          row.kind,
           row.name,
           row.description,
           row.author,
@@ -222,6 +232,7 @@ class SqliteTx implements ShaderTx {
   }
 
   async updateShader(
+    scope: UserScope,
     id: string,
     fields: ShaderMutableFields,
     expectedRevision?: number,
@@ -233,7 +244,7 @@ class SqliteTx implements ShaderTx {
          SET name = ?, description = ?, author = ?, updated_at = ?,
              project_json = ?, controls_json = ?, render_json = ?, channels_json = ?,
              revision = revision + 1
-         WHERE id = ? AND (? IS NULL OR revision = ?)`,
+         WHERE id = ? AND owner_user_id = ? AND (? IS NULL OR revision = ?)`,
       )
       .run(
         fields.name,
@@ -245,12 +256,17 @@ class SqliteTx implements ShaderTx {
         fields.renderJson,
         fields.channelsJson,
         id,
+        scope.userId,
         expected,
         expected,
       );
 
     if (Number(result.changes) === 0) {
-      const existing = this.db.prepare('SELECT revision FROM shaders WHERE id = ?').get(id);
+      // Scoped on purpose: another user's shader reads as missing here, so a
+      // probe cannot tell "not yours" apart from "does not exist".
+      const existing = this.db
+        .prepare('SELECT revision FROM shaders WHERE id = ? AND owner_user_id = ?')
+        .get(id, scope.userId);
       if (!existing) throw new StorageError('not_found', `Shader "${id}" was not found`);
       throw new StorageError(
         'conflict',
@@ -262,8 +278,10 @@ class SqliteTx implements ShaderTx {
     return Number(after['revision']);
   }
 
-  async deleteShader(id: string): Promise<boolean> {
-    const result = this.db.prepare('DELETE FROM shaders WHERE id = ?').run(id);
+  async deleteShader(scope: UserScope, id: string): Promise<boolean> {
+    const result = this.db
+      .prepare('DELETE FROM shaders WHERE id = ? AND owner_user_id = ?')
+      .run(id, scope.userId);
     return Number(result.changes) > 0;
   }
 
@@ -332,6 +350,8 @@ class SqliteTx implements ShaderTx {
 function toShaderRow(row: SQLRow): ShaderRow {
   return {
     id: String(row['id']),
+    ownerUserId: String(row['owner_user_id']),
+    kind: String(row['kind']) === 'template' ? 'template' : 'shader',
     name: String(row['name']),
     description: String(row['description']),
     author: row['author'] === null ? null : String(row['author']),
@@ -368,6 +388,7 @@ function toAssetMeta(row: SQLRow): AssetMeta {
 function toSummaryRow(row: SQLRow): ShaderSummaryRow {
   return {
     id: String(row['id']),
+    kind: String(row['kind']) === 'template' ? 'template' : 'shader',
     name: String(row['name']),
     description: String(row['description']),
     updatedAt: String(row['updated_at']),

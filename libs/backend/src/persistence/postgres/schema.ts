@@ -1,5 +1,7 @@
 import { index, integer, jsonb, pgTable, primaryKey, text, customType } from 'drizzle-orm/pg-core';
 
+import type { ShaderKind } from '../user-scope';
+
 const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
   dataType: () => 'bytea',
   fromDriver: (value) => new Uint8Array(value),
@@ -13,19 +15,25 @@ const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
  * its migrations already created these tables. The schema is therefore both a
  * typed query model and the source of truth for future server-side relations.
  */
-export const shaders = pgTable('shaders', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  description: text('description').notNull(),
-  author: text('author'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-  revision: integer('revision').notNull(),
-  projectJson: jsonb('project_json').notNull(),
-  controlsJson: jsonb('controls_json').notNull(),
-  renderJson: jsonb('render_json').notNull(),
-  channelsJson: jsonb('channels_json').notNull(),
-});
+export const shaders = pgTable(
+  'shaders',
+  {
+    id: text('id').primaryKey(),
+    ownerUserId: text('owner_user_id').notNull(),
+    kind: text('kind').$type<ShaderKind>().notNull().default('shader'),
+    name: text('name').notNull(),
+    description: text('description').notNull(),
+    author: text('author'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    revision: integer('revision').notNull(),
+    projectJson: jsonb('project_json').notNull(),
+    controlsJson: jsonb('controls_json').notNull(),
+    renderJson: jsonb('render_json').notNull(),
+    channelsJson: jsonb('channels_json').notNull(),
+  },
+  (table) => [index('idx_shaders_owner_updated').on(table.ownerUserId, table.updatedAt.desc())],
+);
 
 export const presets = pgTable(
   'presets',

@@ -27,6 +27,7 @@ import {
   type StoredAsset,
   type StoredShader,
 } from '../shader-repository';
+import type { UserScope } from '../user-scope';
 import { POSTGRES_MIGRATIONS } from './migrations';
 import { assets, postgresSchema, presets, shaders, storageMetadata } from './schema';
 
@@ -115,16 +116,16 @@ export class PostgresRepository implements ShaderRepository {
     }
   }
 
-  listShaders(): Promise<ShaderSummaryRow[]> {
-    return new PgOps(this.database()).listShaders();
+  listShaders(scope: UserScope): Promise<ShaderSummaryRow[]> {
+    return new PgOps(this.database()).listShaders(scope);
   }
 
-  loadShader(id: string): Promise<StoredShader | null> {
-    return new PgOps(this.database()).loadShader(id);
+  loadShader(scope: UserScope, id: string): Promise<StoredShader | null> {
+    return new PgOps(this.database()).loadShader(scope, id);
   }
 
-  loadAsset(id: string, key: AssetKey): Promise<StoredAsset | null> {
-    return new PgOps(this.database()).loadAsset(id, key);
+  loadAsset(scope: UserScope, id: string, key: AssetKey): Promise<StoredAsset | null> {
+    return new PgOps(this.database()).loadAsset(scope, id, key);
   }
 
   getMeta(key: string): Promise<string | null> {
@@ -144,11 +145,12 @@ export class PostgresRepository implements ShaderRepository {
 class PgOps implements ShaderTx {
   constructor(private readonly db: PostgresExecutor) {}
 
-  async listShaders(): Promise<ShaderSummaryRow[]> {
+  async listShaders(scope: UserScope): Promise<ShaderSummaryRow[]> {
     const thumbnails = alias(assets, 'thumbnail_asset');
     const rows = await this.db
       .select({
         id: shaders.id,
+        kind: shaders.kind,
         name: shaders.name,
         description: shaders.description,
         updatedAt: shaders.updatedAt,
@@ -163,8 +165,10 @@ class PgOps implements ShaderTx {
         thumbnails,
         and(eq(thumbnails.shaderId, shaders.id), eq(thumbnails.assetKey, 'thumbnail')),
       )
+      .where(eq(shaders.ownerUserId, scope.userId))
       .groupBy(
         shaders.id,
+        shaders.kind,
         shaders.name,
         shaders.description,
         shaders.updatedAt,
@@ -175,6 +179,7 @@ class PgOps implements ShaderTx {
 
     return rows.map((row) => ({
       id: row.id,
+      kind: row.kind,
       name: row.name,
       description: row.description,
       updatedAt: row.updatedAt,
@@ -187,13 +192,21 @@ class PgOps implements ShaderTx {
     }));
   }
 
-  async listIds(): Promise<string[]> {
-    const rows = await this.db.select({ id: shaders.id }).from(shaders).orderBy(asc(shaders.id));
+  async listIds(scope: UserScope): Promise<string[]> {
+    const rows = await this.db
+      .select({ id: shaders.id })
+      .from(shaders)
+      .where(eq(shaders.ownerUserId, scope.userId))
+      .orderBy(asc(shaders.id));
     return rows.map((row) => row.id);
   }
 
-  async loadShader(id: string): Promise<StoredShader | null> {
-    const [row] = await this.db.select().from(shaders).where(eq(shaders.id, id)).limit(1);
+  async loadShader(scope: UserScope, id: string): Promise<StoredShader | null> {
+    const [row] = await this.db
+      .select()
+      .from(shaders)
+      .where(and(eq(shaders.id, id), eq(shaders.ownerUserId, scope.userId)))
+      .limit(1);
     if (!row) return null;
 
     const presetRows = await this.db
@@ -215,6 +228,8 @@ class PgOps implements ShaderTx {
     return {
       row: {
         id: row.id,
+        ownerUserId: row.ownerUserId,
+        kind: row.kind,
         name: row.name,
         description: row.description,
         author: row.author,
@@ -237,20 +252,31 @@ class PgOps implements ShaderTx {
     };
   }
 
-  async loadAsset(id: string, key: AssetKey): Promise<StoredAsset | null> {
+  async loadAsset(scope: UserScope, id: string, key: AssetKey): Promise<StoredAsset | null> {
+    // Joined rather than trusting the caller: this is the one asset read that is
+    // reachable without a prior scoped load of the parent shader.
     const [row] = await this.db
-      .select()
+      .select({ asset: assets })
       .from(assets)
-      .where(and(eq(assets.shaderId, id), eq(assets.assetKey, key)))
+      .innerJoin(shaders, eq(shaders.id, assets.shaderId))
+      .where(
+        and(
+          eq(assets.shaderId, id),
+          eq(assets.assetKey, key),
+          eq(shaders.ownerUserId, scope.userId),
+        ),
+      )
       .limit(1);
     if (!row) return null;
-    return { ...toAssetMeta(row), data: row.data };
+    return { ...toAssetMeta(row.asset), data: row.asset.data };
   }
 
   async insertShader(row: ShaderRow): Promise<void> {
     try {
       await this.db.insert(shaders).values({
         id: row.id,
+        ownerUserId: row.ownerUserId,
+        kind: row.kind,
         name: row.name,
         description: row.description,
         author: row.author,
@@ -271,14 +297,14 @@ class PgOps implements ShaderTx {
   }
 
   async updateShader(
+    scope: UserScope,
     id: string,
     fields: ShaderMutableFields,
     expectedRevision?: number,
   ): Promise<number> {
+    const owned = and(eq(shaders.id, id), eq(shaders.ownerUserId, scope.userId));
     const predicate =
-      expectedRevision === undefined
-        ? eq(shaders.id, id)
-        : and(eq(shaders.id, id), eq(shaders.revision, expectedRevision));
+      expectedRevision === undefined ? owned : and(owned, eq(shaders.revision, expectedRevision));
     const [updated] = await this.db
       .update(shaders)
       .set({
@@ -296,10 +322,12 @@ class PgOps implements ShaderTx {
       .returning({ revision: shaders.revision });
 
     if (!updated) {
+      // Scoped on purpose: another user's shader reads as missing here, so a
+      // probe cannot tell "not yours" apart from "does not exist".
       const [existing] = await this.db
         .select({ revision: shaders.revision })
         .from(shaders)
-        .where(eq(shaders.id, id))
+        .where(owned)
         .limit(1);
       if (!existing) throw new StorageError('not_found', `Shader "${id}" was not found`);
       throw new StorageError(
@@ -310,10 +338,10 @@ class PgOps implements ShaderTx {
     return updated.revision;
   }
 
-  async deleteShader(id: string): Promise<boolean> {
+  async deleteShader(scope: UserScope, id: string): Promise<boolean> {
     const rows = await this.db
       .delete(shaders)
-      .where(eq(shaders.id, id))
+      .where(and(eq(shaders.id, id), eq(shaders.ownerUserId, scope.userId)))
       .returning({ id: shaders.id });
     return rows.length > 0;
   }

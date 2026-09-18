@@ -10,7 +10,7 @@ import type { Server } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { ShaderLibrary } from '@shader-studio/backend/library';
+import { LOCAL_SCOPE, ShaderLibrary } from '@shader-studio/backend/library';
 import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
 import { createNestApi, type NestApi } from './bootstrap';
 
@@ -20,7 +20,7 @@ let base: string;
 let nestApi: NestApi;
 
 beforeAll(async () => {
-  library = new ShaderLibrary(new SqliteRepository({ location: ':memory:' }));
+  library = new ShaderLibrary(new SqliteRepository({ location: ':memory:' }), LOCAL_SCOPE);
   await library.init();
   nestApi = await createNestApi(library);
   const app = express();

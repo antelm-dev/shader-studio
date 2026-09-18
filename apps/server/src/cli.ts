@@ -11,7 +11,7 @@
  *     node dist/shader-studio/cli.mjs migrate-files --source=/legacy-data
  */
 
-import { ShaderLibrary } from '@shader-studio/backend/library';
+import { ShaderLibrary, SYSTEM_SCOPE } from '@shader-studio/backend/library';
 import { createLegacyReader } from '@shader-studio/backend/persistence/legacy';
 import { PostgresRepository } from '@shader-studio/backend/persistence/postgres';
 import type { ImportMode } from '@shader-studio/shared/model';
@@ -50,7 +50,10 @@ async function migrateFiles(source: string, mode: ImportMode): Promise<number> {
     return 2;
   }
 
-  const library = new ShaderLibrary(new PostgresRepository({ connectionString: url }));
+  const library = new ShaderLibrary(
+    new PostgresRepository({ connectionString: url }),
+    SYSTEM_SCOPE,
+  );
   await library.init();
   try {
     const reader = createLegacyReader(source);

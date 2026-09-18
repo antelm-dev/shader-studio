@@ -53,4 +53,21 @@ export const POSTGRES_MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: 'shader-ownership',
+    async up(exec) {
+      // Backfill through a column default, then drop the default: from here on an
+      // INSERT must name an owner, so a code path that forgets one fails loudly
+      // instead of quietly creating an unowned shader. The foreign key to
+      // users(id) is added by the auth migration, once that table exists.
+      await exec(`
+        ALTER TABLE shaders ADD COLUMN owner_user_id text NOT NULL DEFAULT 'system';
+        ALTER TABLE shaders ALTER COLUMN owner_user_id DROP DEFAULT;
+        ALTER TABLE shaders ADD COLUMN kind text NOT NULL DEFAULT 'shader';
+
+        CREATE INDEX idx_shaders_owner_updated ON shaders(owner_user_id, updated_at DESC);
+      `);
+    },
+  },
 ];

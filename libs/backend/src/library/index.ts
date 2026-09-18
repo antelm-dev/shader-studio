@@ -6,3 +6,10 @@ export {
   TEMPLATE_CONTROLS,
   TEMPLATE_FRAGMENT,
 } from '@shader-studio/shared/templates';
+export type { ShaderKind, UserScope } from '../persistence/user-scope';
+export {
+  LOCAL_SCOPE,
+  LOCAL_USER_ID,
+  SYSTEM_OWNER_ID,
+  SYSTEM_SCOPE,
+} from '../persistence/user-scope';
