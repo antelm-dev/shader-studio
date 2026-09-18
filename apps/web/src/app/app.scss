@@ -74,7 +74,8 @@ app-titlebar {
     }
   }
 
-  .save {
+  .save,
+  .account {
     min-width: 0;
     height: 32px;
     padding-inline: 12px;
@@ -86,6 +87,11 @@ app-titlebar {
       font-size: 18px;
       line-height: 18px;
     }
+  }
+
+  .account {
+    margin-left: 2px;
+    white-space: nowrap;
   }
 }
 
@@ -100,6 +106,17 @@ app-titlebar {
 @container toolbar (max-width: 720px) {
   .toolbar .quick-actions {
     display: none;
+  }
+}
+
+@container toolbar (max-width: 560px) {
+  .toolbar .account {
+    width: 32px;
+    padding-inline: 7px;
+
+    span {
+      display: none;
+    }
   }
 }
 

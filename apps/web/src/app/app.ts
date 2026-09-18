@@ -13,6 +13,7 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -51,6 +52,7 @@ import { StartupCoordinator } from './workspace/startup-coordinator';
 import { WorkspaceActions } from './ui/workspace-actions';
 import { I18n, LANGUAGE_OPTIONS, type AppLocale } from './i18n/i18n';
 import { TranslatePipe } from './i18n/translate.pipe';
+import { AuthPreviewDialog } from './ui/dialogs/auth-preview-dialog';
 
 @Component({
   selector: 'app-root',
@@ -62,6 +64,7 @@ import { TranslatePipe } from './i18n/translate.pipe';
     InspectorShell,
     TranslatePipe,
     MatButtonModule,
+    MatDialogModule,
     MatDividerModule,
     MatIconModule,
     MatMenuModule,
@@ -91,6 +94,7 @@ export class App {
   protected readonly outputMode = isOutputWindow();
 
   private readonly snackBar = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
 
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
   private readonly importMode = signal<ImportMode>('rename');
@@ -193,6 +197,14 @@ export class App {
       default:
         return false;
     }
+  }
+
+  protected openAuthPreview(): void {
+    this.dialog.open(AuthPreviewDialog, {
+      autoFocus: false,
+      restoreFocus: true,
+      maxWidth: 'calc(100vw - 32px)',
+    });
   }
 
   protected readonly shaderCommands: readonly MenuCommand[] = [

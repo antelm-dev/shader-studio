@@ -126,6 +126,18 @@
       <mat-icon>more_vert</mat-icon>
     </button>
 
+    <button
+      matButton="tonal"
+      type="button"
+      class="account"
+      [matTooltip]="'auth.accountTooltip' | translate"
+      [attr.aria-label]="'auth.accountTooltip' | translate"
+      (click)="openAuthPreview()"
+    >
+      <mat-icon>person</mat-icon>
+      <span>{{ 'auth.login' | translate }}</span>
+    </button>
+
     <!-- Four sections, because a flat list of nine commands is a list you read
          rather than a menu you scan. -->
     <mat-menu #moreMenu="matMenu">
