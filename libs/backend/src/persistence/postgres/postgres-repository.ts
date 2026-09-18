@@ -26,8 +26,10 @@ import {
   type ShaderTx,
   type StoredAsset,
   type StoredShader,
+  type AuthDatabase,
 } from '../shader-repository';
 import type { UserScope } from '../user-scope';
+import { postgresAuthSchema } from './auth-schema';
 import { POSTGRES_MIGRATIONS } from './migrations';
 import { assets, postgresSchema, presets, shaders, storageMetadata } from './schema';
 
@@ -47,6 +49,7 @@ export interface PostgresRepositoryOptions {
 export class PostgresRepository implements ShaderRepository {
   private pool: Pool | null = null;
   private db: PostgresDb | null = null;
+  private authDb: object | null = null;
 
   constructor(private readonly options: PostgresRepositoryOptions) {}
 
@@ -99,11 +102,21 @@ export class PostgresRepository implements ShaderRepository {
     }
 
     this.db = drizzle({ client: pool, schema: postgresSchema });
+    // A second Drizzle view of the *same* pool. Separating the schemas keeps
+    // Better Auth's tables out of the shader query model (and vice versa)
+    // without opening a second set of connections.
+    this.authDb = drizzle({ client: pool, schema: postgresAuthSchema });
+  }
+
+  authDatabase(): AuthDatabase {
+    if (!this.authDb) throw new StorageError('io', 'The database pool is not open');
+    return { provider: 'pg', db: this.authDb };
   }
 
   async close(): Promise<void> {
     const pool = this.pool;
     this.db = null;
+    this.authDb = null;
     this.pool = null;
     await pool?.end();
   }

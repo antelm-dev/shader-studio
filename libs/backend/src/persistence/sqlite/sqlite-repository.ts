@@ -15,12 +15,14 @@
 // oxlint-disable-next-line typescript/triple-slash-reference
 /// <reference path="./node-sqlite.d.ts" />
 import { DatabaseSync, type SQLRow, type StatementSync } from 'node:sqlite';
+import { drizzle as drizzleProxy } from 'drizzle-orm/sqlite-proxy';
 
 import { StorageError } from '../../library/storage-error';
 import { runMigrations } from '../migration-runner';
 import {
   type AssetKey,
   type AssetMeta,
+  type AuthDatabase,
   type PresetRow,
   type ShaderMutableFields,
   type ShaderRepository,
@@ -31,6 +33,7 @@ import {
   type StoredShader,
 } from '../shader-repository';
 import type { UserScope } from '../user-scope';
+import { sqliteAuthSchema } from './auth-schema';
 import { SQLITE_MIGRATIONS } from './migrations';
 
 /** Serializes transactions so two never open a nested BEGIN on the one connection. */
@@ -56,6 +59,7 @@ export interface SqliteRepositoryOptions {
 
 export class SqliteRepository implements ShaderRepository {
   private db: DatabaseSync | null = null;
+  private authDb: object | null = null;
   private readonly mutex = new Mutex();
 
   constructor(private readonly options: SqliteRepositoryOptions) {}
@@ -65,6 +69,7 @@ export class SqliteRepository implements ShaderRepository {
     // leak a file handle (which on Windows would block deleting the database).
     this.db?.close();
     this.db = null;
+    this.authDb = null;
     const db = new DatabaseSync(this.options.location);
     // Pragmas must run outside any transaction.
     db.exec('PRAGMA foreign_keys = ON');
@@ -98,9 +103,42 @@ export class SqliteRepository implements ShaderRepository {
     }
   }
 
+  /**
+   * A Drizzle handle over this same connection, for Better Auth.
+   *
+   * `node:sqlite` has no Drizzle driver of its own, so `sqlite-proxy` is given
+   * a callback that runs statements on the one open `DatabaseSync`. Sharing the
+   * connection matters on Windows, where a second handle on the same file would
+   * contend for locks and keep the file busy after close.
+   */
+  authDatabase(): AuthDatabase {
+    this.authDb ??= drizzleProxy(
+      async (sql, params, method) => {
+        const db = this.database();
+        const statement = db.prepare(sql);
+        const bind = params as Parameters<StatementSync['all']>;
+        if (method === 'run') {
+          statement.run(...bind);
+          return { rows: [] };
+        }
+        // `get`/`all`/`values` all want positional cells, and `node:sqlite`
+        // returns objects — in SELECT order, which is what Drizzle expects.
+        const cells = (row: SQLRow): unknown[] => Object.values(row);
+        if (method === 'get') {
+          const row = statement.get(...bind);
+          return { rows: row ? cells(row) : [] };
+        }
+        return { rows: statement.all(...bind).map(cells) };
+      },
+      { schema: sqliteAuthSchema },
+    );
+    return { provider: 'sqlite', db: this.authDb };
+  }
+
   async close(): Promise<void> {
     this.db?.close();
     this.db = null;
+    this.authDb = null;
   }
 
   transaction<T>(work: (tx: ShaderTx) => Promise<T>): Promise<T> {

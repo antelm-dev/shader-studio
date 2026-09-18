@@ -17,14 +17,20 @@ import {
   type UserScope,
 } from '@shader-studio/backend/library';
 import { createLegacyReader } from '@shader-studio/backend/persistence/legacy';
-import type { ShaderRepository } from '@shader-studio/backend/persistence';
+import type { AuthDatabase, ShaderRepository } from '@shader-studio/backend/persistence';
 
 /**
  * The library the process holds is bound to the bootstrap scope, which owns the
  * bundled examples and any rows that predate authentication. A request-scoped
  * copy comes from `library.as(principal)` — never this one directly.
  */
-export async function createLibrary(): Promise<ShaderLibrary> {
+export interface ServerStore {
+  library: ShaderLibrary;
+  /** The same connection, for Better Auth — one database, one migration ledger. */
+  authDatabase: AuthDatabase;
+}
+
+export async function createLibrary(): Promise<ServerStore> {
   const { repo, bootstrapScope } = await createRepository();
   const library = new ShaderLibrary(repo, bootstrapScope);
   await library.init();
@@ -34,7 +40,7 @@ export async function createLibrary(): Promise<ShaderLibrary> {
   // multi-user deployment they go in as templates owned by the system account.
   const kind = bootstrapScope === SYSTEM_SCOPE ? 'template' : 'shader';
   await library.installExamples(createLegacyReader(examplesDir()), seed, kind);
-  return library;
+  return { library, authDatabase: repo.authDatabase() };
 }
 
 async function createRepository(): Promise<{

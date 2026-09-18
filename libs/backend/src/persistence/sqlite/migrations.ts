@@ -77,4 +77,69 @@ export const SQLITE_MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    name: 'auth-tables',
+    up(exec) {
+      // Mirrors `auth-schema.ts` exactly — Better Auth resolves columns through
+      // those Drizzle definitions, so the two files change together.
+      //
+      // Dates are epoch milliseconds and booleans 0/1, matching the schema's
+      // `timestamp_ms` and `boolean` modes. No foreign key is added to
+      // `shaders.owner_user_id`: SQLite cannot add a constraint to an existing
+      // table without a rebuild, and this store is single-user anyway. The
+      // desktop app never opens these tables — only `pnpm dev:server` does.
+      exec(`
+        CREATE TABLE users (
+          id             TEXT PRIMARY KEY,
+          name           TEXT NOT NULL,
+          email          TEXT NOT NULL UNIQUE,
+          email_verified INTEGER NOT NULL DEFAULT 0,
+          image          TEXT,
+          created_at     INTEGER NOT NULL,
+          updated_at     INTEGER NOT NULL
+        );
+
+        CREATE TABLE sessions (
+          id         TEXT PRIMARY KEY,
+          expires_at INTEGER NOT NULL,
+          token      TEXT NOT NULL UNIQUE,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          ip_address TEXT,
+          user_agent TEXT,
+          user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE accounts (
+          id                       TEXT PRIMARY KEY,
+          account_id               TEXT NOT NULL,
+          provider_id              TEXT NOT NULL,
+          user_id                  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          access_token             TEXT,
+          refresh_token            TEXT,
+          id_token                 TEXT,
+          access_token_expires_at  INTEGER,
+          refresh_token_expires_at INTEGER,
+          scope                    TEXT,
+          password                 TEXT,
+          created_at               INTEGER NOT NULL,
+          updated_at               INTEGER NOT NULL
+        );
+
+        CREATE TABLE verifications (
+          id         TEXT PRIMARY KEY,
+          identifier TEXT NOT NULL,
+          value      TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX idx_sessions_user ON sessions(user_id);
+        CREATE INDEX idx_accounts_user ON accounts(user_id);
+        CREATE INDEX idx_verifications_identifier ON verifications(identifier);
+      `);
+    },
+  },
 ];

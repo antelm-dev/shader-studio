@@ -130,9 +130,23 @@ export interface ShaderTx {
   setMeta(key: string, value: string): Promise<void>;
 }
 
+/**
+ * The engine's own connection, handed over as a Drizzle database bound to the
+ * auth schema. Authentication shares the shader store — same pool or file, same
+ * migration ledger — so a session and the shaders it unlocks can never be
+ * served by two databases that disagree about what exists.
+ */
+export interface AuthDatabase {
+  readonly provider: 'pg' | 'sqlite';
+  /** Passed straight to Better Auth's `drizzleAdapter`. */
+  readonly db: object;
+}
+
 export interface ShaderRepository {
   /** Opens the connection, applies engine pragmas/pool settings, runs migrations. */
   init(): Promise<void>;
+  /** The auth-schema view of the same connection. Only valid after `init()`. */
+  authDatabase(): AuthDatabase;
   close(): Promise<void>;
   /** Runs `work` inside a single transaction, rolling back if it throws. */
   transaction<T>(work: (tx: ShaderTx) => Promise<T>): Promise<T>;

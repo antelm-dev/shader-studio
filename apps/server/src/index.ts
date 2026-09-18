@@ -21,6 +21,8 @@ import express, { type Application } from 'express';
 import { join } from 'node:path';
 
 import { createNestApi } from './api/bootstrap';
+import { createAuth } from './auth/auth';
+import { readAuthConfig } from './auth/auth-config';
 import { createLibrary } from './create-library';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
@@ -40,7 +42,10 @@ const angularApp = new AngularNodeAppEngine({ allowedHosts });
 let routerPromise: Promise<Application> | null = null;
 function ensureRouter(): Promise<Application> {
   routerPromise ??= createLibrary()
-    .then(async (library) => (await createNestApi(library)).handler)
+    .then(async ({ library, authDatabase }) => {
+      const auth = createAuth(authDatabase, readAuthConfig());
+      return (await createNestApi(library, auth)).handler;
+    })
     .catch((error: unknown) => {
       console.error('[server] failed to initialise shader storage', error);
       routerPromise = null; // let the next request retry
@@ -71,6 +76,12 @@ app.use((req, res, next) => {
 });
 
 if (isMainModule(import.meta.url) || process.env['pm_id']) {
+  // Fail here rather than on the first sign-in attempt: a production server
+  // missing its auth secret should never reach the point of accepting traffic.
+  // This runs only when the module is actually serving, so Angular's build-time
+  // route extraction — which imports this file with no environment — is unaffected.
+  readAuthConfig();
+
   const port = Number(process.env['PORT'] ?? 4000);
   app.listen(port, (error?: Error) => {
     if (error) {

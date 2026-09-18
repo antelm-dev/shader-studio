@@ -1,4 +1,5 @@
 export const SHADER_LIBRARY = Symbol('SHADER_LIBRARY');
+export const AUTH_INSTANCE = Symbol('AUTH_INSTANCE');
 
 // A textured shader's bundle inlines its channel images as base64 (~33%
 // inflation), and a collection can hold many shaders.
