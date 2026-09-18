@@ -1,14 +1,20 @@
 {
-  "editor.defaultFormatter": "oxc.oxc-vscode",
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
     "source.fixAll.oxc": "always"
   },
   "oxc.fmt.configPath": ".oxfmtrc.json",
 
-  "typescript.tsdk": "apps/web/node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
-  "typescript.preferences.autoImportFileExcludePatterns": ["**/dist/**", "**/dist-*/**"],
+  // oxfmt only handles JS/TS/JSON; everything else keeps its own formatter.
+  "[typescript]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
+  "[javascript]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
+  "[json]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
+  "[jsonc]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
+  "[glsl]": { "editor.formatOnSave": false },
+
+  "js/ts.tsdk": "apps/web/node_modules/typescript/lib",
+  "js/ts.enablePromptUseWorkspaceTsdk": true,
+  "js/ts.preferences.autoImportFileExcludePatterns": ["**/dist/**", "**/dist-*/**"],
 
   "files.associations": {
     "*.glsl": "glsl",
@@ -21,6 +27,7 @@
     "**/.git": true,
     "**/dist": true,
     "**/dist-main": true,
+    "**/dist-renderer": true,
     "**/dist-web": true,
     "**/release": true
   },
@@ -28,6 +35,7 @@
     "**/node_modules": true,
     "**/dist": true,
     "**/dist-main": true,
+    "**/dist-renderer": true,
     "**/dist-web": true,
     "**/release": true,
     "**/pnpm-lock.yaml": true,
@@ -37,6 +45,7 @@
     "**/node_modules/**": true,
     "**/dist/**": true,
     "**/dist-main/**": true,
+    "**/dist-renderer/**": true,
     "**/dist-web/**": true,
     "**/release/**": true,
     "**/.angular/**": true
