@@ -25,6 +25,29 @@ export interface AuthConfig {
   readonly requireEmailVerification: boolean;
   readonly mail: MailConfig;
   readonly production: boolean;
+  /**
+   * Whether `x-forwarded-*` may be believed. Off unless the deployment says it
+   * sits behind a reverse proxy it controls: a forged `x-forwarded-for` would
+   * otherwise let a caller pick which bucket per-IP throttling counts them in.
+   */
+  readonly trustProxy: boolean;
+  /**
+   * Whether a new password is checked against the Have I Been Pwned corpus.
+   *
+   * On by default, and it fails *closed*: if the service cannot be reached, the
+   * sign-up or reset is refused rather than quietly accepting a password that
+   * might be in a breach. That is the right default and a real availability
+   * trade-off, so an air-gapped deployment can turn it off deliberately with
+   * `AUTH_CHECK_COMPROMISED_PASSWORDS=0` instead of discovering it at 3am.
+   */
+  readonly checkCompromisedPasswords: boolean;
+  /**
+   * Per-IP throttling on the credential endpoints. On everywhere by default —
+   * a limit that only exists in production is a limit nobody has tried. The
+   * escape hatch is for test suites that need to sign a dozen accounts up in a
+   * second, not for deployments.
+   */
+  readonly rateLimits: boolean;
   /** Seconds a session survives without use, and its hard ceiling. */
   readonly sessionIdleSeconds: number;
   readonly sessionMaxSeconds: number;
@@ -77,6 +100,9 @@ export function readAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig
     requireEmailVerification: env['AUTH_REQUIRE_VERIFIED_EMAIL'] !== '0',
     mail: { url: mailUrl, from: env['MAIL_FROM']?.trim() || 'Shader Studio <no-reply@localhost>' },
     production,
+    trustProxy: env['TRUST_PROXY'] === '1',
+    checkCompromisedPasswords: env['AUTH_CHECK_COMPROMISED_PASSWORDS'] !== '0',
+    rateLimits: env['AUTH_RATE_LIMIT'] !== '0',
     sessionIdleSeconds: positiveSeconds(env['AUTH_SESSION_IDLE_SECONDS'], 60 * 60 * 24 * 7),
     sessionMaxSeconds: positiveSeconds(env['AUTH_SESSION_MAX_SECONDS'], 60 * 60 * 24 * 30),
   };

@@ -24,6 +24,7 @@ import { createNestApi } from './api/bootstrap';
 import { createAuth } from './auth/auth';
 import { readAuthConfig } from './auth/auth-config';
 import { createLibrary } from './create-library';
+import { securityHeaders } from './security-headers';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
@@ -34,6 +35,10 @@ const allowedHosts = (process.env['NG_ALLOWED_HOSTS'] ?? 'localhost,127.0.0.1,[:
 
 const app = express();
 const angularApp = new AngularNodeAppEngine({ allowedHosts });
+
+// First, so they are on every response — including the error paths below, which
+// are exactly the ones a later middleware would forget.
+app.use(securityHeaders({ production: process.env['NODE_ENV'] === 'production' }));
 
 // Storage is initialised lazily, on the first /api request. Doing it here rather
 // than at module load keeps it out of Angular's build-time route extraction

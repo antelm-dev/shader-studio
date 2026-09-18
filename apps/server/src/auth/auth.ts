@@ -9,10 +9,13 @@
  */
 
 import { betterAuth } from 'better-auth';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { haveIBeenPwned } from 'better-auth/plugins';
 
 import type { AuthDatabase } from '@shader-studio/backend/persistence';
 
+import { consoleAuditor, eventForPath, requestContext, type Auditor } from './audit';
 import { type AuthConfig } from './auth-config';
 import { createMailer, type Mailer } from './mailer';
 
@@ -28,7 +31,12 @@ export interface Principal {
 // them (and then disagrees with itself about `secret`).
 export type Auth = ReturnType<typeof createAuth>;
 
-export function createAuth(database: AuthDatabase, config: AuthConfig, mailer?: Mailer) {
+export function createAuth(
+  database: AuthDatabase,
+  config: AuthConfig,
+  mailer?: Mailer,
+  auditor: Auditor = consoleAuditor,
+) {
   const mail: Mailer = mailer ?? createMailer(config.mail);
 
   return betterAuth({
@@ -65,6 +73,9 @@ export function createAuth(database: AuthDatabase, config: AuthConfig, mailer?: 
       minPasswordLength: 12,
       maxPasswordLength: 128,
       resetPasswordTokenExpiresIn: 60 * 15,
+      // A reset is a privilege change: whoever prompted it may be the reason
+      // the account needed recovering, so every other session goes with it.
+      revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
         await mail.send({
           to: user.email,
@@ -99,6 +110,10 @@ export function createAuth(database: AuthDatabase, config: AuthConfig, mailer?: 
       // No cookie cache: a revoked session must stop working on the next
       // request, not when a cached copy happens to expire.
       cookieCache: { enabled: false },
+      // Changing a password or revoking sessions requires a session that was
+      // authenticated recently, so a borrowed laptop cannot be used to lock the
+      // owner out hours later.
+      freshAge: 60 * 15,
     },
 
     advanced: {
@@ -114,13 +129,17 @@ export function createAuth(database: AuthDatabase, config: AuthConfig, mailer?: 
       // every assertion about them — sees the same behaviour.
       disableOriginCheck: false,
       disableCSRFCheck: false,
+      // `x-forwarded-*` is only believed when the deployment says it sits behind
+      // a proxy it controls. Otherwise any caller could forge the address that
+      // per-IP throttling and the audit log both key on.
+      trustedProxyHeaders: config.trustProxy,
     },
 
     // Enabled in development too, so a limit that is wrong is found before it
     // reaches production. The defaults are loose; the credential endpoints are
     // not, because those are the ones worth guessing at.
     rateLimit: {
-      enabled: true,
+      enabled: config.rateLimits,
       window: 60,
       max: 120,
       customRules: {
@@ -137,6 +156,44 @@ export function createAuth(database: AuthDatabase, config: AuthConfig, mailer?: 
       // includes token values, and we do not add any.
       level: config.production ? 'warn' : 'info',
     },
+
+    // Rejects a password already known to have leaked. Only the first five
+    // characters of its SHA-1 hash leave this process, so the service never
+    // learns the password or which account it belongs to.
+    //
+    // It fails closed: an unreachable service refuses the sign-up rather than
+    // waving a possibly-breached password through. See `checkCompromisedPasswords`.
+    plugins: [
+      haveIBeenPwned({
+        enabled: config.checkCompromisedPasswords,
+        customPasswordCompromisedMessage:
+          'That password appears in a known breach. Please choose a different one.',
+      }),
+    ],
+
+    // Observation only — this hook never changes an outcome, so a bug in the
+    // audit trail cannot become a bug in authentication.
+    hooks: {
+      after: createAuthMiddleware(async (ctx) => {
+        const returned = ctx.context.returned;
+        const event = eventForPath(ctx.path, !(returned instanceof APIError));
+        if (!event) return;
+
+        auditor.record(event, {
+          // On sign-in the session is only established by this very request, so
+          // the id comes from what the endpoint returned rather than from the
+          // (still anonymous) incoming context.
+          ...userIdOf(ctx.context.session?.user.id ?? actorFrom(returned)),
+          // Only on failure, and only because there is no user id to name: an
+          // operator looking at a password-spraying run has nothing else to
+          // correlate attempts on.
+          ...(event === 'sign-in.failure' ? emailOf(emailFrom(ctx.body)) : {}),
+          ...requestContext(ctx.request?.headers ?? new Headers(), {
+            trustProxy: config.trustProxy,
+          }),
+        });
+      }),
+    },
   });
 }
 
@@ -145,6 +202,28 @@ export function createAuth(database: AuthDatabase, config: AuthConfig, mailer?: 
  * Better Auth reads the cookie itself — the raw session id is never copied into
  * a variable of ours, let alone a log line.
  */
+/** The address a sign-in was attempted for, when the body carried one. */
+function emailFrom(body: unknown): string | undefined {
+  const email = (body as { email?: unknown } | undefined)?.email;
+  return typeof email === 'string' ? email : undefined;
+}
+
+/** The account an endpoint just acted on, from whatever it handed back. */
+function actorFrom(returned: unknown): string | undefined {
+  const id = (returned as { user?: { id?: unknown } } | undefined)?.user?.id;
+  return typeof id === 'string' ? id : undefined;
+}
+
+// Two shims so the audit call can spread conditionally without `exactOptional`
+// complaints about an explicit `undefined`.
+function userIdOf(userId: string | undefined): { userId?: string } {
+  return userId ? { userId } : {};
+}
+
+function emailOf(email: string | undefined): { email?: string } {
+  return email ? { email } : {};
+}
+
 export async function resolvePrincipal(auth: Auth, headers: Headers): Promise<Principal | null> {
   const session = await auth.api.getSession({ headers });
   if (!session?.user) return null;

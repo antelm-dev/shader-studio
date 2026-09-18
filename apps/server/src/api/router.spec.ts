@@ -17,9 +17,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { LOCAL_SCOPE, ShaderLibrary } from '@shader-studio/backend/library';
 import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
 
+import type { AuditDetails, AuditEvent, Auditor } from '../auth/audit';
 import { createAuth } from '../auth/auth';
 import { readAuthConfig } from '../auth/auth-config';
 import type { Mail, Mailer } from '../auth/mailer';
+import { securityHeaders } from '../security-headers';
 import { createNestApi, type NestApi } from './bootstrap';
 
 const PASSWORD = 'correct horse battery staple';
@@ -36,6 +38,18 @@ const mailer: Mailer = {
     outbox.push(mail);
   },
 };
+
+/** Every audit line the server emitted, newest last. */
+const audited: { event: AuditEvent; details: AuditDetails }[] = [];
+const recorder: Auditor = {
+  record: (event, details = {}) => {
+    audited.push({ event, details });
+  },
+};
+
+function auditedEvents(event: AuditEvent): AuditDetails[] {
+  return audited.filter((entry) => entry.event === event).map((entry) => entry.details);
+}
 
 interface TestUser {
   email: string;
@@ -58,6 +72,10 @@ beforeAll(async () => {
   const { port } = server.address() as AddressInfo;
   base = `http://127.0.0.1:${port}`;
 
+  // The security headers live on the outer app, the same way the real server
+  // mounts them, so they are asserted where a browser would actually see them.
+  app.use(securityHeaders({ production: true }));
+
   const auth = createAuth(
     repo.authDatabase(),
     readAuthConfig({
@@ -65,10 +83,18 @@ beforeAll(async () => {
       BETTER_AUTH_SECRET: 'test-secret-not-used-anywhere-real',
       BETTER_AUTH_URL: base,
       AUTH_TRUSTED_ORIGINS: base,
+      // The breach check calls out to api.pwnedpasswords.com. Leaving it on
+      // would make this suite need the network and, worse, go red the day that
+      // service has an outage. `auth-config.spec.ts` asserts it is on by default.
+      AUTH_CHECK_COMPROMISED_PASSWORDS: '0',
+      // Sign-up is capped at five an hour, and this suite needs more accounts
+      // than that. `rate-limit.spec.ts` covers the limiter on its own server.
+      AUTH_RATE_LIMIT: '0',
     }),
     mailer,
+    recorder,
   );
-  nestApi = await createNestApi(library, auth);
+  nestApi = await createNestApi(library, auth, recorder);
   app.use('/api', nestApi.handler);
 
   alice = await signUp('alice@example.test', 'Alice');
@@ -117,7 +143,12 @@ async function signUp(email: string, name: string): Promise<TestUser> {
   const verified = await authFetch(null, pathOf(verification!.link));
   expect(verified.status).toBeLessThan(400);
 
-  const signedIn = await postJson(null, '/api/auth/sign-in/email', { email, password: PASSWORD });
+  return signIn(email, PASSWORD);
+}
+
+/** A second, independent session for an account that already exists. */
+async function signIn(email: string, password: string): Promise<TestUser> {
+  const signedIn = await postJson(null, '/api/auth/sign-in/email', { email, password });
   expect(signedIn.status).toBe(200);
   return { email, cookie: cookieHeader(signedIn) };
 }
@@ -420,5 +451,131 @@ describe('authorization', () => {
     const response = await authFetch(alice, `/api/shaders/${id}/thumbnail`);
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toContain('private');
+  });
+});
+
+// --- hardening ---------------------------------------------------------------
+
+describe('security headers', () => {
+  const PATHS = ['/api/shaders', '/api/i18n/en', '/api/auth/get-session'];
+
+  it('sends them on the API and on the app alike', async () => {
+    for (const path of PATHS) {
+      const headers = (await authFetch(alice, path)).headers;
+      // Written into the assertion so a failure names the offending path.
+      expect(`${path}: ${headers.get('x-content-type-options')}`).toBe(`${path}: nosniff`);
+      expect(`${path}: ${headers.get('x-frame-options')}`).toBe(`${path}: DENY`);
+      expect(`${path}: ${headers.get('referrer-policy')}`).toBe(`${path}: same-origin`);
+      expect(headers.get('strict-transport-security')).toContain('max-age=');
+    }
+  });
+
+  it('keeps the app unframeable on everything the stack answers', async () => {
+    for (const path of PATHS) {
+      const csp = (await authFetch(alice, path)).headers.get('content-security-policy');
+      expect(`${path}: ${csp}`).toContain("frame-ancestors 'none'");
+    }
+  });
+
+  it('still refuses framing on a route nothing handles', async () => {
+    // Express's own 404 page replaces the CSP with `default-src 'none'`, and
+    // `frame-ancestors` does not fall back to `default-src`. `X-Frame-Options`
+    // is why that page is still unframeable — which is the reason it is set
+    // alongside the CSP rather than instead of it.
+    const headers = (await authFetch(alice, '/api/no-such-thing-at-all')).headers;
+    expect(headers.get('x-frame-options')).toBe('DENY');
+  });
+});
+
+describe('session lifecycle', () => {
+  it('revokes every other session when a password is reset', async () => {
+    const owner = await signUp('reset-me@example.test', 'Reset Me');
+    const elsewhere = await signIn('reset-me@example.test', PASSWORD);
+    expect((await authFetch(elsewhere, '/api/shaders')).status).toBe(200);
+
+    await postJson(null, '/api/auth/request-password-reset', {
+      email: owner.email,
+      redirectTo: `${base}/reset-password`,
+    });
+    const reset = await postJson(null, '/api/auth/reset-password', {
+      token: resetTokenFrom(outbox.at(-1)!.link),
+      newPassword: 'an entirely different passphrase',
+    });
+    expect(reset.status).toBe(200);
+
+    // Whoever prompted the reset may be the reason the account needed
+    // recovering, so the sessions they might be holding go with it.
+    expect((await authFetch(owner, '/api/shaders')).status).toBe(401);
+    expect((await authFetch(elsewhere, '/api/shaders')).status).toBe(401);
+  });
+
+  it('lets a user sign out of every other device at once', async () => {
+    const owner = await signUp('everywhere@example.test', 'Everywhere');
+    const elsewhere = await signIn('everywhere@example.test', PASSWORD);
+
+    const revoked = await postJson(owner, '/api/auth/revoke-other-sessions', {});
+    expect(revoked.status).toBe(200);
+
+    expect((await authFetch(elsewhere, '/api/shaders')).status).toBe(401);
+    // …and the session that asked for it is still the one you are using.
+    expect((await authFetch(owner, '/api/shaders')).status).toBe(200);
+  });
+});
+
+describe('audit log', () => {
+  it('records a sign-in, a failed sign-in and a deletion', async () => {
+    const before = audited.length;
+    const id = await createShader(alice, 'Audited');
+    expect((await authFetch(alice, `/api/shaders/${id}`, { method: 'DELETE' })).status).toBe(204);
+
+    await postJson(null, '/api/auth/sign-in/email', {
+      email: alice.email,
+      password: 'not the right password',
+    });
+    await postJson(null, '/api/auth/sign-in/email', { email: alice.email, password: PASSWORD });
+
+    const fresh = audited.slice(before);
+    const events = fresh.map((entry) => entry.event);
+    expect(events).toContain('shader.deleted');
+    expect(events).toContain('sign-in.failure');
+    expect(events).toContain('sign-in.success');
+
+    const deletion = fresh.find((entry) => entry.event === 'shader.deleted');
+    expect(deletion?.details.subject).toBe(id);
+    expect(deletion?.details.userId).toBeTruthy();
+  });
+
+  it('records a refused delete as nothing at all', async () => {
+    const id = await createShader(alice, 'Not Yours');
+    const before = audited.length;
+
+    expect((await authFetch(bob, `/api/shaders/${id}`, { method: 'DELETE' })).status).toBe(404);
+
+    expect(audited.slice(before).map((entry) => entry.event)).not.toContain('shader.deleted');
+  });
+
+  it('names the address only on a failed sign-in, where there is no user id', async () => {
+    await postJson(null, '/api/auth/sign-in/email', {
+      email: 'stranger@example.test',
+      password: 'guessing',
+    });
+
+    expect(auditedEvents('sign-in.failure').at(-1)?.email).toBe('stranger@example.test');
+    // A successful sign-in identifies the actor by id instead: an id names the
+    // account without being a second copy of a personal detail.
+    expect(auditedEvents('sign-in.success').every((entry) => entry.email === undefined)).toBe(true);
+  });
+
+  it('never writes a credential into the log', async () => {
+    const serialised = JSON.stringify(audited);
+    for (const secret of [PASSWORD, 'not the right password', 'guessing']) {
+      expect(serialised).not.toContain(secret);
+    }
+    // No cookie, no session id, no reset or verification token either.
+    expect(serialised.toLowerCase()).not.toContain('better-auth.session');
+    for (const mail of outbox) {
+      const token = new URL(mail.link).searchParams.get('token');
+      if (token) expect(serialised).not.toContain(token);
+    }
   });
 });

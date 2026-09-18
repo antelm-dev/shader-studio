@@ -42,6 +42,20 @@ services:
       NG_ALLOWED_HOSTS: ${SHADER_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}
       # Set to 0 to start with an empty store instead of seeding it from examples/.
       SHADER_SEED: ${SHADER_SEED:-1}
+      # Marks this a production deployment: Secure cookies and HSTS, and a
+      # refusal to start on a missing auth secret rather than a silent fallback
+      # to a development one.
+      NODE_ENV: production
+      # Authentication. The first three are required — see .env.example.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set (see .env.example)}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL must be set (see .env.example)}
+      MAIL_SMTP_URL: ${MAIL_SMTP_URL:?MAIL_SMTP_URL must be set (see .env.example)}
+      MAIL_FROM: ${MAIL_FROM:-Shader Studio <no-reply@localhost>}
+      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-}
+      AUTH_REGISTRATION: ${AUTH_REGISTRATION:-open}
+      # Secure cookies and HSTS only mean anything behind TLS, which is the
+      # proxy's job. Set TRUST_PROXY=1 once a proxy you control is in front.
+      TRUST_PROXY: ${TRUST_PROXY:-0}
     # A legacy file library can be mounted read-only to import it once via the
     # `migrate` profile below. It is NOT the primary store anymore.
     # volumes:
@@ -61,6 +75,20 @@ services:
       - ./legacy-data:/legacy-data:ro
     entrypoint: ['node', 'dist/shader-studio/cli.mjs', 'migrate-files']
     command: ['--source=/legacy-data']
+
+  # Hands the shaders that predate authentication to a real account. Sign that
+  # account up in the app first, then run this once:
+  #   docker compose --profile claim run --rm claim --email=you@example.com
+  # Add --dry-run to see the count without moving anything.
+  claim:
+    profiles: ['claim']
+    image: shader-studio:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-shader_studio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-shader_studio}
+    entrypoint: ['node', 'dist/shader-studio/cli.mjs', 'claim-shaders']
 
 volumes:
   postgres-data:

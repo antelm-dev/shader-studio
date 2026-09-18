@@ -27,8 +27,9 @@ import {
   validateImportMode,
 } from '@shader-studio/shared/validate';
 
-import { SHADER_LIBRARY } from './api.constants';
+import { AUDITOR, SHADER_LIBRARY } from './api.constants';
 import { AllowUnverified, CurrentUser, Public } from './auth.guard';
+import type { Auditor } from '../auth/audit';
 import type { Principal } from '../auth/auth';
 
 type JsonBody = Record<string, unknown>;
@@ -41,7 +42,10 @@ type JsonBody = Record<string, unknown>;
  */
 @Controller()
 export class ApiController {
-  constructor(@Inject(SHADER_LIBRARY) private readonly storage: ShaderLibrary) {}
+  constructor(
+    @Inject(SHADER_LIBRARY) private readonly storage: ShaderLibrary,
+    @Inject(AUDITOR) private readonly auditor: Auditor,
+  ) {}
 
   private libraryFor(principal: Principal): ShaderLibrary {
     return this.storage.as({ userId: principal.userId });
@@ -119,6 +123,9 @@ export class ApiController {
   @HttpCode(204)
   async remove(@Param('id') id: string, @CurrentUser() principal: Principal): Promise<void> {
     await this.libraryFor(principal).remove(id);
+    // Recorded after the fact, so a refused delete leaves no line claiming one
+    // happened. A shader has no undo — this is the only trace it existed.
+    this.auditor.record('shader.deleted', { userId: principal.userId, subject: id });
   }
 
   @Post('shaders/:id/duplicate')

@@ -5,6 +5,7 @@ import express, { type Application, type NextFunction, type Request, type Respon
 
 import type { ShaderLibrary } from '@shader-studio/backend/library';
 
+import type { Auditor } from '../auth/audit';
 import type { Auth } from '../auth/auth';
 import { ApiExceptionFilter } from './api-exception.filter';
 import { BODY_LIMIT, TEXTURE_BODY_LIMIT, THUMBNAIL_BODY_LIMIT } from './api.constants';
@@ -15,7 +16,11 @@ export interface NestApi {
   app: NestExpressApplication;
 }
 
-export async function createNestApi(library: ShaderLibrary, auth: Auth): Promise<NestApi> {
+export async function createNestApi(
+  library: ShaderLibrary,
+  auth: Auth,
+  auditor?: Auditor,
+): Promise<NestApi> {
   const handler = express();
 
   // Mounted before every body parser: Better Auth reads and verifies the
@@ -45,7 +50,7 @@ export async function createNestApi(library: ShaderLibrary, auth: Auth): Promise
   );
 
   const app = await NestFactory.create<NestExpressApplication>(
-    ApiModule.forLibrary(library, auth),
+    ApiModule.forLibrary(library, auth, auditor),
     new ExpressAdapter(handler),
     { bodyParser: false },
   );
