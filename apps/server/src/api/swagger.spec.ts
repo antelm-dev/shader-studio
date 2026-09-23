@@ -5,8 +5,11 @@ import type { Server } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
-import { ShaderLibrary } from '@shader-studio/backend/library';
+import { LOCAL_SCOPE, ShaderLibrary } from '@shader-studio/backend/library';
 import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
+import { silentAuditor } from '../auth/audit';
+import { createAuth } from '../auth/auth';
+import { readAuthConfig } from '../auth/auth-config';
 import { createNestApi, type NestApi } from './bootstrap';
 
 let library: ShaderLibrary;
@@ -15,13 +18,27 @@ let base: string;
 let nestApi: NestApi;
 
 beforeAll(async () => {
-  library = new ShaderLibrary(new SqliteRepository({ location: ':memory:' }));
+  const repo = new SqliteRepository({ location: ':memory:' });
+  library = new ShaderLibrary(repo, LOCAL_SCOPE);
   await library.init();
-  nestApi = await createNestApi(library);
   const app = express();
-  app.use('/api', nestApi.handler);
   server = app.listen(0);
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const auth = createAuth(
+    repo.authDatabase(),
+    readAuthConfig({
+      NODE_ENV: 'test',
+      BETTER_AUTH_SECRET: 'test-secret-not-used-anywhere-real',
+      BETTER_AUTH_URL: base,
+      AUTH_TRUSTED_ORIGINS: base,
+      AUTH_CHECK_COMPROMISED_PASSWORDS: '0',
+      AUTH_RATE_LIMIT: '0',
+    }),
+    { send: async () => undefined },
+    silentAuditor,
+  );
+  nestApi = await createNestApi(library, auth, silentAuditor);
+  app.use('/api', nestApi.handler);
 });
 
 afterAll(async () => {

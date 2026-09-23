@@ -29,8 +29,11 @@ import {
   validateImportMode,
 } from '@shader-studio/shared/validate';
 
-import { SHADER_LIBRARY } from './api.constants';
+import { AUDITOR, SHADER_LIBRARY } from './api.constants';
+import { AllowUnverified, CurrentUser, Public } from './auth.guard';
 import { ApiErrors, IMAGE_BODY_SCHEMA, SHADER_BODY_SCHEMA } from './swagger';
+import type { Auditor } from '../auth/audit';
+import type { Principal } from '../auth/auth';
 
 type JsonBody = Record<string, unknown>;
 
@@ -39,7 +42,14 @@ type JsonBody = Record<string, unknown>;
 export class ApiController {
   private readonly logger = new Logger('api');
 
-  constructor(@Inject(SHADER_LIBRARY) private readonly storage: ShaderLibrary) {}
+  constructor(
+    @Inject(SHADER_LIBRARY) private readonly storage: ShaderLibrary,
+    @Inject(AUDITOR) private readonly auditor: Auditor,
+  ) {}
+
+  private libraryFor(principal: Principal): ShaderLibrary {
+    return this.storage.as({ userId: principal.userId });
+  }
 
   @ApiTags('i18n')
   @ApiOperation({
@@ -47,6 +57,7 @@ export class ApiController {
     description: 'Returns `{ locale, catalog }` for a supported locale.',
   })
   @ApiErrors(400, 500)
+  @Public()
   @Get('i18n/:locale')
   async i18n(@Param('locale') locale: string): Promise<unknown> {
     if (!(I18N_LOCALES as readonly string[]).includes(locale)) {
@@ -63,9 +74,10 @@ export class ApiController {
   }
 
   @ApiOperation({ summary: 'List every shader', description: 'Summaries only, not full sources.' })
+  @AllowUnverified()
   @Get('shaders')
-  async list(): Promise<unknown> {
-    return { shaders: await this.storage.list() };
+  async list(@CurrentUser() principal: Principal): Promise<unknown> {
+    return { shaders: await this.libraryFor(principal).list() };
   }
 
   @ApiOperation({
@@ -75,9 +87,13 @@ export class ApiController {
   @ApiBody({ schema: SHADER_BODY_SCHEMA })
   @ApiErrors(400)
   @Post('shaders')
-  async create(@Body() body: JsonBody | undefined, @Res() response: Response): Promise<void> {
+  async create(
+    @Body() body: JsonBody | undefined,
+    @Res() response: Response,
+    @CurrentUser() principal: Principal,
+  ): Promise<void> {
     const input = body ?? {};
-    const created = await this.storage.create({
+    const created = await this.libraryFor(principal).create({
       name: input['name'],
       description: input['description'],
       controls: input['controls'],
@@ -93,9 +109,10 @@ export class ApiController {
 
   @ApiOperation({ summary: 'Read one shader', description: 'Full record, including presets.' })
   @ApiErrors(404)
+  @AllowUnverified()
   @Get('shaders/:id')
-  async read(@Param('id') id: string): Promise<unknown> {
-    return { shader: await this.storage.read(id) };
+  async read(@Param('id') id: string, @CurrentUser() principal: Principal): Promise<unknown> {
+    return { shader: await this.libraryFor(principal).read(id) };
   }
 
   @ApiOperation({
@@ -107,9 +124,13 @@ export class ApiController {
   @ApiBody({ schema: SHADER_BODY_SCHEMA })
   @ApiErrors(400, 404, 409)
   @Put('shaders/:id')
-  async update(@Param('id') id: string, @Body() body: JsonBody | undefined): Promise<unknown> {
+  async update(
+    @Param('id') id: string,
+    @Body() body: JsonBody | undefined,
+    @CurrentUser() principal: Principal,
+  ): Promise<unknown> {
     const input = body ?? {};
-    const updated = await this.storage.update(id, {
+    const updated = await this.libraryFor(principal).update(id, {
       ...('name' in input ? { name: input['name'] } : {}),
       ...('description' in input ? { description: input['description'] } : {}),
       ...('controls' in input ? { controls: input['controls'] } : {}),
@@ -130,9 +151,12 @@ export class ApiController {
   @ApiErrors(404)
   @Delete('shaders/:id')
   @HttpCode(204)
-  async remove(@Param('id') id: string): Promise<void> {
-    await this.storage.remove(id);
+  async remove(@Param('id') id: string, @CurrentUser() principal: Principal): Promise<void> {
+    await this.libraryFor(principal).remove(id);
     this.logger.log(`deleted shader "${id}"`);
+    // Recorded after the fact, so a refused delete leaves no line claiming one
+    // happened. A shader has no undo — this is the only trace it existed.
+    this.auditor.record('shader.deleted', { userId: principal.userId, subject: id });
   }
 
   @ApiOperation({
@@ -149,8 +173,9 @@ export class ApiController {
     @Param('id') id: string,
     @Body() body: JsonBody | undefined,
     @Res() response: Response,
+    @CurrentUser() principal: Principal,
   ): Promise<void> {
-    const copy = await this.storage.duplicate(id, body?.['name']);
+    const copy = await this.libraryFor(principal).duplicate(id, body?.['name']);
     this.logger.log(`duplicated shader "${id}" to "${copy.id}"`);
     response.status(201).json({ shader: copy });
   }
@@ -158,9 +183,10 @@ export class ApiController {
   @ApiTags('presets')
   @ApiOperation({ summary: "List a shader's presets" })
   @ApiErrors(404)
+  @AllowUnverified()
   @Get('shaders/:id/presets')
-  async presets(@Param('id') id: string): Promise<unknown> {
-    return { presets: (await this.storage.read(id)).presets };
+  async presets(@Param('id') id: string, @CurrentUser() principal: Principal): Promise<unknown> {
+    return { presets: (await this.libraryFor(principal).read(id)).presets };
   }
 
   @ApiTags('presets')
@@ -185,9 +211,10 @@ export class ApiController {
     @Param('id') id: string,
     @Body() body: JsonBody | undefined,
     @Res() response: Response,
+    @CurrentUser() principal: Principal,
   ): Promise<void> {
     const input = body ?? {};
-    const preset = await this.storage.savePreset(id, {
+    const preset = await this.libraryFor(principal).savePreset(id, {
       name: input['name'],
       values: input['values'],
       render: input['render'],
@@ -200,8 +227,12 @@ export class ApiController {
   @ApiErrors(404)
   @Delete('shaders/:id/presets/:presetId')
   @HttpCode(204)
-  async deletePreset(@Param('id') id: string, @Param('presetId') presetId: string): Promise<void> {
-    await this.storage.deletePreset(id, presetId);
+  async deletePreset(
+    @Param('id') id: string,
+    @Param('presetId') presetId: string,
+    @CurrentUser() principal: Principal,
+  ): Promise<void> {
+    await this.libraryFor(principal).deletePreset(id, presetId);
   }
 
   @ApiTags('textures')
@@ -219,12 +250,13 @@ export class ApiController {
     @Query('width') rawWidth: string | undefined,
     @Query('height') rawHeight: string | undefined,
     @Req() request: Request,
+    @CurrentUser() principal: Principal,
   ): Promise<unknown> {
     const body = request.body as unknown;
     if (!Buffer.isBuffer(body)) {
       throw new StorageError('invalid', 'Expected a raw image body with an image/* Content-Type');
     }
-    const shader = await this.storage.setTexture(id, channel(rawChannel), {
+    const shader = await this.libraryFor(principal).setTexture(id, channel(rawChannel), {
       ext: imageExtension(request.headers['content-type']),
       bytes: body,
       width: positiveInteger(rawWidth, 'width'),
@@ -240,8 +272,9 @@ export class ApiController {
   async clearTexture(
     @Param('id') id: string,
     @Param('channel') rawChannel: string,
+    @CurrentUser() principal: Principal,
   ): Promise<unknown> {
-    return { shader: await this.storage.clearTexture(id, channel(rawChannel)) };
+    return { shader: await this.libraryFor(principal).clearTexture(id, channel(rawChannel)) };
   }
 
   @ApiTags('textures')
@@ -252,12 +285,14 @@ export class ApiController {
   @ApiProduces('image/png', 'image/jpeg', 'image/webp', 'image/gif')
   @ApiErrors(400, 404)
   @Get('shaders/:id/textures/:channel')
+  @AllowUnverified()
   async texture(
     @Param('id') id: string,
     @Param('channel') rawChannel: string,
     @Res() response: Response,
+    @CurrentUser() principal: Principal,
   ): Promise<void> {
-    const texture = await this.storage.readTexture(id, channel(rawChannel));
+    const texture = await this.libraryFor(principal).readTexture(id, channel(rawChannel));
     if (!texture) {
       response.status(404).end();
       return;
@@ -274,13 +309,17 @@ export class ApiController {
   @ApiBody({ schema: IMAGE_BODY_SCHEMA })
   @ApiErrors(400, 404)
   @Put('shaders/:id/thumbnail')
-  async setThumbnail(@Param('id') id: string, @Req() request: Request): Promise<unknown> {
+  async setThumbnail(
+    @Param('id') id: string,
+    @Req() request: Request,
+    @CurrentUser() principal: Principal,
+  ): Promise<unknown> {
     const body = request.body as unknown;
     if (!Buffer.isBuffer(body)) {
       throw new StorageError('invalid', 'Expected a raw image body with an image/* Content-Type');
     }
     return {
-      shader: await this.storage.setThumbnail(id, {
+      shader: await this.libraryFor(principal).setThumbnail(id, {
         ext: imageExtension(request.headers['content-type']),
         bytes: body,
       }),
@@ -292,8 +331,13 @@ export class ApiController {
   @ApiProduces('image/png', 'image/jpeg', 'image/webp')
   @ApiErrors(404)
   @Get('shaders/:id/thumbnail')
-  async thumbnail(@Param('id') id: string, @Res() response: Response): Promise<void> {
-    const thumbnail = await this.storage.readThumbnail(id);
+  @AllowUnverified()
+  async thumbnail(
+    @Param('id') id: string,
+    @Res() response: Response,
+    @CurrentUser() principal: Principal,
+  ): Promise<void> {
+    const thumbnail = await this.libraryFor(principal).readThumbnail(id);
     if (!thumbnail) {
       response.status(404).end();
       return;
@@ -311,8 +355,13 @@ export class ApiController {
   })
   @ApiErrors(404)
   @Get('shaders/:id/export')
-  async exportShader(@Param('id') id: string, @Res() response: Response): Promise<void> {
-    const payload = await this.storage.exportOne(id);
+  @AllowUnverified()
+  async exportShader(
+    @Param('id') id: string,
+    @Res() response: Response,
+    @CurrentUser() principal: Principal,
+  ): Promise<void> {
+    const payload = await this.libraryFor(principal).exportOne(id);
     response
       .setHeader('Content-Disposition', `attachment; filename="${attachmentName(payload.id)}"`)
       .json(buildShaderBundle(payload));
@@ -322,8 +371,9 @@ export class ApiController {
   @ApiOperation({ summary: 'Export the whole library', description: 'A collection bundle.' })
   @Get('export')
   @Header('Content-Disposition', 'attachment; filename="shader-studio-collection.shader.json"')
-  async exportAll(): Promise<unknown> {
-    return buildCollectionBundle(await this.storage.exportAll());
+  @AllowUnverified()
+  async exportAll(@CurrentUser() principal: Principal): Promise<unknown> {
+    return buildCollectionBundle(await this.libraryFor(principal).exportAll());
   }
 
   @ApiTags('transfer')
@@ -344,7 +394,11 @@ export class ApiController {
   })
   @ApiErrors(400)
   @Post('import')
-  async import(@Body() body: JsonBody | undefined, @Res() response: Response): Promise<void> {
+  async import(
+    @Body() body: JsonBody | undefined,
+    @Res() response: Response,
+    @CurrentUser() principal: Principal,
+  ): Promise<void> {
     const input = body ?? {};
     const raw = 'bundle' in input ? input['bundle'] : input;
     const mode = validateImportMode(input['mode']);
@@ -355,7 +409,7 @@ export class ApiController {
       throw new StorageError('invalid', 'The bundle could not be imported', parsed.errors);
     }
 
-    const result = await this.storage.importPayloads(parsed.value, mode.value);
+    const result = await this.libraryFor(principal).importPayloads(parsed.value, mode.value);
     const replaced = result.imported.filter((entry) => entry.replaced).length;
     this.logger.log(
       `imported ${result.imported.length} shader(s) in "${mode.value}" mode (${replaced} replaced)`,

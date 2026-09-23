@@ -3,6 +3,7 @@
   "recommendations": [
     "oxc.oxc-vscode",
     "angular.ng-template",
+    "nrwl.angular-console",
     "editorconfig.editorconfig",
     "slevesque.shader",
     "vitest.explorer",

@@ -42,8 +42,17 @@ export interface Preset {
   render?: RenderSettings;
 }
 
+/**
+ * `shader` is a document in your own library. `template` is a bundled example:
+ * everyone can read one, nobody can write to one, and editing it produces a
+ * copy you own. It is a marker, never the absence of an owner — an unowned row
+ * does not exist.
+ */
+export type ShaderKind = 'shader' | 'template';
+
 export interface ShaderMeta {
   id: string;
+  kind: ShaderKind;
   name: string;
   description: string;
   author?: string;
@@ -77,6 +86,7 @@ export interface ShaderRecord extends ShaderMeta {
 
 export interface ShaderSummary {
   id: string;
+  kind: ShaderKind;
   name: string;
   description: string;
   updatedAt: string;
@@ -134,6 +144,7 @@ export interface ApiErrorBody {
 export function toSummary(record: ShaderRecord): ShaderSummary {
   return {
     id: record.id,
+    kind: record.kind,
     name: record.name,
     description: record.description,
     updatedAt: record.updatedAt,

@@ -19,13 +19,7 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
  */
 @Component({
   selector: 'app-desktop-version-dialog',
-  imports: [
-    MatButtonModule,
-    MatDialogModule,
-    MatIconModule,
-    MatProgressBarModule,
-    TranslatePipe,
-  ],
+  imports: [MatButtonModule, MatDialogModule, MatIconModule, MatProgressBarModule, TranslatePipe],
   template: `
     <h2 mat-dialog-title>{{ 'desktop.versionTitle' | translate }}</h2>
     <mat-dialog-content>
@@ -34,17 +28,11 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
         <div>
           <strong>Shader Studio</strong>
           <span>{{
-            'desktop.versionLabel'
-              | translate: { version: updater.state().currentVersion || '—' }
+            'desktop.versionLabel' | translate: { version: updater.state().currentVersion || '—' }
           }}</span>
         </div>
       </div>
-      <div
-        class="status"
-        [class]="updater.state().status"
-        role="status"
-        aria-live="polite"
-      >
+      <div class="status" [class]="updater.state().status" role="status" aria-live="polite">
         <mat-icon>{{ statusIcon() }}</mat-icon>
         <span>{{ statusText() }}</span>
       </div>
@@ -52,10 +40,7 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
         <mat-progress-bar
           mode="determinate"
           [value]="updater.state().progress ?? 0"
-          [attr.aria-label]="
-            'desktop.downloadProgress'
-              | translate: { progress: progressLabel() }
-          "
+          [attr.aria-label]="'desktop.downloadProgress' | translate: { progress: progressLabel() }"
         />
         <span class="progress">{{ progressLabel() }}</span>
       }
@@ -64,15 +49,8 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
       <button matButton type="button" mat-dialog-close>
         {{ 'action.close' | translate }}
       </button>
-      <button
-        matButton="filled"
-        type="button"
-        [disabled]="actionDisabled()"
-        (click)="runAction()"
-      >
-        <mat-icon [class.spin]="isBusy()">{{
-          isBusy() ? 'sync' : actionIcon()
-        }}</mat-icon>
+      <button matButton="filled" type="button" [disabled]="actionDisabled()" (click)="runAction()">
+        <mat-icon [class.spin]="isBusy()">{{ isBusy() ? 'sync' : actionIcon() }}</mat-icon>
         {{ actionLabel() }}
       </button>
     </mat-dialog-actions>

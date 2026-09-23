@@ -39,6 +39,7 @@ const CONTROLS: ShaderControl[] = [{ key: 'speed', type: 'number', default: 1, m
 export function makeRecord(overrides: Partial<ShaderRecord> = {}): ShaderRecord {
   return {
     id: 'waves',
+    kind: 'shader',
     name: 'Waves',
     description: '',
     createdAt: '2024-01-01T00:00:00.000Z',

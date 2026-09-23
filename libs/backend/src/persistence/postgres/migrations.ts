@@ -53,4 +53,93 @@ export const POSTGRES_MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: 'shader-ownership',
+    async up(exec) {
+      // Backfill through a column default, then drop the default: from here on an
+      // INSERT must name an owner, so a code path that forgets one fails loudly
+      // instead of quietly creating an unowned shader. The foreign key to
+      // users(id) is added by the auth migration, once that table exists.
+      await exec(`
+        ALTER TABLE shaders ADD COLUMN owner_user_id text NOT NULL DEFAULT 'system';
+        ALTER TABLE shaders ALTER COLUMN owner_user_id DROP DEFAULT;
+        ALTER TABLE shaders ADD COLUMN kind text NOT NULL DEFAULT 'shader';
+
+        CREATE INDEX idx_shaders_owner_updated ON shaders(owner_user_id, updated_at DESC);
+      `);
+    },
+  },
+  {
+    version: 3,
+    name: 'auth-tables',
+    async up(exec) {
+      // Mirrors `auth-schema.ts` exactly — Better Auth resolves columns through
+      // those Drizzle definitions, so the two files change together or the
+      // adapter fails at runtime rather than at build time.
+      //
+      // The system account is inserted before the foreign key so the rows
+      // migration 2 backfilled have something real to point at. It is given an
+      // unroutable email and no `accounts` row, which means no credential
+      // exists for it and nobody can sign in as the owner of the examples.
+      await exec(`
+        CREATE TABLE users (
+          id             text PRIMARY KEY,
+          name           text NOT NULL,
+          email          text NOT NULL UNIQUE,
+          email_verified boolean NOT NULL DEFAULT false,
+          image          text,
+          created_at     timestamptz NOT NULL DEFAULT now(),
+          updated_at     timestamptz NOT NULL DEFAULT now()
+        );
+
+        CREATE TABLE sessions (
+          id         text PRIMARY KEY,
+          expires_at timestamptz NOT NULL,
+          token      text NOT NULL UNIQUE,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          updated_at timestamptz NOT NULL DEFAULT now(),
+          ip_address text,
+          user_agent text,
+          user_id    text NOT NULL REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE accounts (
+          id                       text PRIMARY KEY,
+          account_id               text NOT NULL,
+          provider_id              text NOT NULL,
+          user_id                  text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          access_token             text,
+          refresh_token            text,
+          id_token                 text,
+          access_token_expires_at  timestamptz,
+          refresh_token_expires_at timestamptz,
+          scope                    text,
+          password                 text,
+          created_at               timestamptz NOT NULL DEFAULT now(),
+          updated_at               timestamptz NOT NULL DEFAULT now()
+        );
+
+        CREATE TABLE verifications (
+          id         text PRIMARY KEY,
+          identifier text NOT NULL,
+          value      text NOT NULL,
+          expires_at timestamptz NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          updated_at timestamptz NOT NULL DEFAULT now()
+        );
+
+        CREATE INDEX idx_sessions_user ON sessions(user_id);
+        CREATE INDEX idx_accounts_user ON accounts(user_id);
+        CREATE INDEX idx_verifications_identifier ON verifications(identifier);
+
+        INSERT INTO users (id, name, email, email_verified)
+        VALUES ('system', 'Shader Studio', 'system@shader-studio.invalid', true);
+
+        ALTER TABLE shaders
+          ADD CONSTRAINT fk_shaders_owner
+          FOREIGN KEY (owner_user_id) REFERENCES users(id);
+      `);
+    },
+  },
 ];

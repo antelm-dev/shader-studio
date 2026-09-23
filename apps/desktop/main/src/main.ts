@@ -5,7 +5,7 @@ import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path
 import { createIpcContainer } from 'electron-ipc-module';
 
 import { resolveI18nDir } from '@shader-studio/backend/i18n';
-import { ShaderLibrary } from '@shader-studio/backend/library';
+import { LOCAL_SCOPE, ShaderLibrary } from '@shader-studio/backend/library';
 import { createLegacyReader, legacyLibraryExists } from '@shader-studio/backend/persistence/legacy';
 import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
 import { WELL_KNOWN_SURFACE_IDS } from '@shader-studio/shared/surfaces';
@@ -180,8 +180,11 @@ prepare({
     // SQLite lives in the main process only; the web app reaches it via IPC.
     const libraryDir = join(userData, 'library');
     await mkdir(libraryDir, { recursive: true });
+    // The desktop app is offline and single-user: everything it stores belongs
+    // to the local user, and no network identity is ever involved.
     const library = new ShaderLibrary(
       new SqliteRepository({ location: join(libraryDir, 'shader-studio.sqlite') }),
+      LOCAL_SCOPE,
     );
     await library.init();
     await migrateLegacyLibrary(library, libraryDir);
