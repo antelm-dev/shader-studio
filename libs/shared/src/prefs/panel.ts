@@ -10,9 +10,15 @@
  */
 
 /** Which section of the inspector is showing. */
-export type InspectorTab = 'controls' | 'textures' | 'presets';
+export type InspectorTab = 'controls' | 'textures' | 'postProcessing' | 'presets';
 
-export const INSPECTOR_TABS: readonly InspectorTab[] = ['controls', 'textures', 'presets'];
+// Same order as the inspector's tabs: the tab group reports an index.
+export const INSPECTOR_TABS: readonly InspectorTab[] = [
+  'controls',
+  'textures',
+  'postProcessing',
+  'presets',
+];
 
 /**
  * How wide a panel may be dragged.
