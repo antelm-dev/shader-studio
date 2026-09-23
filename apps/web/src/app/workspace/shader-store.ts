@@ -192,7 +192,7 @@ export class ShaderStore {
     return this.selection.initializeClient(routeShaderId);
   }
 
-  refreshList(): Promise<void> {
+  refreshList(): Promise<boolean> {
     return this.selection.refreshList();
   }
 
