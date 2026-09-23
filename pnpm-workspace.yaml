@@ -6,6 +6,7 @@ packages:
 
 onlyBuiltDependencies:
   - '@parcel/watcher'
+  - '@scarf/scarf'
   - electron
   - electron-ipc-module
   - electron-winstaller

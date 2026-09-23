@@ -43,6 +43,7 @@
               "cloudflare:sockets",
               "class-validator",
               "class-transformer",
+              "@nestjs/swagger",
               "@nestjs/websockets/socket-module",
               "@nestjs/microservices",
               "@nestjs/microservices/microservices-module"
