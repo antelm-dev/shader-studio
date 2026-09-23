@@ -88,12 +88,21 @@ together; the app waits for the database to be healthy before it starts.
 ```bash
 git clone https://github.com/antelm-dev/shader-studio.git
 cd shader-studio
-cp .env.example .env         # then set POSTGRES_PASSWORD to a long random value
+cp .env.example .env         # then fill in the required values it lists
 docker compose up -d --build
 ```
 
 Shader Studio is then available at [http://localhost:4000](http://localhost:4000),
 with the five example shaders already seeded.
+
+Each web user gets a private library, so the deployment needs a few things
+before it will start: `BETTER_AUTH_SECRET`, the public `BETTER_AUTH_URL`, and an
+SMTP server for verification and password-reset mail. Compose refuses to come up
+without them rather than falling back to a development secret.
+**[docs/deploying-authentication.md](docs/deploying-authentication.md)** covers
+the setup, what to do with shaders that predate accounts, and what each control
+enforces. The desktop app is unaffected — it is offline and single-user, and has
+no accounts at all.
 
 Keep `.env` local: it is ignored by both Git and the Docker build context.
 Only `.env.example`, which contains no usable credential, belongs in version

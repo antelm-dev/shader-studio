@@ -221,6 +221,8 @@ export class ShaderStorage {
     const now = new Date().toISOString();
     return {
       id,
+      // The legacy file store predates templates: everything in it is a document.
+      kind: 'shader',
       name,
       description,
       ...(typeof record['author'] === 'string' ? { author: record['author'] } : {}),
@@ -288,6 +290,7 @@ export class ShaderStorage {
 
     const meta: ShaderMeta = {
       id: payload.id,
+      kind: 'shader',
       name: payload.name,
       description: payload.description,
       ...(payload.author ? { author: payload.author } : {}),

@@ -12,6 +12,8 @@
  */
 
 /** The four channel slots plus the preview, as stored in the `assets` table. */
+import type { ShaderKind, UserScope } from './user-scope';
+
 export type AssetKey = 'thumbnail' | 'texture:0' | 'texture:1' | 'texture:2' | 'texture:3';
 
 export const TEXTURE_ASSET_KEYS = [
@@ -30,6 +32,9 @@ export function textureAssetKey(channel: number): AssetKey {
 /** A `shaders` row. `project_json` is the source of truth; fragment/vertex are derived. */
 export interface ShaderRow {
   id: string;
+  /** Set from the caller's scope on insert, never from request input. */
+  ownerUserId: string;
+  kind: ShaderKind;
   name: string;
   description: string;
   author: string | null;
@@ -86,6 +91,7 @@ export interface StoredShader {
 /** A lightweight listing row — no project/render/channels JSON, no asset bytes. */
 export interface ShaderSummaryRow {
   id: string;
+  kind: ShaderKind;
   name: string;
   description: string;
   updatedAt: string;
@@ -100,9 +106,9 @@ export interface ShaderSummaryRow {
  * its assets commit or roll back as a unit.
  */
 export interface ShaderTx {
-  listIds(): Promise<string[]>;
-  loadShader(id: string): Promise<StoredShader | null>;
-  loadAsset(id: string, key: AssetKey): Promise<StoredAsset | null>;
+  listIds(scope: UserScope): Promise<string[]>;
+  loadShader(scope: UserScope, id: string): Promise<StoredShader | null>;
+  loadAsset(scope: UserScope, id: string, key: AssetKey): Promise<StoredAsset | null>;
   insertShader(row: ShaderRow): Promise<void>;
   /**
    * Rewrites the mutable columns and bumps `revision`. When `expectedRevision`
@@ -110,8 +116,13 @@ export interface ShaderTx {
    * `StorageError` rather than clobbering a concurrent write. Returns the new
    * revision.
    */
-  updateShader(id: string, fields: ShaderMutableFields, expectedRevision?: number): Promise<number>;
-  deleteShader(id: string): Promise<boolean>;
+  updateShader(
+    scope: UserScope,
+    id: string,
+    fields: ShaderMutableFields,
+    expectedRevision?: number,
+  ): Promise<number>;
+  deleteShader(scope: UserScope, id: string): Promise<boolean>;
   replacePresets(shaderId: string, presets: PresetRow[]): Promise<void>;
   putAsset(shaderId: string, asset: StoredAsset): Promise<void>;
   deleteAsset(shaderId: string, key: AssetKey): Promise<void>;
@@ -119,17 +130,31 @@ export interface ShaderTx {
   setMeta(key: string, value: string): Promise<void>;
 }
 
+/**
+ * The engine's own connection, handed over as a Drizzle database bound to the
+ * auth schema. Authentication shares the shader store — same pool or file, same
+ * migration ledger — so a session and the shaders it unlocks can never be
+ * served by two databases that disagree about what exists.
+ */
+export interface AuthDatabase {
+  readonly provider: 'pg' | 'sqlite';
+  /** Passed straight to Better Auth's `drizzleAdapter`. */
+  readonly db: object;
+}
+
 export interface ShaderRepository {
   /** Opens the connection, applies engine pragmas/pool settings, runs migrations. */
   init(): Promise<void>;
+  /** The auth-schema view of the same connection. Only valid after `init()`. */
+  authDatabase(): AuthDatabase;
   close(): Promise<void>;
   /** Runs `work` inside a single transaction, rolling back if it throws. */
   transaction<T>(work: (tx: ShaderTx) => Promise<T>): Promise<T>;
 
   // Reads — safe outside a transaction.
-  listShaders(): Promise<ShaderSummaryRow[]>;
-  loadShader(id: string): Promise<StoredShader | null>;
-  loadAsset(id: string, key: AssetKey): Promise<StoredAsset | null>;
+  listShaders(scope: UserScope): Promise<ShaderSummaryRow[]>;
+  loadShader(scope: UserScope, id: string): Promise<StoredShader | null>;
+  loadAsset(scope: UserScope, id: string, key: AssetKey): Promise<StoredAsset | null>;
   getMeta(key: string): Promise<string | null>;
   setMeta(key: string, value: string): Promise<void>;
 }

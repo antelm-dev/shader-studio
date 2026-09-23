@@ -58,6 +58,7 @@ class FakeController implements ShaderStudioController {
     return [
       {
         id: 'demo',
+        kind: 'shader',
         name: 'Demo',
         description: '',
         updatedAt: '2024-01-01T00:00:00.000Z',

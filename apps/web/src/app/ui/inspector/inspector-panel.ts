@@ -107,7 +107,6 @@ import { WorkspaceActions } from '../workspace-actions';
       [selectedIndex]="index()"
       (selectedIndexChange)="selectTab($event)"
     >
-
       <mat-tab>
         <ng-template mat-tab-label>
           {{ 'inspector.controls' | translate }}

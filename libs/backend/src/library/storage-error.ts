@@ -7,7 +7,7 @@ import type { Result } from '@shader-studio/shared/validate';
  */
 export class StorageError extends Error {
   constructor(
-    readonly code: 'not_found' | 'conflict' | 'invalid' | 'io',
+    readonly code: 'not_found' | 'conflict' | 'invalid' | 'io' | 'unauthorized',
     message: string,
     readonly details: string[] = [],
   ) {
@@ -17,6 +17,11 @@ export class StorageError extends Error {
 
   get status(): number {
     switch (this.code) {
+      // No session, or one that expired or was revoked. Distinct from 404,
+      // which is what a shader belonging to someone else returns — the caller
+      // is known there, just not entitled, and must not learn the difference.
+      case 'unauthorized':
+        return 401;
       case 'not_found':
         return 404;
       case 'conflict':

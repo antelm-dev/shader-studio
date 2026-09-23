@@ -2,6 +2,7 @@ import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import {
   Component,
   ElementRef,
+  PLATFORM_ID,
   afterRenderEffect,
   computed,
   effect,
@@ -10,9 +11,11 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -51,6 +54,10 @@ import { StartupCoordinator } from './workspace/startup-coordinator';
 import { WorkspaceActions } from './ui/workspace-actions';
 import { I18n, LANGUAGE_OPTIONS, type AppLocale } from './i18n/i18n';
 import { TranslatePipe } from './i18n/translate.pipe';
+import { AuthService } from './auth/auth.service';
+import { AuthPrompt } from './auth/auth-prompt';
+import { AccountDialog } from './ui/dialogs/account-dialog';
+import { AuthDialog, type AuthDialogData } from './ui/dialogs/auth-dialog';
 
 @Component({
   selector: 'app-root',
@@ -62,6 +69,7 @@ import { TranslatePipe } from './i18n/translate.pipe';
     InspectorShell,
     TranslatePipe,
     MatButtonModule,
+    MatDialogModule,
     MatDividerModule,
     MatIconModule,
     MatMenuModule,
@@ -90,7 +98,20 @@ export class App {
   protected readonly i18n = inject(I18n);
   protected readonly outputMode = isOutputWindow();
 
+  protected readonly auth = inject(AuthService);
+  private readonly authPrompt = inject(AuthPrompt);
+
+  /**
+   * Cloud accounts exist on the web and nowhere else. The desktop app stores
+   * everything locally for one user, so it shows no account controls at all
+   * rather than controls that cannot lead anywhere.
+   */
+  protected readonly cloudAccounts = !this.desktop.available;
+
   private readonly snackBar = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
+  /** At most one auth dialog, however many 401s arrive at once. */
+  private authDialogOpen = false;
 
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
   private readonly importMode = signal<ImportMode>('rename');
@@ -195,6 +216,49 @@ export class App {
     }
   }
 
+  protected openSignIn(): void {
+    this.openAuth({ mode: 'sign-in' });
+  }
+
+  protected openAccount(): void {
+    this.dialog.open(AccountDialog, {
+      autoFocus: 'dialog',
+      restoreFocus: true,
+      maxWidth: 'calc(100vw - 32px)',
+    });
+  }
+
+  protected async signOut(): Promise<void> {
+    const result = await this.auth.signOut();
+    if (!result.ok) {
+      this.store.notice.set({
+        text: result.message ?? this.i18n.t('auth.genericError'),
+        error: true,
+      });
+    }
+  }
+
+  /**
+   * The editor keeps its document throughout: signing in happens *over* the
+   * app, so an expired session costs a dialog rather than unsaved work.
+   */
+  private openAuth(data: AuthDialogData): void {
+    if (this.authDialogOpen) return;
+    this.authDialogOpen = true;
+    this.dialog
+      .open(AuthDialog, {
+        data,
+        autoFocus: 'first-tabbable',
+        restoreFocus: true,
+        maxWidth: 'calc(100vw - 32px)',
+      })
+      .afterClosed()
+      .subscribe(() => {
+        this.authDialogOpen = false;
+        this.authPrompt.clear();
+      });
+  }
+
   protected readonly shaderCommands: readonly MenuCommand[] = [
     this.commands.newShader,
     this.commands.renameShader,
@@ -255,6 +319,22 @@ export class App {
 
     // The hidden input the browser imports go through is in this template.
     if (!this.outputMode) this.commands.useFilePicker((mode) => this.pickFile(mode));
+
+    // Resolving the session in the browser only. Doing it during SSR would put
+    // one visitor's identity into a response that may be cached and handed to
+    // the next, so the shell renders anonymous and settles on hydration.
+    if (this.cloudAccounts && !this.outputMode && isPlatformBrowser(inject(PLATFORM_ID))) {
+      void this.auth.refresh();
+    }
+
+    // A `401`, or a link out of a verification or reset email, asks for the
+    // dialog through this signal rather than opening one itself — so a burst of
+    // parallel failures still produces exactly one.
+    effect(() => {
+      const pending = this.authPrompt.pending();
+      if (pending) this.openAuth(pending);
+    });
+
     /**
      * A side drawer offsets the content with a margin that Material measures for
      * itself — on open, on close, and on a viewport change, but *not* when the

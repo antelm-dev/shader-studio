@@ -101,7 +101,7 @@ export class SelectionLifecycle {
    * The client switches to the remembered shader once it takes over.
    */
   async initialize(routeShaderId?: string | null): Promise<void> {
-    await this.refreshList();
+    const listed = await this.refreshList();
 
     const shaders = this.documentState.shaders();
     const requested =
@@ -110,7 +110,10 @@ export class SelectionLifecycle {
         : shaders[0]?.id;
     if (requested) await this.select(requested);
 
-    if (this.isServer) {
+    // A failed list (SSR carries no session cookie, so it is usually a 401)
+    // publishes nothing: an empty snapshot would stop the browser — which does
+    // hold the session — from ever fetching the library itself.
+    if (this.isServer && listed) {
       this.transferState.set(SNAPSHOT_KEY, {
         shaders: this.documentState.shaders(),
         record: this.documentState.record(),
@@ -141,11 +144,14 @@ export class SelectionLifecycle {
 
   // --- The collection -------------------------------------------------------
 
-  async refreshList(): Promise<void> {
+  /** True when the list was loaded; a failure has already been reported. */
+  async refreshList(): Promise<boolean> {
     try {
       this.documentState.shaders.set(await this.api.list());
+      return true;
     } catch (error) {
       this.report(error);
+      return false;
     }
   }
 

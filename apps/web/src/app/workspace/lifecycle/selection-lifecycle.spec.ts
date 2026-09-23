@@ -1,6 +1,19 @@
+import { DOCUMENT } from '@angular/common';
+import { PLATFORM_ID, TransferState } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MemoryStorage, flush, makeRecord, setupLifecycle } from './testing/lifecycle-harness';
+import { ShaderApi } from '../../api/shader-api';
+import { Preferences } from '../../prefs/preferences';
+import { SelectionLifecycle } from './selection-lifecycle';
+import {
+  FakePreferences,
+  MemoryStorage,
+  documentWith,
+  flush,
+  makeRecord,
+  setupLifecycle,
+} from './testing/lifecycle-harness';
 
 /**
  * Selection, and specifically what happens when two of them overlap.
@@ -245,5 +258,25 @@ describe('SelectionLifecycle: startup', () => {
     await pending;
 
     expect(state.selectedId()).toBe('plasma');
+  });
+});
+
+describe('SelectionLifecycle: server render', () => {
+  it('publishes no snapshot when the list could not be read', async () => {
+    // SSR has no session cookie, so the list 401s. An empty snapshot would stop
+    // the signed-in browser from ever fetching its own library.
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ShaderApi, useValue: { list: () => Promise.reject(new Error('401')) } },
+        { provide: Preferences, useValue: new FakePreferences() },
+        { provide: PLATFORM_ID, useValue: 'server' },
+        { provide: DOCUMENT, useValue: documentWith(new MemoryStorage()) },
+      ],
+    });
+
+    await TestBed.inject(SelectionLifecycle).initialize();
+
+    expect(TestBed.inject(TransferState).isEmpty).toBe(true);
   });
 });

@@ -31,6 +31,7 @@ import { DEFAULT_VERTEX, TEMPLATE_FRAGMENT } from '@shader-studio/shared/templat
 import { ShaderLibrary, type PayloadSource } from './shader-library';
 import { StorageError } from './storage-error';
 import type { AssetKey, ShaderRepository } from '../persistence/shader-repository';
+import { LOCAL_SCOPE, LOCAL_USER_ID } from '../persistence/user-scope';
 
 export interface ConformanceHarness {
   /** A repository over this harness's (empty) store. Calling again re-opens the same store. */
@@ -84,7 +85,7 @@ export function runShaderLibraryConformance(
 
     beforeEach(async () => {
       harness = newHarness();
-      lib = new ShaderLibrary(harness.makeRepository());
+      lib = new ShaderLibrary(harness.makeRepository(), LOCAL_SCOPE);
       await lib.init();
     });
 
@@ -383,7 +384,7 @@ export function runShaderLibraryConformance(
       await lib.update(created.id, { project: wired });
 
       await lib.close();
-      const reopened = new ShaderLibrary(harness.makeRepository());
+      const reopened = new ShaderLibrary(harness.makeRepository(), LOCAL_SCOPE);
       await reopened.init();
       try {
         expect((await reopened.read(created.id)).project).toEqual(wired);
@@ -414,13 +415,15 @@ export function runShaderLibraryConformance(
     // 16 — rollback on a mid-transaction error
     it('rolls a failed transaction back completely', async () => {
       const repo = harness.makeRepository();
-      const lib2 = new ShaderLibrary(repo);
+      const lib2 = new ShaderLibrary(repo, LOCAL_SCOPE);
       await lib2.init();
       try {
         await expect(
           repo.transaction(async (tx) => {
             await tx.insertShader({
               id: 'ghost',
+              ownerUserId: LOCAL_USER_ID,
+              kind: 'shader',
               name: 'Ghost',
               description: '',
               author: null,
@@ -515,13 +518,169 @@ export function runShaderLibraryConformance(
       await lib.update(created.id, { fragment: FRAGMENT });
       await lib.close();
 
-      const reopened = new ShaderLibrary(harness.makeRepository());
+      const reopened = new ShaderLibrary(harness.makeRepository(), LOCAL_SCOPE);
       await reopened.init();
       try {
         expect((await reopened.read(created.id)).fragment).toBe(FRAGMENT);
       } finally {
         await reopened.close();
       }
+    });
+
+    // 22 — ownership: two users share a store and never see each other
+    describe('ownership', () => {
+      const ALICE = { userId: 'user-alice' };
+      const BOB = { userId: 'user-bob' };
+
+      async function aliceShader(name = 'Alice Only'): Promise<string> {
+        return (await lib.as(ALICE).create({ name })).id;
+      }
+
+      it('lists only the shaders the scope owns', async () => {
+        await lib.as(ALICE).create({ name: 'Alpha' });
+        await lib.as(BOB).create({ name: 'Beta' });
+
+        expect((await lib.as(ALICE).list()).map((entry) => entry.name)).toEqual(['Alpha']);
+        expect((await lib.as(BOB).list()).map((entry) => entry.name)).toEqual(['Beta']);
+      });
+
+      it('reports another user’s shader as not found, never as forbidden', async () => {
+        const id = await aliceShader();
+        // The same code and message a genuinely unknown id produces, so a probe
+        // cannot distinguish "exists but not yours" from "does not exist".
+        const failure = async (target: string): Promise<StorageError> => {
+          try {
+            await lib.as(BOB).read(target);
+          } catch (error) {
+            return error as StorageError;
+          }
+          throw new Error(`reading "${target}" as Bob should have failed`);
+        };
+
+        const missing = await failure('no-such-shader');
+        const foreign = await failure(id);
+
+        expect(foreign).toBeInstanceOf(StorageError);
+        expect(foreign.code).toBe(missing.code);
+        expect(foreign.status).toBe(missing.status);
+      });
+
+      it('refuses every cross-user mutation', async () => {
+        const id = await aliceShader();
+        const bob = lib.as(BOB);
+
+        await expect(bob.update(id, { name: 'Stolen' })).rejects.toMatchObject({
+          code: 'not_found',
+        });
+        await expect(bob.remove(id)).rejects.toMatchObject({ code: 'not_found' });
+        await expect(bob.duplicate(id)).rejects.toMatchObject({ code: 'not_found' });
+        await expect(bob.exportOne(id)).rejects.toMatchObject({ code: 'not_found' });
+        await expect(bob.savePreset(id, { name: 'Nope', values: {} })).rejects.toMatchObject({
+          code: 'not_found',
+        });
+        await expect(bob.deletePreset(id, 'nope')).rejects.toMatchObject({ code: 'not_found' });
+        await expect(bob.clearTexture(id, 0)).rejects.toMatchObject({ code: 'not_found' });
+        await expect(
+          bob.setThumbnail(id, { ext: 'png', bytes: Buffer.from('x') }),
+        ).rejects.toMatchObject({ code: 'not_found' });
+
+        // Alice's shader survived every attempt untouched.
+        expect((await lib.as(ALICE).read(id)).name).toBe('Alice Only');
+      });
+
+      it('keeps nested assets behind the parent shader’s owner', async () => {
+        const id = await aliceShader();
+        await lib.as(ALICE).setTexture(id, 0, {
+          ext: 'png',
+          bytes: Buffer.from(PNG, 'base64'),
+          width: 2,
+          height: 2,
+        });
+        await lib.as(ALICE).setThumbnail(id, { ext: 'webp', bytes: Buffer.from(WEBP, 'base64') });
+
+        expect(await lib.as(BOB).readTexture(id, 0)).toBeNull();
+        expect(await lib.as(BOB).readThumbnail(id)).toBeNull();
+        expect(await lib.as(ALICE).readTexture(id, 0)).not.toBeNull();
+      });
+
+      it('assigns the acting user as owner on create, duplicate and import', async () => {
+        const created = await lib.as(ALICE).create({ name: 'Mine' });
+        const copy = await lib.as(ALICE).duplicate(created.id, 'Mine Copy');
+        await lib.as(BOB).importPayloads([payloadOf('shared-id', 'Bobs Import')], 'rename');
+
+        expect((await lib.as(ALICE).list()).map((entry) => entry.id).sort()).toEqual(
+          [created.id, copy.id].sort(),
+        );
+        expect((await lib.as(BOB).list()).map((entry) => entry.name)).toEqual(['Bobs Import']);
+      });
+
+      it('never lets exportAll cross an ownership boundary', async () => {
+        await lib.as(ALICE).create({ name: 'Alpha' });
+        await lib.as(BOB).create({ name: 'Beta' });
+
+        expect((await lib.as(ALICE).exportAll()).map((entry) => entry.name)).toEqual(['Alpha']);
+        expect((await lib.as(BOB).exportAll()).map((entry) => entry.name)).toEqual(['Beta']);
+      });
+
+      it('keeps revision conflicts working inside a scope', async () => {
+        const id = await aliceShader();
+        const alice = lib.as(ALICE);
+        const first = await alice.update(id, { name: 'Once', expectedRevision: 1 });
+
+        await expect(
+          alice.update(id, { name: 'Twice', expectedRevision: 1 }),
+        ).rejects.toMatchObject({ code: 'conflict' });
+        expect(first.revision).toBe(2);
+      });
+
+      describe('templates', () => {
+        const source: PayloadSource = {
+          listIds: async () => ['example'],
+          exportOne: async () => payloadOf('example', 'Bundled Example'),
+        };
+
+        beforeEach(async () => {
+          await lib.as({ userId: 'system' }).installExamples(source, true, 'template');
+        });
+
+        it('shows the same templates to everyone, marked as such', async () => {
+          for (const who of [ALICE, BOB]) {
+            const listed = await lib.as(who).list();
+            expect(listed.map((entry) => `${entry.id}:${entry.kind}`)).toEqual([
+              'example:template',
+            ]);
+          }
+        });
+
+        it('forks a template on the first edit instead of writing to it', async () => {
+          const edited = await lib.as(ALICE).update('example', { name: 'My Version' });
+
+          expect(edited.id).not.toBe('example');
+          expect(edited.kind).toBe('shader');
+          expect(edited.name).toBe('My Version');
+
+          // The example is untouched, and Bob sees no trace of Alice's copy.
+          expect((await lib.as(BOB).read('example')).name).toBe('Bundled Example');
+          expect((await lib.as(BOB).list()).map((entry) => entry.id)).toEqual(['example']);
+        });
+
+        it('refuses to delete a template', async () => {
+          await expect(lib.as(ALICE).remove('example')).rejects.toMatchObject({
+            code: 'not_found',
+          });
+          expect((await lib.as(BOB).read('example')).name).toBe('Bundled Example');
+        });
+      });
+
+      it('gives a second user their own id when a slug is globally taken', async () => {
+        const mine = await lib.as(ALICE).create({ name: 'Nebula' });
+        const theirs = await lib.as(BOB).create({ name: 'Nebula' });
+
+        expect(mine.id).toBe('nebula');
+        expect(theirs.id).not.toBe('nebula');
+        expect(theirs.id.startsWith('nebula-')).toBe(true);
+        expect((await lib.as(BOB).read(theirs.id)).name).toBe('Nebula');
+      });
     });
   });
 }
