@@ -15,6 +15,7 @@ export const TRANSLATION_KEYS = [
   'menu.theme',
   'menu.editorAppearance',
   'menu.desktopVersion',
+  'menu.downloadDesktop',
   'menu.keyboardShortcuts',
   'menu.documentation',
   'menu.reportIssue',

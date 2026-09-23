@@ -251,6 +251,16 @@
         <mat-icon>info</mat-icon>
         <span>{{ 'menu.desktopVersion' | translate }}</span>
       </button>
+      } @else {
+      <a
+        mat-menu-item
+        href="https://github.com/antelm-dev/shader-studio/releases/latest"
+        target="_blank"
+        rel="noopener"
+      >
+        <mat-icon>download</mat-icon>
+        <span>{{ 'menu.downloadDesktop' | translate }}</span>
+      </a>
       }
       <button mat-menu-item type="button" [matMenuTriggerFor]="languageMenu">
         <mat-icon>language</mat-icon>
