@@ -9,7 +9,7 @@
  */
 
 import { betterAuth } from 'better-auth';
-import { APIError, createAuthMiddleware } from 'better-auth/api';
+import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { haveIBeenPwned } from 'better-auth/plugins';
 
@@ -104,20 +104,22 @@ export function createAuth(
 
     // Better Auth has no idle timeout or absolute lifetime of its own: it only
     // pushes `expiresAt` to now + `expiresIn` once `updateAge` has passed since
-    // the last push. So `expiresIn` *is* the idle window, `updateAge` is kept
-    // short so activity keeps sliding it, and the hard ceiling is enforced by
+    // the last push. So `expiresIn` *is* the idle window, `updateAge` stays well
+    // inside it so activity keeps sliding it (at `updateAge === expiresIn` the
+    // refresh would only fall due once the session had already expired), and
+    // the hard ceiling is enforced by
     // the `databaseHooks` below, which never let a refresh reach past
     // `createdAt + sessionMaxSeconds`.
     session: {
       expiresIn: Math.min(config.sessionIdleSeconds, config.sessionMaxSeconds),
-      updateAge: Math.min(config.sessionIdleSeconds, SESSION_REFRESH_SECONDS),
+      updateAge: refreshAge(config.sessionIdleSeconds),
       // No cookie cache: a revoked session must stop working on the next
       // request, not when a cached copy happens to expire.
       cookieCache: { enabled: false },
-      // Changing a password or revoking sessions requires a session that was
-      // authenticated recently, so a borrowed laptop cannot be used to lock the
-      // owner out hours later.
-      freshAge: 60 * 15,
+      // Better Auth itself only checks this on `/list-sessions` and
+      // `/unlink-account`. The revocation routes are held to it by the `before`
+      // hook below; changing a password needs the current one anyway.
+      freshAge: FRESH_SECONDS,
     },
 
     databaseHooks: {
@@ -197,6 +199,19 @@ export function createAuth(
     // Observation only — this hook never changes an outcome, so a bug in the
     // audit trail cannot become a bug in authentication.
     hooks: {
+      // Revoking sessions needs a recent sign-in, so an old session left on a
+      // borrowed device cannot sign the owner out of everything else. The
+      // client answers SESSION_NOT_FRESH by asking for the password again.
+      before: createAuthMiddleware(async (ctx) => {
+        if (!FRESH_ONLY.has(ctx.path)) return;
+        const session = await getSessionFromCtx(ctx);
+        if (session && !isFresh(session.session.createdAt)) {
+          throw new APIError('FORBIDDEN', {
+            code: 'SESSION_NOT_FRESH',
+            message: 'Confirm your password to continue.',
+          });
+        }
+      }),
       after: createAuthMiddleware(async (ctx) => {
         const returned = ctx.context.returned;
         const event = eventForPath(ctx.path, !(returned instanceof APIError));
@@ -220,8 +235,24 @@ export function createAuth(
   });
 }
 
-/** How often an active session's idle window is slid forward. */
+/** How often an active session's idle window is slid forward, at most. */
 const SESSION_REFRESH_SECONDS = 60 * 60;
+
+/** How long after signing in a session may still revoke others. */
+const FRESH_SECONDS = 60 * 15;
+const FRESH_ONLY = new Set(['/revoke-session', '/revoke-sessions', '/revoke-other-sessions']);
+
+/**
+ * Half the idle window, capped at an hour: any request in the second half of
+ * the window slides it, so a user who keeps working is never signed out.
+ */
+export function refreshAge(idleSeconds: number): number {
+  return Math.max(1, Math.min(Math.floor(idleSeconds / 2), SESSION_REFRESH_SECONDS));
+}
+
+function isFresh(createdAt: Date): boolean {
+  return Date.now() - new Date(createdAt).getTime() < FRESH_SECONDS * 1000;
+}
 
 /** `expiresAt`, pulled back so it never passes the session's absolute lifetime. */
 export function capExpiry(expiresAt: Date, createdAt: Date, maxSeconds: number): Date {
