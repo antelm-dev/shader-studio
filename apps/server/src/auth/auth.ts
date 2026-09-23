@@ -196,8 +196,9 @@ export function createAuth(
       }),
     ],
 
-    // Observation only — this hook never changes an outcome, so a bug in the
-    // audit trail cannot become a bug in authentication.
+    // The audit half of the `after` hook is observation only — it never
+    // changes an outcome, so a bug in the audit trail cannot become a bug in
+    // authentication.
     hooks: {
       // Revoking sessions needs a recent sign-in, so an old session left on a
       // borrowed device cannot sign the owner out of everything else. The
@@ -214,6 +215,21 @@ export function createAuth(
       }),
       after: createAuthMiddleware(async (ctx) => {
         const returned = ctx.context.returned;
+
+        // Signing in over an existing session (re-confirming a password, or
+        // just signing in again) replaces the cookie; the session it named
+        // would otherwise linger as a phantom device until its idle expiry.
+        if (ctx.path === '/sign-in/email' && !(returned instanceof APIError)) {
+          const previous = await ctx.getSignedCookie(
+            ctx.context.authCookies.sessionToken.name,
+            ctx.context.secret,
+          );
+          const current = ctx.context.newSession?.session.token;
+          if (previous && current && previous !== current) {
+            await ctx.context.internalAdapter.deleteSession(previous);
+          }
+        }
+
         const event = eventForPath(ctx.path, !(returned instanceof APIError));
         if (!event) return;
 

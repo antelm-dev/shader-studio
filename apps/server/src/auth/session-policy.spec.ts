@@ -74,9 +74,10 @@ async function signUp(): Promise<{ email: string; headers: Headers }> {
   return { email, headers: cookieOf(response) };
 }
 
-async function signIn(email: string): Promise<Headers> {
+async function signIn(email: string, over?: Headers): Promise<Headers> {
   const response = await auth.api.signInEmail({
     body: { email, password: PASSWORD },
+    ...(over ? { headers: over } : {}),
     asResponse: true,
   });
   expect(response.status).toBe(200);
@@ -138,5 +139,21 @@ describe('revoking sessions', () => {
     expect(revoked.status).toBe(200);
     expect(await alive(elsewhere)).toBe(false);
     expect(await alive(fresh)).toBe(true);
+  });
+});
+
+describe('signing in again', () => {
+  it('replaces the session the browser already had instead of adding one', async () => {
+    const { email, headers } = await signUp();
+    const elsewhere = await signIn(email);
+
+    const renewed = await signIn(email, headers);
+
+    expect(await alive(headers)).toBe(false);
+    expect(await alive(renewed)).toBe(true);
+    // Another device's session is not the browser's to retire.
+    expect(await alive(elsewhere)).toBe(true);
+    const sessions = await auth.api.listSessions({ headers: renewed });
+    expect(sessions).toHaveLength(2);
   });
 });

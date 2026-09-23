@@ -147,7 +147,8 @@ export class AuthService {
 
   /**
    * Proves it is still the owner at the keyboard: a fresh sign-in, which is
-   * what listing and revoking sessions require.
+   * what listing and revoking sessions require. The server retires the session
+   * this browser held, so no duplicate device appears.
    */
   async reauthenticate(password: string): Promise<AuthResult> {
     const email = this.userSignal()?.email;
