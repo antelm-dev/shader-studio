@@ -9,6 +9,7 @@ import {
 } from '@shader-studio/shared/model';
 import { composePass } from '@shader-studio/shared/pass-source';
 import { imagePass } from '@shader-studio/shared/project';
+import { AuthService, type AuthResult } from '../auth/auth.service';
 import { DesktopPlatform } from '../desktop/desktop-platform';
 import { DesktopUpdater } from '../desktop/desktop-updater';
 import { ShaderStore, type EditorDocument } from '../workspace/shader-store';
@@ -43,6 +44,7 @@ export class WorkspaceActions {
   private readonly updater = inject(DesktopUpdater);
   private readonly i18n = inject(I18n);
   private readonly openDocs = inject(OpenDocuments);
+  private readonly auth = inject(AuthService);
   private transitionInFlight: Promise<boolean> | null = null;
 
   guardedTransition(action: () => void | Promise<void>): Promise<boolean> {
@@ -72,6 +74,19 @@ export class WorkspaceActions {
     }
     await action();
     return true;
+  }
+
+  /**
+   * Signing out closes the library, so it is a transition like any other: the
+   * unsaved-changes guard runs first. Null when the user chose to stay.
+   */
+  async signOut(): Promise<AuthResult | null> {
+    let result: AuthResult | null = null;
+    await this.guardedTransition(async () => {
+      result = await this.auth.signOut();
+      if (result.ok) this.store.closeLibrary();
+    });
+    return result;
   }
 
   async selectShader(id: string): Promise<boolean> {

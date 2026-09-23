@@ -1,8 +1,9 @@
-import { Injectable, afterNextRender, effect, inject } from '@angular/core';
+import { Injectable, afterNextRender, computed, effect, inject, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
 
+import { AuthService } from '../auth/auth.service';
 import { isOutputWindow } from '../output-mode';
 import { I18n } from '../i18n/i18n';
 import { WorkspaceActions } from '../ui/workspace-actions';
@@ -23,8 +24,12 @@ export class RoutingCoordinator {
   private readonly store = inject(ShaderStore);
   private readonly workspace = inject(WorkspaceActions);
   private readonly i18n = inject(I18n);
+  private readonly auth = inject(AuthService);
 
   private routingReady = false;
+
+  /** Whose library is on screen; `undefined` until the session first resolves. */
+  private owner: string | null | undefined;
 
   constructor() {
     this.router.events
@@ -43,7 +48,42 @@ export class RoutingCoordinator {
       if (this.router.url !== canonical) void this.router.navigateByUrl(canonical);
     });
 
+    // `undefined` while the session is being resolved, so the effect only ever
+    // sees an answer. The desktop never resolves one and stays out of this.
+    const identity = computed(() =>
+      this.auth.status() === 'loading' ? undefined : (this.auth.user()?.id ?? null),
+    );
+    effect(() => {
+      const user = identity();
+      if (user !== undefined) untracked(() => void this.followIdentity(user));
+    });
+
     if (!isOutputWindow()) afterNextRender(() => void this.initializeRouting());
+  }
+
+  /**
+   * The library was loaded once, with whatever cookie the page started with.
+   * Signing in changes that answer without a reload, so the library follows:
+   * the same account coming back after an expiry keeps its open document and
+   * draft, a different one never sees the previous account's shaders.
+   *
+   * Losing the session is deliberately not acted on here — a `401` must not
+   * cost unsaved work. An explicit sign-out closes the library itself, behind
+   * the unsaved-changes guard (`WorkspaceActions.signOut`).
+   */
+  private async followIdentity(user: string | null): Promise<void> {
+    const owner = this.owner;
+    if (owner === undefined) {
+      // The first answer: `initializeRouting` is already loading for it.
+      this.owner = user;
+      return;
+    }
+    if (user === null) return;
+
+    this.owner = user;
+    if (owner !== null && owner !== user) this.store.closeLibrary();
+    await this.store.reloadLibrary();
+    await this.workspace.resolveStaleRecovery();
   }
 
   routeShaderId(): string | null {

@@ -24,6 +24,7 @@ import {
 } from '../../auth/auth.service';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
+import { WorkspaceActions } from '../workspace-actions';
 
 @Component({
   selector: 'app-account-dialog',
@@ -192,6 +193,7 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
 })
 export class AccountDialog implements OnInit {
   protected readonly auth = inject(AuthService);
+  private readonly workspace = inject(WorkspaceActions);
   private readonly i18n = inject(I18n);
   private readonly ref = inject(MatDialogRef<AccountDialog>);
 
@@ -230,7 +232,7 @@ export class AccountDialog implements OnInit {
 
   protected async signOut(): Promise<void> {
     this.busy.set(true);
-    if (this.settle(await this.auth.signOut())) this.ref.close();
+    await this.signOutHere();
   }
 
   protected async signOutEverywhere(): Promise<void> {
@@ -243,7 +245,17 @@ export class AccountDialog implements OnInit {
       return;
     }
     this.busy.set(true);
-    if (this.settle(await this.auth.signOut())) this.ref.close();
+    await this.signOutHere();
+  }
+
+  /**
+   * Through the workspace, so unsaved work is asked about before the library
+   * closes. Choosing to stay keeps the dialog open, signed in.
+   */
+  private async signOutHere(): Promise<void> {
+    const result = await this.workspace.signOut();
+    if (!result) this.busy.set(false);
+    else if (this.settle(result)) this.ref.close();
   }
 
   /**

@@ -229,8 +229,8 @@ export class App {
   }
 
   protected async signOut(): Promise<void> {
-    const result = await this.auth.signOut();
-    if (!result.ok) {
+    const result = await this.workspace.signOut();
+    if (result && !result.ok) {
       this.store.notice.set({
         text: result.message ?? this.i18n.t('auth.genericError'),
         error: true,

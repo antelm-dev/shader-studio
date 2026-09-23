@@ -10,6 +10,7 @@ import { AuthService, SESSION_NOT_FRESH, type AuthSession } from '../../auth/aut
 import { I18nCatalog, type I18nCatalogMap } from '../../i18n/catalog';
 import { I18n } from '../../i18n/i18n';
 import { Preferences } from '../../prefs/preferences';
+import { WorkspaceActions } from '../workspace-actions';
 import { AccountDialog } from './account-dialog';
 
 class FileCatalog extends I18nCatalog {
@@ -58,6 +59,10 @@ describe('AccountDialog', () => {
         { provide: Preferences, useValue: { value: signal({ language: 'en' }) } },
         { provide: AuthService, useValue: auth },
         { provide: MatDialogRef, useValue: { close } },
+        {
+          provide: WorkspaceActions,
+          useValue: { signOut: () => auth.signOut() },
+        },
       ],
     });
     await TestBed.inject(I18n).ensureLoaded('en');

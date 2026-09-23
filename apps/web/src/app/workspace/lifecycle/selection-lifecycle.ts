@@ -76,6 +76,13 @@ export class SelectionLifecycle {
    */
   private inFlight = 0;
 
+  /**
+   * The same idea as `generation`, for the list: bumped when the library is
+   * closed, so a list still in the air for the account that just signed out
+   * cannot land in front of the next one.
+   */
+  private listGeneration = 0;
+
   constructor() {
     if (this.isServer || !this.transferState.hasKey(SNAPSHOT_KEY)) return;
 
@@ -146,13 +153,46 @@ export class SelectionLifecycle {
 
   /** True when the list was loaded; a failure has already been reported. */
   async refreshList(): Promise<boolean> {
+    const token = this.listGeneration;
     try {
-      this.documentState.shaders.set(await this.api.list());
+      const shaders = await this.api.list();
+      if (token !== this.listGeneration) return false;
+      this.documentState.shaders.set(shaders);
       return true;
     } catch (error) {
-      this.report(error);
+      if (token === this.listGeneration) this.report(error);
       return false;
     }
+  }
+
+  /**
+   * The session changed hands or came back: re-read the library with the
+   * cookie now held. A document still open is kept, unsaved draft and all —
+   * a change of account has already closed the previous one's.
+   */
+  async reloadLibrary(): Promise<void> {
+    if (!(await this.refreshList()) || this.documentState.record()) return;
+
+    const preferred = this.preferences.value().lastShaderId;
+    const shaders = this.documentState.shaders();
+    const id = shaders.some((shader) => shader.id === preferred) ? preferred : shaders[0]?.id;
+    if (id) await this.select(id);
+  }
+
+  /**
+   * Signed out, or someone else signed in: nothing of the previous account may
+   * stay on screen, and nothing still in the air for it may land later.
+   *
+   * A draft still dirty here — a session that expired and was taken over by
+   * another account — goes to its recovery copy first, keyed by a shader id
+   * only its owner will ever open again.
+   */
+  closeLibrary(): void {
+    this.recovery.flush();
+    this.listGeneration++;
+    this.clearCurrent();
+    this.documentState.shaders.set([]);
+    this.documentState.staleRecovery.set(null);
   }
 
   // --- Selection ------------------------------------------------------------

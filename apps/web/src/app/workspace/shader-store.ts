@@ -200,6 +200,14 @@ export class ShaderStore {
     return this.selection.select(id);
   }
 
+  reloadLibrary(): Promise<void> {
+    return this.selection.reloadLibrary();
+  }
+
+  closeLibrary(): void {
+    this.selection.closeLibrary();
+  }
+
   // --- Recovery (owned by `RecoveryFacade`) ---------------------------------
 
   resolveRecovery(restore: boolean): void {

@@ -280,3 +280,50 @@ describe('SelectionLifecycle: server render', () => {
     expect(TestBed.inject(TransferState).isEmpty).toBe(true);
   });
 });
+
+describe('SelectionLifecycle: changes of account', () => {
+  it('reloading for the same account keeps the open draft', async () => {
+    const { selection, state, api } = setupLifecycle(new MemoryStorage(), makeRecord());
+    const opened = selection.select('waves');
+    api.settle('waves');
+    await opened;
+    state.patchDraft({ controlsText: '[]' });
+
+    api.records.set('plasma', makeRecord({ id: 'plasma', name: 'Plasma' }));
+    await selection.reloadLibrary();
+
+    expect(state.shaders().map((shader) => shader.id)).toEqual(['waves', 'plasma']);
+    expect(state.selectedId()).toBe('waves');
+    expect(state.dirty()).toBe(true);
+  });
+
+  it('reloading with nothing open opens the remembered shader', async () => {
+    const { selection, state, api, preferences } = setupLifecycle(
+      new MemoryStorage(),
+      makeRecord(),
+      makeRecord({ id: 'plasma', name: 'Plasma' }),
+    );
+    preferences.patch({ lastShaderId: 'plasma' });
+
+    const reloaded = selection.reloadLibrary();
+    await flush();
+    api.settle('plasma');
+    await reloaded;
+
+    expect(state.selectedId()).toBe('plasma');
+  });
+
+  it('closing drops the document, the list and a list still in the air', async () => {
+    const { selection, state, api } = setupLifecycle(new MemoryStorage(), makeRecord());
+    const opened = selection.select('waves');
+    api.settle('waves');
+    await opened;
+
+    const late = selection.refreshList();
+    selection.closeLibrary();
+    await late;
+
+    expect(state.record()).toBeNull();
+    expect(state.shaders()).toEqual([]);
+  });
+});

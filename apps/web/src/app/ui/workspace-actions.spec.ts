@@ -7,6 +7,7 @@ import { of } from 'rxjs';
 import { DEFAULT_CHANNELS, DEFAULT_RENDER, type ShaderRecord } from '@shader-studio/shared/model';
 import { migrateLegacyProject } from '@shader-studio/shared/project';
 import { ShaderApi } from '../api/shader-api';
+import { AuthService } from '../auth/auth.service';
 import { DesktopPlatform } from '../desktop/desktop-platform';
 import { DesktopUpdater } from '../desktop/desktop-updater';
 import { I18n } from '../i18n/i18n';
@@ -228,5 +229,59 @@ describe('WorkspaceActions Help flows', () => {
     check.mockRejectedValueOnce(new Error('network down'));
     await expect(actions.checkForUpdates()).rejects.toThrow('network down');
     expect(open).not.toHaveBeenCalled();
+  });
+});
+
+describe('WorkspaceActions.signOut', () => {
+  const auth = { signOut: vi.fn(async () => ({ ok: true })) };
+  let choice: string | undefined;
+  let actions: WorkspaceActions;
+  let store: ShaderStore;
+
+  beforeEach(async () => {
+    TestBed.resetTestingModule();
+    vi.clearAllMocks();
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ShaderApi, useValue: new FakeApi() },
+        { provide: Preferences, useValue: new FakePreferences() },
+        { provide: AuthService, useValue: auth },
+        { provide: DesktopPlatform, useValue: { available: false } },
+        {
+          provide: I18n,
+          useValue: { locale: () => 'en', t: (key: string) => key },
+        },
+        {
+          provide: MatDialog,
+          useValue: { open: () => ({ afterClosed: () => of(choice) }) },
+        },
+      ],
+    });
+    store = TestBed.inject(ShaderStore);
+    actions = TestBed.inject(WorkspaceActions);
+    await store.initialize();
+    store.setFragment('void main() {}');
+  });
+
+  it('keeps the session and the draft when the user cancels', async () => {
+    choice = 'cancel';
+    expect(await actions.signOut()).toBeNull();
+    expect(auth.signOut).not.toHaveBeenCalled();
+    expect(store.dirty()).toBe(true);
+  });
+
+  it('closes the library once the server has signed out', async () => {
+    choice = 'discard';
+    expect(await actions.signOut()).toEqual({ ok: true });
+    expect(store.record()).toBeNull();
+    expect(store.shaders()).toEqual([]);
+  });
+
+  it('leaves the library alone when signing out fails', async () => {
+    choice = 'discard';
+    auth.signOut.mockResolvedValueOnce({ ok: false } as never);
+    await actions.signOut();
+    expect(store.record()).not.toBeNull();
+    expect(store.shaders()).toHaveLength(1);
   });
 });
