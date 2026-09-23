@@ -124,6 +124,8 @@ export const TRANSLATION_KEYS = [
   'auth.sessionExpires',
   'auth.unknownDevice',
   'auth.noSessions',
+  'auth.reauthHint',
+  'auth.confirmPassword',
   'auth.signOutEverywhere',
   'auth.signedOutEverywhere',
   'auth.sessionExpired',

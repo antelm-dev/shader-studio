@@ -121,6 +121,8 @@
   "auth.sessionExpires": "expire le",
   "auth.unknownDevice": "Appareil inconnu",
   "auth.noSessions": "Aucune autre session.",
+  "auth.reauthHint": "Par sécurité, confirmez votre mot de passe pour gérer vos sessions.",
+  "auth.confirmPassword": "Confirmer",
   "auth.signOutEverywhere": "Se déconnecter partout",
   "auth.signedOutEverywhere": "Déconnecté de tous les appareils.",
   "auth.sessionExpired": "Votre session a pris fin. Reconnectez-vous — rien de non enregistré n’a été perdu.",

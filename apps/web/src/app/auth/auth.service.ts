@@ -41,7 +41,12 @@ export interface AuthResult {
   ok: boolean;
   /** A message safe to show; already generic where the server keeps it generic. */
   message?: string;
+  /** The server's error code — `SESSION_NOT_FRESH` means "confirm your password". */
+  code?: string;
 }
+
+/** The server refuses session management on a sign-in older than a few minutes. */
+export const SESSION_NOT_FRESH = 'SESSION_NOT_FRESH';
 
 const OK: AuthResult = { ok: true };
 
@@ -140,10 +145,21 @@ export class AuthService {
     return error ? this.fail(error.message) : OK;
   }
 
-  async listSessions(): Promise<AuthSession[]> {
+  /**
+   * Proves it is still the owner at the keyboard: a fresh sign-in, which is
+   * what listing and revoking sessions require.
+   */
+  async reauthenticate(password: string): Promise<AuthResult> {
+    const email = this.userSignal()?.email;
+    if (!email) return this.fail(undefined);
+    return this.signIn(email, password);
+  }
+
+  /** Fails rather than answering `[]`, so "no sessions" is never a guess. */
+  async listSessions(): Promise<AuthResult & { sessions: AuthSession[] }> {
     const { data, error } = await this.client.listSessions();
-    if (error || !data) return [];
-    return data.map((session) => ({
+    if (error || !data) return { ...this.fail(error?.message, error?.code), sessions: [] };
+    const sessions = data.map((session) => ({
       id: session.id,
       createdAt: String(session.createdAt),
       expiresAt: String(session.expiresAt),
@@ -152,17 +168,18 @@ export class AuthService {
       // list is informational and revoking the current one signs you out.
       current: false,
     }));
+    return { ...OK, sessions };
   }
 
   async revokeSession(token: string): Promise<AuthResult> {
     const { error } = await this.client.revokeSession({ token });
-    return error ? this.fail(error.message) : OK;
+    return error ? this.fail(error.message, error.code) : OK;
   }
 
   /** Signs out everywhere, including here. */
   async revokeOtherSessions(): Promise<AuthResult> {
     const { error } = await this.client.revokeOtherSessions();
-    return error ? this.fail(error.message) : OK;
+    return error ? this.fail(error.message, error.code) : OK;
   }
 
   /** Accepts the client's own user shape, where `image` may simply be absent. */
@@ -185,8 +202,12 @@ export class AuthService {
     this.statusSignal.set('authenticated');
   }
 
-  private fail(message: string | undefined): AuthResult {
-    return { ok: false, message: message ?? 'Something went wrong. Try again.' };
+  private fail(message: string | undefined, code?: string): AuthResult {
+    return {
+      ok: false,
+      message: message ?? 'Something went wrong. Try again.',
+      ...(code ? { code } : {}),
+    };
   }
 }
 

@@ -137,6 +137,19 @@ describe('AuthService', () => {
     expect(auth.authenticated()).toBe(true);
   });
 
+  it('reports a stale sign-in on the session list instead of an empty list', async () => {
+    const auth = makeService((url) =>
+      url.includes('list-sessions')
+        ? respond({ code: 'SESSION_NOT_FRESH', message: 'Session is not fresh' }, 403)
+        : respond({ user: USER, session: {} }),
+    );
+    await auth.refresh();
+
+    const result = await auth.listSessions();
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('SESSION_NOT_FRESH');
+  });
+
   it('keeps no credential in browser storage', async () => {
     const auth = makeService(() => respond({ user: USER, session: { id: 's1', token: 'secret' } }));
     await auth.refresh();

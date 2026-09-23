@@ -11,10 +11,17 @@ import { Component, inject, signal, type OnInit } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
-import { AuthService, type AuthResult, type AuthSession } from '../../auth/auth.service';
+import {
+  AuthService,
+  SESSION_NOT_FRESH,
+  type AuthResult,
+  type AuthSession,
+} from '../../auth/auth.service';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 
@@ -24,7 +31,9 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
     DatePipe,
     MatButtonModule,
     MatDialogModule,
+    MatFormFieldModule,
     MatIconModule,
+    MatInputModule,
     MatProgressBarModule,
     TranslatePipe,
   ],
@@ -57,22 +66,48 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
         <p class="notice" role="status" aria-live="polite">{{ text }}</p>
       }
 
-      <ul class="sessions">
-        @for (session of sessions(); track session.id) {
-          <li>
-            <mat-icon aria-hidden="true">devices</mat-icon>
-            <div>
-              <p class="device">{{ session.userAgent || ('auth.unknownDevice' | translate) }}</p>
-              <p class="dates">
-                {{ 'auth.sessionStarted' | translate }} {{ session.createdAt | date: 'medium' }} ·
-                {{ 'auth.sessionExpires' | translate }} {{ session.expiresAt | date: 'medium' }}
-              </p>
-            </div>
-          </li>
-        } @empty {
-          <li class="dates">{{ 'auth.noSessions' | translate }}</li>
-        }
-      </ul>
+      @if (retry()) {
+        <!-- Session management needs a recent sign-in: ask, then carry on. -->
+        <p class="hint">{{ 'auth.reauthHint' | translate }}</p>
+        <mat-form-field appearance="outline" class="reauth">
+          <mat-label>{{ 'auth.password' | translate }}</mat-label>
+          <input
+            matInput
+            required
+            cdkFocusInitial
+            type="password"
+            autocomplete="current-password"
+            [value]="password()"
+            (input)="password.set($any($event.target).value)"
+            (keyup.enter)="confirmPassword()"
+          />
+        </mat-form-field>
+        <button
+          matButton="filled"
+          type="button"
+          [disabled]="busy() || !password()"
+          (click)="confirmPassword()"
+        >
+          {{ 'auth.confirmPassword' | translate }}
+        </button>
+      } @else if (listed()) {
+        <ul class="sessions">
+          @for (session of sessions(); track session.id) {
+            <li>
+              <mat-icon aria-hidden="true">devices</mat-icon>
+              <div>
+                <p class="device">{{ session.userAgent || ('auth.unknownDevice' | translate) }}</p>
+                <p class="dates">
+                  {{ 'auth.sessionStarted' | translate }} {{ session.createdAt | date: 'medium' }} ·
+                  {{ 'auth.sessionExpires' | translate }} {{ session.expiresAt | date: 'medium' }}
+                </p>
+              </div>
+            </li>
+          } @empty {
+            <li class="dates">{{ 'auth.noSessions' | translate }}</li>
+          }
+        </ul>
+      }
     </mat-dialog-content>
 
     <mat-dialog-actions align="end">
@@ -163,11 +198,34 @@ export class AccountDialog implements OnInit {
   protected readonly sessions = signal<AuthSession[]>([]);
   protected readonly busy = signal(false);
   protected readonly message = signal<string | null>(null);
+  /** False until the list really loaded, so a failure never reads as "no sessions". */
+  protected readonly listed = signal(false);
+  /** Set while a password is needed; the action to resume once it is confirmed. */
+  protected readonly retry = signal<(() => Promise<void>) | null>(null);
+  protected readonly password = signal('');
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit(): Promise<void> {
+    return this.loadSessions();
+  }
+
+  protected async confirmPassword(): Promise<void> {
+    const resume = this.retry();
+    if (!resume || !this.password()) return;
     this.busy.set(true);
-    this.sessions.set(await this.auth.listSessions());
-    this.busy.set(false);
+    const result = await this.auth.reauthenticate(this.password());
+    this.password.set('');
+    if (!this.settle(result)) return;
+    this.retry.set(null);
+    this.message.set(null);
+    await resume();
+  }
+
+  private async loadSessions(): Promise<void> {
+    this.busy.set(true);
+    const result = await this.auth.listSessions();
+    if (!this.settle(result, () => this.loadSessions())) return;
+    this.sessions.set(result.sessions);
+    this.listed.set(true);
   }
 
   protected async signOut(): Promise<void> {
@@ -181,15 +239,26 @@ export class AccountDialog implements OnInit {
     // leaves the user signed out of the devices they were worried about. Any
     // failure keeps the dialog open: this is the incident-response button, and
     // closing it would read as "done" while the other sessions still work.
-    if (!this.settle(await this.auth.revokeOtherSessions())) return;
+    if (!this.settle(await this.auth.revokeOtherSessions(), () => this.signOutEverywhere())) {
+      return;
+    }
     this.busy.set(true);
     if (this.settle(await this.auth.signOut())) this.ref.close();
   }
 
-  /** Shows a failure and re-enables the buttons; true when the step succeeded. */
-  private settle(result: AuthResult): boolean {
+  /**
+   * Re-enables the buttons and, on failure, either asks for the password (when
+   * the sign-in is too old and `again` can resume the action) or shows the
+   * error. True when the step succeeded.
+   */
+  private settle(result: AuthResult, again?: () => Promise<void>): boolean {
     this.busy.set(false);
-    if (!result.ok) this.message.set(result.message ?? this.i18n.t('auth.genericError'));
-    return result.ok;
+    if (result.ok) return true;
+    if (result.code === SESSION_NOT_FRESH && again) {
+      this.retry.set(again);
+    } else {
+      this.message.set(result.message ?? this.i18n.t('auth.genericError'));
+    }
+    return false;
   }
 }

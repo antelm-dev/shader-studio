@@ -121,6 +121,8 @@
   "auth.sessionExpires": "expires",
   "auth.unknownDevice": "Unknown device",
   "auth.noSessions": "No other sessions.",
+  "auth.reauthHint": "For your security, confirm your password to manage where you are signed in.",
+  "auth.confirmPassword": "Confirm",
   "auth.signOutEverywhere": "Sign out everywhere",
   "auth.signedOutEverywhere": "Signed out of every device.",
   "auth.sessionExpired": "Your session ended. Sign in to keep working — nothing unsaved was lost.",
