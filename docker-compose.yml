@@ -53,6 +53,12 @@ services:
       MAIL_FROM: ${MAIL_FROM:-Shader Studio <no-reply@localhost>}
       AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-}
       AUTH_REGISTRATION: ${AUTH_REGISTRATION:-open}
+      # Optional. Empty means "use the built-in default" — see .env.example.
+      AUTH_REQUIRE_VERIFIED_EMAIL: ${AUTH_REQUIRE_VERIFIED_EMAIL:-}
+      AUTH_SESSION_IDLE_SECONDS: ${AUTH_SESSION_IDLE_SECONDS:-}
+      AUTH_SESSION_MAX_SECONDS: ${AUTH_SESSION_MAX_SECONDS:-}
+      AUTH_CHECK_COMPROMISED_PASSWORDS: ${AUTH_CHECK_COMPROMISED_PASSWORDS:-}
+      AUTH_RATE_LIMIT: ${AUTH_RATE_LIMIT:-}
       # Secure cookies and HSTS only mean anything behind TLS, which is the
       # proxy's job. Set TRUST_PROXY=1 once a proxy you control is in front.
       TRUST_PROXY: ${TRUST_PROXY:-0}
