@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.3.0](https://github.com/antelm-dev/shader-studio/compare/v1.2.0...v1.3.0) (2026-09-23)
+
+
+### Features
+
+* add account authentication and per-user shader libraries ([efc0df7](https://github.com/antelm-dev/shader-studio/commit/efc0df79f94830da9b680d27b5ea0a51b35fbabc))
+* **api:** integrate @nestjs/swagger for API documentation and enhance logging ([544366c](https://github.com/antelm-dev/shader-studio/commit/544366c27a4bc78fe5d920c5a79aa6734dec8c66))
+* **backend,server:** treat bundled examples as read-only templates ([14353cf](https://github.com/antelm-dev/shader-studio/commit/14353cfcd756e602ab990a95efff93df9488ddc9))
+* **backend:** scope every shader operation to an owning user ([c20a7ce](https://github.com/antelm-dev/shader-studio/commit/c20a7cec98e85d67477e9bca7de84c98fbc0389e))
+* **server:** authenticate with Better Auth and enforce it per request ([9038b06](https://github.com/antelm-dev/shader-studio/commit/9038b061517bff75286a526be44ace0a61143547))
+* **server:** harden the session, log the audit trail, document the deploy ([3b9c7da](https://github.com/antelm-dev/shader-studio/commit/3b9c7dab556940e73012e7e6fbed0789daf87081))
+* **vscode:** update extensions and settings for improved development experience ([81729f7](https://github.com/antelm-dev/shader-studio/commit/81729f7869da4209bb83f4908cda26ce6c30ed2a))
+* **web:** add account button and auth preview dialog ([fbf8eda](https://github.com/antelm-dev/shader-studio/commit/fbf8eda3045da9bc321ffc814e7503a5849d83b4))
+* **web:** sign in, recover and manage an account from the editor ([766fd3c](https://github.com/antelm-dev/shader-studio/commit/766fd3c48888075f69aad84800d2dc694bc08fc6))
+
+
+### Bug Fixes
+
+* **deploy:** forward every documented auth variable through Compose ([e2e5d5f](https://github.com/antelm-dev/shader-studio/commit/e2e5d5f49dfb4a6c046ba9355d49dc30bf48fee7))
+* **server:** enforce the session idle window and absolute lifetime ([9e01d29](https://github.com/antelm-dev/shader-studio/commit/9e01d296796ea7936c10cffca2e611e4bb9e96d1))
+* **server:** keep the session refresh inside the idle window, gate revocation on a fresh sign-in ([561f2bd](https://github.com/antelm-dev/shader-studio/commit/561f2bdc82abed299cbb7cf3d6d369b564f96c19))
+* **server:** retire the browser's previous session when it signs in again ([89fd6f4](https://github.com/antelm-dev/shader-studio/commit/89fd6f408a796ed5f16816817df0cd3174f1b50a))
+* **server:** seed examples as system templates on both engines ([e6e10ed](https://github.com/antelm-dev/shader-studio/commit/e6e10edcad3190f5f721c68f914474ad7c551d3d))
+* **web:** ask for the password when session management needs a fresh sign-in ([15bcb10](https://github.com/antelm-dev/shader-studio/commit/15bcb101a097ac0a390c7e11929dbb1c748fb34d))
+* **web:** let the browser fetch the library when SSR could not ([7ce0ec5](https://github.com/antelm-dev/shader-studio/commit/7ce0ec5e49d6cdeab9902ddd8fffc6dfed61ce33))
+* **web:** map the post-processing inspector tab to its index ([53a2ed9](https://github.com/antelm-dev/shader-studio/commit/53a2ed9de7a2a9e4b3b637f56db25f3584f5fb1c))
+* **web:** surface failed sign-out and session revocation ([7f70330](https://github.com/antelm-dev/shader-studio/commit/7f70330a6c2bbddd6d65a084eb8fc2c285b785c7))
+
 ## [1.2.0](https://github.com/antelm-dev/shader-studio/compare/v1.1.0...v1.2.0) (2026-07-30)
 
 
