@@ -108,7 +108,7 @@ describe('DesktopVersionDialog', () => {
 
     expect(root.querySelector('.status')).toBeNull();
     expect(root.querySelector('mat-dialog-actions button[matButton="filled"]')).toBeNull();
-    expect(root.textContent).not.toContain('Version');
+    expect(root.textContent).toContain('Version 1.2.3');
     expect(root.querySelector('a.changelog')?.getAttribute('href')).toContain('CHANGELOG.md');
   });
 

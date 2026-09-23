@@ -28,11 +28,9 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
         <mat-icon class="app-icon" aria-hidden="true">auto_awesome</mat-icon>
         <div>
           <strong>Shader Studio</strong>
-          @if (desktop.available) {
-            <span>{{
-              'desktop.versionLabel' | translate: { version: updater.state().currentVersion || '—' }
-            }}</span>
-          }
+          <span>{{
+            'desktop.versionLabel' | translate: { version: updater.state().currentVersion || '—' }
+          }}</span>
           <a class="changelog" [href]="changelogUrl" target="_blank" rel="noopener">
             {{ 'desktop.changelog' | translate }}
           </a>

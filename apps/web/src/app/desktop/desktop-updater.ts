@@ -1,10 +1,12 @@
 import { Injectable, signal } from '@angular/core';
 
 import type { UpdateState } from '@shader-studio/desktop-api/contracts';
+// The release version release-please bumps; esbuild inlines just this field.
+import { version } from '../../../../../package.json';
 
 const WEB_STATE: UpdateState = {
   status: 'unavailable',
-  currentVersion: '',
+  currentVersion: version,
   message: 'Les mises à jour sont gérées par votre navigateur.',
 };
 
