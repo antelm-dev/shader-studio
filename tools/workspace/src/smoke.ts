@@ -1,6 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { chromium } from 'playwright';
@@ -29,7 +31,16 @@ if (ipc.status !== 0) {
 
 const server = spawn(process.execPath, [ngCli, 'serve', `--port=${PORT}`, '--host=127.0.0.1'], {
   cwd: webDir,
-  env: { ...process.env, FORCE_COLOR: '0' },
+  env: {
+    ...process.env,
+    FORCE_COLOR: '0',
+    // A throwaway store, and an account that can sign in without a mailbox or
+    // a round-trip to Have I Been Pwned — the smoke drives the editor, not auth.
+    SHADER_DATA_DIR: mkdtempSync(join(tmpdir(), 'shader-studio-smoke-')),
+    BETTER_AUTH_URL: BASE,
+    AUTH_REQUIRE_VERIFIED_EMAIL: '0',
+    AUTH_CHECK_COMPROMISED_PASSWORDS: '0',
+  },
   stdio: ['ignore', 'pipe', 'pipe'],
   windowsHide: true,
 });
@@ -62,6 +73,14 @@ try {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
 
+  // The library is per-account now: sign up first. With verification off, the
+  // sign-up response sets the session cookie on this browser context.
+  const signUp = await page.request.post(`${BASE}/api/auth/sign-up/email`, {
+    headers: { origin: BASE },
+    data: { name: 'Smoke', email: 'smoke@example.test', password: 'smoke-test-password' },
+  });
+  if (!signUp.ok()) throw new Error(`Sign-up failed: ${signUp.status()} ${await signUp.text()}`);
+
   await page.goto(BASE, { waitUntil: 'networkidle', timeout: 60_000 });
   await page.locator('mat-sidenav.drawer').waitFor({ state: 'visible', timeout: 30_000 });
   await page
@@ -77,6 +96,9 @@ try {
   // the per-effect and master bypass switches. Asserted through stable
   // data-testid hooks rather than translated labels, so a locale change or a
   // copy edit cannot break this script.
+  // The rack lives on its own inspector tab (controls, textures, post, presets),
+  // picked by position so the label's locale does not matter.
+  await page.locator('app-inspector-shell [role="tab"]').nth(2).click();
   const rack = page.locator('app-post-processing-panel');
   await rack.waitFor({ state: 'visible', timeout: 15_000 });
 
