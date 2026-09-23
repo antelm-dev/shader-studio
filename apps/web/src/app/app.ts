@@ -229,7 +229,13 @@ export class App {
   }
 
   protected async signOut(): Promise<void> {
-    await this.auth.signOut();
+    const result = await this.auth.signOut();
+    if (!result.ok) {
+      this.store.notice.set({
+        text: result.message ?? this.i18n.t('auth.genericError'),
+        error: true,
+      });
+    }
   }
 
   /**

@@ -14,7 +14,7 @@ import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
-import { AuthService, type AuthSession } from '../../auth/auth.service';
+import { AuthService, type AuthResult, type AuthSession } from '../../auth/auth.service';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 
@@ -172,18 +172,24 @@ export class AccountDialog implements OnInit {
 
   protected async signOut(): Promise<void> {
     this.busy.set(true);
-    await this.auth.signOut();
-    this.ref.close();
+    if (this.settle(await this.auth.signOut())) this.ref.close();
   }
 
   protected async signOutEverywhere(): Promise<void> {
     this.busy.set(true);
     // Revoking the others first, then this one, so a failure part-way through
-    // leaves the user signed out of the devices they were worried about.
-    await this.auth.revokeOtherSessions();
-    await this.auth.signOut();
-    this.message.set(this.i18n.t('auth.signedOutEverywhere'));
+    // leaves the user signed out of the devices they were worried about. Any
+    // failure keeps the dialog open: this is the incident-response button, and
+    // closing it would read as "done" while the other sessions still work.
+    if (!this.settle(await this.auth.revokeOtherSessions())) return;
+    this.busy.set(true);
+    if (this.settle(await this.auth.signOut())) this.ref.close();
+  }
+
+  /** Shows a failure and re-enables the buttons; true when the step succeeded. */
+  private settle(result: AuthResult): boolean {
     this.busy.set(false);
-    this.ref.close();
+    if (!result.ok) this.message.set(result.message ?? this.i18n.t('auth.genericError'));
+    return result.ok;
   }
 }

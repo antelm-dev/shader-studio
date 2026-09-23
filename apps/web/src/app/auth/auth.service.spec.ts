@@ -119,9 +119,22 @@ describe('AuthService', () => {
     await auth.refresh();
     expect(auth.authenticated()).toBe(true);
 
-    await auth.signOut();
+    expect((await auth.signOut()).ok).toBe(true);
     expect(auth.status()).toBe('anonymous');
     expect(auth.user()).toBeNull();
+  });
+
+  it('reports a failed sign-out and keeps the session it could not invalidate', async () => {
+    const auth = makeService((url) =>
+      url.includes('sign-out')
+        ? respond({ message: 'Server unavailable' }, 503)
+        : respond({ user: USER, session: {} }),
+    );
+    await auth.refresh();
+
+    const result = await auth.signOut();
+    expect(result.ok).toBe(false);
+    expect(auth.authenticated()).toBe(true);
   });
 
   it('keeps no credential in browser storage', async () => {

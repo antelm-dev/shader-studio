@@ -109,9 +109,18 @@ export class AuthService {
     return OK;
   }
 
-  async signOut(): Promise<void> {
-    await this.client.signOut().catch(() => undefined);
+  /**
+   * Only reports success once the server has invalidated the session. On
+   * failure the local state is left alone: showing "signed out" while the
+   * cookie still works would be a lie the user might act on.
+   */
+  async signOut(): Promise<AuthResult> {
+    const { error } = await this.client
+      .signOut()
+      .catch((cause: unknown) => ({ error: { message: messageOf(cause) } }));
+    if (error) return this.fail(error.message);
     this.apply(null);
+    return OK;
   }
 
   async requestPasswordReset(email: string, redirectTo: string): Promise<AuthResult> {
