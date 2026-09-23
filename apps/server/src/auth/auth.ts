@@ -102,11 +102,15 @@ export function createAuth(
       },
     },
 
+    // Better Auth has no idle timeout or absolute lifetime of its own: it only
+    // pushes `expiresAt` to now + `expiresIn` once `updateAge` has passed since
+    // the last push. So `expiresIn` *is* the idle window, `updateAge` is kept
+    // short so activity keeps sliding it, and the hard ceiling is enforced by
+    // the `databaseHooks` below, which never let a refresh reach past
+    // `createdAt + sessionMaxSeconds`.
     session: {
-      expiresIn: config.sessionMaxSeconds,
-      // Sliding idle window: an active session is extended, an abandoned one
-      // reaches `expiresIn` and dies.
-      updateAge: config.sessionIdleSeconds,
+      expiresIn: Math.min(config.sessionIdleSeconds, config.sessionMaxSeconds),
+      updateAge: Math.min(config.sessionIdleSeconds, SESSION_REFRESH_SECONDS),
       // No cookie cache: a revoked session must stop working on the next
       // request, not when a cached copy happens to expire.
       cookieCache: { enabled: false },
@@ -114,6 +118,25 @@ export function createAuth(
       // authenticated recently, so a borrowed laptop cannot be used to lock the
       // owner out hours later.
       freshAge: 60 * 15,
+    },
+
+    databaseHooks: {
+      session: {
+        update: {
+          // The only write that moves `expiresAt` is the refresh in
+          // `getSession`, which has already put the session on the context.
+          before: async (data, ctx) => {
+            const createdAt = ctx?.context.session?.session.createdAt;
+            if (!data.expiresAt || !createdAt) return;
+            return {
+              data: {
+                ...data,
+                expiresAt: capExpiry(data.expiresAt, createdAt, config.sessionMaxSeconds),
+              },
+            };
+          },
+        },
+      },
     },
 
     advanced: {
@@ -195,6 +218,15 @@ export function createAuth(
       }),
     },
   });
+}
+
+/** How often an active session's idle window is slid forward. */
+const SESSION_REFRESH_SECONDS = 60 * 60;
+
+/** `expiresAt`, pulled back so it never passes the session's absolute lifetime. */
+export function capExpiry(expiresAt: Date, createdAt: Date, maxSeconds: number): Date {
+  const ceiling = new Date(createdAt).getTime() + maxSeconds * 1000;
+  return new Date(Math.min(new Date(expiresAt).getTime(), ceiling));
 }
 
 /**
