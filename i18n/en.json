@@ -451,6 +451,7 @@
   "export.failed": "The export failed: {error}",
   "desktop.versionTitle": "About Shader Studio",
   "desktop.versionLabel": "Version {version}",
+  "desktop.changelog": "What's new (changelog)",
   "desktop.downloadProgress": "Downloading update: {progress}",
   "desktop.unavailable": "Automatic updates are unavailable.",
   "desktop.checking": "Checking for an update…",

@@ -246,12 +246,11 @@
         <mat-icon>settings</mat-icon>
         <span>{{ 'menu.editorAppearance' | translate }}</span>
       </button>
-      @if (desktop.available) {
-      <button mat-menu-item type="button" (click)="workspace.openDesktopVersion()">
+      <button mat-menu-item type="button" (click)="workspace.openAboutShaderStudio()">
         <mat-icon>info</mat-icon>
         <span>{{ 'menu.desktopVersion' | translate }}</span>
       </button>
-      } @else {
+      @if (!desktop.available) {
       <a
         mat-menu-item
         href="https://github.com/antelm-dev/shader-studio/releases/latest"

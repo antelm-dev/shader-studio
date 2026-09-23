@@ -454,6 +454,7 @@ export const TRANSLATION_KEYS = [
   'export.failed',
   'desktop.versionTitle',
   'desktop.versionLabel',
+  'desktop.changelog',
   'desktop.downloadProgress',
   'desktop.unavailable',
   'desktop.checking',

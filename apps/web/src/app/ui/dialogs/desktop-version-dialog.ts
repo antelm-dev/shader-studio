@@ -4,6 +4,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
+import { DesktopPlatform } from '../../desktop/desktop-platform';
 import { DesktopUpdater } from '../../desktop/desktop-updater';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
@@ -27,32 +28,48 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
         <mat-icon class="app-icon" aria-hidden="true">auto_awesome</mat-icon>
         <div>
           <strong>Shader Studio</strong>
-          <span>{{
-            'desktop.versionLabel' | translate: { version: updater.state().currentVersion || '—' }
-          }}</span>
+          @if (desktop.available) {
+            <span>{{
+              'desktop.versionLabel' | translate: { version: updater.state().currentVersion || '—' }
+            }}</span>
+          }
+          <a class="changelog" [href]="changelogUrl" target="_blank" rel="noopener">
+            {{ 'desktop.changelog' | translate }}
+          </a>
         </div>
       </div>
-      <div class="status" [class]="updater.state().status" role="status" aria-live="polite">
-        <mat-icon>{{ statusIcon() }}</mat-icon>
-        <span>{{ statusText() }}</span>
-      </div>
-      @if (updater.state().status === 'downloading') {
-        <mat-progress-bar
-          mode="determinate"
-          [value]="updater.state().progress ?? 0"
-          [attr.aria-label]="'desktop.downloadProgress' | translate: { progress: progressLabel() }"
-        />
-        <span class="progress">{{ progressLabel() }}</span>
+      @if (desktop.available) {
+        <div class="status" [class]="updater.state().status" role="status" aria-live="polite">
+          <mat-icon>{{ statusIcon() }}</mat-icon>
+          <span>{{ statusText() }}</span>
+        </div>
+        @if (updater.state().status === 'downloading') {
+          <mat-progress-bar
+            mode="determinate"
+            [value]="updater.state().progress ?? 0"
+            [attr.aria-label]="
+              'desktop.downloadProgress' | translate: { progress: progressLabel() }
+            "
+          />
+          <span class="progress">{{ progressLabel() }}</span>
+        }
       }
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button matButton type="button" mat-dialog-close>
         {{ 'action.close' | translate }}
       </button>
-      <button matButton="filled" type="button" [disabled]="actionDisabled()" (click)="runAction()">
-        <mat-icon [class.spin]="isBusy()">{{ isBusy() ? 'sync' : actionIcon() }}</mat-icon>
-        {{ actionLabel() }}
-      </button>
+      @if (desktop.available) {
+        <button
+          matButton="filled"
+          type="button"
+          [disabled]="actionDisabled()"
+          (click)="runAction()"
+        >
+          <mat-icon [class.spin]="isBusy()">{{ isBusy() ? 'sync' : actionIcon() }}</mat-icon>
+          {{ actionLabel() }}
+        </button>
+      }
     </mat-dialog-actions>
   `,
   styles: `
@@ -78,6 +95,10 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
     }
     .identity strong {
       font: var(--mat-sys-title-large);
+    }
+    .changelog {
+      justify-self: start;
+      color: var(--mat-sys-primary);
     }
     .identity span,
     .progress {
@@ -139,7 +160,11 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
 })
 export class DesktopVersionDialog {
   protected readonly updater = inject(DesktopUpdater);
+  protected readonly desktop = inject(DesktopPlatform);
   private readonly i18n = inject(I18n);
+
+  protected readonly changelogUrl =
+    'https://github.com/antelm-dev/shader-studio/blob/master/CHANGELOG.md';
 
   protected readonly statusText = computed(() => {
     const state = this.updater.state();

@@ -6,6 +6,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UpdateState } from '@shader-studio/desktop-api/contracts';
+import { DesktopPlatform } from '../../desktop/desktop-platform';
 import { DesktopUpdater } from '../../desktop/desktop-updater';
 import { I18nCatalog, type I18nCatalogMap } from '../../i18n/catalog';
 import { I18n } from '../../i18n/i18n';
@@ -23,6 +24,7 @@ class FileCatalog extends I18nCatalog {
 }
 
 describe('DesktopVersionDialog', () => {
+  const platform = { available: true };
   const language = signal({ language: 'en' as 'en' | 'fr' });
   const updateState = signal<UpdateState>({
     status: 'up-to-date',
@@ -34,6 +36,7 @@ describe('DesktopVersionDialog', () => {
   beforeEach(async () => {
     language.set({ language: 'en' });
     updateState.set({ status: 'up-to-date', currentVersion: '1.2.3' });
+    platform.available = true;
     check.mockReset();
     update.mockReset();
 
@@ -52,6 +55,7 @@ describe('DesktopVersionDialog', () => {
             },
           },
         },
+        { provide: DesktopPlatform, useValue: platform },
         {
           provide: DesktopUpdater,
           useValue: {
@@ -95,6 +99,17 @@ describe('DesktopVersionDialog', () => {
     expect(status?.getAttribute('role')).toBe('status');
     expect(check).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('on the web, drops the update status and keeps the changelog link', async () => {
+    platform.available = false;
+    const fixture = await mount('en');
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelector('.status')).toBeNull();
+    expect(root.querySelector('mat-dialog-actions button[matButton="filled"]')).toBeNull();
+    expect(root.textContent).not.toContain('Version');
+    expect(root.querySelector('a.changelog')?.getAttribute('href')).toContain('CHANGELOG.md');
   });
 
   it('shows unavailable status text and a disabled primary action', async () => {

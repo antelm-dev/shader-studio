@@ -451,6 +451,7 @@
   "export.failed": "Échec de l’export : {error}",
   "desktop.versionTitle": "À propos de Shader Studio",
   "desktop.versionLabel": "Version {version}",
+  "desktop.changelog": "Nouveautés (changelog)",
   "desktop.downloadProgress": "Téléchargement de la mise à jour : {progress}",
   "desktop.unavailable": "Mise à jour automatique indisponible.",
   "desktop.checking": "Recherche d’une mise à jour…",

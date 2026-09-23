@@ -229,10 +229,4 @@ describe('WorkspaceActions Help flows', () => {
     await expect(actions.checkForUpdates()).rejects.toThrow('network down');
     expect(open).not.toHaveBeenCalled();
   });
-
-  it('openDesktopVersion aliases About without a forced check', async () => {
-    await actions.openDesktopVersion();
-    expect(check).not.toHaveBeenCalled();
-    expect(open).toHaveBeenCalledOnce();
-  });
 });

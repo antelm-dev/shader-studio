@@ -116,10 +116,9 @@ export class WorkspaceActions {
 
   /**
    * About Shader Studio… — same dialog as Check for Updates, without forcing a
-   * network check. Alias kept as `openDesktopVersion` for the web overflow menu.
+   * network check. Also offered on the web, where it drops the update status.
    */
   async openAboutShaderStudio(): Promise<void> {
-    if (!this.desktop.available) return;
     if (this.dialog.getDialogById(ABOUT_DIALOG_ID)) return;
     const { AboutShaderStudioDialog } = await import('./dialogs/desktop-version-dialog');
     this.dialog.open(AboutShaderStudioDialog, {
@@ -127,11 +126,6 @@ export class WorkspaceActions {
       width: '480px',
       maxWidth: '92vw',
     });
-  }
-
-  /** Web overflow menu entry — same as Help → About Shader Studio…. */
-  async openDesktopVersion(): Promise<void> {
-    await this.openAboutShaderStudio();
   }
 
   /**
