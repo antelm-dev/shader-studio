@@ -523,6 +523,30 @@ export function runShaderLibraryConformance(
         expect((await lib.list()).find((entry) => entry.id === id)?.revision).toBe(revision + 1);
       });
 
+      it('keeps a stored thumbnail newer than the payload’s and replaces an older one', async () => {
+        const { id, revision } = await seeded();
+        const thumbnail = (updatedAt: string) => ({ ext: 'webp', updatedAt, data: WEBP });
+
+        const older = await lib.replaceFromPayload(
+          id,
+          payloadOf(id, 'Stale Preview', { thumbnail: thumbnail('2000-01-01T00:00:00.000Z') }),
+          revision,
+        );
+        expect(older.revision).toBe(revision + 1);
+        expect(older.thumbnail?.ext).toBe('png');
+        expect((await lib.readThumbnail(id))?.bytes).toEqual(new Uint8Array(Buffer.from('thumb')));
+
+        const newer = await lib.replaceFromPayload(
+          id,
+          payloadOf(id, 'Fresh Preview', { thumbnail: thumbnail('2999-01-01T00:00:00.000Z') }),
+          revision + 1,
+        );
+        expect(newer.thumbnail).toEqual({ ext: 'webp', updatedAt: '2999-01-01T00:00:00.000Z' });
+        expect((await lib.readThumbnail(id))?.bytes).toEqual(
+          new Uint8Array(Buffer.from('a fake webp preview')),
+        );
+      });
+
       it('refuses a stale revision and changes nothing', async () => {
         const { id, revision } = await seeded();
         const before = await lib.read(id);

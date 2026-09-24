@@ -630,6 +630,15 @@ export class ShaderLibrary {
    * never deletes the row, so the revision carries on — it becomes exactly
    * `expectedRevision + 1`, or the call fails with `conflict` when the shader
    * has moved on. This is how a sync client pushes a whole shader.
+   *
+   * The thumbnail is versioned on its own, by `updatedAt`, because a preview
+   * never bumps the revision (see {@link setThumbnail}): when both the stored
+   * and the incoming thumbnail exist and the stored one is newer, it is kept.
+   * A payload without a thumbnail still removes it. Sync clients can spot a
+   * thumbnail-only change from `summary.thumbnail.updatedAt`.
+   *
+   * The returned record is read inside the transaction, so it is exactly the
+   * revision this call wrote, never a later concurrent one.
    */
   async replaceFromPayload(
     id: string,
@@ -642,19 +651,35 @@ export class ShaderLibrary {
     const now = new Date().toISOString();
     const fields = payloadFields(payload, now);
 
-    await this.repo.transaction(async (tx) => {
+    return this.repo.transaction(async (tx) => {
       const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
       if (stored.row.kind === 'template') {
         throw new StorageError('invalid', `Shader "${id}" is a template and cannot be replaced`);
       }
 
-      await tx.updateShader(this.scope, validId, fields, revision);
-      for (const asset of stored.assets) await tx.deleteAsset(validId, asset.key);
-      await this.writePayloadChildren(tx, validId, payload, now);
-    });
+      const storedThumbnail = stored.assets.find((asset) => asset.key === THUMBNAIL_ASSET_KEY);
+      const keepThumbnail =
+        storedThumbnail !== undefined &&
+        payload.thumbnail !== null &&
+        Date.parse(storedThumbnail.updatedAt) > Date.parse(payload.thumbnail.updatedAt);
 
-    return this.read(id);
+      await tx.updateShader(this.scope, validId, fields, revision);
+      for (const asset of stored.assets) {
+        if (keepThumbnail && asset.key === THUMBNAIL_ASSET_KEY) continue;
+        await tx.deleteAsset(validId, asset.key);
+      }
+      await this.writePayloadChildren(
+        tx,
+        validId,
+        keepThumbnail ? { ...payload, thumbnail: null } : payload,
+        now,
+      );
+
+      const written = await tx.loadShader(this.scope, validId);
+      if (!written) throw new StorageError('not_found', `Shader "${id}" was not found`);
+      return this.mapRecord(written);
+    });
   }
 
   // --- Seeding & legacy migration -----------------------------------------
