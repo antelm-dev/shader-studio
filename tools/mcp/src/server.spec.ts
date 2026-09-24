@@ -62,6 +62,7 @@ class FakeController implements ShaderStudioController {
         name: 'Demo',
         description: '',
         updatedAt: '2024-01-01T00:00:00.000Z',
+        revision: 1,
         controlCount: 0,
         presetCount: 0,
         thumbnail: null,

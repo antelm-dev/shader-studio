@@ -176,6 +176,7 @@ class PgOps implements ShaderTx {
         name: shaders.name,
         description: shaders.description,
         updatedAt: shaders.updatedAt,
+        revision: shaders.revision,
         controlsJson: shaders.controlsJson,
         presetCount: count(presets.id),
         thumbExt: thumbnails.extension,
@@ -194,6 +195,7 @@ class PgOps implements ShaderTx {
         shaders.name,
         shaders.description,
         shaders.updatedAt,
+        shaders.revision,
         shaders.controlsJson,
         thumbnails.extension,
         thumbnails.updatedAt,
@@ -205,6 +207,7 @@ class PgOps implements ShaderTx {
       name: row.name,
       description: row.description,
       updatedAt: row.updatedAt,
+      revision: row.revision,
       controlCount: Array.isArray(row.controlsJson) ? row.controlsJson.length : 0,
       presetCount: row.presetCount,
       thumbnail:

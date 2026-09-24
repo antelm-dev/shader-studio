@@ -53,6 +53,7 @@ const shaderSummarySchema = z.object({
   name: z.string(),
   description: z.string(),
   updatedAt: z.string(),
+  revision: z.number().int().positive(),
   controlCount: z.number().int().nonnegative(),
   presetCount: z.number().int().nonnegative(),
   thumbnail: thumbnailMetaSchema.nullable(),

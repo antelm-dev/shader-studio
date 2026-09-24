@@ -95,6 +95,7 @@ export interface ShaderSummaryRow {
   name: string;
   description: string;
   updatedAt: string;
+  revision: number;
   controlCount: number;
   presetCount: number;
   thumbnail: { extension: string; updatedAt: string } | null;

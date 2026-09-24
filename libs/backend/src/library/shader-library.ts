@@ -140,6 +140,7 @@ export class ShaderLibrary {
           name: row.name,
           description: row.description,
           updatedAt: row.updatedAt,
+          revision: row.revision,
           controlCount: row.controlCount,
           presetCount: row.presetCount,
           thumbnail: row.thumbnail
@@ -622,6 +623,52 @@ export class ShaderLibrary {
     return { imported };
   }
 
+  /**
+   * Overwrites a shader with a payload in one transaction: fields, project,
+   * controls, render, presets and textures. `id`, owner, `kind` and
+   * `createdAt` stay; `payload.id` is ignored. Unlike an `overwrite` import it
+   * never deletes the row, so the revision carries on — it becomes exactly
+   * `expectedRevision + 1`, or the call fails with `conflict` when the shader
+   * has moved on. This is how a sync client pushes a whole shader.
+   *
+   * The thumbnail is left out entirely: it is a derived picture outside the
+   * revision (see {@link setThumbnail}), so this never reads or writes it and
+   * cannot lose a concurrent upload. `payload.thumbnail` is ignored; a client
+   * pushes its preview through {@link setThumbnail} instead.
+   *
+   * The returned record is read inside the transaction, so it is exactly the
+   * revision this call wrote, never a later concurrent one.
+   */
+  async replaceFromPayload(
+    id: string,
+    payload: ShaderPayload,
+    expectedRevision: unknown,
+  ): Promise<ShaderRecord> {
+    const validId = this.validId(id);
+    const revision = parseExpectedRevision(expectedRevision);
+    if (revision === undefined) throw new StorageError('invalid', 'Invalid expected revision');
+    const now = new Date().toISOString();
+    const fields = payloadFields(payload, now);
+
+    return this.repo.transaction(async (tx) => {
+      const stored = await tx.loadShader(this.scope, validId);
+      if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+      if (stored.row.kind === 'template') {
+        throw new StorageError('invalid', `Shader "${id}" is a template and cannot be replaced`);
+      }
+
+      await tx.updateShader(this.scope, validId, fields, revision);
+      for (const asset of stored.assets) {
+        if (asset.key !== THUMBNAIL_ASSET_KEY) await tx.deleteAsset(validId, asset.key);
+      }
+      await this.writePayloadChildren(tx, validId, { ...payload, thumbnail: null }, now);
+
+      const written = await tx.loadShader(this.scope, validId);
+      if (!written) throw new StorageError('not_found', `Shader "${id}" was not found`);
+      return this.mapRecord(written);
+    });
+  }
+
   // --- Seeding & legacy migration -----------------------------------------
 
   /**
@@ -804,48 +851,33 @@ export class ShaderLibrary {
     payload: ShaderPayload,
     kind: ShaderKind = 'shader',
   ): Promise<void> {
-    const project = sanitizeProject(payload.project, payload.fragment, payload.vertex);
-    const controls = expect(
-      validateControls(payload.controls),
-      `Shader "${payload.id}" has an invalid control schema`,
-    );
     const now = new Date().toISOString();
-
-    const channels = CHANNEL_INDICES.map((channel) => {
-      const entry = payload.channels[channel];
-      return {
-        ext: entry.ext,
-        width: entry.width,
-        height: entry.height,
-        wrap: entry.wrap,
-        filter: entry.filter,
-        flipY: entry.flipY,
-      } satisfies TextureChannel;
-    }) as unknown as TextureChannels;
-
     const row: ShaderRow = {
       id: payload.id,
       ownerUserId: this.scope.userId,
       kind,
-      name: payload.name,
-      description: payload.description,
-      author: payload.author ?? null,
       createdAt: now,
-      updatedAt: now,
       revision: 1,
-      projectJson: JSON.stringify(project),
-      controlsJson: JSON.stringify(controls),
-      renderJson: JSON.stringify(validateRender(payload.render)),
-      channelsJson: JSON.stringify(validateChannels(channels)),
+      ...payloadFields(payload, now),
     };
 
     await tx.insertShader(row);
-    await tx.replacePresets(payload.id, payload.presets.map(presetToRow));
+    await this.writePayloadChildren(tx, payload.id, payload, now);
+  }
+
+  /** Presets, texture bytes and thumbnail of a payload, written under `id`. */
+  private async writePayloadChildren(
+    tx: ShaderTx,
+    id: string,
+    payload: ShaderPayload,
+    now: string,
+  ): Promise<void> {
+    await tx.replacePresets(id, payload.presets.map(presetToRow));
 
     for (const channel of CHANNEL_INDICES) {
       const entry = payload.channels[channel];
       if (entry.ext === null || entry.data === null) continue;
-      await tx.putAsset(payload.id, {
+      await tx.putAsset(id, {
         key: textureAssetKey(channel),
         extension: entry.ext,
         width: entry.width,
@@ -856,7 +888,7 @@ export class ShaderLibrary {
     }
 
     if (payload.thumbnail) {
-      await tx.putAsset(payload.id, {
+      await tx.putAsset(id, {
         key: THUMBNAIL_ASSET_KEY,
         extension: payload.thumbnail.ext,
         width: null,
@@ -978,6 +1010,37 @@ function mergeChannelSettings(
     ...current[channel],
     ...patch[channel],
   })) as unknown as TextureChannels;
+}
+
+/** A payload's shader columns, validated the same way for insert and replace. */
+function payloadFields(payload: ShaderPayload, updatedAt: string): ShaderMutableFields {
+  const project = sanitizeProject(payload.project, payload.fragment, payload.vertex);
+  const controls = expect(
+    validateControls(payload.controls),
+    `Shader "${payload.id}" has an invalid control schema`,
+  );
+  const channels = CHANNEL_INDICES.map((channel) => {
+    const entry = payload.channels[channel];
+    return {
+      ext: entry.ext,
+      width: entry.width,
+      height: entry.height,
+      wrap: entry.wrap,
+      filter: entry.filter,
+      flipY: entry.flipY,
+    } satisfies TextureChannel;
+  }) as unknown as TextureChannels;
+
+  return {
+    name: payload.name,
+    description: payload.description,
+    author: payload.author ?? null,
+    updatedAt,
+    projectJson: JSON.stringify(project),
+    controlsJson: JSON.stringify(controls),
+    renderJson: JSON.stringify(validateRender(payload.render)),
+    channelsJson: JSON.stringify(validateChannels(channels)),
+  };
 }
 
 function presetToRow(preset: Preset): PresetRow {

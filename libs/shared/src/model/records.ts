@@ -90,6 +90,8 @@ export interface ShaderSummary {
   name: string;
   description: string;
   updatedAt: string;
+  /** Same as `ShaderMeta.revision` — lets a sync client spot a change without reading the record. */
+  revision: number;
   controlCount: number;
   presetCount: number;
   thumbnail: ThumbnailMeta | null;
@@ -148,6 +150,7 @@ export function toSummary(record: ShaderRecord): ShaderSummary {
     name: record.name,
     description: record.description,
     updatedAt: record.updatedAt,
+    revision: record.revision,
     controlCount: record.controls.length,
     presetCount: record.presets.length,
     thumbnail: record.thumbnail,

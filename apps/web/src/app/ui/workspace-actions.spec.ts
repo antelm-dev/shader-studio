@@ -53,6 +53,7 @@ class FakeApi implements Partial<ShaderApi> {
         kind: this.record.kind,
         name: this.record.name,
         description: this.record.description,
+        revision: this.record.revision,
         controlCount: this.record.controls.length,
         presetCount: 0,
         thumbnail: null,

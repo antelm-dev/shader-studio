@@ -171,7 +171,7 @@ export class SqliteRepository implements ShaderRepository {
   async listShaders(scope: UserScope): Promise<ShaderSummaryRow[]> {
     const rows = this.database()
       .prepare(
-        `SELECT s.id, s.kind, s.name, s.description, s.updated_at, s.controls_json,
+        `SELECT s.id, s.kind, s.name, s.description, s.updated_at, s.revision, s.controls_json,
                 (SELECT COUNT(*) FROM presets p WHERE p.shader_id = s.id) AS preset_count,
                 t.extension AS thumb_ext, t.updated_at AS thumb_updated
          FROM shaders s
@@ -438,6 +438,7 @@ function toSummaryRow(row: SQLRow): ShaderSummaryRow {
     name: String(row['name']),
     description: String(row['description']),
     updatedAt: String(row['updated_at']),
+    revision: Number(row['revision']),
     controlCount: countArray(row['controls_json']),
     presetCount: Number(row['preset_count'] ?? 0),
     thumbnail:
