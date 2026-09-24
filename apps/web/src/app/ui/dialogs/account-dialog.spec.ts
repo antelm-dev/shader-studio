@@ -33,9 +33,9 @@ const SESSION: AuthSession = {
 const STALE = { ok: false, code: SESSION_NOT_FRESH, message: 'Confirm your password.' };
 
 /**
- * Listing and revoking sessions need a recent sign-in. When the server says
- * the sign-in is too old, the dialog asks for the password and then finishes
- * what was asked — it never shows a stale answer as "no sessions".
+ * Listing sessions is available immediately. Revoking them needs a recent
+ * sign-in; when that action is refused, the dialog asks for the password and
+ * then finishes what was asked.
  */
 describe('AccountDialog', () => {
   const auth = {
@@ -105,19 +105,14 @@ describe('AccountDialog', () => {
     await settle(fixture);
   }
 
-  it('asks for the password instead of claiming there are no sessions', async () => {
-    auth.listSessions
-      .mockResolvedValueOnce({ ...STALE, sessions: [] })
-      .mockResolvedValueOnce({ ok: true, sessions: [SESSION] });
+  it('shows the browser session without asking for the password', async () => {
+    auth.listSessions.mockResolvedValue({ ok: true, sessions: [SESSION] });
     const fixture = await mount();
     const root = fixture.nativeElement as HTMLElement;
 
-    expect(root.textContent).not.toContain('No other sessions.');
-    await confirmWith(fixture, 'correct horse battery');
-
-    expect(auth.reauthenticate).toHaveBeenCalledWith('correct horse battery');
     expect(root.textContent).toContain('Laptop browser');
     expect(root.querySelector('input[type="password"]')).toBeNull();
+    expect(auth.reauthenticate).not.toHaveBeenCalled();
   });
 
   it('finishes signing out everywhere once the password is confirmed', async () => {

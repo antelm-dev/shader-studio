@@ -116,10 +116,11 @@ export function createAuth(
       // No cookie cache: a revoked session must stop working on the next
       // request, not when a cached copy happens to expire.
       cookieCache: { enabled: false },
-      // Better Auth itself only checks this on `/list-sessions` and
-      // `/unlink-account`. The revocation routes are held to it by the `before`
-      // hook below; changing a password needs the current one anyway.
-      freshAge: FRESH_SECONDS,
+      // Listing devices is read-only and should work for every valid session.
+      // Better Auth otherwise applies `freshAge` to `/list-sessions`, which
+      // would ask for the password merely to open the account dialog. Sensitive
+      // routes are held to our explicit freshness check below instead.
+      freshAge: 0,
     },
 
     databaseHooks: {
@@ -200,8 +201,8 @@ export function createAuth(
     // changes an outcome, so a bug in the audit trail cannot become a bug in
     // authentication.
     hooks: {
-      // Revoking sessions needs a recent sign-in, so an old session left on a
-      // borrowed device cannot sign the owner out of everything else. The
+      // Revoking sessions or unlinking an account needs a recent sign-in, so an
+      // old session left on a borrowed device cannot lock the owner out. The
       // client answers SESSION_NOT_FRESH by asking for the password again.
       before: createAuthMiddleware(async (ctx) => {
         if (!FRESH_ONLY.has(ctx.path)) return;
@@ -256,7 +257,12 @@ const SESSION_REFRESH_SECONDS = 60 * 60;
 
 /** How long after signing in a session may still revoke others. */
 const FRESH_SECONDS = 60 * 15;
-const FRESH_ONLY = new Set(['/revoke-session', '/revoke-sessions', '/revoke-other-sessions']);
+const FRESH_ONLY = new Set([
+  '/revoke-session',
+  '/revoke-sessions',
+  '/revoke-other-sessions',
+  '/unlink-account',
+]);
 
 /**
  * Half the idle window, capped at an hour: any request in the second half of

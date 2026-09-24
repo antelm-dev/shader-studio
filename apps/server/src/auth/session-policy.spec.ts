@@ -117,7 +117,7 @@ describe('session lifetime', () => {
 });
 
 describe('revoking sessions', () => {
-  it('needs a recent sign-in', async () => {
+  it('lists devices normally but needs a recent sign-in to revoke them', async () => {
     const { email, headers } = await signUp();
     const elsewhere = await signIn(email);
 
@@ -127,6 +127,11 @@ describe('revoking sessions', () => {
       expect(await alive(headers)).toBe(true);
       expect(await alive(elsewhere)).toBe(true);
     }
+
+    // Looking at the device list is not a destructive action. A valid session
+    // may always do it, even after the password-confirmation window elapsed.
+    expect(await auth.api.listSessions({ headers })).toHaveLength(2);
+
     await expect(auth.api.revokeOtherSessions({ headers })).rejects.toMatchObject({
       statusCode: 403,
       body: { code: 'SESSION_NOT_FRESH' },
