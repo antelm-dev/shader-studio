@@ -170,6 +170,53 @@
     </button>
     } }
 
+    <!-- The desktop's account: present only when the build names a server. -->
+    @if (desktopAccountShown(); as account) { @if (account.user; as user) {
+    <button
+      matButton="tonal"
+      type="button"
+      class="account"
+      [matTooltip]="'auth.accountMenu' | translate"
+      [attr.aria-label]="'auth.accountMenu' | translate"
+      [matMenuTriggerFor]="desktopAccountMenu"
+    >
+      <mat-icon>{{ account.status === 'reauth-required' ? 'sync_problem' : 'person' }}</mat-icon>
+      <span>{{ user.name || user.email }}</span>
+    </button>
+
+    <mat-menu #desktopAccountMenu="matMenu">
+      <div class="menu-section">{{ user.email }}</div>
+      @if (account.status === 'reauth-required') {
+      <button mat-menu-item type="button" (click)="desktopSignIn()">
+        <mat-icon>login</mat-icon>
+        <span>{{ 'account.signInAgain' | translate }}</span>
+      </button>
+      }
+      <button mat-menu-item type="button" (click)="desktopAccount.openAccountPage()">
+        <mat-icon>manage_accounts</mat-icon>
+        <span>{{ 'account.manage' | translate }}</span>
+      </button>
+      <button mat-menu-item type="button" (click)="desktopAccount.signOut()">
+        <mat-icon>logout</mat-icon>
+        <span>{{ 'auth.signOut' | translate }}</span>
+      </button>
+    </mat-menu>
+    } @else {
+    <button
+      matButton="tonal"
+      type="button"
+      class="account"
+      [matTooltip]="
+        (desktopAccount.signingIn() ? 'account.waiting' : 'account.signInTooltip') | translate
+      "
+      [attr.aria-label]="'account.signInTooltip' | translate"
+      (click)="desktopSignIn()"
+    >
+      <mat-icon>{{ desktopAccount.signingIn() ? 'open_in_browser' : 'person' }}</mat-icon>
+      <span>{{ 'auth.login' | translate }}</span>
+    </button>
+    } }
+
     <!-- Four sections, because a flat list of nine commands is a list you read
          rather than a menu you scan. -->
     <mat-menu #moreMenu="matMenu">

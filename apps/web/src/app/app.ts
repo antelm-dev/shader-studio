@@ -34,6 +34,7 @@ import {
   colorSchemeIcon,
   type ColorScheme,
 } from './prefs/preferences';
+import { DesktopAccount } from './desktop/desktop-account';
 import { DesktopPlatform } from './desktop/desktop-platform';
 import { ShaderStore } from './workspace/shader-store';
 import { SurfaceLayoutService } from './surfaces/surface-layout';
@@ -107,6 +108,12 @@ export class App {
    * rather than controls that cannot lead anywhere.
    */
   protected readonly cloudAccounts = !this.desktop.available;
+  /** The desktop's own account, signed in through the browser when the build has a server. */
+  protected readonly desktopAccount = inject(DesktopAccount);
+  protected readonly desktopAccountShown = computed(() => {
+    const state = this.desktopAccount.state();
+    return this.cloudAccounts || state.status === 'disabled' ? null : state;
+  });
 
   private readonly snackBar = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
@@ -236,6 +243,18 @@ export class App {
         error: true,
       });
     }
+  }
+
+  protected async desktopSignIn(): Promise<void> {
+    const result = await this.desktopAccount.signIn();
+    if (result === 'ok' || result === 'cancelled') return;
+    const key =
+      result === 'timeout'
+        ? 'account.signInTimeout'
+        : result === 'encryption-unavailable'
+          ? 'account.encryptionUnavailable'
+          : 'account.signInFailed';
+    this.store.notice.set({ text: this.i18n.t(key), error: true });
   }
 
   /**
