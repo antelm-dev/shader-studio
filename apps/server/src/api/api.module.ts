@@ -10,6 +10,7 @@ import type { ShaderLibrary } from '@shader-studio/backend/library';
 import type { Auditor } from '../auth/audit';
 import { consoleAuditor } from '../auth/audit';
 import type { Auth } from '../auth/auth';
+import { DesktopHandoffController } from '../auth/desktop-handoff';
 import { ApiController } from './api.controller';
 import { AUDITOR, AUTH_INSTANCE, SHADER_LIBRARY } from './api.constants';
 import { AuthGuard } from './auth.guard';
@@ -24,7 +25,7 @@ export class ApiModule implements NestModule {
   ): DynamicModule {
     return {
       module: ApiModule,
-      controllers: [ApiController],
+      controllers: [ApiController, DesktopHandoffController],
       providers: [
         { provide: SHADER_LIBRARY, useValue: library },
         { provide: AUTH_INSTANCE, useValue: auth },

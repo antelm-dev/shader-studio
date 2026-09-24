@@ -11,7 +11,7 @@
 import { betterAuth } from 'better-auth';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { haveIBeenPwned } from 'better-auth/plugins';
+import { bearer, haveIBeenPwned } from 'better-auth/plugins';
 
 import type { AuthDatabase } from '@shader-studio/backend/persistence';
 
@@ -195,6 +195,7 @@ export function createAuth(
         customPasswordCompromisedMessage:
           'That password appears in a known breach. Please choose a different one.',
       }),
+      desktopBearer(),
     ],
 
     // The audit half of the `after` hook is observation only — it never
@@ -250,6 +251,23 @@ export function createAuth(
       }),
     },
   });
+}
+
+/**
+ * Lets the desktop app send its session as `Authorization: Bearer` (see
+ * `desktop-handoff.ts`). Only the plugin's request half is kept: its response
+ * half copies every new session token into a `set-auth-token` header, which a
+ * script *can* read — that would hand the browser's HttpOnly session to any XSS
+ * on the next sign-in. The desktop gets its token from `/api/desktop/token`.
+ *
+ * Better Auth's origin and CSRF checks key on the request carrying a `Cookie`
+ * header, and a bearer request carries none, so a desktop sign-out passes them
+ * without any exemption; the browser, which does send cookies, is still held to
+ * `trustedOrigins`.
+ */
+function desktopBearer() {
+  const plugin = bearer();
+  return { ...plugin, hooks: { before: plugin.hooks.before } };
 }
 
 /** How often an active session's idle window is slid forward, at most. */
