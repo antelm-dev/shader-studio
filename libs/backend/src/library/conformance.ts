@@ -7,7 +7,7 @@
  * two backends.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_CHANNELS,
@@ -482,25 +482,21 @@ export function runShaderLibraryConformance(
 
     // 17b — replace from a payload (what a sync client pushes)
     describe('replaceFromPayload', () => {
-      async function seeded(): Promise<{ id: string; revision: number; thumbnail: string }> {
+      async function seeded(): Promise<{ id: string; revision: number }> {
         const { id } = await lib.create({ name: 'Target' });
         await lib.savePreset(id, { name: 'Old Preset', values: {} });
         await lib.setTexture(id, 1, { ext: 'png', bytes: Buffer.from('t'), width: 1, height: 1 });
-        const { revision, thumbnail } = await lib.setThumbnail(id, {
-          ext: 'png',
-          bytes: Buffer.from('thumb'),
-        });
-        return { id, revision, thumbnail: thumbnail!.updatedAt };
+        await lib.setThumbnail(id, { ext: 'png', bytes: Buffer.from('thumb') });
+        return { id, revision: (await lib.read(id)).revision };
       }
 
-      const CLIENT_STAMP = '2000-01-01T00:00:00.000Z';
       const withThumbnail = (payload: ShaderPayload): ShaderPayload => ({
         ...payload,
-        thumbnail: { ext: 'webp', updatedAt: CLIENT_STAMP, data: WEBP },
+        thumbnail: { ext: 'webp', updatedAt: '2000-01-01T00:00:00.000Z', data: WEBP },
       });
 
       it('replaces fields and children and sets revision to expected + 1', async () => {
-        const { id, revision, thumbnail } = await seeded();
+        const { id, revision } = await seeded();
         const before = await lib.read(id);
         const payload = withTexture(
           payloadOf('ignored-id', 'Replaced', {
@@ -513,7 +509,7 @@ export function runShaderLibraryConformance(
           2,
         );
 
-        const replaced = await lib.replaceFromPayload(id, payload, revision, thumbnail);
+        const replaced = await lib.replaceFromPayload(id, payload, revision);
 
         expect(replaced.id).toBe(id);
         expect(replaced.kind).toBe('shader');
@@ -527,79 +523,46 @@ export function runShaderLibraryConformance(
         expect((await lib.readTexture(id, 2))?.bytes).toEqual(
           new Uint8Array(Buffer.from('a fake png image')),
         );
-        expect(replaced.thumbnail).toBeNull();
-        expect(await lib.readThumbnail(id)).toBeNull();
         expect((await lib.list()).find((entry) => entry.id === id)?.revision).toBe(revision + 1);
       });
 
-      it('never overwrites or deletes a thumbnail uploaded after the client read', async () => {
-        for (const pushed of [(p: ShaderPayload) => p, withThumbnail]) {
-          const { id, revision } = await lib.create({ name: 'Raced' });
-          // The client read no thumbnail; the browser uploads one meanwhile.
-          const uploaded = await lib.setThumbnail(id, { ext: 'png', bytes: Buffer.from('web') });
+      it('leaves the stored thumbnail untouched whatever the payload carries', async () => {
+        const { id, revision } = await seeded();
+        const before = await lib.read(id);
 
-          const replaced = await lib.replaceFromPayload(
-            id,
-            pushed(payloadOf(id, 'Pushed')),
-            revision,
-            null,
-          );
-          expect(replaced.name).toBe('Pushed');
-          expect(replaced.revision).toBe(revision + 1);
-          expect(replaced.thumbnail).toEqual(uploaded.thumbnail);
-          expect((await lib.readThumbnail(id))?.bytes).toEqual(new Uint8Array(Buffer.from('web')));
-        }
-      });
-
-      it('applies the pushed thumbnail when the token matches, with a server stamp', async () => {
-        const { id, revision, thumbnail } = await seeded();
-
-        const written = await lib.replaceFromPayload(
-          id,
+        for (const [step, payload] of [
+          payloadOf(id, 'Without Preview'),
           withThumbnail(payloadOf(id, 'With Preview')),
-          revision,
-          thumbnail,
-        );
-        expect(written.thumbnail?.ext).toBe('webp');
-        expect(written.thumbnail?.updatedAt).not.toBe(thumbnail);
-        expect(written.thumbnail?.updatedAt).not.toBe(CLIENT_STAMP);
-        expect((await lib.readThumbnail(id))?.bytes).toEqual(
-          new Uint8Array(Buffer.from('a fake webp preview')),
-        );
-
-        const removed = await lib.replaceFromPayload(
-          id,
-          payloadOf(id, 'No Preview'),
-          revision + 1,
-          written.thumbnail!.updatedAt,
-        );
-        expect(removed.thumbnail).toBeNull();
-        expect(await lib.readThumbnail(id)).toBeNull();
+        ].entries()) {
+          const replaced = await lib.replaceFromPayload(id, payload, revision + step);
+          expect(replaced.thumbnail).toEqual(before.thumbnail);
+          expect((await lib.readThumbnail(id))?.bytes).toEqual(
+            new Uint8Array(Buffer.from('thumb')),
+          );
+        }
       });
 
-      it('changes the thumbnail token on every write, even within one millisecond', async () => {
-        const { id } = await lib.create({ name: 'Frozen Clock' });
-        vi.useFakeTimers({ toFake: ['Date'] });
-        try {
-          vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
-          const first = await lib.setThumbnail(id, { ext: 'png', bytes: Buffer.from('a') });
-          const second = await lib.setThumbnail(id, { ext: 'png', bytes: Buffer.from('b') });
-          expect(first.thumbnail?.updatedAt).toBe('2030-01-01T00:00:00.000Z');
-          expect(second.thumbnail?.updatedAt).not.toBe(first.thumbnail?.updatedAt);
-        } finally {
-          vi.useRealTimers();
-        }
+      it('keeps a thumbnail uploaded after the client read the revision', async () => {
+        const { id, revision } = await lib.create({ name: 'Raced' });
+        // The browser uploads a preview after the client read `revision`.
+        const uploaded = await lib.setThumbnail(id, { ext: 'png', bytes: Buffer.from('web') });
+
+        const replaced = await lib.replaceFromPayload(id, payloadOf(id, 'Pushed'), revision);
+        expect(replaced.name).toBe('Pushed');
+        expect(replaced.revision).toBe(revision + 1);
+        expect(replaced.thumbnail).toEqual(uploaded.thumbnail);
+        expect((await lib.readThumbnail(id))?.bytes).toEqual(new Uint8Array(Buffer.from('web')));
       });
 
       it('refuses a stale revision and changes nothing', async () => {
-        const { id, revision, thumbnail } = await seeded();
+        const { id, revision } = await seeded();
         const before = await lib.read(id);
 
         await expect(
-          lib.replaceFromPayload(id, payloadOf(id, 'Late'), revision - 1, thumbnail),
+          lib.replaceFromPayload(id, payloadOf(id, 'Late'), revision - 1),
         ).rejects.toMatchObject({ code: 'conflict' });
         await expect(
-          lib.replaceFromPayload(id, payloadOf(id, 'None'), undefined, thumbnail),
+          lib.replaceFromPayload(id, payloadOf(id, 'None'), undefined),
         ).rejects.toMatchObject({ code: 'invalid' });
 
         const after = await lib.read(id);
@@ -610,13 +573,13 @@ export function runShaderLibraryConformance(
 
       it('404s an unknown or foreign shader and refuses a template', async () => {
         await expect(
-          lib.replaceFromPayload('nope', payloadOf('nope', 'X'), 1, null),
+          lib.replaceFromPayload('nope', payloadOf('nope', 'X'), 1),
         ).rejects.toMatchObject({ code: 'not_found' });
 
         const alice = lib.as({ userId: 'user-alice' });
         const { id } = await alice.create({ name: 'Hers' });
         await expect(
-          lib.as({ userId: 'user-bob' }).replaceFromPayload(id, payloadOf(id, 'Stolen'), 1, null),
+          lib.as({ userId: 'user-bob' }).replaceFromPayload(id, payloadOf(id, 'Stolen'), 1),
         ).rejects.toMatchObject({ code: 'not_found' });
         expect((await alice.read(id)).name).toBe('Hers');
 
@@ -628,7 +591,7 @@ export function runShaderLibraryConformance(
             'template',
           );
         await expect(
-          alice.replaceFromPayload('example', payloadOf('example', 'Mine'), 1, null),
+          alice.replaceFromPayload('example', payloadOf('example', 'Mine'), 1),
         ).rejects.toMatchObject({ code: 'invalid' });
         expect((await alice.read('example')).name).toBe('Ex');
       });

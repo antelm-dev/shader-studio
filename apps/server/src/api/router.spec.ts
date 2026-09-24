@@ -236,8 +236,7 @@ describe('shader REST API', () => {
     bundle.shader.name = 'Pushed Again';
     const path = `/api/shaders/${id}/bundle`;
 
-    const push = (user: TestUser, body: object) =>
-      postJson(user, path, { bundle, expectedThumbnail: null, ...body }, 'PUT');
+    const push = (user: TestUser, body: object) => postJson(user, path, { bundle, ...body }, 'PUT');
 
     const replaced = await push(alice, { expectedRevision: 1 });
     expect(replaced.status).toBe(200);
@@ -250,7 +249,6 @@ describe('shader REST API', () => {
 
     expect((await push(alice, { expectedRevision: 1 })).status).toBe(409);
     expect((await push(bob, { expectedRevision: 2 })).status).toBe(404);
-    expect((await postJson(alice, path, { bundle, expectedRevision: 2 }, 'PUT')).status).toBe(400);
     const collection = { ...bundle, kind: 'collection', shaders: [bundle.shader] };
     expect((await push(alice, { bundle: collection, expectedRevision: 2 })).status).toBe(400);
   });
