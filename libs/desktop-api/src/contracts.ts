@@ -80,3 +80,20 @@ export type NativeSurfaceContext =
 export type NativeSurfaceChangedEvent =
   | (NativeSurfaceSnapshot & { open: true })
   | { surfaceId: string; open: false };
+
+/** C5: how a local shader stands against the signed-in account. Templates have none. */
+export type SyncStatus =
+  | 'local-only'
+  | 'synced'
+  | 'pending'
+  | 'syncing'
+  | 'conflict-resolved'
+  | 'reauth-required'
+  | 'other-account'
+  | 'error';
+
+/** Empty `statuses` when there is no account (disabled or signed out). */
+export interface SyncChangedEvent {
+  statuses: Record<string, SyncStatus>;
+  progress: { done: number; total: number } | null;
+}
