@@ -456,6 +456,116 @@ export function runShaderLibraryConformance(
       await expect(lib.update(created.id, { name: 'C' })).resolves.toMatchObject({ name: 'C' });
     });
 
+    it('bumps the revision on every edit and reports it in the summary', async () => {
+      const { id } = await lib.create({ name: 'Counted' });
+      const revision = async (): Promise<number> => (await lib.read(id)).revision;
+      const summaryRevision = async (): Promise<number | undefined> =>
+        (await lib.list()).find((entry) => entry.id === id)?.revision;
+
+      const steps: [string, () => Promise<unknown>][] = [
+        ['update', () => lib.update(id, { fragment: FRAGMENT })],
+        ['savePreset', () => lib.savePreset(id, { name: 'P', values: {} })],
+        ['deletePreset', () => lib.deletePreset(id, 'p')],
+        [
+          'setTexture',
+          () => lib.setTexture(id, 0, { ext: 'png', bytes: Buffer.from('x'), width: 1, height: 1 }),
+        ],
+        ['clearTexture', () => lib.clearTexture(id, 0)],
+      ];
+      for (const [name, step] of steps) {
+        const before = await revision();
+        await step();
+        expect(`${name} → ${await revision()}`).toBe(`${name} → ${before + 1}`);
+        expect(await summaryRevision()).toBe(await revision());
+      }
+    });
+
+    // 17b — replace from a payload (what a sync client pushes)
+    describe('replaceFromPayload', () => {
+      async function seeded(): Promise<{ id: string; revision: number }> {
+        const { id } = await lib.create({ name: 'Target' });
+        await lib.savePreset(id, { name: 'Old Preset', values: {} });
+        await lib.setTexture(id, 1, { ext: 'png', bytes: Buffer.from('t'), width: 1, height: 1 });
+        await lib.setThumbnail(id, { ext: 'png', bytes: Buffer.from('thumb') });
+        return { id, revision: (await lib.read(id)).revision };
+      }
+
+      it('replaces fields and children and sets revision to expected + 1', async () => {
+        const { id, revision } = await seeded();
+        const before = await lib.read(id);
+        const payload = withTexture(
+          payloadOf('ignored-id', 'Replaced', {
+            fragment: FRAGMENT,
+            project: migrateLegacyProject(FRAGMENT, DEFAULT_VERTEX),
+            presets: [
+              { id: 'new', name: 'New Preset', createdAt: new Date().toISOString(), values: {} },
+            ],
+          }),
+          2,
+        );
+
+        const replaced = await lib.replaceFromPayload(id, payload, revision);
+
+        expect(replaced.id).toBe(id);
+        expect(replaced.kind).toBe('shader');
+        expect(replaced.createdAt).toBe(before.createdAt);
+        expect(replaced.revision).toBe(revision + 1);
+        expect(replaced.name).toBe('Replaced');
+        expect(replaced.fragment).toBe(FRAGMENT);
+        expect(replaced.presets.map((preset) => preset.name)).toEqual(['New Preset']);
+        expect(replaced.channels[1].ext).toBeNull();
+        expect(await lib.readTexture(id, 1)).toBeNull();
+        expect((await lib.readTexture(id, 2))?.bytes).toEqual(
+          new Uint8Array(Buffer.from('a fake png image')),
+        );
+        expect(replaced.thumbnail).toBeNull();
+        expect(await lib.readThumbnail(id)).toBeNull();
+        expect((await lib.list()).find((entry) => entry.id === id)?.revision).toBe(revision + 1);
+      });
+
+      it('refuses a stale revision and changes nothing', async () => {
+        const { id, revision } = await seeded();
+        const before = await lib.read(id);
+
+        await expect(
+          lib.replaceFromPayload(id, payloadOf(id, 'Late'), revision - 1),
+        ).rejects.toMatchObject({ code: 'conflict' });
+        await expect(
+          lib.replaceFromPayload(id, payloadOf(id, 'None'), undefined),
+        ).rejects.toMatchObject({ code: 'invalid' });
+
+        const after = await lib.read(id);
+        expect(after).toEqual(before);
+        expect(await lib.readTexture(id, 1)).not.toBeNull();
+        expect(await lib.readThumbnail(id)).not.toBeNull();
+      });
+
+      it('404s an unknown or foreign shader and refuses a template', async () => {
+        await expect(
+          lib.replaceFromPayload('nope', payloadOf('nope', 'X'), 1),
+        ).rejects.toMatchObject({ code: 'not_found' });
+
+        const alice = lib.as({ userId: 'user-alice' });
+        const { id } = await alice.create({ name: 'Hers' });
+        await expect(
+          lib.as({ userId: 'user-bob' }).replaceFromPayload(id, payloadOf(id, 'Stolen'), 1),
+        ).rejects.toMatchObject({ code: 'not_found' });
+        expect((await alice.read(id)).name).toBe('Hers');
+
+        await lib
+          .as({ userId: 'system' })
+          .installExamples(
+            { listIds: async () => ['example'], exportOne: async () => payloadOf('example', 'Ex') },
+            true,
+            'template',
+          );
+        await expect(
+          alice.replaceFromPayload('example', payloadOf('example', 'Mine'), 1),
+        ).rejects.toMatchObject({ code: 'invalid' });
+        expect((await alice.read('example')).name).toBe('Ex');
+      });
+    });
+
     // 18 — migration from the file format (an in-memory legacy source)
     it('migrates a legacy library in one verified transaction', async () => {
       const legacy: ShaderPayload[] = [
