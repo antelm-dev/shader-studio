@@ -443,7 +443,8 @@ export class ShaderLibrary {
    * Stores the preview the client captured. It deliberately does *not* touch the
    * shader row: a thumbnail is a picture of the document, not a change to it, so
    * `updatedAt` and `revision` stay put and a "recently modified" list does not
-   * reorder every time a preview refreshes.
+   * reorder every time a preview refreshes. Its own `updatedAt` is the
+   * thumbnail's version instead — see {@link replaceFromPayload}.
    */
   async setThumbnail(id: string, input: { ext: string; bytes: Uint8Array }): Promise<ShaderRecord> {
     const validId = this.validId(id);
@@ -469,7 +470,7 @@ export class ShaderLibrary {
         extension: ext,
         width: null,
         height: null,
-        updatedAt: new Date().toISOString(),
+        updatedAt: freshStamp(thumbnailStamp(stored.assets)),
         data: input.bytes,
       });
     });
@@ -631,11 +632,14 @@ export class ShaderLibrary {
    * `expectedRevision + 1`, or the call fails with `conflict` when the shader
    * has moved on. This is how a sync client pushes a whole shader.
    *
-   * The thumbnail is versioned on its own, by `updatedAt`, because a preview
-   * never bumps the revision (see {@link setThumbnail}): when both the stored
-   * and the incoming thumbnail exist and the stored one is newer, it is kept.
-   * A payload without a thumbnail still removes it. Sync clients can spot a
-   * thumbnail-only change from `summary.thumbnail.updatedAt`.
+   * The thumbnail has its own concurrency token, because a preview never bumps
+   * the revision (see {@link setThumbnail}): the stored `thumbnail.updatedAt`,
+   * or `null` when there is none. Only when it equals `expectedThumbnail` is
+   * the payload's thumbnail applied — written with a fresh server stamp, or
+   * removed when the payload has none. Otherwise the stored thumbnail is left
+   * exactly as it is: it is a derived picture, so a concurrent upload must
+   * never be lost, but it should not fail a content push either. The returned
+   * record carries the current token.
    *
    * The returned record is read inside the transaction, so it is exactly the
    * revision this call wrote, never a later concurrent one.
@@ -644,6 +648,7 @@ export class ShaderLibrary {
     id: string,
     payload: ShaderPayload,
     expectedRevision: unknown,
+    expectedThumbnail: string | null,
   ): Promise<ShaderRecord> {
     const validId = this.validId(id);
     const revision = parseExpectedRevision(expectedRevision);
@@ -658,23 +663,25 @@ export class ShaderLibrary {
         throw new StorageError('invalid', `Shader "${id}" is a template and cannot be replaced`);
       }
 
-      const storedThumbnail = stored.assets.find((asset) => asset.key === THUMBNAIL_ASSET_KEY);
-      const keepThumbnail =
-        storedThumbnail !== undefined &&
-        payload.thumbnail !== null &&
-        Date.parse(storedThumbnail.updatedAt) > Date.parse(payload.thumbnail.updatedAt);
+      const current = thumbnailStamp(stored.assets);
+      const applyThumbnail = current === expectedThumbnail;
 
       await tx.updateShader(this.scope, validId, fields, revision);
       for (const asset of stored.assets) {
-        if (keepThumbnail && asset.key === THUMBNAIL_ASSET_KEY) continue;
+        if (asset.key === THUMBNAIL_ASSET_KEY && !applyThumbnail) continue;
         await tx.deleteAsset(validId, asset.key);
       }
-      await this.writePayloadChildren(
-        tx,
-        validId,
-        keepThumbnail ? { ...payload, thumbnail: null } : payload,
-        now,
-      );
+      await this.writePayloadChildren(tx, validId, { ...payload, thumbnail: null }, now);
+      if (applyThumbnail && payload.thumbnail) {
+        await tx.putAsset(validId, {
+          key: THUMBNAIL_ASSET_KEY,
+          extension: payload.thumbnail.ext,
+          width: null,
+          height: null,
+          updatedAt: freshStamp(current),
+          data: fromBase64(payload.thumbnail.data),
+        });
+      }
 
       const written = await tx.loadShader(this.scope, validId);
       if (!written) throw new StorageError('not_found', `Shader "${id}" was not found`);
@@ -1023,6 +1030,21 @@ function mergeChannelSettings(
     ...current[channel],
     ...patch[channel],
   })) as unknown as TextureChannels;
+}
+
+/** The stored thumbnail's `updatedAt` — its concurrency token — or `null` when there is none. */
+function thumbnailStamp(assets: AssetMeta[]): string | null {
+  return assets.find((asset) => asset.key === THUMBNAIL_ASSET_KEY)?.updatedAt ?? null;
+}
+
+/**
+ * A server-clock stamp for a new thumbnail, guaranteed to differ from the one
+ * it replaces so the token always changes, even within the same millisecond.
+ */
+function freshStamp(previous: string | null): string {
+  const now = new Date();
+  if (now.toISOString() === previous) now.setTime(now.getTime() + 1);
+  return now.toISOString();
 }
 
 /** A payload's shader columns, validated the same way for insert and replace. */

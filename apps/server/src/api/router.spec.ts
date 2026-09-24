@@ -236,7 +236,10 @@ describe('shader REST API', () => {
     bundle.shader.name = 'Pushed Again';
     const path = `/api/shaders/${id}/bundle`;
 
-    const replaced = await postJson(alice, path, { bundle, expectedRevision: 1 }, 'PUT');
+    const push = (user: TestUser, body: object) =>
+      postJson(user, path, { bundle, expectedThumbnail: null, ...body }, 'PUT');
+
+    const replaced = await push(alice, { expectedRevision: 1 });
     expect(replaced.status).toBe(200);
     const { shader } = (await replaced.json()) as { shader: { name: string; revision: number } };
     expect(shader).toMatchObject({ name: 'Pushed Again', revision: 2 });
@@ -245,12 +248,11 @@ describe('shader REST API', () => {
     };
     expect(shaders.find((entry) => entry.id === id)?.revision).toBe(2);
 
-    expect((await postJson(alice, path, { bundle, expectedRevision: 1 }, 'PUT')).status).toBe(409);
-    expect((await postJson(bob, path, { bundle, expectedRevision: 2 }, 'PUT')).status).toBe(404);
+    expect((await push(alice, { expectedRevision: 1 })).status).toBe(409);
+    expect((await push(bob, { expectedRevision: 2 })).status).toBe(404);
+    expect((await postJson(alice, path, { bundle, expectedRevision: 2 }, 'PUT')).status).toBe(400);
     const collection = { ...bundle, kind: 'collection', shaders: [bundle.shader] };
-    expect(
-      (await postJson(alice, path, { bundle: collection, expectedRevision: 2 }, 'PUT')).status,
-    ).toBe(400);
+    expect((await push(alice, { bundle: collection, expectedRevision: 2 })).status).toBe(400);
   });
 
   it('404s an unknown shader and 400s an invalid body', async () => {

@@ -423,15 +423,22 @@ export class ApiController {
     description:
       'Overwrites the shader with a single-shader bundle — fields, presets, textures and ' +
       'thumbnail — keeping its id. `expectedRevision` is required; the result has ' +
-      '`expectedRevision + 1`, or 409 when the shader has moved on. A template is refused.',
+      '`expectedRevision + 1`, or 409 when the shader has moved on. `expectedThumbnail` is ' +
+      'the `thumbnail.updatedAt` the client last read, or null for none; the pushed thumbnail ' +
+      'is applied only when it still matches. A template is refused.',
   })
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['bundle', 'expectedRevision'],
+      required: ['bundle', 'expectedRevision', 'expectedThumbnail'],
       properties: {
         bundle: { type: 'object', description: 'A `shader` bundle, as `/export` produces.' },
         expectedRevision: { type: 'integer', description: 'Revision the client last read.' },
+        expectedThumbnail: {
+          type: 'string',
+          nullable: true,
+          description: 'Thumbnail `updatedAt` the client last read, or null when it had none.',
+        },
       },
     },
   })
@@ -452,12 +459,17 @@ export class ApiController {
     if (!parsed.ok) {
       throw new StorageError('invalid', 'The bundle could not be read', parsed.errors);
     }
+    const expectedThumbnail = input['expectedThumbnail'];
+    if (expectedThumbnail !== null && typeof expectedThumbnail !== 'string') {
+      throw new StorageError('invalid', '"expectedThumbnail" must be a string or null');
+    }
     const [payload] = parsed.value;
     return {
       shader: await this.libraryFor(principal).replaceFromPayload(
         id,
         payload,
         input['expectedRevision'],
+        expectedThumbnail,
       ),
     };
   }
