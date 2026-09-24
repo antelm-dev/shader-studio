@@ -25,6 +25,7 @@ export type AuditEvent =
   | 'password-reset.completed'
   | 'session.revoked'
   | 'sessions.revoked-all'
+  | 'desktop.signed-in'
   | 'shader.deleted';
 
 export interface AuditDetails {
