@@ -228,6 +228,31 @@ describe('shader REST API', () => {
     expect(stale.status).toBe(409);
   });
 
+  it('replaces a shader from a bundle under expectedRevision', async () => {
+    const id = await createShader(alice, 'Pushed');
+    const bundle = (await (await authFetch(alice, `/api/shaders/${id}/export`)).json()) as {
+      shader: { name: string };
+    };
+    bundle.shader.name = 'Pushed Again';
+    const path = `/api/shaders/${id}/bundle`;
+
+    const replaced = await postJson(alice, path, { bundle, expectedRevision: 1 }, 'PUT');
+    expect(replaced.status).toBe(200);
+    const { shader } = (await replaced.json()) as { shader: { name: string; revision: number } };
+    expect(shader).toMatchObject({ name: 'Pushed Again', revision: 2 });
+    const { shaders } = (await (await authFetch(alice, '/api/shaders')).json()) as {
+      shaders: { id: string; revision: number }[];
+    };
+    expect(shaders.find((entry) => entry.id === id)?.revision).toBe(2);
+
+    expect((await postJson(alice, path, { bundle, expectedRevision: 1 }, 'PUT')).status).toBe(409);
+    expect((await postJson(bob, path, { bundle, expectedRevision: 2 }, 'PUT')).status).toBe(404);
+    const collection = { ...bundle, kind: 'collection', shaders: [bundle.shader] };
+    expect(
+      (await postJson(alice, path, { bundle: collection, expectedRevision: 2 }, 'PUT')).status,
+    ).toBe(400);
+  });
+
   it('404s an unknown shader and 400s an invalid body', async () => {
     expect((await authFetch(alice, '/api/shaders/nope')).status).toBe(404);
 
@@ -262,6 +287,7 @@ describe('authentication', () => {
     ['DELETE', '/api/shaders/anything/textures/0'],
     ['GET', '/api/shaders/anything/thumbnail'],
     ['PUT', '/api/shaders/anything/thumbnail'],
+    ['PUT', '/api/shaders/anything/bundle'],
     ['GET', '/api/shaders/anything/export'],
     ['GET', '/api/export'],
     ['POST', '/api/import'],

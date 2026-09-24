@@ -419,6 +419,51 @@ export class ApiController {
 
   @ApiTags('transfer')
   @ApiOperation({
+    summary: 'Replace a shader from a bundle',
+    description:
+      'Overwrites the shader with a single-shader bundle — fields, presets, textures and ' +
+      'thumbnail — keeping its id. `expectedRevision` is required; the result has ' +
+      '`expectedRevision + 1`, or 409 when the shader has moved on. A template is refused.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['bundle', 'expectedRevision'],
+      properties: {
+        bundle: { type: 'object', description: 'A `shader` bundle, as `/export` produces.' },
+        expectedRevision: { type: 'integer', description: 'Revision the client last read.' },
+      },
+    },
+  })
+  @ApiErrors(400, 404, 409)
+  @Put('shaders/:id/bundle')
+  async replaceBundle(
+    @Param('id') id: string,
+    @Body() body: JsonBody | undefined,
+    @CurrentUser() principal: Principal,
+  ): Promise<unknown> {
+    const input = body ?? {};
+    const raw = input['bundle'];
+    const kind = typeof raw === 'object' && raw !== null ? (raw as JsonBody)['kind'] : undefined;
+    if (kind !== 'shader') {
+      throw new StorageError('invalid', 'Expected a single-shader bundle');
+    }
+    const parsed = parseBundle(raw);
+    if (!parsed.ok) {
+      throw new StorageError('invalid', 'The bundle could not be read', parsed.errors);
+    }
+    const [payload] = parsed.value;
+    return {
+      shader: await this.libraryFor(principal).replaceFromPayload(
+        id,
+        payload,
+        input['expectedRevision'],
+      ),
+    };
+  }
+
+  @ApiTags('transfer')
+  @ApiOperation({
     summary: 'Convert a Shadertoy shader',
     description:
       'Fetches the shader from the Shadertoy API with the caller’s own key and returns it as a ' +
