@@ -131,6 +131,8 @@ export const TRANSLATION_KEYS = [
   'auth.signedOutEverywhere',
   'auth.sessionExpired',
   'auth.desktopConnecting',
+  'auth.desktopConfirm',
+  'auth.desktopConnect',
   'auth.desktopReturn',
   'auth.desktopFailed',
   'auth.desktopRetry',

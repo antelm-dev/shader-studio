@@ -1,13 +1,24 @@
-import { TestBed } from '@angular/core/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import {
+  ActivatedRoute,
   UrlTree,
   convertToParamMap,
   type ActivatedRouteSnapshot,
   type RouterStateSnapshot,
 } from '@angular/router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { desktopConnectLink } from './desktop-connect';
+import { I18nCatalog, type I18nCatalogMap } from '../i18n/catalog';
+import { I18n } from '../i18n/i18n';
+import { Preferences } from '../prefs/preferences';
+import { AuthService, type AuthStatus } from './auth.service';
+import { DesktopConnect, desktopConnectLink } from './desktop-connect';
 
 const CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
 const STATE = 'af0ifjsldkj-state_1';
@@ -32,5 +43,106 @@ describe('desktopConnectLink', () => {
     expect(admits({ state: `${STATE}<script>`, code_challenge: CHALLENGE })).toBe(false);
     expect(admits({ state: STATE, code_challenge: `${CHALLENGE}=` })).toBe(false);
     expect(admits({ state: STATE, code_challenge: 'plain-verifier' })).toBe(false);
+  });
+});
+
+class FileCatalog extends I18nCatalog {
+  override load(locale: 'en' | 'fr'): Promise<I18nCatalogMap> {
+    const raw = readFileSync(
+      resolve(import.meta.dirname, `../../../../../i18n/${locale}.json`),
+      'utf8',
+    );
+    return Promise.resolve(JSON.parse(raw) as I18nCatalogMap);
+  }
+}
+
+describe('DesktopConnect', () => {
+  const status = signal<AuthStatus>('error');
+  const verified = signal(false);
+  const auth = {
+    status,
+    verified,
+    // The server answers this time: the session resolves as signed in.
+    refresh: vi.fn(async () => {
+      status.set('authenticated');
+      verified.set(true);
+    }),
+  };
+
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  async function mount(): Promise<ComponentFixture<DesktopConnect>> {
+    TestBed.configureTestingModule({
+      imports: [DesktopConnect],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        I18n,
+        { provide: I18nCatalog, useClass: FileCatalog },
+        { provide: Preferences, useValue: { value: signal({ language: 'en' }) } },
+        { provide: AuthService, useValue: auth },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: convertToParamMap({ state: STATE, code_challenge: CHALLENGE }),
+            },
+          },
+        },
+      ],
+    });
+    await TestBed.inject(I18n).ensureLoaded('en');
+    const fixture = TestBed.createComponent(DesktopConnect);
+    await settle(fixture);
+    return fixture;
+  }
+
+  async function settle(fixture: ComponentFixture<DesktopConnect>): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  function button(fixture: ComponentFixture<DesktopConnect>, label: string): HTMLButtonElement {
+    const found = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === label,
+    );
+    expect(found, `button "${label}"`).toBeTruthy();
+    return found!;
+  }
+
+  it('retries an unreachable session, then asks for the password before connecting', async () => {
+    const fixture = await mount();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(auth.refresh).not.toHaveBeenCalled();
+
+    button(fixture, 'Try again').click();
+    await settle(fixture);
+    expect(auth.refresh).toHaveBeenCalledTimes(1);
+    expect(root.textContent).toContain('Confirm your password to connect Shader Studio Desktop.');
+
+    const input = root.querySelector<HTMLInputElement>('input[type="password"]')!;
+    input.value = 'correct horse battery staple';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    button(fixture, 'Connect').click();
+
+    const request = TestBed.inject(HttpTestingController).expectOne('/api/desktop/handoff');
+    expect(request.request.body).toEqual({
+      codeChallenge: CHALLENGE,
+      password: 'correct horse battery staple',
+    });
+    request.flush(
+      { error: { code: 'invalid', message: 'Check your password and try again' } },
+      { status: 400, statusText: 'Bad Request' },
+    );
+    await settle(fixture);
+
+    expect(root.textContent).toContain('Check your password and try again.');
+    // The password does not outlive the request.
+    expect(root.querySelector<HTMLInputElement>('input[type="password"]')!.value).toBe('');
   });
 });

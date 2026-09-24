@@ -6,11 +6,19 @@
  * challenge and hands it back through the `shader-studio://` deep link. The code
  * is useless without the verifier only the desktop holds, and it is never kept,
  * shown or logged here — it goes straight from the response into the link.
+ *
+ * Being signed in is not enough: the page asks for the password again, and the
+ * server checks it before issuing a code. A script injected into the page has
+ * the session cookie but not the password, so it cannot mint a desktop token.
+ * The password stays in a field until the request is sent, and no longer.
  */
 
 import { HttpClient } from '@angular/common/http';
 import { Component, effect, inject, signal, untracked } from '@angular/core';
 import { ActivatedRoute, Router, type CanActivateFn } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { firstValueFrom } from 'rxjs';
 
 import { API_BASE_URL } from '../api/api-base-url';
@@ -30,16 +38,38 @@ export const desktopConnectLink: CanActivateFn = (route) => {
   return (STATE.test(state) && CHALLENGE.test(challenge)) || inject(Router).parseUrl('/');
 };
 
-type Stage = 'connecting' | 'returned' | 'failed';
+/** `waiting` covers everything before the user is signed in and verified. */
+type Stage = 'waiting' | 'password' | 'returned' | 'failed';
 
 @Component({
   selector: 'app-desktop-connect',
-  imports: [TranslatePipe],
+  imports: [MatButtonModule, MatFormFieldModule, MatInputModule, TranslatePipe],
   template: `
     <section class="card" role="status">
       <p>{{ message[stage()] | translate }}</p>
-      @if (!busy()) {
-        <button class="link" type="button" (click)="start()">
+      @if (stage() === 'password' || stage() === 'failed') {
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'auth.password' | translate }}</mat-label>
+          <input
+            matInput
+            required
+            type="password"
+            autocomplete="current-password"
+            [value]="password()"
+            (input)="password.set(value($event))"
+            (keyup.enter)="connect()"
+          />
+        </mat-form-field>
+        <button
+          matButton="filled"
+          type="button"
+          [disabled]="busy() || !password()"
+          (click)="connect()"
+        >
+          {{ 'auth.desktopConnect' | translate }}
+        </button>
+      } @else if (!busy()) {
+        <button class="link" type="button" (click)="retry()">
           {{ 'auth.desktopRetry' | translate }}
         </button>
       }
@@ -51,6 +81,10 @@ type Stage = 'connecting' | 'returned' | 'failed';
       top: 50%;
       left: 50%;
       z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
       transform: translate(-50%, -50%);
       max-width: calc(100vw - 32px);
       padding: 20px 24px;
@@ -62,7 +96,7 @@ type Stage = 'connecting' | 'returned' | 'failed';
     }
 
     .card p {
-      margin: 0 0 8px;
+      margin: 0;
       font: var(--mat-sys-body-large);
     }
 
@@ -84,42 +118,57 @@ export class DesktopConnect {
   private readonly query = inject(ActivatedRoute).snapshot.queryParamMap;
 
   protected readonly message = {
-    connecting: 'auth.desktopConnecting',
+    waiting: 'auth.desktopConnecting',
+    password: 'auth.desktopConfirm',
     returned: 'auth.desktopReturn',
     failed: 'auth.desktopFailed',
   } as const;
-  protected readonly stage = signal<Stage>('connecting');
+  protected readonly stage = signal<Stage>('waiting');
   protected readonly busy = signal(false);
-
-  /** Set once a code has been asked for, so a later session refresh does not ask again. */
-  private attempted = false;
+  protected readonly password = signal('');
 
   constructor() {
     // Runs as the session settles, and again once the dialog signs the user in.
     effect(() => {
       this.auth.status();
       this.auth.verified();
-      if (!this.attempted) untracked(() => this.start());
+      if (this.stage() === 'waiting') untracked(() => this.start());
     });
   }
 
-  protected start(): void {
-    if (this.auth.status() === 'anonymous') {
-      this.prompt.requestSignIn();
-    } else if (this.auth.status() === 'authenticated') {
-      if (this.auth.verified()) void this.connect();
-      else this.prompt.request({ mode: 'verify-email' });
+  protected retry(): void {
+    this.stage.set('waiting');
+    // A session that could not be resolved at all is asked for again; the
+    // effect carries on once it settles. Never from the effect itself, which
+    // would loop for as long as the server stays unreachable.
+    if (this.auth.status() === 'error') void this.auth.refresh();
+    else this.start();
+  }
+
+  protected value(event: Event): string {
+    return (event.target as HTMLInputElement).value;
+  }
+
+  private start(): void {
+    switch (this.auth.status()) {
+      case 'anonymous':
+        this.prompt.requestSignIn();
+        return;
+      case 'authenticated':
+        if (this.auth.verified()) this.stage.set('password');
+        else this.prompt.request({ mode: 'verify-email' });
+        return;
     }
   }
 
-  private async connect(): Promise<void> {
-    this.attempted = true;
+  protected async connect(): Promise<void> {
+    if (this.busy() || !this.password()) return;
     this.busy.set(true);
-    this.stage.set('connecting');
     try {
       const { code } = await firstValueFrom(
         this.http.post<{ code: string }>(`${this.baseUrl}/api/desktop/handoff`, {
           codeChallenge: this.query.get('code_challenge'),
+          password: this.password(),
         }),
       );
       const callback = new URL('shader-studio://auth/callback');
@@ -130,6 +179,7 @@ export class DesktopConnect {
     } catch {
       this.stage.set('failed');
     } finally {
+      this.password.set('');
       this.busy.set(false);
     }
   }
