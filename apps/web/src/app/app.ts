@@ -35,6 +35,7 @@ import {
   type ColorScheme,
 } from './prefs/preferences';
 import { DesktopPlatform } from './desktop/desktop-platform';
+import { DesktopSync } from './desktop/desktop-sync';
 import { ShaderStore } from './workspace/shader-store';
 import { SurfaceLayoutService } from './surfaces/surface-layout';
 import { SurfaceRegistry } from './surfaces/surface-registry';
@@ -88,6 +89,7 @@ import { AuthDialog, type AuthDialogData } from './ui/dialogs/auth-dialog';
 })
 export class App {
   protected readonly store = inject(ShaderStore);
+  protected readonly sync = inject(DesktopSync);
   protected readonly preferences = inject(Preferences);
   protected readonly workspace = inject(WorkspaceActions);
   protected readonly desktop = inject(DesktopPlatform);

@@ -328,6 +328,15 @@
       [attr.aria-label]="'workspace.working' | translate"
     />
     }
+
+    @if (sync.progress(); as progress) {
+    <mat-progress-bar
+      class="loading"
+      mode="determinate"
+      [value]="(100 * progress.done) / progress.total"
+      [attr.aria-label]="'sync.progress' | translate: progress"
+    />
+    }
   </mat-toolbar>
 
   <mat-sidenav-container class="body" [hasBackdrop]="isHandset()">
