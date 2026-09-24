@@ -2,13 +2,16 @@
  * The desktop handoff over HTTP, against a real Better Auth instance, with
  * throttling left on. Requests made "as the desktop" carry only
  * `Authorization: Bearer` — no cookie and no Origin, as `net.fetch` sends them.
+ *
+ * Each test calls from its own forwarded address, so the per-address limits
+ * only ever see the requests of the test that is about them.
  */
 
 import { createHash, randomBytes } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LOCAL_SCOPE, ShaderLibrary } from '@shader-studio/backend/library';
 import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
@@ -57,6 +60,7 @@ beforeAll(async () => {
       AUTH_CHECK_COMPROMISED_PASSWORDS: '0',
       // So an unverified account can hold a session at all, and be refused here.
       AUTH_REQUIRE_VERIFIED_EMAIL: '0',
+      TRUST_PROXY: '1',
     }),
     mailer,
     recorder,
@@ -74,6 +78,11 @@ afterAll(async () => {
   await library.close();
 });
 
+let caller = 0;
+beforeEach(() => {
+  caller += 1;
+});
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -83,7 +92,11 @@ afterEach(() => {
 function post(path: string, body: unknown, headers: Record<string, string> = {}) {
   return fetch(`${base}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: {
+      'content-type': 'application/json',
+      'x-forwarded-for': `10.0.0.${caller}`,
+      ...headers,
+    },
     body: JSON.stringify(body),
     redirect: 'manual',
   });
@@ -135,12 +148,12 @@ function pkce(): { verifier: string; challenge: string } {
   return { verifier, challenge: createHash('sha256').update(verifier).digest('base64url') };
 }
 
+function requestCode(cookie: string, body: Record<string, unknown>): Promise<Response> {
+  return post('/api/desktop/handoff', body, asBrowser(cookie));
+}
+
 async function handoff(cookie: string, challenge: string): Promise<string> {
-  const response = await post(
-    '/api/desktop/handoff',
-    { codeChallenge: challenge },
-    asBrowser(cookie),
-  );
+  const response = await requestCode(cookie, { codeChallenge: challenge, password: PASSWORD });
   expect(response.status).toBe(200);
   const { code } = (await response.json()) as { code: string };
   return code;
@@ -173,11 +186,9 @@ async function expectRefused(response: Response): Promise<void> {
 describe('POST /api/desktop/handoff', () => {
   it('refuses anonymous and unverified callers', async () => {
     const { challenge } = pkce();
-    expect((await post('/api/desktop/handoff', { codeChallenge: challenge })).status).toBe(401);
-    expect(
-      (await post('/api/desktop/handoff', { codeChallenge: challenge }, asBrowser(unverified)))
-        .status,
-    ).toBe(401);
+    const body = { codeChallenge: challenge, password: PASSWORD };
+    expect((await post('/api/desktop/handoff', body)).status).toBe(401);
+    expect((await requestCode(unverified, body)).status).toBe(401);
   });
 
   it('needs an S256 challenge', async () => {
@@ -187,9 +198,23 @@ describe('POST /api/desktop/handoff', () => {
       'x'.repeat(43) + '=',
       'plain verifier '.repeat(3),
     ]) {
-      const response = await post('/api/desktop/handoff', { codeChallenge }, asBrowser(verified));
+      const response = await requestCode(verified, { codeChallenge, password: PASSWORD });
       expect(response.status).toBe(400);
     }
+  });
+
+  // A script running on the page has the cookie but not the password.
+  it('needs the account password, not just the session', async () => {
+    const { challenge } = pkce();
+    const missing = await requestCode(verified, { codeChallenge: challenge });
+    const wrong = await requestCode(verified, { codeChallenge: challenge, password: 'guess' });
+    expect(missing.status).toBe(400);
+    expect(wrong.status).toBe(400);
+    expect(await wrong.json()).toEqual(await missing.json());
+
+    const right = await requestCode(verified, { codeChallenge: challenge, password: PASSWORD });
+    expect(right.status).toBe(200);
+    expect(right.headers.get('cache-control')).toBe('no-store');
   });
 });
 
@@ -264,7 +289,7 @@ describe('desktop bearer session', () => {
   it('cannot hand off to another desktop', async () => {
     const response = await post(
       '/api/desktop/handoff',
-      { codeChallenge: pkce().challenge },
+      { codeChallenge: pkce().challenge, password: PASSWORD },
       asDesktop(await desktopToken()),
     );
     expect(response.status).toBe(401);
@@ -292,8 +317,22 @@ describe('desktop bearer session', () => {
   });
 });
 
-// Last: it spends this address's budget for the rest of the minute.
 describe('rate limit', () => {
+  it('counts failed password guesses against the handoff budget', async () => {
+    const { challenge } = pkce();
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      statuses.push(
+        (await requestCode(verified, { codeChallenge: challenge, password: 'guess' })).status,
+      );
+    }
+    expect(statuses.slice(0, 10).every((status) => status === 400)).toBe(true);
+    expect(statuses.slice(10)).toEqual([429, 429]);
+    // Even the right password waits out the window once the guesses spent it.
+    const right = await requestCode(verified, { codeChallenge: challenge, password: PASSWORD });
+    expect(right.status).toBe(429);
+  });
+
   it('throttles guessing at codes', async () => {
     const statuses: number[] = [];
     for (let attempt = 0; attempt < 15; attempt += 1) {

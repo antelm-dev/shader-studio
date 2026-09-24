@@ -11,12 +11,19 @@
  * only its hash is stored. Every failure is the same 400, so the endpoint never
  * says which part was wrong. Neither the code nor the token is ever logged.
  *
+ * Issuing a code takes the account password, not just the session cookie. The
+ * cookie rides along on any request from our origin, so without that a script
+ * injected into the page (XSS) could post its own challenge, trade the code and
+ * walk away with a bearer token that outlives the page. The password is the one
+ * thing such a script does not have; it is checked by Better Auth's own hasher,
+ * and failed guesses are throttled like sign-in.
+ *
  * The session it issues is an ordinary one: it shows up in the account's device
  * list, obeys the same idle and absolute lifetimes, and dies when revoked.
  */
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { Body, Controller, HttpCode, Inject, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Inject, Post, Req, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { fromNodeHeaders } from 'better-auth/node';
@@ -33,9 +40,9 @@ import type { Auth, Principal } from './auth';
 export const DESKTOP_USER_AGENT = 'Shader Studio Desktop';
 
 const CODE_SECONDS = 60;
-/** The same budget as a password sign-in: ten a minute per address. */
-const TOKEN_WINDOW_MS = 60_000;
-const TOKEN_MAX = 10;
+/** The same budget as a password sign-in, for each endpoint: ten a minute per address. */
+const LIMIT_WINDOW_MS = 60_000;
+const LIMIT_MAX = 10;
 
 // A SHA-256 digest in unpadded base64url, and RFC 7636's verifier alphabet.
 const CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
@@ -52,7 +59,8 @@ interface Grant {
 @ApiTags('desktop')
 @Controller('desktop')
 export class DesktopHandoffController {
-  private readonly limiter = windowLimiter(TOKEN_WINDOW_MS, TOKEN_MAX);
+  private readonly handoffLimiter = windowLimiter(LIMIT_WINDOW_MS, LIMIT_MAX);
+  private readonly tokenLimiter = windowLimiter(LIMIT_WINDOW_MS, LIMIT_MAX);
 
   constructor(
     @Inject(AUTH_INSTANCE) private readonly auth: Auth,
@@ -62,34 +70,47 @@ export class DesktopHandoffController {
   @ApiOperation({
     summary: 'Issue a desktop sign-in code',
     description:
-      'Needs a verified browser (cookie) session. Returns `{ code }`, single-use and valid for 60 s, bound to the S256 `codeChallenge`.',
+      'Needs a verified browser (cookie) session and the account password. Returns `{ code }`, single-use and valid for 60 s, bound to the S256 `codeChallenge`.',
   })
   @ApiErrors(400)
   @Post('handoff')
-  @HttpCode(200)
   async handoff(
     @Body() body: JsonBody,
     @Req() request: Request,
+    @Res() response: Response,
     @CurrentUser() principal: Principal,
-  ): Promise<{ code: string }> {
+  ): Promise<void> {
     // Only the browser hands off. A bearer session minting more of itself would
     // let a stolen desktop token outlive its own revocation.
     if (request.headers.authorization) {
       throw new StorageError('unauthorized', 'Sign in from the browser to connect the desktop');
     }
+    // Counted before the password is looked at, so failed guesses spend it too.
+    if (this.throttled(this.handoffLimiter, request, response)) return;
+
     const codeChallenge = body?.['codeChallenge'];
-    if (typeof codeChallenge !== 'string' || !CHALLENGE.test(codeChallenge)) {
-      throw new StorageError('invalid', 'Expected an S256 code challenge');
+    const password = body?.['password'];
+    if (typeof codeChallenge !== 'string' || !CHALLENGE.test(codeChallenge)) invalidHandoff();
+    if (typeof password !== 'string' || !password || password.length > 128) invalidHandoff();
+
+    const context = await this.auth.$context;
+    const account = await context.internalAdapter.findCredentialAccount(principal.userId);
+    if (!account?.password) {
+      // Hashed anyway so an account without a password answers in the same time.
+      await context.password.hash(password);
+      invalidHandoff();
     }
+    if (!(await context.password.verify({ hash: account.password, password }))) invalidHandoff();
+
     const code = randomBytes(32).toString('base64url');
     const grant: Grant = { userId: principal.userId, codeChallenge };
-    const { internalAdapter } = await this.auth.$context;
-    await internalAdapter.createVerificationValue({
+    await context.internalAdapter.createVerificationValue({
       identifier: identifierFor(code),
       value: JSON.stringify(grant),
       expiresAt: new Date(Date.now() + CODE_SECONDS * 1000),
     });
-    return { code };
+    response.setHeader('Cache-Control', 'no-store');
+    response.status(200).json({ code });
   }
 
   @ApiOperation({
@@ -105,17 +126,9 @@ export class DesktopHandoffController {
     @Req() request: Request,
     @Res() response: Response,
   ): Promise<void> {
-    const headers = fromNodeHeaders(request.headers);
-    const trustProxy = this.auth.options.advanced?.trustedProxyHeaders === true;
-    const context = requestContext(headers, { trustProxy });
-    const ip = context.ip ?? request.socket.remoteAddress ?? '';
-
-    if (this.auth.options.rateLimit?.enabled && !this.limiter(ip)) {
-      response
-        .status(429)
-        .json({ error: { code: 'rate_limited', message: 'Too many attempts. Try again later.' } });
-      return;
-    }
+    const context = this.requestContext(request);
+    const ip = this.clientIp(request);
+    if (this.throttled(this.tokenLimiter, request, response)) return;
 
     const code = body?.['code'];
     const verifier = body?.['codeVerifier'];
@@ -145,6 +158,32 @@ export class DesktopHandoffController {
       user: { id: user.id, name: user.name, email: user.email },
     });
   }
+
+  private requestContext(request: Request) {
+    const trustProxy = this.auth.options.advanced?.trustedProxyHeaders === true;
+    return requestContext(fromNodeHeaders(request.headers), { trustProxy });
+  }
+
+  private clientIp(request: Request): string {
+    return this.requestContext(request).ip ?? request.socket.remoteAddress ?? '';
+  }
+
+  /** Answers 429 and returns true once this address has spent its budget. */
+  private throttled(
+    limiter: (key: string) => boolean,
+    request: Request,
+    response: Response,
+  ): boolean {
+    if (!this.auth.options.rateLimit?.enabled || limiter(this.clientIp(request))) return false;
+    response
+      .status(429)
+      .json({ error: { code: 'rate_limited', message: 'Too many attempts. Try again later.' } });
+    return true;
+  }
+}
+
+function invalidHandoff(): never {
+  throw new StorageError('invalid', 'Check your password and try again');
 }
 
 function invalidCode(): never {
