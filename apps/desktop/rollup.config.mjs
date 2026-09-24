@@ -43,7 +43,11 @@ export default defineConfig([
       nodeResolve({ exportConditions: ['node'] }),
       commonjs(),
       typescript({ tsconfig: './tsconfig.main.json', compilerOptions: { sourceMap: !production } }),
-      replace({ preventAssignment: true, __ELECTRON_PRODUCTION__: JSON.stringify(production) }),
+      replace({
+        preventAssignment: true,
+        __ELECTRON_PRODUCTION__: JSON.stringify(production),
+        __SHADER_STUDIO_ACCOUNT_URL__: JSON.stringify(process.env.SHADER_STUDIO_ACCOUNT_URL ?? ''),
+      }),
       production && terser(),
       process.env.ROLLUP_WATCH &&
         electronRun({
