@@ -17,8 +17,10 @@ import { createFilesIpc } from './ipc/files.ipc';
 import { createI18nIpc } from './ipc/i18n.ipc';
 import { createMigrationIpc } from './ipc/migration.ipc';
 import { createShaderIpc } from './ipc/shader.ipc';
+import { broadcastSync, createSyncIpc } from './ipc/sync.ipc';
 import { createUpdateIpc } from './ipc/update.ipc';
 import { createWindowIpc, type CloseController } from './ipc/window.ipc';
+import { notifyingWrites, SyncService, type AccountSession } from './sync/sync-service';
 import {
   applyNavigationPolicy,
   createAppUrlChecker,
@@ -253,18 +255,28 @@ prepare({
     };
     closeController.outputOpen = () => surfaceManager?.isLivePreviewOutputOpen() ?? false;
 
+    // Integration: replace with Task 03's AccountSession. Until then sync stays off (C4 `disabled`).
+    const account: AccountSession = {
+      state: () => ({ status: 'disabled' }),
+      onChange: () => () => undefined,
+      fetch: () => Promise.reject(new Error('No account server is configured')),
+    };
+    const sync = new SyncService(library, account, broadcastSync);
+
     const ipc = createIpcContainer();
     const updates = new UpdateController(() => {
       for (const window of BrowserWindow.getAllWindows()) closeController.approved.add(window);
     });
     await ipc.loadAll({
-      shader: createShaderIpc(library),
+      shader: createShaderIpc(notifyingWrites(library, () => sync.changed())),
       files: createFilesIpc(),
       i18n: createI18nIpc(i18nDir),
       migration: createMigrationIpc(library, migrationPath),
       window: createWindowIpc(closeController),
       update: createUpdateIpc(updates),
+      sync: createSyncIpc(sync),
     });
+    void sync.run();
 
     const win = createSecureBrowserWindow({
       width: bounds?.width ?? 1440,
