@@ -1,4 +1,5 @@
-import { signal } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import { PLATFORM_ID, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,6 +25,7 @@ import {
 } from '../prefs/preferences';
 import { ApiError, type UpdateShaderPatch } from '../api/shader-api';
 import { ShaderApi } from '../api/shader-api';
+import { documentWith, MemoryStorage } from './lifecycle/testing/lifecycle-harness';
 import { ShaderStore } from './shader-store';
 
 /**
@@ -757,9 +759,22 @@ describe('ShaderStore: collection', () => {
   });
 
   it('reloads the open shader sync replaced, offering the unsaved draft back', async () => {
-    const { store, api } = setup(makeRecord());
+    // Explicit storage, as the recovery-facade specs use: the environment's
+    // own localStorage is not something this outcome may depend on.
+    const storage = new MemoryStorage();
+    const api = new FakeApi(makeRecord());
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ShaderApi, useValue: api },
+        { provide: Preferences, useValue: new FakePreferences() },
+        { provide: PLATFORM_ID, useValue: 'browser' },
+        { provide: DOCUMENT, useValue: documentWith(storage) },
+      ],
+    });
+    const store = TestBed.inject(ShaderStore);
     await store.initialize();
     store.setFragment('void main() { /* unsaved */ }');
+    expect(store.dirty()).toBe(true);
     api.records.set(
       'waves',
       makeRecord({
@@ -771,8 +786,13 @@ describe('ShaderStore: collection', () => {
 
     await store.reloadReplaced(['other']);
     expect(store.record()?.revision).toBe(1);
+    expect(storage.getItem('shader-studio.recovered-drafts')).toBeNull();
 
     await store.reloadReplaced(['waves']);
+    const saved = JSON.parse(storage.getItem('shader-studio.recovered-drafts') ?? '{}') as {
+      drafts?: Record<string, { baselineUpdatedAt: string }>;
+    };
+    expect(saved.drafts?.['waves']?.baselineUpdatedAt).toBe('2024-01-01T00:00:00.000Z');
     expect(store.record()?.fragment).toBe('void main() { /* account */ }');
     expect(store.record()?.revision).toBe(2);
     expect(store.staleRecovery()?.shaderId).toBe('waves');
