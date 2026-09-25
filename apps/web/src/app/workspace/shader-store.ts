@@ -704,6 +704,18 @@ export class ShaderStore {
     }
   }
 
+  /**
+   * Sync replaced these shaders underneath the editor. If the open one is among
+   * them, re-open it; an unsaved draft goes to its recovery copy first, so the
+   * usual "restore unsaved changes?" prompt offers it back over the new record.
+   */
+  async reloadReplaced(ids: readonly string[]): Promise<void> {
+    const id = this.selectedId();
+    if (!id || !ids.includes(id)) return;
+    this.recovery.flush();
+    await this.forceSelect(id);
+  }
+
   /** `select`, but reloads even if the id is already the open one. */
   private forceSelect(id: string): Promise<void> {
     return this.selection.forceSelect(id);

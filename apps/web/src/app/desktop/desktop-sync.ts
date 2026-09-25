@@ -44,5 +44,6 @@ export class DesktopSync {
     this.progress.set(event.progress);
     // A conflict adds a copy and replaces a shader locally: show it.
     if (ended) void this.store.refreshList();
+    if (event.replaced?.length) void this.store.reloadReplaced(event.replaced);
   }
 }

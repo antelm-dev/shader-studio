@@ -756,6 +756,28 @@ describe('ShaderStore: collection', () => {
     expect(store.notice()).toEqual({ text: 'Imported 1 shader (1 replaced)', error: false });
   });
 
+  it('reloads the open shader sync replaced, offering the unsaved draft back', async () => {
+    const { store, api } = setup(makeRecord());
+    await store.initialize();
+    store.setFragment('void main() { /* unsaved */ }');
+    api.records.set(
+      'waves',
+      makeRecord({
+        fragment: 'void main() { /* account */ }',
+        updatedAt: '2024-02-01T00:00:00.000Z',
+        revision: 2,
+      }),
+    );
+
+    await store.reloadReplaced(['other']);
+    expect(store.record()?.revision).toBe(1);
+
+    await store.reloadReplaced(['waves']);
+    expect(store.record()?.fragment).toBe('void main() { /* account */ }');
+    expect(store.record()?.revision).toBe(2);
+    expect(store.staleRecovery()?.shaderId).toBe('waves');
+  });
+
   it('reports an import the server rejected', async () => {
     const { store, api } = setup(makeRecord());
     await store.initialize();
