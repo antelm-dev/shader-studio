@@ -26,6 +26,23 @@ export interface UpdateState {
   message?: string;
 }
 
+/** `disabled` when the build has no account server (`SHADER_STUDIO_ACCOUNT_URL`). */
+export type AccountStatus = 'disabled' | 'signed-out' | 'signed-in' | 'reauth-required';
+
+export interface AccountUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+/** What the renderer may know about the account: never a credential. */
+export interface AccountState {
+  status: AccountStatus;
+  user?: AccountUser;
+}
+
+export type SignInResult = 'ok' | 'cancelled' | 'timeout' | 'encryption-unavailable' | 'failed';
+
 /** Mirrors @shader-studio/shared SurfaceKind for the preload boundary. */
 export type NativeSurfaceKind =
   | 'preview'

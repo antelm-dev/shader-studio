@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, screen } from 'electron';
+import { app, BrowserWindow, Menu, net, safeStorage, screen, shell } from 'electron';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -9,10 +9,12 @@ import { LOCAL_SCOPE, ShaderLibrary } from '@shader-studio/backend/library';
 import { createLegacyReader, legacyLibraryExists } from '@shader-studio/backend/persistence/legacy';
 import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
 import { WELL_KNOWN_SURFACE_IDS } from '@shader-studio/shared/surfaces';
+import { DesktopAccountSession, findCallbackUrl } from './account/account-session';
 import { prepare } from './core/bootstrap';
 import { createCustomScheme } from './core/electron';
 import { UpdateController } from './core/updater';
 import { env } from './env';
+import { createAccountIpc } from './ipc/account.ipc';
 import { createFilesIpc } from './ipc/files.ipc';
 import { createI18nIpc } from './ipc/i18n.ipc';
 import { createMigrationIpc } from './ipc/migration.ipc';
@@ -158,11 +160,38 @@ const closeController: CloseController = {
 let mainWindow: BrowserWindow | null = null;
 let surfaceManager: SurfaceWindowManager | null = null;
 
-if (!app.requestSingleInstanceLock()) app.quit();
+const account = new DesktopAccountSession({
+  accountUrl: env.accountUrl,
+  dataDir: app.getPath('userData'),
+  fetch: (url, init) => net.fetch(url, init),
+  safeStorage,
+  openExternal: (url) => shell.openExternal(url),
+});
+/** Only `shader-studio://auth/callback` reaches the account; other links are ignored. */
+const openCallback = (argv: readonly string[]) => {
+  const url = findCallbackUrl(argv);
+  if (url) void app.whenReady().then(() => account.handleCallback(url));
+};
+if (account.state().status !== 'disabled') {
+  // A dev build is `electron <entry>`, so the link must relaunch both.
+  const entry = process.defaultApp
+    ? process.argv.slice(1).find((arg) => !arg.startsWith('-') && !findCallbackUrl([arg]))
+    : undefined;
+  if (entry) app.setAsDefaultProtocolClient(env.scheme, process.execPath, [resolve(entry)]);
+  else app.setAsDefaultProtocolClient(env.scheme);
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    openCallback([url]);
+  });
+}
+
+const primaryInstance = app.requestSingleInstanceLock();
+if (!primaryInstance) app.quit();
 else
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
     mainWindow?.restore();
     mainWindow?.focus();
+    openCallback(argv);
   });
 
 prepare({
@@ -187,6 +216,9 @@ prepare({
       LOCAL_SCOPE,
     );
     await library.init();
+    void account.restore();
+    // A second instance only forwards its link, through `second-instance`.
+    if (primaryInstance) openCallback(process.argv);
     await migrateLegacyLibrary(library, libraryDir);
     const examplesDir = env.production
       ? join(process.resourcesPath, 'examples')
@@ -264,6 +296,7 @@ prepare({
       migration: createMigrationIpc(library, migrationPath),
       window: createWindowIpc(closeController),
       update: createUpdateIpc(updates),
+      account: createAccountIpc(account),
     });
 
     const win = createSecureBrowserWindow({
