@@ -298,6 +298,11 @@ export function runShaderLibraryConformance(
 
       await lib.setThumbnail(created.id, { ext: 'png', bytes: Buffer.from('img2') });
       expect((await lib.readThumbnail(created.id))?.ext).toBe('png');
+
+      const cleared = await lib.clearThumbnail(created.id);
+      expect(cleared.thumbnail).toBeNull();
+      expect(cleared.revision).toBe(created.revision);
+      expect(await lib.readThumbnail(created.id)).toBeNull();
     });
 
     // 12 & 13 — import/export v2, rename and overwrite

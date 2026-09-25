@@ -35,9 +35,12 @@ const SAVE_DEBOUNCE_MS = 2_000;
 const RETRY_MIN_MS = 5_000;
 const RETRY_MAX_MS = 5 * 60_000;
 
-/** Ends a run: the account needs signing in again, or the server is unreachable. */
+/**
+ * Ends a run: the account needs signing in again, the server is unreachable,
+ * or the signed-in account is no longer the one the run started for.
+ */
 class Stop extends Error {
-  constructor(readonly reason: 'reauth' | 'offline') {
+  constructor(readonly reason: 'reauth' | 'offline' | 'switched') {
     super(reason);
   }
 }
@@ -66,6 +69,8 @@ export class SyncService {
   private progress: SyncChangedEvent['progress'] = null;
   private readonly resolved = new Set<string>();
   private readonly failed = new Set<string>();
+  /** Ids a keep-both replaced since the last event, for the renderer to reload. */
+  private replaced: string[] = [];
   private userId: string | undefined;
   private retryDelay = 0;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -195,7 +200,7 @@ export class SyncService {
       const { revision } = await this.library.read(id);
       const payload = await this.library.exportOne(id);
       const response = await expectOk(
-        await this.call('/api/import', {
+        await this.call(userId, '/api/import', {
           method: 'POST',
           headers: JSON_HEADERS,
           body: JSON.stringify({ bundle: buildShaderBundle(payload), mode: 'rename' }),
@@ -247,7 +252,19 @@ export class SyncService {
     }
   }
 
-  private async call(path: string, init?: RequestInit): Promise<Response> {
+  /**
+   * A run belongs to the account it started for. `account.fetch` sends whatever
+   * token is current, so every request and every link write first checks that
+   * this is still that account — synchronously, right before it — and a run
+   * that finds another one stops without writing anything.
+   */
+  private assertAccount(userId: string): void {
+    const state = this.account.state();
+    if (state.status !== 'signed-in' || state.user?.id !== userId) throw new Stop('switched');
+  }
+
+  private async call(userId: string, path: string, init?: RequestInit): Promise<Response> {
+    this.assertAccount(userId);
     let response: Response;
     try {
       response = await this.account.fetch(path, init);
@@ -255,6 +272,7 @@ export class SyncService {
       throw new Stop('offline');
     }
     if (response.status === 401) throw new Stop('reauth');
+    this.assertAccount(userId);
     return response;
   }
 
@@ -265,7 +283,7 @@ export class SyncService {
     const payload = await this.library.exportOne(id);
 
     if (revision > link.localRevision) {
-      const response = await this.call(`${base}/bundle`, {
+      const response = await this.call(userId, `${base}/bundle`, {
         method: 'PUT',
         headers: JSON_HEADERS,
         body: JSON.stringify({
@@ -285,7 +303,7 @@ export class SyncService {
     const thumbnail = payload.thumbnail;
     if ((thumbnail?.updatedAt ?? null) === links[id].localThumbnail) return;
     if (thumbnail?.data) {
-      const response = await this.call(`${base}/thumbnail`, {
+      const response = await this.call(userId, `${base}/thumbnail`, {
         method: 'PUT',
         headers: { 'content-type': mimeFromExt(thumbnail.ext) },
         body: new Uint8Array(Buffer.from(thumbnail.data, 'base64')),
@@ -313,26 +331,29 @@ export class SyncService {
     const base = `/api/shaders/${encodeURIComponent(link.remoteId)}`;
     // Revision before content: if the account moves again in between, the next
     // push conflicts again instead of overwriting what we never saw.
-    const current = await this.call(base);
+    const current = await this.call(userId, base);
     if (current.status === 404) return this.unlink(userId, id, links);
     const { shader: remote } = (await (await expectOk(current)).json()) as {
       shader: ShaderRecord;
     };
-    const exported = await this.call(`${base}/export`);
+    const exported = await this.call(userId, `${base}/export`);
     if (exported.status === 404) return this.unlink(userId, id, links);
     const parsed = parseBundle(await (await expectOk(exported)).json());
     if (!parsed.ok) throw new Error('The account version could not be read');
     const [account] = parsed.value;
 
+    this.assertAccount(userId);
     const name = local.name.slice(0, LIMITS.nameLength - CONFLICT_SUFFIX.length);
     await this.library.importPayloads([{ ...local, name: name + CONFLICT_SUFFIX }], 'rename');
-    let record = await this.library.replaceFromPayload(id, account, localRevision);
-    if (account.thumbnail?.data) {
-      record = await this.library.setThumbnail(id, {
-        ext: account.thumbnail.ext,
-        bytes: Buffer.from(account.thumbnail.data, 'base64'),
-      });
-    }
+    await this.library.replaceFromPayload(id, account, localRevision);
+    // The replace leaves thumbnails alone; the linked slot takes the account's, or none.
+    const record = account.thumbnail?.data
+      ? await this.library.setThumbnail(id, {
+          ext: account.thumbnail.ext,
+          bytes: Buffer.from(account.thumbnail.data, 'base64'),
+        })
+      : await this.library.clearThumbnail(id);
+    this.replaced.push(id);
     links[id] = {
       remoteId: link.remoteId,
       remoteRevision: remote.revision,
@@ -353,8 +374,12 @@ export class SyncService {
   // --- Links -----------------------------------------------------------------
 
   private publish(): void {
-    void this.snapshot().then(this.emit, (error: unknown) =>
-      console.error('[sync] status failed', error),
+    void this.snapshot().then(
+      (event) => {
+        const replaced = this.replaced.splice(0);
+        this.emit(replaced.length > 0 ? { ...event, replaced } : event);
+      },
+      (error: unknown) => console.error('[sync] status failed', error),
     );
   }
 
@@ -364,6 +389,7 @@ export class SyncService {
 
   // ponytail: the whole JSON map is rewritten on each change; a `sync_links` table if libraries grow large.
   private async writeLinks(userId: string, links: Links): Promise<void> {
+    this.assertAccount(userId);
     await this.library.setMeta(linksKey(userId), JSON.stringify(links));
     const accounts = await this.accounts();
     if (!accounts.includes(userId)) {

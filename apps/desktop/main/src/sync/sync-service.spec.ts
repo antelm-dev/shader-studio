@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LOCAL_SCOPE, ShaderLibrary, StorageError } from '@shader-studio/backend/library';
 import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
@@ -14,7 +14,13 @@ const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 
 /** The account server, reduced to the routes sync uses, over a real library. */
 function fakeServer(remote: ShaderLibrary) {
-  const server = { calls: [] as string[], offline: false, unauthorized: false };
+  const server = {
+    calls: [] as string[],
+    offline: false,
+    unauthorized: false,
+    /** Runs once the server has handled a request, before the client sees the answer. */
+    afterHandled: undefined as ((call: string) => void) | undefined,
+  };
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
@@ -65,7 +71,12 @@ function fakeServer(remote: ShaderLibrary) {
       throw error;
     }
   };
-  return Object.assign(server, { fetch: handle });
+  const fetch = async (path: string, init?: RequestInit): Promise<Response> => {
+    const response = await handle(path, init);
+    server.afterHandled?.(server.calls.at(-1)!);
+    return response;
+  };
+  return Object.assign(server, { fetch });
 }
 
 function fakeAccount(fetch: AccountSession['fetch'], state: AccountState) {
@@ -293,6 +304,61 @@ describe('SyncService', () => {
 
     expect(server.calls).toEqual([]);
     expect(await statusOf(shader.id)).toBe('other-account');
+    expect(await links('user-b')).toEqual({});
+  });
+
+  it('clears the local thumbnail when the account version has none', async () => {
+    const shader = await local.create({ name: 'Bare' });
+    await sync.upload([shader.id]);
+    const { remoteId } = (await links())[shader.id];
+    await remote.update(remoteId, { fragment: 'void main() { /* web */ }' });
+    await local.update(shader.id, { fragment: 'void main() { /* desktop */ }' });
+    await local.setThumbnail(shader.id, { ext: 'png', bytes: PNG });
+
+    const events: SyncChangedEvent[] = [];
+    const watched = new SyncService(local, account, (event) => events.push(event));
+    await watched.run();
+    expect((await watched.snapshot()).statuses[shader.id]).toBe('conflict-resolved');
+    watched.dispose();
+
+    expect(await local.readThumbnail(shader.id)).toBeNull();
+    const copy = (await local.list()).find((s) => s.id !== shader.id)!;
+    expect(copy.thumbnail).not.toBeNull();
+    expect((await links())[shader.id].localThumbnail).toBeNull();
+    await vi.waitFor(() => expect(events.some((e) => e.replaced?.includes(shader.id))).toBe(true));
+  });
+
+  it('stops an upload when another account signs in mid-batch (AC-SYNC-04)', async () => {
+    const one = await local.create({ name: 'One' });
+    await local.create({ name: 'Two' });
+    server.afterHandled = (call) => {
+      if (call === 'POST /api/import') account.set(userB);
+    };
+
+    await sync.uploadAll();
+
+    expect(server.calls).toEqual(['POST /api/import']);
+    expect(await links('user-a')).toEqual({});
+    expect(await links('user-b')).toEqual({});
+    expect(await statusOf(one.id)).toBe('local-only');
+  });
+
+  it('stops a push when another account signs in mid-run (AC-SYNC-04)', async () => {
+    const one = await local.create({ name: 'One' });
+    const two = await local.create({ name: 'Two' });
+    await sync.upload([one.id, two.id]);
+    await local.update(one.id, { fragment: 'void main() { /* 1 */ }' });
+    await local.update(two.id, { fragment: 'void main() { /* 2 */ }' });
+    const before = await links();
+    server.calls.length = 0;
+    server.afterHandled = (call) => {
+      if (call.endsWith('/bundle')) account.set(userB);
+    };
+
+    await sync.run();
+
+    expect(server.calls.filter((call) => call.endsWith('/bundle'))).toHaveLength(1);
+    expect(await links('user-a')).toEqual(before);
     expect(await links('user-b')).toEqual({});
   });
 

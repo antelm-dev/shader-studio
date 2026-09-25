@@ -113,4 +113,6 @@ export type SyncStatus =
 export interface SyncChangedEvent {
   statuses: Record<string, SyncStatus>;
   progress: { done: number; total: number } | null;
+  /** Shaders a "keep both" just replaced locally; sent once, with the next event. */
+  replaced?: string[];
 }

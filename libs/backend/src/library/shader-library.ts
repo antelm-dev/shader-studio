@@ -477,6 +477,17 @@ export class ShaderLibrary {
     return this.read(id);
   }
 
+  /** Drops the preview. Like {@link setThumbnail}, the shader row stays put. */
+  async clearThumbnail(id: string): Promise<ShaderRecord> {
+    const validId = this.validId(id);
+    await this.repo.transaction(async (tx) => {
+      const stored = await tx.loadShader(this.scope, validId);
+      if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+      await tx.deleteAsset(validId, THUMBNAIL_ASSET_KEY);
+    });
+    return this.read(id);
+  }
+
   /** The preview's raw image bytes, for serving to the client. */
   async readThumbnail(id: string): Promise<{ bytes: Uint8Array; ext: string } | null> {
     const asset = await this.repo.loadAsset(this.scope, this.validId(id), THUMBNAIL_ASSET_KEY);
