@@ -8,10 +8,14 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
+import type { SyncStatus } from '@shader-studio/desktop-api/contracts';
 import type { ThumbnailMeta } from '@shader-studio/shared/model';
+import { DesktopAccount } from '../../desktop/desktop-account';
+import { DesktopSync } from '../../desktop/desktop-sync';
 import { ShaderStore } from '../../workspace/shader-store';
 import { ThumbnailAssets } from '../../assets/thumbnail-assets';
 import { I18n } from '../../i18n/i18n';
+import type { TranslationKey } from '../../i18n/keys';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { WorkspaceActions } from '../workspace-actions';
 
@@ -31,6 +35,9 @@ import { WorkspaceActions } from '../workspace-actions';
   template: `
     <header class="browser-header">
       <h2 class="browser-title">{{ 'browser.title' | translate }}</h2>
+      @if (sync.progress(); as progress) {
+        <span class="sync-progress" role="status">{{ 'sync.progress' | translate: progress }}</span>
+      }
       <button
         matIconButton
         type="button"
@@ -84,7 +91,20 @@ import { WorkspaceActions } from '../workspace-actions';
                 <mat-icon>image</mat-icon>
               </span>
             }
-            <span matListItemTitle class="row-title">{{ shader.name }}</span>
+            <span matListItemTitle class="row-title">
+              @let status = syncShown() ? sync.statuses()[shader.id] : undefined;
+              @if (status) {
+                <mat-icon
+                  class="sync-icon"
+                  [class.sync-alert]="status === 'error' || status === 'reauth-required'"
+                  role="img"
+                  [attr.aria-label]="syncLabels[status] | translate"
+                  [matTooltip]="syncLabels[status] | translate"
+                  >{{ syncIcons[status] }}</mat-icon
+                >
+              }
+              {{ shader.name }}
+            </span>
             <span matListItemLine class="row-meta">{{ meta(shader) }}</span>
           </mat-list-option>
         }
@@ -117,6 +137,22 @@ import { WorkspaceActions } from '../workspace-actions';
           <mat-icon>download</mat-icon>
           <span>{{ 'action.export' | translate }}</span>
         </button>
+        @if (syncShown()) {
+          @switch (sync.statuses()[shader.id]) {
+            @case ('local-only') {
+              <button mat-menu-item type="button" (click)="sync.upload([shader.id])">
+                <mat-icon>cloud_upload</mat-icon>
+                <span>{{ 'sync.upload' | translate }}</span>
+              </button>
+            }
+            @case ('error') {
+              <button mat-menu-item type="button" (click)="sync.retry(shader.id)">
+                <mat-icon>refresh</mat-icon>
+                <span>{{ 'sync.retry' | translate }}</span>
+              </button>
+            }
+          }
+        }
         <button
           mat-menu-item
           type="button"
@@ -147,6 +183,11 @@ import { WorkspaceActions } from '../workspace-actions';
       flex: 1;
       margin: 0;
       font: var(--mat-sys-title-medium);
+    }
+
+    .sync-progress {
+      color: var(--mat-sys-on-surface-variant);
+      font: var(--mat-sys-body-small);
     }
 
     .search {
@@ -206,6 +247,19 @@ import { WorkspaceActions } from '../workspace-actions';
       font: var(--mat-sys-body-large);
     }
 
+    .sync-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+      vertical-align: -2px;
+      margin-inline-end: 4px;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .sync-icon.sync-alert {
+      color: var(--mat-sys-error);
+    }
+
     .row-meta {
       color: var(--mat-sys-on-surface-variant);
       font: var(--mat-sys-body-small);
@@ -222,7 +276,37 @@ export class ShaderBrowser {
   protected readonly i18n = inject(I18n);
   protected readonly store = inject(ShaderStore);
   protected readonly workspace = inject(WorkspaceActions);
+  protected readonly sync = inject(DesktopSync);
+  private readonly account = inject(DesktopAccount);
   private readonly thumbnails = inject(ThumbnailAssets);
+
+  protected readonly syncIcons: Record<SyncStatus, string> = {
+    'local-only': 'cloud_off',
+    synced: 'cloud_done',
+    pending: 'cloud_upload',
+    syncing: 'sync',
+    'conflict-resolved': 'call_split',
+    'reauth-required': 'lock',
+    'other-account': 'no_accounts',
+    error: 'error',
+  };
+
+  protected readonly syncLabels: Record<SyncStatus, TranslationKey> = {
+    'local-only': 'sync.localOnly',
+    synced: 'sync.synced',
+    pending: 'sync.pending',
+    syncing: 'sync.syncing',
+    'conflict-resolved': 'sync.conflictResolved',
+    'reauth-required': 'sync.reauthRequired',
+    'other-account': 'sync.otherAccount',
+    error: 'sync.error',
+  };
+
+  /** Sync icons and actions only with an account to sync with. */
+  protected readonly syncShown = computed(() => {
+    const status = this.account.state().status;
+    return status === 'signed-in' || status === 'reauth-required';
+  });
 
   protected readonly query = signal('');
 
