@@ -93,7 +93,14 @@ export class DesktopAccountSession implements AccountSession {
   private current: AccountState;
   private token: string | null = null;
   private waiting: Waiting | null = null;
+  private signingIn: Promise<SignInResult> | null = null;
   private restoring: Promise<void> = Promise.resolve();
+  /**
+   * Bumped by every sign-in and sign-out. Async work captures it and drops its
+   * result once it has moved on, so a slow exchange or check can never bring
+   * back a session the user has since signed out of.
+   */
+  private epoch = 0;
 
   constructor(private readonly deps: AccountSessionDeps) {
     this.origin = accountOrigin(deps.accountUrl);
@@ -135,12 +142,104 @@ export class DesktopAccountSession implements AccountSession {
     return response;
   }
 
-  /** Opens the browser and waits for the callback, at most five minutes. */
-  async signIn(): Promise<SignInResult> {
-    if (!this.origin) return 'failed';
-    if (!this.deps.safeStorage.isEncryptionAvailable()) return 'encryption-unavailable';
-    this.finish('cancelled');
+  /**
+   * Opens the browser and waits for the callback, at most five minutes. A call
+   * while one is in progress joins it rather than starting another.
+   */
+  signIn(): Promise<SignInResult> {
+    if (!this.origin) return Promise.resolve('failed');
+    if (!this.deps.safeStorage.isEncryptionAvailable()) {
+      return Promise.resolve('encryption-unavailable');
+    }
+    if (!this.signingIn) {
+      const attempt = this.startSignIn(this.origin).finally(() => {
+        if (this.signingIn === attempt) this.signingIn = null;
+      });
+      this.signingIn = attempt;
+    }
+    return this.signingIn;
+  }
 
+  /** Completes a sign-in from its deep link. Anything unexpected is ignored. */
+  async handleCallback(raw: string): Promise<boolean> {
+    if (!this.origin) return false;
+    const params = callbackParams(raw);
+    if (!params) return false;
+    const epoch = this.epoch;
+    await this.restoring;
+    const waiting = this.waiting;
+    const pending = waiting?.pending ?? (await this.readPending());
+    // A wrong state leaves the real sign-in waiting.
+    if (
+      epoch !== this.epoch ||
+      !pending ||
+      pending.expiresAt < Date.now() ||
+      !sameString(params.state, pending.state)
+    ) {
+      return false;
+    }
+
+    // One try per sign-in, whatever the outcome.
+    if (waiting) {
+      clearTimeout(waiting.timer);
+      this.waiting = null;
+    }
+    let result: SignInResult = 'failed';
+    try {
+      await rm(this.pendingPath, { force: true });
+      const response = await this.deps.fetch(
+        new URL('/api/desktop/token', this.origin).toString(),
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ code: params.code, codeVerifier: pending.verifier }),
+          redirect: 'error',
+        },
+      );
+      const body = response.ok ? ((await response.json()) as Partial<Stored> | null) : null;
+      const user = userOf(body?.user);
+      const token = typeof body?.token === 'string' && body.token ? body.token : null;
+      if (token && user) {
+        if (epoch === this.epoch) await this.writeEncrypted(this.sessionPath, { token, user });
+        if (epoch === this.epoch) {
+          this.token = token;
+          this.set({ status: 'signed-in', user });
+          result = 'ok';
+        } else {
+          // Signed out meanwhile: this session must not survive, on disk or on the server.
+          result = 'cancelled';
+          await this.discard(token);
+        }
+      }
+    } catch {
+      // Network, server or storage failure: the sign-in fails, nothing is kept.
+    }
+    waiting?.resolve(result);
+    return result === 'ok';
+  }
+
+  /** Forgets the session locally at once, then revokes it on the server if it can. */
+  async signOut(): Promise<void> {
+    const epoch = ++this.epoch;
+    this.finish('cancelled');
+    const token = this.token;
+    this.token = null;
+    await Promise.all([
+      rm(this.sessionPath, { force: true }),
+      rm(this.pendingPath, { force: true }),
+    ]);
+    if (this.origin && epoch === this.epoch) this.set({ status: 'signed-out' });
+    // Offline, the session stays revocable from the web account.
+    if (token) await this.revoke(token);
+  }
+
+  /** The web app, where the account and its sessions are managed. */
+  openAccountPage(): void {
+    if (this.origin) void this.deps.openExternal(`${this.origin}/`).catch(() => undefined);
+  }
+
+  private async startSignIn(origin: string): Promise<SignInResult> {
+    const epoch = ++this.epoch;
     const timeoutMs = this.deps.timeoutMs ?? SIGN_IN_TIMEOUT_MS;
     const verifier = randomBytes(32).toString('base64url');
     const pending: Pending = {
@@ -153,7 +252,11 @@ export class DesktopAccountSession implements AccountSession {
     } catch {
       return 'failed';
     }
-    const url = new URL('/desktop/connect', this.origin);
+    if (epoch !== this.epoch) {
+      await rm(this.pendingPath, { force: true });
+      return 'cancelled';
+    }
+    const url = new URL('/desktop/connect', origin);
     url.searchParams.set('state', pending.state);
     url.searchParams.set('code_challenge', challengeOf(verifier));
 
@@ -165,114 +268,61 @@ export class DesktopAccountSession implements AccountSession {
     });
   }
 
-  /** Completes a sign-in from its deep link. Anything unexpected is ignored. */
-  async handleCallback(raw: string): Promise<boolean> {
-    if (!this.origin) return false;
-    const params = callbackParams(raw);
-    if (!params) return false;
-    await this.restoring;
-    const waiting = this.waiting;
-    const pending = waiting?.pending ?? (await this.readPending());
-    // A wrong state leaves the real sign-in waiting.
-    if (!pending || pending.expiresAt < Date.now() || !sameString(params.state, pending.state)) {
-      return false;
-    }
-
-    // One try per sign-in, whatever the outcome.
-    if (waiting) {
-      clearTimeout(waiting.timer);
-      this.waiting = null;
-    }
-    await rm(this.pendingPath, { force: true });
-
-    let result: SignInResult = 'failed';
-    try {
-      const response = await this.deps.fetch(
-        new URL('/api/desktop/token', this.origin).toString(),
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ code: params.code, codeVerifier: pending.verifier }),
-          redirect: 'error',
-        },
-      );
-      const body = response.ok ? ((await response.json()) as Partial<Stored> | null) : null;
-      const user = userOf(body?.user);
-      if (typeof body?.token === 'string' && body.token && user) {
-        await this.writeEncrypted(this.sessionPath, { token: body.token, user });
-        this.token = body.token;
-        this.set({ status: 'signed-in', user });
-        result = 'ok';
-      }
-    } catch {
-      // Network, server or storage failure: the sign-in fails, nothing is kept.
-    }
-    waiting?.resolve(result);
-    return result === 'ok';
-  }
-
-  /** Revokes the server session if it can, and forgets it locally regardless. */
-  async signOut(): Promise<void> {
-    this.finish('cancelled');
-    if (this.token) {
-      try {
-        await this.fetch('/api/auth/sign-out', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: '{}',
-          signal: AbortSignal.timeout(SIGN_OUT_TIMEOUT_MS),
-        });
-      } catch {
-        // Offline: the session stays revocable from the web account.
-      }
-    }
-    this.token = null;
-    await Promise.all([
-      rm(this.sessionPath, { force: true }),
-      rm(this.pendingPath, { force: true }),
-    ]);
-    if (this.origin) this.set({ status: 'signed-out' });
-  }
-
-  /** The web app, where the account and its sessions are managed. */
-  openAccountPage(): void {
-    if (this.origin) void this.deps.openExternal(`${this.origin}/`).catch(() => undefined);
-  }
-
   private async load(): Promise<void> {
     if (!this.origin) return;
+    const epoch = this.epoch;
     const stored = await this.readEncrypted(this.sessionPath);
     const user = userOf(stored?.['user']);
     const token = stored?.['token'];
-    if (typeof token !== 'string' || !token || !user) return;
+    if (epoch !== this.epoch || typeof token !== 'string' || !token || !user) return;
     this.token = token;
     this.set({ status: 'signed-in', user });
-    void this.verify(token);
+    void this.verify(epoch);
   }
 
-  private async verify(token: string): Promise<void> {
+  /**
+   * Refreshes the displayed user from the server. The file is not rewritten:
+   * it only caches a display name, and a write here could outlive a sign-out.
+   */
+  private async verify(epoch: number): Promise<void> {
     let body: unknown;
     try {
       const response = await this.fetch('/api/auth/get-session');
-      if (!response.ok) return;
+      if (!response.ok || epoch !== this.epoch) return;
       body = await response.json();
     } catch {
       return;
     }
-    if (this.token !== token) return;
+    if (epoch !== this.epoch) return;
     // Better Auth answers a dead session with 200 `null`.
     if (body === null) {
       this.set({ status: 'reauth-required', user: this.current.user });
       return;
     }
     const user = userOf((body as { user?: unknown } | undefined)?.user);
-    if (!user) return;
+    if (user) this.set({ status: 'signed-in', user });
+  }
+
+  /** Drops a token obtained by stale work: deleted if it reached the disk, then revoked. */
+  private async discard(token: string): Promise<void> {
+    const stored = await this.readEncrypted(this.sessionPath);
+    if (stored?.['token'] === token) await rm(this.sessionPath, { force: true });
+    await this.revoke(token);
+  }
+
+  private async revoke(token: string): Promise<void> {
+    if (!this.origin) return;
     try {
-      await this.writeEncrypted(this.sessionPath, { token, user });
+      await this.deps.fetch(new URL('/api/auth/sign-out', this.origin).toString(), {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: '{}',
+        redirect: 'error',
+        signal: AbortSignal.timeout(SIGN_OUT_TIMEOUT_MS),
+      });
     } catch {
-      // The cached user is only a display name; keep the old one on disk.
+      // Best effort.
     }
-    this.set({ status: 'signed-in', user });
   }
 
   private finish(result: SignInResult): void {

@@ -187,7 +187,12 @@
     <mat-menu #desktopAccountMenu="matMenu">
       <div class="menu-section">{{ user.email }}</div>
       @if (account.status === 'reauth-required') {
-      <button mat-menu-item type="button" (click)="desktopSignIn()">
+      <button
+        mat-menu-item
+        type="button"
+        [disabled]="desktopAccount.signingIn()"
+        (click)="desktopSignIn()"
+      >
         <mat-icon>login</mat-icon>
         <span>{{ 'account.signInAgain' | translate }}</span>
       </button>
@@ -210,6 +215,8 @@
         (desktopAccount.signingIn() ? 'account.waiting' : 'account.signInTooltip') | translate
       "
       [attr.aria-label]="'account.signInTooltip' | translate"
+      [disabled]="desktopAccount.signingIn()"
+      [disabledInteractive]="true"
       (click)="desktopSignIn()"
     >
       <mat-icon>{{ desktopAccount.signingIn() ? 'open_in_browser' : 'person' }}</mat-icon>

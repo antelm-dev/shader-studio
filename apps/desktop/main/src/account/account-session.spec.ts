@@ -199,6 +199,60 @@ describe('DesktopAccountSession', () => {
     await expect(session.fetch('/api/shaders')).rejects.toThrow();
   });
 
+  it('joins a sign-in already in progress', async () => {
+    const session = create();
+    const first = session.signIn();
+    const second = session.signIn();
+    await vi.waitFor(() => expect(opened).toHaveLength(1));
+    const state = new URL(opened[0]!).searchParams.get('state')!;
+    fetch.mockResolvedValueOnce(json({ token: TOKEN, user: USER }));
+    await session.handleCallback(callback(state));
+    expect(await Promise.all([first, second])).toEqual(['ok', 'ok']);
+    expect(opened).toHaveLength(1);
+  });
+
+  it('stays signed out when sign-out lands during the token exchange', async () => {
+    const session = create();
+    const { result, state } = await startSignIn(session);
+    let answer!: (response: Response) => void;
+    fetch.mockImplementation(async (url) =>
+      url.endsWith('/api/desktop/token')
+        ? new Promise<Response>((resolve) => (answer = resolve))
+        : new Response(null, { status: 200 }),
+    );
+    const exchange = session.handleCallback(callback(state));
+    await vi.waitFor(() => expect(answer).toBeDefined());
+    await session.signOut();
+    answer(json({ token: TOKEN, user: USER }));
+
+    expect(await exchange).toBe(false);
+    expect(await result).toBe('cancelled');
+    expect(session.state()).toEqual({ status: 'signed-out' });
+    expect(existsSync(join(dir, 'account.bin'))).toBe(false);
+    // The stale session is revoked, not kept.
+    const revoke = fetch.mock.calls.find(([url]) => url.endsWith('/api/auth/sign-out'));
+    expect(new Headers(revoke?.[1]?.headers).get('authorization')).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it('stays signed out when sign-out lands during the startup check', async () => {
+    await signedIn();
+    let answer!: (response: Response) => void;
+    fetch.mockImplementation(async (url) =>
+      url.endsWith('/api/auth/get-session')
+        ? new Promise<Response>((resolve) => (answer = resolve))
+        : new Response(null, { status: 200 }),
+    );
+    const restarted = create();
+    await restarted.restore();
+    await vi.waitFor(() => expect(answer).toBeDefined());
+    await restarted.signOut();
+    answer(json({ user: { ...USER, name: 'Renamed' } }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(restarted.state()).toEqual({ status: 'signed-out' });
+    expect(existsSync(join(dir, 'account.bin'))).toBe(false);
+  });
+
   it('finds the callback among process arguments', () => {
     expect(findCallbackUrl(['app.exe', '--flag', callback('s'.repeat(16))])).toBe(
       callback('s'.repeat(16)),
