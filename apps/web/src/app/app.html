@@ -197,6 +197,12 @@
         <span>{{ 'account.signInAgain' | translate }}</span>
       </button>
       }
+      @if (account.status === 'signed-in' && sync.hasLocalOnly()) {
+      <button mat-menu-item type="button" (click)="sync.uploadAll()">
+        <mat-icon>cloud_upload</mat-icon>
+        <span>{{ 'sync.uploadAll' | translate }}</span>
+      </button>
+      }
       <button mat-menu-item type="button" (click)="desktopAccount.openAccountPage()">
         <mat-icon>manage_accounts</mat-icon>
         <span>{{ 'account.manage' | translate }}</span>
@@ -381,9 +387,7 @@
       mode="indeterminate"
       [attr.aria-label]="'workspace.working' | translate"
     />
-    }
-
-    @if (sync.progress(); as progress) {
+    } @else if (sync.progress(); as progress) {
     <mat-progress-bar
       class="loading"
       mode="determinate"

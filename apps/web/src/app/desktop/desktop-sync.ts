@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type { SyncChangedEvent, SyncStatus } from '@shader-studio/desktop-api/contracts';
 import { ShaderStore } from '../workspace/shader-store';
@@ -11,6 +11,7 @@ import { ShaderStore } from '../workspace/shader-store';
 export class DesktopSync {
   readonly statuses = signal<Record<string, SyncStatus>>({});
   readonly progress = signal<SyncChangedEvent['progress']>(null);
+  readonly hasLocalOnly = computed(() => Object.values(this.statuses()).includes('local-only'));
   private readonly store = inject(ShaderStore);
   private readonly available = typeof window !== 'undefined' && 'electron' in window;
 
@@ -24,6 +25,13 @@ export class DesktopSync {
 
   upload(ids: string[]): void {
     if (this.available) void window.electron.bridge.sync.upload(ids);
+  }
+
+  /** A failed shader: re-uploads it if unlinked (a linked one is skipped), then pushes. */
+  retry(id: string): void {
+    if (!this.available) return;
+    const bridge = window.electron.bridge.sync;
+    void bridge.upload([id]).then(() => bridge.run());
   }
 
   uploadAll(): void {

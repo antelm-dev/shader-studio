@@ -10,6 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 
 import type { SyncStatus } from '@shader-studio/desktop-api/contracts';
 import type { ThumbnailMeta } from '@shader-studio/shared/model';
+import { DesktopAccount } from '../../desktop/desktop-account';
 import { DesktopSync } from '../../desktop/desktop-sync';
 import { ShaderStore } from '../../workspace/shader-store';
 import { ThumbnailAssets } from '../../assets/thumbnail-assets';
@@ -36,17 +37,6 @@ import { WorkspaceActions } from '../workspace-actions';
       <h2 class="browser-title">{{ 'browser.title' | translate }}</h2>
       @if (sync.progress(); as progress) {
         <span class="sync-progress" role="status">{{ 'sync.progress' | translate: progress }}</span>
-      }
-      @if (hasLocalOnly()) {
-        <button
-          matIconButton
-          type="button"
-          [matTooltip]="'sync.uploadAll' | translate"
-          [attr.aria-label]="'sync.uploadAll' | translate"
-          (click)="sync.uploadAll()"
-        >
-          <mat-icon>cloud_upload</mat-icon>
-        </button>
       }
       <button
         matIconButton
@@ -102,7 +92,7 @@ import { WorkspaceActions } from '../workspace-actions';
               </span>
             }
             <span matListItemTitle class="row-title">
-              @let status = sync.statuses()[shader.id];
+              @let status = syncShown() ? sync.statuses()[shader.id] : undefined;
               @if (status) {
                 <mat-icon
                   class="sync-icon"
@@ -147,11 +137,21 @@ import { WorkspaceActions } from '../workspace-actions';
           <mat-icon>download</mat-icon>
           <span>{{ 'action.export' | translate }}</span>
         </button>
-        @if (uploadable(shader.id)) {
-          <button mat-menu-item type="button" (click)="sync.upload([shader.id])">
-            <mat-icon>cloud_upload</mat-icon>
-            <span>{{ 'sync.upload' | translate }}</span>
-          </button>
+        @if (syncShown()) {
+          @switch (sync.statuses()[shader.id]) {
+            @case ('local-only') {
+              <button mat-menu-item type="button" (click)="sync.upload([shader.id])">
+                <mat-icon>cloud_upload</mat-icon>
+                <span>{{ 'sync.upload' | translate }}</span>
+              </button>
+            }
+            @case ('error') {
+              <button mat-menu-item type="button" (click)="sync.retry(shader.id)">
+                <mat-icon>refresh</mat-icon>
+                <span>{{ 'sync.retry' | translate }}</span>
+              </button>
+            }
+          }
         }
         <button
           mat-menu-item
@@ -277,6 +277,7 @@ export class ShaderBrowser {
   protected readonly store = inject(ShaderStore);
   protected readonly workspace = inject(WorkspaceActions);
   protected readonly sync = inject(DesktopSync);
+  private readonly account = inject(DesktopAccount);
   private readonly thumbnails = inject(ThumbnailAssets);
 
   protected readonly syncIcons: Record<SyncStatus, string> = {
@@ -301,15 +302,11 @@ export class ShaderBrowser {
     error: 'sync.error',
   };
 
-  protected readonly hasLocalOnly = computed(() =>
-    Object.values(this.sync.statuses()).includes('local-only'),
-  );
-
-  /** Unlinked, or a failed upload to retry; the main process skips anything linked. */
-  protected uploadable(id: string): boolean {
-    const status = this.sync.statuses()[id];
-    return status === 'local-only' || status === 'error';
-  }
+  /** Sync icons and actions only with an account to sync with. */
+  protected readonly syncShown = computed(() => {
+    const status = this.account.state().status;
+    return status === 'signed-in' || status === 'reauth-required';
+  });
 
   protected readonly query = signal('');
 

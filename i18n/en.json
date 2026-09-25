@@ -195,6 +195,7 @@
   "sync.otherAccount": "Linked to another account",
   "sync.error": "Sync failed; it will be retried",
   "sync.upload": "Upload to account",
+  "sync.retry": "Retry sync",
   "sync.uploadAll": "Upload all to account",
   "sync.progress": "Syncing {done} / {total}",
   "inspector.collapse": "Collapse the inspector (H)",

@@ -195,6 +195,7 @@
   "sync.otherAccount": "Lié à un autre compte",
   "sync.error": "Échec de la synchronisation ; nouvel essai plus tard",
   "sync.upload": "Envoyer vers le compte",
+  "sync.retry": "Réessayer la synchronisation",
   "sync.uploadAll": "Tout envoyer vers le compte",
   "sync.progress": "Synchronisation {done} / {total}",
   "inspector.collapse": "Réduire l’inspecteur (H)",

@@ -199,6 +199,7 @@ export const TRANSLATION_KEYS = [
   'sync.error',
   'sync.upload',
   'sync.uploadAll',
+  'sync.retry',
   'sync.progress',
   'inspector.collapse',
   'inspector.collapseAria',
