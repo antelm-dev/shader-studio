@@ -76,6 +76,7 @@ export class SyncService {
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly unsubscribe: () => void;
+  private disposed = false;
 
   constructor(
     private readonly library: ShaderLibrary,
@@ -125,6 +126,7 @@ export class SyncService {
   }
 
   dispose(): void {
+    this.disposed = true;
     clearTimeout(this.saveTimer);
     clearTimeout(this.retryTimer);
     this.unsubscribe();
@@ -254,9 +256,10 @@ export class SyncService {
 
   /**
    * A run belongs to the account it started for. `account.fetch` sends whatever
-   * token is current, so every request and every link write first checks that
-   * this is still that account — synchronously, right before it — and a run
-   * that finds another one stops without writing anything.
+   * token is current, so every request first checks that this is still that
+   * account — synchronously, right before sending — and a run that finds
+   * another one stops there. A request already sent for this account keeps its
+   * result: it is written to this account's links, never another's.
    */
   private assertAccount(userId: string): void {
     const state = this.account.state();
@@ -272,7 +275,6 @@ export class SyncService {
       throw new Stop('offline');
     }
     if (response.status === 401) throw new Stop('reauth');
-    this.assertAccount(userId);
     return response;
   }
 
@@ -342,7 +344,6 @@ export class SyncService {
     if (!parsed.ok) throw new Error('The account version could not be read');
     const [account] = parsed.value;
 
-    this.assertAccount(userId);
     const name = local.name.slice(0, LIMITS.nameLength - CONFLICT_SUFFIX.length);
     await this.library.importPayloads([{ ...local, name: name + CONFLICT_SUFFIX }], 'rename');
     await this.library.replaceFromPayload(id, account, localRevision);
@@ -379,7 +380,10 @@ export class SyncService {
         const replaced = this.replaced.splice(0);
         this.emit(replaced.length > 0 ? { ...event, replaced } : event);
       },
-      (error: unknown) => console.error('[sync] status failed', error),
+      (error: unknown) => {
+        // After dispose the library may already be closed: nothing to report.
+        if (!this.disposed) console.error('[sync] status failed', error);
+      },
     );
   }
 
@@ -389,7 +393,6 @@ export class SyncService {
 
   // ponytail: the whole JSON map is rewritten on each change; a `sync_links` table if libraries grow large.
   private async writeLinks(userId: string, links: Links): Promise<void> {
-    this.assertAccount(userId);
     await this.library.setMeta(linksKey(userId), JSON.stringify(links));
     const accounts = await this.accounts();
     if (!accounts.includes(userId)) {

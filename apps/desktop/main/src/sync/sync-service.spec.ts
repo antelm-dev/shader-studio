@@ -328,22 +328,33 @@ describe('SyncService', () => {
     await vi.waitFor(() => expect(events.some((e) => e.replaced?.includes(shader.id))).toBe(true));
   });
 
-  it('stops an upload when another account signs in mid-batch (AC-SYNC-04)', async () => {
+  it('keeps an upload already sent, then stops, when another account signs in (AC-SYNC-04)', async () => {
     const one = await local.create({ name: 'One' });
-    await local.create({ name: 'Two' });
+    const two = await local.create({ name: 'Two' });
     server.afterHandled = (call) => {
       if (call === 'POST /api/import') account.set(userB);
     };
 
     await sync.uploadAll();
 
+    // One request, sent for A: its result is A's link, so A never re-imports it.
     expect(server.calls).toEqual(['POST /api/import']);
-    expect(await links('user-a')).toEqual({});
+    const [imported] = await remote.list();
+    const linked = await links('user-a');
+    expect(Object.keys(linked)).toHaveLength(1);
+    expect([one.id, two.id]).toContain(Object.keys(linked)[0]);
+    expect(Object.values(linked)[0].remoteId).toBe(imported.id);
     expect(await links('user-b')).toEqual({});
-    expect(await statusOf(one.id)).toBe('local-only');
+
+    server.afterHandled = undefined;
+    account.set(userA);
+    server.calls.length = 0;
+    await sync.uploadAll();
+    expect(server.calls).toEqual(['POST /api/import']);
+    expect(await remote.list()).toHaveLength(2);
   });
 
-  it('stops a push when another account signs in mid-run (AC-SYNC-04)', async () => {
+  it('keeps a push already sent, then stops, when another account signs in (AC-SYNC-04)', async () => {
     const one = await local.create({ name: 'One' });
     const two = await local.create({ name: 'Two' });
     await sync.upload([one.id, two.id]);
@@ -357,9 +368,23 @@ describe('SyncService', () => {
 
     await sync.run();
 
-    expect(server.calls.filter((call) => call.endsWith('/bundle'))).toHaveLength(1);
-    expect(await links('user-a')).toEqual(before);
+    const bundles = server.calls.filter((call) => call.endsWith('/bundle'));
+    expect(server.calls).toEqual(bundles);
+    expect(bundles).toHaveLength(1);
+    const after = await links();
+    const pushed = [one.id, two.id].find((id) => bundles[0].includes(before[id].remoteId))!;
+    const other = pushed === one.id ? two.id : one.id;
+    expect(after[pushed].remoteRevision).toBe(2);
+    expect(after[other]).toEqual(before[other]);
     expect(await links('user-b')).toEqual({});
+
+    // Back on A: the recorded revision holds, so no spurious 409 and no copy.
+    server.afterHandled = undefined;
+    account.set(userA);
+    await sync.run();
+    expect(await local.list()).toHaveLength(2);
+    expect(await statusOf(one.id)).toBe('synced');
+    expect(await statusOf(two.id)).toBe('synced');
   });
 
   it('shows no statuses without a signed-in account', async () => {
