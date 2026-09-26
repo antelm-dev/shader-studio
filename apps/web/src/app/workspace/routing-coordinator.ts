@@ -43,7 +43,7 @@ export class RoutingCoordinator {
 
     effect(() => {
       const id = this.store.selectedId();
-      if (!this.routingReady) return;
+      if (!this.routingReady || this.onStandalonePage()) return;
       const canonical = id ? `/shaders/${encodeURIComponent(id)}` : '/';
       if (this.router.url !== canonical) void this.router.navigateByUrl(canonical);
     });
@@ -106,6 +106,7 @@ export class RoutingCoordinator {
   }
 
   private async applyRoute(): Promise<void> {
+    if (this.onStandalonePage()) return;
     const requested = this.routeShaderId();
     if (!requested) {
       await this.normalizeRoute(null);
@@ -125,10 +126,19 @@ export class RoutingCoordinator {
   }
 
   private async normalizeRoute(requested: string | null): Promise<void> {
+    if (this.onStandalonePage()) return;
     const canonical = this.canonicalUrl();
     if (this.router.url !== canonical || requested !== this.store.selectedId()) {
       await this.router.navigateByUrl(canonical, { replaceUrl: true });
     }
+  }
+
+  /**
+   * `/desktop/connect` is a page of its own, not a view of the selection: the
+   * desktop's sign-in handoff runs there, so it must not be normalized to `/`.
+   */
+  private onStandalonePage(): boolean {
+    return /^\/desktop\/connect(?:[/?#]|$)/.test(this.router.url);
   }
 
   private canonicalUrl(): string {
