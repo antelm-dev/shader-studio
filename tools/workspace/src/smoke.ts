@@ -9,6 +9,7 @@ import { chromium } from 'playwright';
 
 import { createLogger } from './lib/logger.js';
 import { root } from './lib/paths.js';
+import { checkPluginSandbox } from './plugin-sandbox-smoke.js';
 
 const log = createLogger('smoke');
 const webDir = resolve(root, 'apps/web');
@@ -187,6 +188,9 @@ try {
   await bottomPanel.locator('app-output-panel').waitFor({ state: 'visible', timeout: 10_000 });
   // preserveContent keeps ProfilerPanel mounted; disable-on-leave is covered by
   // mounted unit tests via setProfilingEnabled(false). Smoke asserts the tab left.
+
+  await checkPluginSandbox(browser, BASE);
+  log.info('plugin sandbox ok — escapes blocked, terminate destroys the Worker');
 
   await browser.close();
   log.info('smoke ok — drawer, inspector controls, Monaco editor, and Profiler tab loaded');
