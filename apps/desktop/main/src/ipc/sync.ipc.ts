@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron';
 import { defineIpcEvents, defineIpcModule, handle } from 'electron-ipc-module';
 
 import { StorageError } from '@shader-studio/backend/library';
-import type { SyncChangedEvent } from '@shader-studio/desktop-api/contracts';
+import type { SyncChangedEvent, SyncRemoveMode } from '@shader-studio/desktop-api/contracts';
 import type { SyncService } from '../sync/sync-service';
 
 type SyncEvents = { 'sync-changed': [event: SyncChangedEvent] };
@@ -27,5 +27,11 @@ export function createSyncIpc(sync: SyncService) {
     upload: handle((_event, ids: string[]) => sync.upload(idsArg(ids))),
     'upload-all': handle(() => sync.uploadAll()),
     run: handle(() => sync.run()),
+    remove: handle((_event, id: string, mode: SyncRemoveMode) => {
+      if (typeof id !== 'string' || (mode !== 'local' && mode !== 'everywhere')) {
+        throw new StorageError('invalid', 'remove takes a shader id and "local" or "everywhere"');
+      }
+      return sync.remove(id, mode);
+    }),
   });
 }

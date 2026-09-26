@@ -115,4 +115,9 @@ export interface SyncChangedEvent {
   progress: { done: number; total: number } | null;
   /** Shaders a "keep both" just replaced locally; sent once, with the next event. */
   replaced?: string[];
+  /** Things the user should hear about once, e.g. a "Delete everywhere" the account refused. */
+  notices?: { kind: 'restored-after-delete'; name: string }[];
 }
+
+/** C5: `local` keeps the account copy and never pulls it back; `everywhere` deletes it too. */
+export type SyncRemoveMode = 'local' | 'everywhere';

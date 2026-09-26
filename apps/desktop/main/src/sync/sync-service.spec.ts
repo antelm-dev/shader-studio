@@ -40,10 +40,16 @@ function fakeServer(remote: ShaderLibrary) {
         if (!parsed.ok) return json({}, 400);
         return json(await remote.importPayloads(parsed.value, 'rename'), 201);
       }
-      const match = /^\/api\/shaders\/([^/]+)(?:\/(\w+))?$/.exec(path);
+      const [route, query] = path.split('?');
+      const match = /^\/api\/shaders\/([^/]+)(?:\/(\w+))?$/.exec(route);
       if (!match) return json({}, 404);
       const id = decodeURIComponent(match[1]);
       const sub = match[2];
+      if (method === 'DELETE' && !sub) {
+        const expected = new URLSearchParams(query).get('expectedRevision');
+        await remote.remove(id, expected === null ? undefined : Number(expected));
+        return new Response(null, { status: 204 });
+      }
       if (method === 'GET' && !sub) return json({ shader: await remote.read(id) });
       if (method === 'GET' && sub === 'export') {
         return json(buildShaderBundle(await remote.exportOne(id)));
@@ -733,6 +739,190 @@ describe('SyncService', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe('deletion (C5)', () => {
+    const tombstones = async (userId = 'user-a') =>
+      JSON.parse((await local.getMeta(`sync_tombstones:${userId}`)) ?? '[]') as unknown[];
+    const ignored = async () =>
+      JSON.parse((await local.getMeta('sync_ignored:user-a')) ?? '[]') as string[];
+    const deletes = () => server.calls.filter((call) => call.startsWith('DELETE '));
+    const linked = async (name: string) => {
+      const shader = await local.create({ name });
+      await sync.upload([shader.id]);
+      return { id: shader.id, remoteId: (await links())[shader.id].remoteId };
+    };
+
+    it('"Delete from this computer" keeps the account copy, never pulled back (AC-DEL-01)', async () => {
+      const { id, remoteId } = await linked('Here only');
+
+      expect(await sync.remove(id, 'local')).toBe(true);
+      await sync.run();
+
+      expect(await local.list()).toEqual([]);
+      expect(await links()).toEqual({});
+      expect(await ignored()).toEqual([remoteId]);
+      expect((await remote.read(remoteId)).name).toBe('Here only');
+      expect(deletes()).toEqual([]);
+      expect(server.calls.filter((call) => call.endsWith('/export'))).toEqual([]);
+    });
+
+    it('"Delete everywhere" deletes the account copy on the next run (AC-DEL-02)', async () => {
+      const { id, remoteId } = await linked('Everywhere');
+      server.calls.length = 0;
+
+      expect(await sync.remove(id, 'everywhere')).toBe(true);
+      await sync.run();
+
+      expect(deletes()).toEqual([`DELETE /api/shaders/${remoteId}?expectedRevision=1`]);
+      expect(await remote.list()).toEqual([]);
+      expect(await local.list()).toEqual([]);
+      expect(await tombstones()).toEqual([]);
+      expect(await ignored()).toEqual([]);
+    });
+
+    it('"Delete everywhere" offline deletes here now and on the account once back (AC-DEL-02)', async () => {
+      const { id, remoteId } = await linked('Offline');
+      server.offline = true;
+
+      await sync.remove(id, 'everywhere');
+      await sync.run();
+
+      expect(await local.list()).toEqual([]);
+      expect(await tombstones()).toHaveLength(1);
+      expect((await remote.read(remoteId)).name).toBe('Offline');
+
+      server.offline = false;
+      await sync.run();
+      expect(await remote.list()).toEqual([]);
+      expect(await tombstones()).toEqual([]);
+      expect(await local.list()).toEqual([]);
+    });
+
+    it('pulls back an account copy changed since the last sync, with a notice (AC-DEL-03)', async () => {
+      const { id, remoteId } = await linked('Changed online');
+      await remote.update(remoteId, { fragment: 'void main() { /* web */ }' });
+      const events: SyncChangedEvent[] = [];
+      const watched = new SyncService(local, account, (event) => events.push(event));
+
+      await watched.remove(id, 'everywhere');
+      await watched.run();
+
+      expect((await remote.read(remoteId)).fragment).toContain('/* web */');
+      const shaders = await local.list();
+      expect(shaders).toHaveLength(1);
+      const [back] = shaders;
+      expect((await local.read(back.id)).fragment).toContain('/* web */');
+      expect((await links())[back.id]).toMatchObject({ remoteId, remoteRevision: 2 });
+      expect(await tombstones()).toEqual([]);
+      expect((await watched.snapshot()).statuses[back.id]).toBe('synced');
+      await vi.waitFor(() =>
+        expect(events.flatMap((e) => e.notices ?? [])).toEqual([
+          { kind: 'restored-after-delete', name: 'Changed online' },
+        ]),
+      );
+      watched.dispose();
+    });
+
+    it('drops a delete the account already did (404)', async () => {
+      const { id } = await linked('Already gone');
+      await remote.remove((await links())[id].remoteId);
+
+      await sync.remove(id, 'everywhere');
+      await sync.run();
+
+      expect(deletes()).toHaveLength(1);
+      expect(await tombstones()).toEqual([]);
+      expect(await local.list()).toEqual([]);
+      expect(last?.notices).toBeUndefined();
+    });
+
+    it('keeps a delete the account failed, and neither pulls nor unlinks its shader', async () => {
+      const { id, remoteId } = await linked('Server error');
+      const fetch = account.fetch;
+      vi.spyOn(account, 'fetch').mockImplementation(async (path, init) =>
+        init?.method === 'DELETE' ? new Response(null, { status: 500 }) : fetch(path, init),
+      );
+
+      await sync.remove(id, 'everywhere');
+      await sync.run();
+
+      expect(await tombstones()).toHaveLength(1);
+      expect(await local.list()).toEqual([]);
+      expect(await ignored()).toEqual([]);
+      expect((await remote.read(remoteId)).name).toBe('Server error');
+    });
+
+    it('keeps tombstones per account across a switch', async () => {
+      const { id, remoteId } = await linked('Per account');
+      server.offline = true;
+      await sync.remove(id, 'everywhere');
+      server.offline = false;
+      server.calls.length = 0;
+
+      account.set(userB);
+      await sync.run();
+
+      expect(deletes()).toEqual([]);
+      expect(await tombstones('user-b')).toEqual([]);
+      expect(await tombstones()).toHaveLength(1);
+
+      account.set(userA);
+      await sync.run();
+      expect(deletes()).toEqual([`DELETE /api/shaders/${remoteId}?expectedRevision=1`]);
+      expect(await remote.list()).toEqual([]);
+    });
+
+    it('keeps a delete already sent, then stops, when another account signs in', async () => {
+      const one = await linked('One');
+      const two = await linked('Two');
+      server.offline = true;
+      await sync.remove(one.id, 'everywhere');
+      await sync.remove(two.id, 'everywhere');
+      server.offline = false;
+      server.calls.length = 0;
+      server.afterHandled = (call) => {
+        if (call.startsWith('DELETE ')) account.set(userB);
+      };
+
+      await sync.run();
+
+      // One delete sent for A, then only B's sign-in run, which has nothing queued.
+      expect(deletes()).toEqual([`DELETE /api/shaders/${one.remoteId}?expectedRevision=1`]);
+      expect(await tombstones()).toEqual([expect.objectContaining({ remoteId: two.remoteId })]);
+      expect((await remote.list()).map((s) => s.id)).toEqual([two.remoteId]);
+    });
+
+    it('refuses a shader linked to another account and changes nothing', async () => {
+      const { id, remoteId } = await linked('Not yours');
+      account.set(userB);
+      await sync.run();
+
+      expect(await sync.remove(id, 'everywhere')).toBe(false);
+      expect(await sync.remove(id, 'local')).toBe(false);
+
+      expect((await local.read(id)).name).toBe('Not yours');
+      expect((await links())[id]).toMatchObject({ remoteId });
+      expect(await tombstones()).toEqual([]);
+      expect(await tombstones('user-b')).toEqual([]);
+    });
+
+    it('waits for a run pulling the shader, then removes it for good', async () => {
+      const { id, remoteId } = await linked('Mid-pull');
+      await remote.update(remoteId, { fragment: 'void main() { /* web */ }' });
+      let removal: Promise<boolean> | undefined;
+      server.afterHandled = (call) => {
+        if (call.endsWith('/export')) removal ??= sync.remove(id, 'local');
+      };
+
+      await sync.run();
+      expect(await removal).toBe(true);
+      await sync.run();
+
+      expect(await local.list()).toEqual([]);
+      expect(await links()).toEqual({});
+      expect(await ignored()).toEqual([remoteId]);
     });
   });
 
