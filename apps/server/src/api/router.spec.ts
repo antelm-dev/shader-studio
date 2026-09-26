@@ -253,6 +253,25 @@ describe('shader REST API', () => {
     expect((await push(alice, { bundle: collection, expectedRevision: 2 })).status).toBe(400);
   });
 
+  it('deletes under expectedRevision only while the revision still matches', async () => {
+    const id = await createShader(alice, 'Conditional');
+    await postJson(alice, `/api/shaders/${id}`, { name: 'Moved On' }, 'PUT');
+    const remove = (query: string) =>
+      authFetch(alice, `/api/shaders/${id}${query}`, { method: 'DELETE' });
+    const before = audited.length;
+
+    for (const bad of ['0', '-1', '1.5', 'abc', '', '1&expectedRevision=2']) {
+      expect((await remove(`?expectedRevision=${bad}`)).status).toBe(400);
+    }
+    expect((await remove('?expectedRevision=1')).status).toBe(409);
+    expect((await authFetch(alice, `/api/shaders/${id}`)).status).toBe(200);
+    expect(audited.slice(before).map((entry) => entry.event)).not.toContain('shader.deleted');
+
+    expect((await remove('?expectedRevision=2')).status).toBe(204);
+    expect((await authFetch(alice, `/api/shaders/${id}`)).status).toBe(404);
+    expect(auditedEvents('shader.deleted').at(-1)?.subject).toBe(id);
+  });
+
   it('404s an unknown shader and 400s an invalid body', async () => {
     expect((await authFetch(alice, '/api/shaders/nope')).status).toBe(404);
 

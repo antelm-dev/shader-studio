@@ -123,7 +123,12 @@ export interface ShaderTx {
     fields: ShaderMutableFields,
     expectedRevision?: number,
   ): Promise<number>;
-  deleteShader(scope: UserScope, id: string): Promise<boolean>;
+  /**
+   * Deletes a shader the scope owns; returns whether a row went. When
+   * `expectedRevision` is given, deletes only at that revision and throws a
+   * `conflict` `StorageError` when the stored revision has moved on.
+   */
+  deleteShader(scope: UserScope, id: string, expectedRevision?: number): Promise<boolean>;
   replacePresets(shaderId: string, presets: PresetRow[]): Promise<void>;
   putAsset(shaderId: string, asset: StoredAsset): Promise<void>;
   deleteAsset(shaderId: string, key: AssetKey): Promise<void>;
