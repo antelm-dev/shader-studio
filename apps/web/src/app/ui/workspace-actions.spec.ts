@@ -9,6 +9,7 @@ import { migrateLegacyProject } from '@shader-studio/shared/project';
 import { ShaderApi } from '../api/shader-api';
 import { AuthService } from '../auth/auth.service';
 import { DesktopPlatform } from '../desktop/desktop-platform';
+import { DesktopSync } from '../desktop/desktop-sync';
 import { DesktopUpdater } from '../desktop/desktop-updater';
 import { I18n } from '../i18n/i18n';
 import {
@@ -17,6 +18,8 @@ import {
   type WorkspacePreferences,
 } from '../prefs/preferences';
 import { ShaderStore } from '../workspace/shader-store';
+import { ConfirmDialog } from './dialogs/confirm-dialog';
+import { DeleteLinkedDialog } from './dialogs/delete-linked-dialog';
 import { OpenDocuments } from './editor/open-documents';
 import { WorkspaceActions } from './workspace-actions';
 
@@ -284,5 +287,86 @@ describe('WorkspaceActions.signOut', () => {
     await actions.signOut();
     expect(store.record()).not.toBeNull();
     expect(store.shaders()).toHaveLength(1);
+  });
+});
+
+describe('WorkspaceActions.deleteShader', () => {
+  const sync = { isLinked: vi.fn(() => false), remove: vi.fn(async () => true) };
+  const api = Object.assign(new FakeApi(), { remove: vi.fn(async () => undefined) });
+  let choice: unknown;
+  let opened: unknown;
+  let actions: WorkspaceActions;
+
+  beforeEach(async () => {
+    TestBed.resetTestingModule();
+    vi.clearAllMocks();
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ShaderApi, useValue: api },
+        { provide: Preferences, useValue: new FakePreferences() },
+        { provide: DesktopPlatform, useValue: { available: false } },
+        { provide: DesktopSync, useValue: sync },
+        {
+          provide: I18n,
+          useValue: { locale: () => 'en', t: (key: string) => key },
+        },
+        {
+          provide: MatDialog,
+          useValue: {
+            open: (component: unknown) => {
+              opened = component;
+              return { afterClosed: () => of(choice) };
+            },
+          },
+        },
+      ],
+    });
+    actions = TestBed.inject(WorkspaceActions);
+    await TestBed.inject(ShaderStore).initialize();
+  });
+
+  it.each(['local', 'everywhere'])(
+    'routes "%s" on a linked shader to sync.remove',
+    async (mode) => {
+      sync.isLinked.mockReturnValue(true);
+      choice = mode;
+
+      await actions.deleteShader('waves', 'Waves');
+
+      expect(opened).toBe(DeleteLinkedDialog);
+      expect(sync.remove).toHaveBeenCalledWith('waves', mode);
+      expect(api.remove).not.toHaveBeenCalled();
+    },
+  );
+
+  it('deletes nothing when the linked dialog is cancelled', async () => {
+    sync.isLinked.mockReturnValue(true);
+    choice = undefined;
+
+    await actions.deleteShader('waves', 'Waves');
+
+    expect(sync.remove).not.toHaveBeenCalled();
+    expect(api.remove).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a plain delete when sync refuses', async () => {
+    sync.isLinked.mockReturnValue(true);
+    sync.remove.mockResolvedValueOnce(false);
+    choice = 'everywhere';
+
+    await actions.deleteShader('waves', 'Waves');
+
+    expect(api.remove).toHaveBeenCalledWith('waves');
+  });
+
+  it('keeps the plain confirm dialog for an unlinked shader', async () => {
+    sync.isLinked.mockReturnValue(false);
+    choice = true;
+
+    await actions.deleteShader('waves', 'Waves');
+
+    expect(opened).toBe(ConfirmDialog);
+    expect(sync.remove).not.toHaveBeenCalled();
+    expect(api.remove).toHaveBeenCalledWith('waves');
   });
 });

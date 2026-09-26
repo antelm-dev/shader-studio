@@ -9,14 +9,17 @@ import {
 } from '@shader-studio/shared/model';
 import { composePass } from '@shader-studio/shared/pass-source';
 import { imagePass } from '@shader-studio/shared/project';
+import type { SyncRemoveMode } from '@shader-studio/desktop-api/contracts';
 import { AuthService, type AuthResult } from '../auth/auth.service';
 import { DesktopPlatform } from '../desktop/desktop-platform';
+import { DesktopSync } from '../desktop/desktop-sync';
 import { DesktopUpdater } from '../desktop/desktop-updater';
 import { ShaderStore, type EditorDocument } from '../workspace/shader-store';
 import { I18n } from '../i18n/i18n';
 import { buildFullGlsl } from '@shader-studio/shared/glsl-export';
 import { convertShadertoy } from '@shader-studio/shared/shadertoy-import';
 import type { ConfirmDialogData } from './dialogs/confirm-dialog';
+import type { DeleteLinkedDialogData } from './dialogs/delete-linked-dialog';
 import type { NewShaderDialogResult } from './dialogs/new-shader-dialog';
 import type { PromptDialogData, PromptDialogResult } from './dialogs/prompt-dialog';
 import type { ShadertoyImportDialogResult } from './dialogs/shadertoy-import-dialog';
@@ -45,6 +48,7 @@ export class WorkspaceActions {
   private readonly i18n = inject(I18n);
   private readonly openDocs = inject(OpenDocuments);
   private readonly auth = inject(AuthService);
+  private readonly sync = inject(DesktopSync);
   private transitionInFlight: Promise<boolean> | null = null;
 
   guardedTransition(action: () => void | Promise<void>): Promise<boolean> {
@@ -222,17 +226,37 @@ export class WorkspaceActions {
     if (name) await this.guardedTransition(() => this.store.duplicate(id, name));
   }
 
+  /** A shader linked to the signed-in account also offers "Delete everywhere". */
   async deleteShader(id: string, name: string): Promise<void> {
-    const confirmed = await this.confirm({
-      title: this.i18n.t('dialog.deleteShader'),
-      message: this.i18n.t('dialog.deleteShaderMessage', { name }),
-      confirmText: this.i18n.t('action.delete'),
-      destructive: true,
-    });
-    if (confirmed) {
-      if (id === this.store.selectedId()) await this.guardedTransition(() => this.store.remove(id));
-      else await this.store.remove(id);
+    let removeRecord: (() => Promise<boolean>) | undefined;
+    if (this.sync.isLinked(id)) {
+      const mode = await this.chooseDeleteMode(name);
+      if (!mode) return;
+      removeRecord = () => this.sync.remove(id, mode);
+    } else {
+      const confirmed = await this.confirm({
+        title: this.i18n.t('dialog.deleteShader'),
+        message: this.i18n.t('dialog.deleteShaderMessage', { name }),
+        confirmText: this.i18n.t('action.delete'),
+        destructive: true,
+      });
+      if (!confirmed) return;
     }
+    const remove = () => this.store.remove(id, removeRecord);
+    if (id === this.store.selectedId()) await this.guardedTransition(remove);
+    else await remove();
+  }
+
+  private async chooseDeleteMode(name: string): Promise<SyncRemoveMode | undefined> {
+    const { DeleteLinkedDialog } = await import('./dialogs/delete-linked-dialog');
+    return firstValueFrom(
+      this.dialog
+        .open<InstanceType<typeof DeleteLinkedDialog>, DeleteLinkedDialogData, SyncRemoveMode>(
+          DeleteLinkedDialog,
+          { data: { name } },
+        )
+        .afterClosed(),
+    );
   }
 
   // --- Files and passes ---------------------------------------------------

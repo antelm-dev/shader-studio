@@ -99,8 +99,9 @@ export class PersistenceService {
     return this.api.update(id, { name });
   }
 
-  async remove(id: string): Promise<void> {
-    await this.api.remove(id);
+  /** `removeRecord` deletes it another way (account sync); false falls back to a plain delete. */
+  async remove(id: string, removeRecord?: () => Promise<boolean>): Promise<void> {
+    if (!(await removeRecord?.())) await this.api.remove(id);
     this.recovery.remove(id);
     this.projects.remove(id);
     this.textures.releaseShader(id);
