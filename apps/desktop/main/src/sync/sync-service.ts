@@ -445,19 +445,23 @@ export class SyncService {
     const account = await this.fetchPayload(userId, link.remoteId);
     if (!account) return this.unlink(userId, id, links);
 
-    let record = local;
+    // Only what this pull reconciled is acknowledged: a local save during the
+    // download stays ahead of `localRevision`, so it is pushed next run.
+    let revision = local.revision;
     if (content) {
-      record = await this.library.replaceFromPayload(id, account, local.revision);
+      revision = (await this.library.replaceFromPayload(id, account, local.revision)).revision;
       this.replaced.push(id);
       this.resolved.delete(id);
     }
-    if (thumbnail) record = await this.applyThumbnail(id, account);
+    const localThumbnail = thumbnail
+      ? await this.pullThumbnail(id, account, link.localThumbnail)
+      : link.localThumbnail;
     links[id] = {
       ...link,
       // The list's revision is never newer than the export: at worst the next run pulls again.
       remoteRevision: content ? summary.revision : link.remoteRevision,
-      localRevision: record.revision,
-      localThumbnail: record.thumbnail?.updatedAt ?? null,
+      localRevision: revision,
+      localThumbnail,
       remoteThumbnail: thumbnail ? (account.thumbnail?.updatedAt ?? null) : link.remoteThumbnail,
     };
     await this.writeLinks(userId, links);
@@ -489,14 +493,26 @@ export class SyncService {
     return parsed.value[0];
   }
 
-  /** `replaceFromPayload` leaves thumbnails alone: write the payload's, or none. */
-  private applyThumbnail(id: string, payload: ShaderPayload): Promise<ShaderRecord> {
-    return payload.thumbnail?.data
-      ? this.library.setThumbnail(id, {
+  /**
+   * `replaceFromPayload` leaves thumbnails alone: write the payload's, or none —
+   * unless the local thumbnail is no longer `seen` (changed during the
+   * download): then the local one wins and stays unacknowledged, to be pushed.
+   * Returns the local `thumbnail.updatedAt` the link may acknowledge.
+   */
+  // ponytail: re-read then write is not atomic; a conditional setThumbnail in the library would close the gap.
+  private async pullThumbnail(
+    id: string,
+    payload: ShaderPayload,
+    seen: string | null,
+  ): Promise<string | null> {
+    if (((await this.library.read(id)).thumbnail?.updatedAt ?? null) !== seen) return seen;
+    const record = payload.thumbnail?.data
+      ? await this.library.setThumbnail(id, {
           ext: payload.thumbnail.ext,
           bytes: Buffer.from(payload.thumbnail.data, 'base64'),
         })
-      : this.library.clearThumbnail(id);
+      : await this.library.clearThumbnail(id);
+    return record.thumbnail?.updatedAt ?? null;
   }
 
   /**
@@ -525,15 +541,19 @@ export class SyncService {
 
     const name = local.name.slice(0, LIMITS.nameLength - CONFLICT_SUFFIX.length);
     await this.library.importPayloads([{ ...local, name: name + CONFLICT_SUFFIX }], 'rename');
-    await this.library.replaceFromPayload(id, account, localRevision);
-    // The linked slot takes the account's thumbnail, or none.
-    const record = await this.applyThumbnail(id, account);
+    const { revision } = await this.library.replaceFromPayload(id, account, localRevision);
+    // The linked slot takes the account's thumbnail, or none; a local one set meanwhile wins.
+    const localThumbnail = await this.pullThumbnail(
+      id,
+      account,
+      local.thumbnail?.updatedAt ?? null,
+    );
     this.replaced.push(id);
     links[id] = {
       remoteId: link.remoteId,
       remoteRevision: remote.revision,
-      localRevision: record.revision,
-      localThumbnail: record.thumbnail?.updatedAt ?? null,
+      localRevision: revision,
+      localThumbnail,
       remoteThumbnail: account.thumbnail?.updatedAt ?? null,
     };
     await this.writeLinks(userId, links);

@@ -19,7 +19,7 @@ function fakeServer(remote: ShaderLibrary) {
     offline: false,
     unauthorized: false,
     /** Runs once the server has handled a request, before the client sees the answer. */
-    afterHandled: undefined as ((call: string) => void) | undefined,
+    afterHandled: undefined as ((call: string) => void | Promise<void>) | undefined,
   };
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -77,7 +77,7 @@ function fakeServer(remote: ShaderLibrary) {
   };
   const fetch = async (path: string, init?: RequestInit, user?: string): Promise<Response> => {
     const response = await handle(path, init, user);
-    server.afterHandled?.(server.calls.at(-1)!);
+    await server.afterHandled?.(server.calls.at(-1)!);
     return response;
   };
   return Object.assign(server, { fetch });
@@ -469,6 +469,67 @@ describe('SyncService', () => {
       server.calls.length = 0;
       await sync.run();
       expect(server.calls).toEqual(['GET /api/shaders']);
+    });
+
+    describe('a local write during the download', () => {
+      const LOCAL_PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9, 9]);
+      const during = (write: () => Promise<unknown>) => {
+        server.afterHandled = async (call) => {
+          if (!call.endsWith('/export')) return;
+          server.afterHandled = undefined;
+          await write();
+        };
+      };
+
+      it('keeps a content save pending over a thumbnail-only pull', async () => {
+        const shader = await local.create({ name: 'Original' });
+        await sync.upload([shader.id]);
+        const { remoteId } = (await links())[shader.id];
+        await remote.setThumbnail(remoteId, { ext: 'png', bytes: PNG });
+        during(() => local.update(shader.id, { name: 'Concurrent edit' }));
+
+        await sync.run();
+
+        expect(await local.readThumbnail(shader.id)).not.toBeNull();
+        expect(await statusOf(shader.id)).toBe('pending');
+        await sync.run();
+        expect((await remote.read(remoteId)).name).toBe('Concurrent edit');
+        expect(await statusOf(shader.id)).toBe('synced');
+      });
+
+      it('keeps and pushes a local thumbnail set during a thumbnail pull', async () => {
+        const shader = await local.create({ name: 'Pic' });
+        await sync.upload([shader.id]);
+        const { remoteId } = (await links())[shader.id];
+        await remote.setThumbnail(remoteId, { ext: 'png', bytes: PNG });
+        during(() => local.setThumbnail(shader.id, { ext: 'png', bytes: LOCAL_PNG }));
+
+        await sync.run();
+
+        expect((await local.readThumbnail(shader.id))?.bytes).toEqual(LOCAL_PNG);
+        expect(await statusOf(shader.id)).toBe('pending');
+        await sync.run();
+        expect((await remote.readThumbnail(remoteId))?.bytes).toEqual(LOCAL_PNG);
+        expect(await statusOf(shader.id)).toBe('synced');
+      });
+
+      it('never acknowledges a content save during a content pull', async () => {
+        const shader = await local.create({ name: 'Race' });
+        await sync.upload([shader.id]);
+        const { remoteId } = (await links())[shader.id];
+        await remote.update(remoteId, { fragment: 'void main() { /* web */ }' });
+        during(() => local.update(shader.id, { fragment: 'void main() { /* local */ }' }));
+
+        await sync.run();
+
+        expect((await local.read(shader.id)).fragment).toContain('/* local */');
+        expect(await statusOf(shader.id)).not.toBe('synced');
+        await sync.run();
+        const copy = (await local.list()).find((s) => s.id !== shader.id)!;
+        expect((await local.read(copy.id)).fragment).toContain('/* local */');
+        expect((await local.read(shader.id)).fragment).toContain('/* web */');
+        expect(await statusOf(shader.id)).toBe('conflict-resolved');
+      });
     });
 
     it('pulls a thumbnail-only web change without touching the content', async () => {
