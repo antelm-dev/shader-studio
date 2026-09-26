@@ -7,7 +7,7 @@ import { LOCAL_SCOPE, ShaderLibrary, StorageError } from '@shader-studio/backend
 import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
 import type { SyncChangedEvent } from '@shader-studio/desktop-api/contracts';
 import { buildShaderBundle, extFromMime, parseBundle } from '@shader-studio/shared/validate';
-import type { AccountSession, AccountState } from '../account/account-session';
+import type { AccountState } from '../account/account-session';
 import { notifyingWrites, SyncService } from './sync-service';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
@@ -19,18 +19,22 @@ function fakeServer(remote: ShaderLibrary) {
     offline: false,
     unauthorized: false,
     /** Runs once the server has handled a request, before the client sees the answer. */
-    afterHandled: undefined as ((call: string) => void) | undefined,
+    afterHandled: undefined as ((call: string) => void | Promise<void>) | undefined,
   };
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-  const handle = async (path: string, init: RequestInit = {}): Promise<Response> => {
+  const handle = async (path: string, init: RequestInit = {}, user?: string): Promise<Response> => {
     const method = init.method ?? 'GET';
     server.calls.push(`${method} ${path}`);
     if (server.offline) throw new TypeError('fetch failed');
     if (server.unauthorized) return new Response(null, { status: 401 });
+    // `remote` is user A's account; any other account is empty.
+    if (user !== 'user-a') return method === 'GET' ? json({ shaders: [] }) : json({}, 404);
     const body = () => JSON.parse(String(init.body)) as Record<string, unknown>;
     try {
+      if (method === 'GET' && path === '/api/shaders')
+        return json({ shaders: await remote.list() });
       if (method === 'POST' && path === '/api/import') {
         const parsed = parseBundle(body()['bundle']);
         if (!parsed.ok) return json({}, 400);
@@ -71,15 +75,18 @@ function fakeServer(remote: ShaderLibrary) {
       throw error;
     }
   };
-  const fetch = async (path: string, init?: RequestInit): Promise<Response> => {
-    const response = await handle(path, init);
-    server.afterHandled?.(server.calls.at(-1)!);
+  const fetch = async (path: string, init?: RequestInit, user?: string): Promise<Response> => {
+    const response = await handle(path, init, user);
+    await server.afterHandled?.(server.calls.at(-1)!);
     return response;
   };
   return Object.assign(server, { fetch });
 }
 
-function fakeAccount(fetch: AccountSession['fetch'], state: AccountState) {
+function fakeAccount(
+  fetch: (path: string, init: RequestInit | undefined, user?: string) => Promise<Response>,
+  state: AccountState,
+) {
   const listeners = new Set<(state: AccountState) => void>();
   const account = {
     current: state,
@@ -89,7 +96,7 @@ function fakeAccount(fetch: AccountSession['fetch'], state: AccountState) {
       return () => listeners.delete(listener);
     },
     fetch: async (path: string, init?: RequestInit) => {
-      const response = await fetch(path, init);
+      const response = await fetch(path, init, account.current.user?.id);
       if (response.status === 401) account.set({ ...account.current, status: 'reauth-required' });
       return response;
     },
@@ -209,7 +216,7 @@ describe('SyncService', () => {
     await sync.run();
 
     const { remoteId } = (await links())[shader.id];
-    expect(server.calls).toEqual([`PUT /api/shaders/${remoteId}/thumbnail`]);
+    expect(server.calls).toEqual(['GET /api/shaders', `PUT /api/shaders/${remoteId}/thumbnail`]);
     expect(await remote.readThumbnail(remoteId)).not.toBeNull();
     expect(await statusOf(shader.id)).toBe('synced');
   });
@@ -302,7 +309,7 @@ describe('SyncService', () => {
     await sync.run();
     await sync.upload([shader.id]);
 
-    expect(server.calls).toEqual([]);
+    expect(server.calls).toEqual(['GET /api/shaders']);
     expect(await statusOf(shader.id)).toBe('other-account');
     expect(await links('user-b')).toEqual({});
   });
@@ -350,7 +357,8 @@ describe('SyncService', () => {
     account.set(userA);
     server.calls.length = 0;
     await sync.uploadAll();
-    expect(server.calls).toEqual(['POST /api/import']);
+    // The sign-in's own run only reads the list: one import, never a duplicate.
+    expect(server.calls).toEqual(['GET /api/shaders', 'POST /api/import']);
     expect(await remote.list()).toHaveLength(2);
   });
 
@@ -369,7 +377,7 @@ describe('SyncService', () => {
     await sync.run();
 
     const bundles = server.calls.filter((call) => call.endsWith('/bundle'));
-    expect(server.calls).toEqual(bundles);
+    expect(server.calls).toEqual(['GET /api/shaders', ...bundles]);
     expect(bundles).toHaveLength(1);
     const after = await links();
     const pushed = [one.id, two.id].find((id) => bundles[0].includes(before[id].remoteId))!;
@@ -401,7 +409,331 @@ describe('SyncService', () => {
 
     await Promise.all([sync.run(), sync.run()]);
 
-    expect(server.calls).toHaveLength(1);
+    expect(server.calls.filter((call) => call === 'GET /api/shaders')).toHaveLength(1);
+  });
+
+  describe('pull (C4)', () => {
+    const exports = () => server.calls.filter((call) => call.endsWith('/export'));
+    const watch = () => {
+      const events: SyncChangedEvent[] = [];
+      const watched = new SyncService(local, account, (event) => events.push(event));
+      return { watched, events };
+    };
+
+    it('pulls a shader created on the web, linked and synced (AC-PULL-01)', async () => {
+      const mine = await local.create({ name: 'Web' });
+      const web = await remote.create({ name: 'Web' });
+      await remote.update(web.id, { fragment: 'void main() { /* web */ }' });
+      await remote.setThumbnail(web.id, { ext: 'png', bytes: PNG });
+
+      await sync.run();
+
+      const pulled = (await local.list()).find((s) => s.id !== mine.id)!;
+      expect((await local.read(pulled.id)).fragment).toContain('/* web */');
+      expect(await local.readThumbnail(pulled.id)).not.toBeNull();
+      expect((await links())[pulled.id]).toMatchObject({ remoteId: web.id, remoteRevision: 2 });
+      expect(await statusOf(pulled.id)).toBe('synced');
+      expect(await statusOf(mine.id)).toBe('local-only');
+
+      server.calls.length = 0;
+      await sync.run();
+      expect(server.calls).toEqual(['GET /api/shaders']);
+    });
+
+    it('pulls a web edit with its thumbnail, then a removed thumbnail (AC-PULL-02, AC-PULL-05)', async () => {
+      const shader = await local.create({ name: 'Edited' });
+      await sync.upload([shader.id]);
+      const { remoteId } = (await links())[shader.id];
+      await remote.update(remoteId, { fragment: 'void main() { /* web */ }' });
+      await remote.setThumbnail(remoteId, { ext: 'png', bytes: PNG });
+      const { watched, events } = watch();
+
+      await watched.run();
+
+      expect((await local.read(shader.id)).fragment).toContain('/* web */');
+      expect(await local.readThumbnail(shader.id)).not.toBeNull();
+      expect(await statusOf(shader.id)).toBe('synced');
+      await vi.waitFor(() =>
+        expect(events.some((e) => e.replaced?.includes(shader.id))).toBe(true),
+      );
+      expect(events.some((e) => e.progress?.total === 1)).toBe(true);
+
+      await remote.update(remoteId, { fragment: 'void main() { /* bare */ }' });
+      await remote.clearThumbnail(remoteId);
+      await watched.run();
+      watched.dispose();
+
+      expect((await local.read(shader.id)).fragment).toContain('/* bare */');
+      expect(await local.readThumbnail(shader.id)).toBeNull();
+      expect(await statusOf(shader.id)).toBe('synced');
+      server.calls.length = 0;
+      await sync.run();
+      expect(server.calls).toEqual(['GET /api/shaders']);
+    });
+
+    describe('a local write during the download', () => {
+      const LOCAL_PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9, 9]);
+      const during = (write: () => Promise<unknown>) => {
+        server.afterHandled = async (call) => {
+          if (!call.endsWith('/export')) return;
+          server.afterHandled = undefined;
+          await write();
+        };
+      };
+
+      it('keeps a content save pending over a thumbnail-only pull', async () => {
+        const shader = await local.create({ name: 'Original' });
+        await sync.upload([shader.id]);
+        const { remoteId } = (await links())[shader.id];
+        await remote.setThumbnail(remoteId, { ext: 'png', bytes: PNG });
+        during(() => local.update(shader.id, { name: 'Concurrent edit' }));
+
+        await sync.run();
+
+        expect(await local.readThumbnail(shader.id)).not.toBeNull();
+        expect(await statusOf(shader.id)).toBe('pending');
+        await sync.run();
+        expect((await remote.read(remoteId)).name).toBe('Concurrent edit');
+        expect(await statusOf(shader.id)).toBe('synced');
+      });
+
+      it('keeps and pushes a local thumbnail set during a thumbnail pull', async () => {
+        const shader = await local.create({ name: 'Pic' });
+        await sync.upload([shader.id]);
+        const { remoteId } = (await links())[shader.id];
+        await remote.setThumbnail(remoteId, { ext: 'png', bytes: PNG });
+        during(() => local.setThumbnail(shader.id, { ext: 'png', bytes: LOCAL_PNG }));
+
+        await sync.run();
+
+        expect((await local.readThumbnail(shader.id))?.bytes).toEqual(LOCAL_PNG);
+        expect(await statusOf(shader.id)).toBe('pending');
+        await sync.run();
+        expect((await remote.readThumbnail(remoteId))?.bytes).toEqual(LOCAL_PNG);
+        expect(await statusOf(shader.id)).toBe('synced');
+      });
+
+      it('keeps a local thumbnail saved right before the pulled one is written', async () => {
+        const shader = await local.create({ name: 'Last moment' });
+        await sync.upload([shader.id]);
+        const { remoteId } = (await links())[shader.id];
+        await remote.setThumbnail(remoteId, { ext: 'png', bytes: PNG });
+        // The renderer's save commits between the download and the sync's write.
+        const setThumbnail = local.setThumbnail.bind(local);
+        const spy = vi
+          .spyOn(local, 'setThumbnail')
+          .mockImplementationOnce(async (id, input, expected) => {
+            await setThumbnail(id, { ext: 'png', bytes: LOCAL_PNG });
+            return setThumbnail(id, input, expected);
+          });
+
+        await sync.run();
+        spy.mockRestore();
+
+        expect((await local.readThumbnail(shader.id))?.bytes).toEqual(LOCAL_PNG);
+        expect(await statusOf(shader.id)).toBe('pending');
+        await sync.run();
+        expect((await remote.readThumbnail(remoteId))?.bytes).toEqual(LOCAL_PNG);
+        expect(await statusOf(shader.id)).toBe('synced');
+      });
+
+      it('keeps a local thumbnail cleared and recreated in the same millisecond', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+          vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+          const shader = await local.create({ name: 'Recreated' });
+          await local.setThumbnail(shader.id, { ext: 'png', bytes: PNG });
+          await sync.upload([shader.id]);
+          const { remoteId } = (await links())[shader.id];
+          await remote.setThumbnail(remoteId, { ext: 'png', bytes: PNG });
+          during(async () => {
+            await local.clearThumbnail(shader.id);
+            await local.setThumbnail(shader.id, { ext: 'png', bytes: LOCAL_PNG });
+          });
+
+          await sync.run();
+
+          expect((await local.readThumbnail(shader.id))?.bytes).toEqual(LOCAL_PNG);
+          expect(await statusOf(shader.id)).toBe('pending');
+          await sync.run();
+          expect((await remote.readThumbnail(remoteId))?.bytes).toEqual(LOCAL_PNG);
+          expect(await statusOf(shader.id)).toBe('synced');
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('never acknowledges a content save during a content pull', async () => {
+        const shader = await local.create({ name: 'Race' });
+        await sync.upload([shader.id]);
+        const { remoteId } = (await links())[shader.id];
+        await remote.update(remoteId, { fragment: 'void main() { /* web */ }' });
+        during(() => local.update(shader.id, { fragment: 'void main() { /* local */ }' }));
+
+        await sync.run();
+
+        expect((await local.read(shader.id)).fragment).toContain('/* local */');
+        expect(await statusOf(shader.id)).not.toBe('synced');
+        await sync.run();
+        const copy = (await local.list()).find((s) => s.id !== shader.id)!;
+        expect((await local.read(copy.id)).fragment).toContain('/* local */');
+        expect((await local.read(shader.id)).fragment).toContain('/* web */');
+        expect(await statusOf(shader.id)).toBe('conflict-resolved');
+      });
+    });
+
+    it('pulls a thumbnail-only web change without touching the content', async () => {
+      const shader = await local.create({ name: 'Pic' });
+      await sync.upload([shader.id]);
+      const { remoteId } = (await links())[shader.id];
+      await remote.setThumbnail(remoteId, { ext: 'png', bytes: PNG });
+      const before = await local.read(shader.id);
+      server.calls.length = 0;
+      const { watched, events } = watch();
+
+      await watched.run();
+      watched.dispose();
+
+      expect(server.calls).toEqual(['GET /api/shaders', `GET /api/shaders/${remoteId}/export`]);
+      expect(await local.readThumbnail(shader.id)).not.toBeNull();
+      expect((await local.read(shader.id)).revision).toBe(before.revision);
+      expect(events.some((e) => e.replaced)).toBe(false);
+      expect(await statusOf(shader.id)).toBe('synced');
+    });
+
+    it('does not pull back a thumbnail it just pushed', async () => {
+      const shader = await local.create({ name: 'Mine' });
+      await sync.upload([shader.id]);
+      await local.setThumbnail(shader.id, { ext: 'png', bytes: PNG });
+      await sync.run();
+      server.calls.length = 0;
+
+      await sync.run();
+
+      expect(server.calls).toEqual(['GET /api/shaders']);
+    });
+
+    it('shows a shader deleted on the web as local-only and keeps it (AC-PULL-03)', async () => {
+      const shader = await local.create({ name: 'Deleted on web' });
+      await sync.upload([shader.id]);
+      await remote.remove((await links())[shader.id].remoteId);
+      server.calls.length = 0;
+
+      await sync.run();
+
+      expect(server.calls).toEqual(['GET /api/shaders']);
+      expect((await links())[shader.id]).toBeUndefined();
+      expect((await local.read(shader.id)).name).toBe('Deleted on web');
+      expect(await statusOf(shader.id)).toBe('local-only');
+    });
+
+    it('never pulls an ignored remote id (AC-PULL-03)', async () => {
+      const web = await remote.create({ name: 'Ignored' });
+      await local.setMeta('sync_ignored:user-a', JSON.stringify([web.id]));
+
+      await sync.run();
+
+      expect(exports()).toEqual([]);
+      expect(await local.list()).toEqual([]);
+    });
+
+    it('ignores the remote id of a linked shader deleted here', async () => {
+      const shader = await local.create({ name: 'Deleted here' });
+      await sync.upload([shader.id]);
+      const { remoteId } = (await links())[shader.id];
+      await local.remove(shader.id);
+
+      await sync.run();
+      await sync.run();
+
+      expect(await links()).toEqual({});
+      expect(JSON.parse((await local.getMeta('sync_ignored:user-a'))!)).toEqual([remoteId]);
+      expect(await local.list()).toEqual([]);
+      expect(exports()).toEqual([]);
+      expect((await remote.read(remoteId)).name).toBe('Deleted here');
+    });
+
+    it('keeps a pull already sent, then stops, when another account signs in (AC-PULL-04)', async () => {
+      await remote.create({ name: 'One' });
+      await remote.create({ name: 'Two' });
+      server.afterHandled = (call) => {
+        if (call.endsWith('/export')) account.set(userB);
+      };
+
+      await sync.run();
+
+      expect(exports()).toHaveLength(1);
+      expect(server.calls).toEqual(['GET /api/shaders', ...exports()]);
+      expect(await local.list()).toHaveLength(1);
+      expect(Object.keys(await links())).toHaveLength(1);
+      expect(await links('user-b')).toEqual({});
+    });
+
+    it('pulls the thumbnail of an older link once', async () => {
+      const shader = await local.create({ name: 'Old link' });
+      await sync.upload([shader.id]);
+      const { remoteThumbnail: _, ...old } = (await links())[shader.id] as Record<string, unknown>;
+      await local.setMeta('sync_links:user-a', JSON.stringify({ [shader.id]: old }));
+      server.calls.length = 0;
+
+      await sync.run();
+      await sync.run();
+
+      expect(exports()).toHaveLength(1);
+      expect((await links())[shader.id]).toHaveProperty('remoteThumbnail', null);
+      expect(await statusOf(shader.id)).toBe('synced');
+    });
+
+    it('is synced only once a run found it on the account', async () => {
+      const shader = await local.create({ name: 'Checked' });
+      await sync.upload([shader.id]);
+      const { watched } = watch();
+      expect((await watched.snapshot()).statuses[shader.id]).toBe('pending');
+
+      server.offline = true;
+      await watched.run();
+      expect((await watched.snapshot()).statuses[shader.id]).toBe('pending');
+
+      server.offline = false;
+      await watched.run();
+      expect((await watched.snapshot()).statuses[shader.id]).toBe('synced');
+      watched.dispose();
+    });
+
+    it('merges timer and focus triggers into one run (AC-PULL-04)', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+      try {
+        const { watched } = watch();
+        const run = vi.spyOn(watched, 'run');
+        const gets = () => server.calls.filter((call) => call === 'GET /api/shaders').length;
+
+        // Timer, focus and a manual trigger at once: one run.
+        vi.advanceTimersByTime(60_000);
+        watched.focused();
+        expect(run).toHaveBeenCalledTimes(2);
+        await watched.run();
+        expect(gets()).toBe(1);
+
+        // Focus runs at most once every 15 s.
+        vi.advanceTimersByTime(10_000);
+        watched.focused();
+        expect(run).toHaveBeenCalledTimes(3);
+        vi.advanceTimersByTime(5_000);
+        watched.focused();
+        expect(run).toHaveBeenCalledTimes(4);
+        await watched.run();
+
+        // Signed out: neither the timer nor focus runs.
+        account.set({ status: 'signed-out' });
+        run.mockClear();
+        vi.advanceTimersByTime(120_000);
+        watched.focused();
+        expect(run).not.toHaveBeenCalled();
+        watched.dispose();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('notifies after a write through the IPC-facing library', async () => {

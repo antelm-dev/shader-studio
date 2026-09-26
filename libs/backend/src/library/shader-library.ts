@@ -77,6 +77,9 @@ import {
   type StoredShader,
 } from '../persistence/shader-repository';
 
+/** The last thumbnail stamp handed out per store, in ms, shared by every scope's library. */
+const lastThumbnailStamps = new WeakMap<ShaderRepository, number>();
+
 /** Bump when the bundled examples change in a way that should reach existing stores. */
 export const SEED_VERSION = 1;
 
@@ -455,8 +458,19 @@ export class ShaderLibrary {
    * shader row: a thumbnail is a picture of the document, not a change to it, so
    * `updatedAt` and `revision` stay put and a "recently modified" list does not
    * reorder every time a preview refreshes.
+   *
+   * With `expectedThumbnail` (the stored `thumbnail.updatedAt`, or `null` for
+   * none) the compare and the write are one conditional statement: a thumbnail
+   * written meanwhile fails the call with `conflict` and nothing is written.
+   * Every write stamps a `thumbnail.updatedAt` strictly after any this process
+   * has written or cleared on this store (see {@link stampThumbnail}), so a
+   * stamp never comes back and a stale expectation can never match again.
    */
-  async setThumbnail(id: string, input: { ext: string; bytes: Uint8Array }): Promise<ShaderRecord> {
+  async setThumbnail(
+    id: string,
+    input: { ext: string; bytes: Uint8Array },
+    expectedThumbnail?: string | null,
+  ): Promise<ShaderRecord> {
     const validId = this.validId(id);
     const ext = input.ext.toLowerCase();
     if (!TEXTURE_EXTENSIONS.has(ext)) {
@@ -472,31 +486,75 @@ export class ShaderLibrary {
       );
     }
 
-    await this.repo.transaction(async (tx) => {
+    return this.repo.transaction(async (tx) => {
       const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
-      await tx.putAsset(validId, {
+      const previous = stored.assets.find((asset) => asset.key === THUMBNAIL_ASSET_KEY);
+      const asset = {
         key: THUMBNAIL_ASSET_KEY,
         extension: ext,
         width: null,
         height: null,
-        updatedAt: new Date().toISOString(),
+        updatedAt: this.stampThumbnail(expectedThumbnail ?? previous?.updatedAt),
         data: input.bytes,
-      });
+      };
+      if (expectedThumbnail === undefined) await tx.putAsset(validId, asset);
+      else if (!(await tx.putAssetIf(validId, asset, expectedThumbnail))) {
+        throw thumbnailConflict(id);
+      }
+      return this.mapRecord(await this.reload(tx, validId));
     });
-
-    return this.read(id);
   }
 
-  /** Drops the preview. Like {@link setThumbnail}, the shader row stays put. */
-  async clearThumbnail(id: string): Promise<ShaderRecord> {
+  /**
+   * Drops the preview. Like {@link setThumbnail}, the shader row stays put, and
+   * `expectedThumbnail` makes it conditional the same way.
+   */
+  async clearThumbnail(id: string, expectedThumbnail?: string | null): Promise<ShaderRecord> {
     const validId = this.validId(id);
-    await this.repo.transaction(async (tx) => {
+    return this.repo.transaction(async (tx) => {
       const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
-      await tx.deleteAsset(validId, THUMBNAIL_ASSET_KEY);
+      // A later thumbnail must never reuse the stamp of the one going now.
+      const cleared = stored.assets.find((asset) => asset.key === THUMBNAIL_ASSET_KEY);
+      this.stampThumbnail(cleared?.updatedAt);
+      if (expectedThumbnail === undefined) await tx.deleteAsset(validId, THUMBNAIL_ASSET_KEY);
+      else if (expectedThumbnail === null) {
+        // Nothing to delete: only a thumbnail present now breaks the expectation.
+        if (stored.assets.some((asset) => asset.key === THUMBNAIL_ASSET_KEY)) {
+          throw thumbnailConflict(id);
+        }
+      } else if (!(await tx.deleteAssetIf(validId, THUMBNAIL_ASSET_KEY, expectedThumbnail))) {
+        throw thumbnailConflict(id);
+      }
+      return this.mapRecord(await this.reload(tx, validId));
     });
-    return this.read(id);
+  }
+
+  /**
+   * A thumbnail stamp strictly after `previous` and after every stamp this
+   * process handed out or saw cleared on this store, whatever the clock says
+   * (same millisecond, clock set back). The conditional writes' only caller is
+   * the desktop sync, comparing a stamp it read from this same store in this
+   * same process, so no in-flight expectation can ever match a newer thumbnail
+   * — clears included. The REST API never takes an expectation from clients.
+   */
+  // ponytail: per-process clock; unique stamps across processes need a persisted thumbnail version column.
+  private stampThumbnail(previous?: string | null): string {
+    const stamp = Math.max(
+      Date.now(),
+      (lastThumbnailStamps.get(this.repo) ?? 0) + 1,
+      previous ? Date.parse(previous) + 1 || 0 : 0,
+    );
+    lastThumbnailStamps.set(this.repo, stamp);
+    return new Date(stamp).toISOString();
+  }
+
+  /** The shader as this transaction just wrote it. */
+  private async reload(tx: ShaderTx, id: string): Promise<StoredShader> {
+    const stored = await tx.loadShader(this.scope, id);
+    if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+    return stored;
   }
 
   /** The preview's raw image bytes, for serving to the client. */
@@ -1077,6 +1135,13 @@ function presetToRow(preset: Preset): PresetRow {
 
 function cloneDefaultChannels(): TextureChannels {
   return DEFAULT_CHANNELS.map((channel) => ({ ...channel })) as unknown as TextureChannels;
+}
+
+function thumbnailConflict(id: string): StorageError {
+  return new StorageError(
+    'conflict',
+    `The thumbnail of "${id}" was changed by another write; nothing was written`,
+  );
 }
 
 function parseExpectedRevision(value: unknown): number | undefined {
