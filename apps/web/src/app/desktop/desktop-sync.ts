@@ -9,8 +9,15 @@ import type {
 import { I18n } from '../i18n/i18n';
 import { ShaderStore } from '../workspace/shader-store';
 
-/** Statuses of a shader linked to the signed-in account. */
-const LINKED = new Set<SyncStatus>(['synced', 'pending', 'syncing', 'conflict-resolved', 'error']);
+/** Statuses of a shader linked to the signed-in account (also while it needs signing in again). */
+const LINKED = new Set<SyncStatus>([
+  'synced',
+  'pending',
+  'syncing',
+  'conflict-resolved',
+  'reauth-required',
+  'error',
+]);
 
 /**
  * The account sync status of each local shader, pushed from the main process.

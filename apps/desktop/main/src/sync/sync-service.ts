@@ -1,6 +1,7 @@
 import { StorageError, type ShaderLibrary } from '@shader-studio/backend/library';
 import type {
   SyncChangedEvent,
+  SyncRemoveMode,
   SyncRemoveRequest,
   SyncRemoveResult,
   SyncStatus,
@@ -36,11 +37,16 @@ type Tombstone = Pick<SyncLink, 'remoteId' | 'remoteRevision' | 'remoteThumbnail
   name: string;
 };
 
-/** A local delete in progress, finished by the next run if a crash interrupts it. */
-interface LocalDelete {
+/**
+ * A linked delete in progress, whole in one record so a crash at any point is
+ * finished by the next run exactly as the user chose.
+ */
+type LocalDelete = Tombstone & {
   localId: string;
   localRevision: number;
-}
+  mode: SyncRemoveMode;
+  userId: string;
+};
 
 type Links = Record<string, SyncLink>;
 /** One unit of a run: the local id it reports on (none for a new pull), and its work. */
@@ -330,93 +336,117 @@ export class SyncService {
   }
 
   /**
-   * Crash-safe order: the local delete intent, then the account state, then the
-   * delete itself, conditional on the revision the user saw. An edit landing
-   * meanwhile wins: the account state is put back and nothing is deleted.
+   * One intent record carries the whole delete, written in one step before
+   * anything else; the local delete is conditional on the revision the user
+   * saw, and only once it is done is the account side applied. An edit landing
+   * meanwhile wins: the intent goes, and nothing account-side was ever written.
+   * A crash anywhere is finished by the next run (`finishDeletes`).
    */
   private async removeNow(request: SyncRemoveRequest): Promise<SyncRemoveResult> {
     const { id, mode, userId, revision } = request;
-    if (this.signedInUser() !== userId) return 'account-changed';
-    const links = await this.readLinks(userId);
-    const link = links[id];
+    // Re-signing in is not needed: the delete is local, the tombstone waits for the next run.
+    const state = this.account.state();
+    const current = state.status === 'signed-in' || state.status === 'reauth-required';
+    if (!current || state.user?.id !== userId) return 'account-changed';
+    const link = (await this.readLinks(userId))[id];
     if (!link) return 'not-linked';
-    const { name, revision: current } = await this.library.read(id);
-    if (current !== revision) return 'changed';
+    const record = await this.library.read(id);
+    if (record.revision !== revision) return 'changed';
 
-    const deletes = await this.readDeletes();
-    await this.writeDeletes([...deletes, { localId: id, localRevision: revision }]);
-    const ignored = await this.readIgnored(userId);
-    const tombstones = await this.readTombstones(userId);
     const { remoteId, remoteRevision, remoteThumbnail } = link;
-    if (mode === 'local') {
-      await this.writeIgnored(userId, new Set(ignored).add(remoteId));
-    } else {
-      const tombstone = { remoteId, remoteRevision, remoteThumbnail, name };
-      await this.writeTombstones(userId, [...tombstones, tombstone]);
-    }
-    delete links[id];
-    await this.writeLinks(userId, links);
+    const intent: LocalDelete = {
+      localId: id,
+      localRevision: revision,
+      mode,
+      userId,
+      remoteId,
+      remoteRevision,
+      remoteThumbnail,
+      name: record.name,
+    };
+    const deletes = await this.readDeletes();
+    await this.writeDeletes([...deletes, intent]);
     try {
       await this.library.remove(id, revision);
     } catch (error) {
       if (!(error instanceof StorageError && error.code === 'conflict')) throw error;
-      await this.writeLinks(userId, { ...links, [id]: link });
-      if (mode === 'local') await this.writeIgnored(userId, ignored);
-      else await this.writeTombstones(userId, tombstones);
       await this.writeDeletes(deletes);
       return 'changed';
     }
+    await this.applyDelete(intent);
     await this.writeDeletes(deletes);
-    this.resolved.delete(id);
-    this.failed.delete(id);
-    this.checked.delete(id);
     if (mode === 'everywhere') void this.run();
     else this.publish();
     return 'ok';
   }
 
   /**
-   * Local deletes a crash interrupted, done now. One edited since keeps the
-   * edit: it stays, unlinked. Runs on the chain, so none is in progress.
+   * The account side of a local delete that happened: the ignored id or the
+   * tombstone, then the link dropped. Idempotent, so a replay is harmless.
+   */
+  private async applyDelete(intent: LocalDelete): Promise<void> {
+    const { localId, mode, userId, remoteId, remoteRevision, remoteThumbnail, name } = intent;
+    if (mode === 'local') {
+      const ignored = await this.readIgnored(userId);
+      if (!ignored.has(remoteId)) await this.writeIgnored(userId, ignored.add(remoteId));
+    } else {
+      const tombstones = await this.readTombstones(userId);
+      if (!tombstones.some((tombstone) => tombstone.remoteId === remoteId)) {
+        const tombstone = { remoteId, remoteRevision, remoteThumbnail, name };
+        await this.writeTombstones(userId, [...tombstones, tombstone]);
+      }
+    }
+    const links = await this.readLinks(userId);
+    if (links[localId]?.remoteId === remoteId) await this.unlink(userId, localId, links);
+    this.failed.delete(localId);
+    this.checked.delete(localId);
+  }
+
+  /**
+   * Deletes a crash interrupted, finished first thing in every run (startup
+   * included). Still at the confirmed revision: deleted, then applied. Already
+   * gone: applied. Edited since: the edit wins, the intent just goes.
    */
   private async finishDeletes(): Promise<void> {
     const deletes = await this.readDeletes();
     if (deletes.length === 0) return;
-    for (const { localId, localRevision } of deletes) {
+    for (const intent of deletes) {
       try {
-        await this.library.remove(localId, localRevision);
+        await this.library.remove(intent.localId, intent.localRevision);
       } catch (error) {
-        const settled =
-          error instanceof StorageError && ['conflict', 'not_found'].includes(error.code);
-        if (!settled) throw error;
+        if (!(error instanceof StorageError)) throw error;
+        if (error.code === 'conflict') continue;
+        if (error.code !== 'not_found') throw error;
       }
+      await this.applyDelete(intent);
     }
     await this.writeDeletes([]);
   }
 
   /**
    * Sends each "Delete everywhere" whose account copy, in `remote`, is still
-   * the one last synced, conditional on its revision. One changed since, by
-   * content or thumbnail, or refused with 409 is dropped, then pulled back with
-   * a notice. Gone (not listed, 204, 404) drops it; any other answer keeps it.
-   * Returns the remote ids the rest of the run leaves alone: deleted or queued.
-   *
-   * A thumbnail-only change between the list read and the DELETE is missed
-   * (thumbnails leave the revision alone): it only loses the picture of a
-   * shader the user chose to delete everywhere.
+   * the one last synced, conditional on its revision and thumbnail in the
+   * server's delete statement itself. One changed since, or refused with 409,
+   * is dropped, then pulled back with a notice. Gone (not listed, 204, 404)
+   * drops it; any other answer keeps it. Returns the remote ids the rest of
+   * the run leaves alone: deleted or queued.
    */
   private async sendTombstones(userId: string, remote: ShaderSummary[]): Promise<Set<string>> {
     const tombstones = await this.readTombstones(userId);
     const listed = new Map(remote.map((summary) => [summary.id, summary]));
     const settled = new Set<string>();
     for (const tombstone of [...tombstones]) {
-      const { remoteId, remoteRevision, name } = tombstone;
+      const { remoteId, remoteRevision, remoteThumbnail, name } = tombstone;
       const summary = listed.get(remoteId);
       let status = 404;
       if (summary && remoteChanged(summary, tombstone)) {
         status = 409;
       } else if (summary) {
-        const path = `/api/shaders/${encodeURIComponent(remoteId)}?expectedRevision=${remoteRevision}`;
+        const query = new URLSearchParams({
+          expectedRevision: String(remoteRevision),
+          expectedThumbnail: remoteThumbnail ?? 'none',
+        });
+        const path = `/api/shaders/${encodeURIComponent(remoteId)}?${query}`;
         ({ status } = await this.call(userId, path, { method: 'DELETE' }));
       }
       if (status >= 300 && status !== 404 && status !== 409) {
