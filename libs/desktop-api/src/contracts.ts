@@ -121,3 +121,17 @@ export interface SyncChangedEvent {
 
 /** C5: `local` keeps the account copy and never pulls it back; `everywhere` deletes it too. */
 export type SyncRemoveMode = 'local' | 'everywhere';
+
+/** A delete as the user confirmed it: the account and the local revision they saw. */
+export interface SyncRemoveRequest {
+  id: string;
+  mode: SyncRemoveMode;
+  userId: string;
+  revision: number;
+}
+
+/**
+ * `not-linked`: not linked to that account, delete it plainly. `account-changed`
+ * (another account signed in) and `changed` (edited since): nothing deleted.
+ */
+export type SyncRemoveResult = 'ok' | 'not-linked' | 'account-changed' | 'changed';

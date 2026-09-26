@@ -1,7 +1,8 @@
 import { StorageError, type ShaderLibrary } from '@shader-studio/backend/library';
 import type {
   SyncChangedEvent,
-  SyncRemoveMode,
+  SyncRemoveRequest,
+  SyncRemoveResult,
   SyncStatus,
 } from '@shader-studio/desktop-api/contracts';
 import type {
@@ -30,11 +31,15 @@ export interface SyncLink {
   remoteThumbnail?: string | null;
 }
 
-/** A "Delete everywhere" still to send: deletes the account copy only if it is still `remoteRevision`. */
-interface Tombstone {
-  remoteId: string;
-  remoteRevision: number;
+/** A "Delete everywhere" still to send: only while the account copy is still the one last synced. */
+type Tombstone = Pick<SyncLink, 'remoteId' | 'remoteRevision' | 'remoteThumbnail'> & {
   name: string;
+};
+
+/** A local delete in progress, finished by the next run if a crash interrupts it. */
+interface LocalDelete {
+  localId: string;
+  localRevision: number;
 }
 
 type Links = Record<string, SyncLink>;
@@ -47,6 +52,8 @@ const linksKey = (userId: string) => `sync_links:${userId}`;
 /** Remote ids this computer must never pull. */
 const ignoredKey = (userId: string) => `sync_ignored:${userId}`;
 const tombstonesKey = (userId: string) => `sync_tombstones:${userId}`;
+/** Account-independent: the local library is shared by every account. */
+const DELETES_KEY = 'sync_local_deletes';
 const CONFLICT_SUFFIX = ' (conflict)';
 const JSON_HEADERS = { 'content-type': 'application/json' };
 const SAVE_DEBOUNCE_MS = 2_000;
@@ -73,7 +80,10 @@ function isDirty(summary: ShaderSummary | ShaderRecord, link: SyncLink): boolean
 }
 
 /** The account moved on since the last sync: content, or a thumbnail (unknown on older links). */
-function remoteChanged(summary: ShaderSummary, link: SyncLink): boolean {
+function remoteChanged(
+  summary: ShaderSummary,
+  link: Pick<SyncLink, 'remoteRevision' | 'remoteThumbnail'>,
+): boolean {
   return (
     summary.revision > link.remoteRevision ||
     (summary.thumbnail?.updatedAt ?? null) !== link.remoteThumbnail
@@ -168,12 +178,12 @@ export class SyncService {
   /**
    * Deletes a shader linked to the signed-in account: `local` keeps the account
    * copy and never pulls it back, `everywhere` queues its deletion for the next
-   * run, which starts now. False when it is not linked to that account: nothing
-   * is done, the caller deletes it plainly.
+   * run, which starts now. Only as the user confirmed it: for that account, at
+   * that local revision; otherwise nothing is deleted (`SyncRemoveResult`).
    */
-  remove(id: string, mode: SyncRemoveMode): Promise<boolean> {
+  remove(request: SyncRemoveRequest): Promise<SyncRemoveResult> {
     // On the chain, so no run rewrites the links this changes.
-    const result = this.chain.then(() => this.removeNow(id, mode));
+    const result = this.chain.then(() => this.removeNow(request));
     this.chain = result.then(
       () => undefined,
       () => undefined,
@@ -254,15 +264,16 @@ export class SyncService {
 
   /** Queued deletes, one `GET /api/shaders`, dead links dropped, then pushes, then pulls. */
   private async syncNow(): Promise<void> {
+    await this.finishDeletes();
     const userId = this.signedInUser();
     if (!userId) return this.publish();
     let remote: ShaderSummary[];
-    let queued: Set<string>;
+    let settled: Set<string>;
     try {
-      queued = new Set((await this.sendTombstones(userId)).map((tombstone) => tombstone.remoteId));
       const response = await expectOk(await this.call(userId, '/api/shaders'));
       const { shaders } = (await response.json()) as { shaders: ShaderSummary[] };
       remote = shaders.filter((summary) => summary.kind !== 'template');
+      settled = await this.sendTombstones(userId, remote);
     } catch (error) {
       if (!(error instanceof Stop)) throw error;
       this.checked.clear();
@@ -280,7 +291,7 @@ export class SyncService {
     );
     if (gone.length > 0) {
       // Before the links: if that write fails, the next run finds the same links.
-      for (const id of gone) if (!queued.has(links[id].remoteId)) ignored.add(links[id].remoteId);
+      for (const id of gone) if (!settled.has(links[id].remoteId)) ignored.add(links[id].remoteId);
       await this.writeIgnored(userId, ignored);
     }
     if (gone.length + dropped.length > 0) {
@@ -304,8 +315,8 @@ export class SyncService {
       .map((id): Task => [id, () => this.push(userId, id, links)]);
     const linkedTo = new Map(Object.entries(links).map(([id, link]) => [link.remoteId, id]));
     for (const summary of remote) {
-      // Its delete is still to be sent: neither pulled nor unlinked.
-      if (queued.has(summary.id)) continue;
+      // Deleted by this run, or its delete still to be sent: neither pulled nor unlinked.
+      if (settled.has(summary.id)) continue;
       const id = linkedTo.get(summary.id);
       if (id !== undefined) {
         if (remoteChanged(summary, links[id])) {
@@ -319,56 +330,107 @@ export class SyncService {
   }
 
   /**
-   * The account state first, then the local delete: a crash in between leaves
-   * an unlinked local copy, nothing lost.
+   * Crash-safe order: the local delete intent, then the account state, then the
+   * delete itself, conditional on the revision the user saw. An edit landing
+   * meanwhile wins: the account state is put back and nothing is deleted.
    */
-  private async removeNow(id: string, mode: SyncRemoveMode): Promise<boolean> {
-    const userId = this.signedInUser();
-    if (!userId) return false;
+  private async removeNow(request: SyncRemoveRequest): Promise<SyncRemoveResult> {
+    const { id, mode, userId, revision } = request;
+    if (this.signedInUser() !== userId) return 'account-changed';
     const links = await this.readLinks(userId);
     const link = links[id];
-    if (!link) return false;
+    if (!link) return 'not-linked';
+    const { name, revision: current } = await this.library.read(id);
+    if (current !== revision) return 'changed';
+
+    const deletes = await this.readDeletes();
+    await this.writeDeletes([...deletes, { localId: id, localRevision: revision }]);
+    const ignored = await this.readIgnored(userId);
+    const tombstones = await this.readTombstones(userId);
+    const { remoteId, remoteRevision, remoteThumbnail } = link;
     if (mode === 'local') {
-      await this.writeIgnored(userId, (await this.readIgnored(userId)).add(link.remoteId));
+      await this.writeIgnored(userId, new Set(ignored).add(remoteId));
     } else {
-      const { name } = await this.library.read(id);
-      const { remoteId, remoteRevision } = link;
-      const tombstones = await this.readTombstones(userId);
-      await this.writeTombstones(userId, [...tombstones, { remoteId, remoteRevision, name }]);
+      const tombstone = { remoteId, remoteRevision, remoteThumbnail, name };
+      await this.writeTombstones(userId, [...tombstones, tombstone]);
     }
-    await this.unlink(userId, id, links);
+    delete links[id];
+    await this.writeLinks(userId, links);
+    try {
+      await this.library.remove(id, revision);
+    } catch (error) {
+      if (!(error instanceof StorageError && error.code === 'conflict')) throw error;
+      await this.writeLinks(userId, { ...links, [id]: link });
+      if (mode === 'local') await this.writeIgnored(userId, ignored);
+      else await this.writeTombstones(userId, tombstones);
+      await this.writeDeletes(deletes);
+      return 'changed';
+    }
+    await this.writeDeletes(deletes);
+    this.resolved.delete(id);
     this.failed.delete(id);
     this.checked.delete(id);
-    await this.library.remove(id);
     if (mode === 'everywhere') void this.run();
     else this.publish();
-    return true;
+    return 'ok';
   }
 
   /**
-   * Sends each "Delete everywhere", conditional on the revision last synced.
-   * Gone (204, 404) or changed since (409, pulled back later) drops it; any
-   * other answer keeps it for the next run. Returns those still queued.
+   * Local deletes a crash interrupted, done now. One edited since keeps the
+   * edit: it stays, unlinked. Runs on the chain, so none is in progress.
    */
-  private async sendTombstones(userId: string): Promise<Tombstone[]> {
+  private async finishDeletes(): Promise<void> {
+    const deletes = await this.readDeletes();
+    if (deletes.length === 0) return;
+    for (const { localId, localRevision } of deletes) {
+      try {
+        await this.library.remove(localId, localRevision);
+      } catch (error) {
+        const settled =
+          error instanceof StorageError && ['conflict', 'not_found'].includes(error.code);
+        if (!settled) throw error;
+      }
+    }
+    await this.writeDeletes([]);
+  }
+
+  /**
+   * Sends each "Delete everywhere" whose account copy, in `remote`, is still
+   * the one last synced, conditional on its revision. One changed since, by
+   * content or thumbnail, or refused with 409 is dropped, then pulled back with
+   * a notice. Gone (not listed, 204, 404) drops it; any other answer keeps it.
+   * Returns the remote ids the rest of the run leaves alone: deleted or queued.
+   *
+   * A thumbnail-only change between the list read and the DELETE is missed
+   * (thumbnails leave the revision alone): it only loses the picture of a
+   * shader the user chose to delete everywhere.
+   */
+  private async sendTombstones(userId: string, remote: ShaderSummary[]): Promise<Set<string>> {
     const tombstones = await this.readTombstones(userId);
+    const listed = new Map(remote.map((summary) => [summary.id, summary]));
+    const settled = new Set<string>();
     for (const tombstone of [...tombstones]) {
       const { remoteId, remoteRevision, name } = tombstone;
-      const response = await this.call(
-        userId,
-        `/api/shaders/${encodeURIComponent(remoteId)}?expectedRevision=${remoteRevision}`,
-        { method: 'DELETE' },
-      );
-      if (!response.ok && response.status !== 404 && response.status !== 409) {
-        console.warn(`[sync] deleting "${name}" failed: ${response.status}`);
+      const summary = listed.get(remoteId);
+      let status = 404;
+      if (summary && remoteChanged(summary, tombstone)) {
+        status = 409;
+      } else if (summary) {
+        const path = `/api/shaders/${encodeURIComponent(remoteId)}?expectedRevision=${remoteRevision}`;
+        ({ status } = await this.call(userId, path, { method: 'DELETE' }));
+      }
+      if (status >= 300 && status !== 404 && status !== 409) {
+        console.warn(`[sync] deleting "${name}" failed: ${status}`);
+        settled.add(remoteId);
         continue;
       }
       // Sent for this account: its result is this account's, even after a switch.
       tombstones.splice(tombstones.indexOf(tombstone), 1);
       await this.writeTombstones(userId, tombstones);
-      if (response.status === 409) this.notices.push({ kind: 'restored-after-delete', name });
+      if (status === 409) this.notices.push({ kind: 'restored-after-delete', name });
+      else settled.add(remoteId);
     }
-    return tombstones;
+    return settled;
   }
 
   private async uploadNow(ids: string[]): Promise<void> {
@@ -711,6 +773,14 @@ export class SyncService {
 
   private async writeTombstones(userId: string, tombstones: Tombstone[]): Promise<void> {
     await this.library.setMeta(tombstonesKey(userId), JSON.stringify(tombstones));
+  }
+
+  private async readDeletes(): Promise<LocalDelete[]> {
+    return JSON.parse((await this.library.getMeta(DELETES_KEY)) ?? '[]') as LocalDelete[];
+  }
+
+  private async writeDeletes(deletes: LocalDelete[]): Promise<void> {
+    await this.library.setMeta(DELETES_KEY, JSON.stringify(deletes));
   }
 
   private async accounts(): Promise<string[]> {

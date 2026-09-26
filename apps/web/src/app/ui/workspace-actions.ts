@@ -9,8 +9,9 @@ import {
 } from '@shader-studio/shared/model';
 import { composePass } from '@shader-studio/shared/pass-source';
 import { imagePass } from '@shader-studio/shared/project';
-import type { SyncRemoveMode } from '@shader-studio/desktop-api/contracts';
+import type { SyncRemoveMode, SyncRemoveResult } from '@shader-studio/desktop-api/contracts';
 import { AuthService, type AuthResult } from '../auth/auth.service';
+import { DesktopAccount } from '../desktop/desktop-account';
 import { DesktopPlatform } from '../desktop/desktop-platform';
 import { DesktopSync } from '../desktop/desktop-sync';
 import { DesktopUpdater } from '../desktop/desktop-updater';
@@ -49,6 +50,7 @@ export class WorkspaceActions {
   private readonly openDocs = inject(OpenDocuments);
   private readonly auth = inject(AuthService);
   private readonly sync = inject(DesktopSync);
+  private readonly account = inject(DesktopAccount);
   private transitionInFlight: Promise<boolean> | null = null;
 
   guardedTransition(action: () => void | Promise<void>): Promise<boolean> {
@@ -226,22 +228,39 @@ export class WorkspaceActions {
     if (name) await this.guardedTransition(() => this.store.duplicate(id, name));
   }
 
-  /** A shader linked to the signed-in account also offers "Delete everywhere". */
+  /**
+   * A shader linked to the signed-in account also offers "Delete everywhere",
+   * bound to the account and revision on screen now: if either moved on by the
+   * time it runs, nothing is deleted. Only `not-linked` falls back to the plain
+   * confirm.
+   */
   async deleteShader(id: string, name: string): Promise<void> {
-    let removeRecord: (() => Promise<boolean>) | undefined;
-    if (this.sync.isLinked(id)) {
+    const userId = this.account.state().user?.id;
+    const revision = this.store.shaders().find((shader) => shader.id === id)?.revision;
+    if (this.sync.isLinked(id) && userId && revision !== undefined) {
       const mode = await this.chooseDeleteMode(name);
       if (!mode) return;
-      removeRecord = () => this.sync.remove(id, mode);
-    } else {
-      const confirmed = await this.confirm({
-        title: this.i18n.t('dialog.deleteShader'),
-        message: this.i18n.t('dialog.deleteShaderMessage', { name }),
-        confirmText: this.i18n.t('action.delete'),
-        destructive: true,
+      let result = undefined as SyncRemoveResult | undefined;
+      await this.removeFromStore(id, async () => {
+        result = await this.sync.remove({ id, mode, userId, revision });
+        return result === 'ok';
       });
-      if (!confirmed) return;
+      if (result === 'changed' || result === 'account-changed') {
+        const key = result === 'changed' ? 'sync.deleteChanged' : 'sync.deleteAccountChanged';
+        this.store.notice.set({ text: this.i18n.t(key, { name }), error: true });
+      }
+      if (result !== 'not-linked') return;
     }
+    const confirmed = await this.confirm({
+      title: this.i18n.t('dialog.deleteShader'),
+      message: this.i18n.t('dialog.deleteShaderMessage', { name }),
+      confirmText: this.i18n.t('action.delete'),
+      destructive: true,
+    });
+    if (confirmed) await this.removeFromStore(id);
+  }
+
+  private async removeFromStore(id: string, removeRecord?: () => Promise<boolean>): Promise<void> {
     const remove = () => this.store.remove(id, removeRecord);
     if (id === this.store.selectedId()) await this.guardedTransition(remove);
     else await remove();

@@ -198,6 +198,8 @@
   "sync.retry": "Retry sync",
   "sync.uploadAll": "Upload all to account",
   "sync.progress": "Syncing {done} / {total}",
+  "sync.deleteChanged": "“{name}” changed after you chose to delete it, so nothing was deleted",
+  "sync.deleteAccountChanged": "Another account signed in, so “{name}” was not deleted",
   "sync.restoredAfterDelete": "“{name}” changed online since your last sync, so it was not deleted from your account and is back on this computer",
   "inspector.collapse": "Collapse the inspector (H)",
   "inspector.collapseAria": "Collapse the inspector",

@@ -198,6 +198,8 @@
   "sync.retry": "Réessayer la synchronisation",
   "sync.uploadAll": "Tout envoyer vers le compte",
   "sync.progress": "Synchronisation {done} / {total}",
+  "sync.deleteChanged": "« {name} » a changé après votre demande de suppression : rien n’a été supprimé",
+  "sync.deleteAccountChanged": "Un autre compte s’est connecté : « {name} » n’a pas été supprimé",
   "sync.restoredAfterDelete": "« {name} » a été modifié en ligne depuis la dernière synchronisation : il n’a pas été supprimé de votre compte et revient sur cet ordinateur",
   "inspector.collapse": "Réduire l’inspecteur (H)",
   "inspector.collapseAria": "Réduire l’inspecteur",

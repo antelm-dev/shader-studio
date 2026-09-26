@@ -202,6 +202,8 @@ export const TRANSLATION_KEYS = [
   'sync.retry',
   'sync.progress',
   'sync.restoredAfterDelete',
+  'sync.deleteChanged',
+  'sync.deleteAccountChanged',
   'inspector.collapse',
   'inspector.collapseAria',
   'inspector.resetTooltip',

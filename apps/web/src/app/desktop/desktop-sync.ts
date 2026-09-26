@@ -2,14 +2,15 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type {
   SyncChangedEvent,
-  SyncRemoveMode,
+  SyncRemoveRequest,
+  SyncRemoveResult,
   SyncStatus,
 } from '@shader-studio/desktop-api/contracts';
 import { I18n } from '../i18n/i18n';
 import { ShaderStore } from '../workspace/shader-store';
 
 /** Statuses of a shader linked to the signed-in account. */
-const LINKED = new Set<SyncStatus>(['synced', 'pending', 'conflict-resolved', 'error']);
+const LINKED = new Set<SyncStatus>(['synced', 'pending', 'syncing', 'conflict-resolved', 'error']);
 
 /**
  * The account sync status of each local shader, pushed from the main process.
@@ -43,14 +44,14 @@ export class DesktopSync {
     void bridge.upload([id]).then(() => bridge.run());
   }
 
-  /** Whether deleting it should offer "Delete everywhere". */
+  /** Whether deleting it should offer "Delete everywhere"; main has the last word (`not-linked`). */
   isLinked(id: string): boolean {
     return LINKED.has(this.statuses()[id]);
   }
 
-  /** Deletes a linked shader through sync. False when it is not linked to the signed-in account. */
-  async remove(id: string, mode: SyncRemoveMode): Promise<boolean> {
-    return this.available && window.electron.bridge.sync.remove(id, mode);
+  /** Deletes a linked shader through sync, as the user confirmed it. */
+  async remove(request: SyncRemoveRequest): Promise<SyncRemoveResult> {
+    return this.available ? window.electron.bridge.sync.remove(request) : 'not-linked';
   }
 
   uploadAll(): void {
