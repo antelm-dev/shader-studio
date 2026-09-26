@@ -364,6 +364,35 @@ export function runShaderLibraryConformance(
         expect(await lib.as({ userId: 'user-alice' }).readThumbnail(id)).toBeNull();
       });
 
+      it('never reuses a cleared stamp, even with the clock frozen or set back', async () => {
+        const created = await lib.create({ name: 'Recreated' });
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+          for (const later of ['2030-01-01T00:00:00.000Z', '2029-12-31T23:00:00.000Z']) {
+            vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+            const a = (await lib.setThumbnail(created.id, img('A'))).thumbnail!.updatedAt;
+            await lib.clearThumbnail(created.id);
+            vi.setSystemTime(new Date(later));
+            const b = (await lib.setThumbnail(created.id, img('B'))).thumbnail!.updatedAt;
+            expect(b).not.toBe(a);
+
+            // A delayed conditional write still holding A's stamp.
+            await expect(lib.setThumbnail(created.id, img('late'), a)).rejects.toMatchObject({
+              code: 'conflict',
+            });
+            await expect(lib.clearThumbnail(created.id, a)).rejects.toMatchObject({
+              code: 'conflict',
+            });
+            expect((await lib.readThumbnail(created.id))?.bytes).toEqual(
+              new Uint8Array(Buffer.from('B')),
+            );
+            await lib.clearThumbnail(created.id);
+          }
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
       it('stamps strictly increasing times under a frozen clock', async () => {
         const created = await lib.create({ name: 'Frozen' });
         vi.useFakeTimers({ toFake: ['Date'] });

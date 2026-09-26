@@ -537,6 +537,32 @@ describe('SyncService', () => {
         expect(await statusOf(shader.id)).toBe('synced');
       });
 
+      it('keeps a local thumbnail cleared and recreated in the same millisecond', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+          vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+          const shader = await local.create({ name: 'Recreated' });
+          await local.setThumbnail(shader.id, { ext: 'png', bytes: PNG });
+          await sync.upload([shader.id]);
+          const { remoteId } = (await links())[shader.id];
+          await remote.setThumbnail(remoteId, { ext: 'png', bytes: PNG });
+          during(async () => {
+            await local.clearThumbnail(shader.id);
+            await local.setThumbnail(shader.id, { ext: 'png', bytes: LOCAL_PNG });
+          });
+
+          await sync.run();
+
+          expect((await local.readThumbnail(shader.id))?.bytes).toEqual(LOCAL_PNG);
+          expect(await statusOf(shader.id)).toBe('pending');
+          await sync.run();
+          expect((await remote.readThumbnail(remoteId))?.bytes).toEqual(LOCAL_PNG);
+          expect(await statusOf(shader.id)).toBe('synced');
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
       it('never acknowledges a content save during a content pull', async () => {
         const shader = await local.create({ name: 'Race' });
         await sync.upload([shader.id]);

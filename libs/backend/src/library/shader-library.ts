@@ -77,6 +77,9 @@ import {
   type StoredShader,
 } from '../persistence/shader-repository';
 
+/** The last thumbnail stamp handed out per store, in ms, shared by every scope's library. */
+const lastThumbnailStamps = new WeakMap<ShaderRepository, number>();
+
 /** Bump when the bundled examples change in a way that should reach existing stores. */
 export const SEED_VERSION = 1;
 
@@ -459,8 +462,9 @@ export class ShaderLibrary {
    * With `expectedThumbnail` (the stored `thumbnail.updatedAt`, or `null` for
    * none) the compare and the write are one conditional statement: a thumbnail
    * written meanwhile fails the call with `conflict` and nothing is written.
-   * Every write stamps a `thumbnail.updatedAt` strictly after the previous one,
-   * so a stamp never comes back and a stale expectation can never match again.
+   * Every write stamps a `thumbnail.updatedAt` strictly after any this process
+   * has written or cleared on this store (see {@link stampThumbnail}), so a
+   * stamp never comes back and a stale expectation can never match again.
    */
   async setThumbnail(
     id: string,
@@ -491,7 +495,7 @@ export class ShaderLibrary {
         extension: ext,
         width: null,
         height: null,
-        updatedAt: nextStamp(expectedThumbnail ?? previous?.updatedAt),
+        updatedAt: this.stampThumbnail(expectedThumbnail ?? previous?.updatedAt),
         data: input.bytes,
       };
       if (expectedThumbnail === undefined) await tx.putAsset(validId, asset);
@@ -511,6 +515,9 @@ export class ShaderLibrary {
     return this.repo.transaction(async (tx) => {
       const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+      // A later thumbnail must never reuse the stamp of the one going now.
+      const cleared = stored.assets.find((asset) => asset.key === THUMBNAIL_ASSET_KEY);
+      this.stampThumbnail(cleared?.updatedAt);
       if (expectedThumbnail === undefined) await tx.deleteAsset(validId, THUMBNAIL_ASSET_KEY);
       else if (expectedThumbnail === null) {
         // Nothing to delete: only a thumbnail present now breaks the expectation.
@@ -522,6 +529,25 @@ export class ShaderLibrary {
       }
       return this.mapRecord(await this.reload(tx, validId));
     });
+  }
+
+  /**
+   * A thumbnail stamp strictly after `previous` and after every stamp this
+   * process handed out or saw cleared on this store, whatever the clock says
+   * (same millisecond, clock set back). The conditional writes' only caller is
+   * the desktop sync, comparing a stamp it read from this same store in this
+   * same process, so no in-flight expectation can ever match a newer thumbnail
+   * — clears included. The REST API never takes an expectation from clients.
+   */
+  // ponytail: per-process clock; unique stamps across processes need a persisted thumbnail version column.
+  private stampThumbnail(previous?: string | null): string {
+    const stamp = Math.max(
+      Date.now(),
+      (lastThumbnailStamps.get(this.repo) ?? 0) + 1,
+      previous ? Date.parse(previous) + 1 || 0 : 0,
+    );
+    lastThumbnailStamps.set(this.repo, stamp);
+    return new Date(stamp).toISOString();
   }
 
   /** The shader as this transaction just wrote it. */
@@ -1109,12 +1135,6 @@ function presetToRow(preset: Preset): PresetRow {
 
 function cloneDefaultChannels(): TextureChannels {
   return DEFAULT_CHANNELS.map((channel) => ({ ...channel })) as unknown as TextureChannels;
-}
-
-/** Now, or 1 ms after `previous` if the clock has not moved past it: stamps only ever grow. */
-function nextStamp(previous: string | undefined): string {
-  const after = previous === undefined ? 0 : Date.parse(previous) + 1;
-  return new Date(Math.max(Date.now(), after || 0)).toISOString();
 }
 
 function thumbnailConflict(id: string): StorageError {
