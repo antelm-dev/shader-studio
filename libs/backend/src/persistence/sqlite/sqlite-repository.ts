@@ -324,11 +324,24 @@ class SqliteTx implements ShaderTx {
     return Number(after['revision']);
   }
 
-  async deleteShader(scope: UserScope, id: string): Promise<boolean> {
+  async deleteShader(scope: UserScope, id: string, expectedRevision?: number): Promise<boolean> {
+    const expected = expectedRevision ?? null;
     const result = this.db
-      .prepare('DELETE FROM shaders WHERE id = ? AND owner_user_id = ?')
-      .run(id, scope.userId);
-    return Number(result.changes) > 0;
+      .prepare(
+        'DELETE FROM shaders WHERE id = ? AND owner_user_id = ? AND (? IS NULL OR revision = ?)',
+      )
+      .run(id, scope.userId, expected, expected);
+    if (Number(result.changes) > 0) return true;
+    if (expectedRevision === undefined) return false;
+
+    const existing = this.db
+      .prepare('SELECT revision FROM shaders WHERE id = ? AND owner_user_id = ?')
+      .get(id, scope.userId);
+    if (!existing) return false;
+    throw new StorageError(
+      'conflict',
+      `Shader "${id}" was modified by another write (expected revision ${expectedRevision})`,
+    );
   }
 
   async replacePresets(shaderId: string, presets: PresetRow[]): Promise<void> {

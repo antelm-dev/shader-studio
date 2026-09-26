@@ -461,6 +461,47 @@ export function runShaderLibraryConformance(
       await expect(lib.update(created.id, { name: 'C' })).resolves.toMatchObject({ name: 'C' });
     });
 
+    describe('remove under expectedRevision', () => {
+      it('deletes nothing on a stale revision and deletes on a matching one', async () => {
+        const { id } = await lib.create({ name: 'Doomed' });
+        await lib.update(id, { name: 'Edited' });
+
+        await expect(lib.remove(id, 1)).rejects.toMatchObject({ code: 'conflict' });
+        expect((await lib.read(id)).name).toBe('Edited');
+
+        await lib.remove(id, 2);
+        await expect(lib.read(id)).rejects.toMatchObject({ code: 'not_found' });
+        await expect(lib.remove(id, 2)).rejects.toMatchObject({ code: 'not_found' });
+      });
+
+      it('rejects an invalid revision and keeps the unconditional delete', async () => {
+        const { id } = await lib.create({ name: 'Plain' });
+        await expect(lib.remove(id, 0)).rejects.toMatchObject({ code: 'invalid' });
+        await lib.update(id, { name: 'Edited' });
+        await lib.remove(id);
+        expect(await lib.list()).toEqual([]);
+      });
+
+      it('404s a foreign shader and refuses a template', async () => {
+        const alice = lib.as({ userId: 'user-alice' });
+        const { id } = await alice.create({ name: 'Hers' });
+        await expect(lib.as({ userId: 'user-bob' }).remove(id, 1)).rejects.toMatchObject({
+          code: 'not_found',
+        });
+        expect((await alice.read(id)).name).toBe('Hers');
+
+        await lib
+          .as({ userId: 'system' })
+          .installExamples(
+            { listIds: async () => ['example'], exportOne: async () => payloadOf('example', 'Ex') },
+            true,
+            'template',
+          );
+        await expect(alice.remove('example', 1)).rejects.toMatchObject({ code: 'not_found' });
+        expect((await alice.read('example')).name).toBe('Ex');
+      });
+    });
+
     it('bumps the revision on every edit and reports it in the summary', async () => {
       const { id } = await lib.create({ name: 'Counted' });
       const revision = async (): Promise<number> => (await lib.read(id)).revision;

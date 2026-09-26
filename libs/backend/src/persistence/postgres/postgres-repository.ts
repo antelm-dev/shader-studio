@@ -358,12 +358,24 @@ class PgOps implements ShaderTx {
     return updated.revision;
   }
 
-  async deleteShader(scope: UserScope, id: string): Promise<boolean> {
-    const rows = await this.db
-      .delete(shaders)
-      .where(and(eq(shaders.id, id), eq(shaders.ownerUserId, scope.userId)))
-      .returning({ id: shaders.id });
-    return rows.length > 0;
+  async deleteShader(scope: UserScope, id: string, expectedRevision?: number): Promise<boolean> {
+    const owned = and(eq(shaders.id, id), eq(shaders.ownerUserId, scope.userId));
+    const predicate =
+      expectedRevision === undefined ? owned : and(owned, eq(shaders.revision, expectedRevision));
+    const rows = await this.db.delete(shaders).where(predicate).returning({ id: shaders.id });
+    if (rows.length > 0) return true;
+    if (expectedRevision === undefined) return false;
+
+    const [existing] = await this.db
+      .select({ revision: shaders.revision })
+      .from(shaders)
+      .where(owned)
+      .limit(1);
+    if (!existing) return false;
+    throw new StorageError(
+      'conflict',
+      `Shader "${id}" was modified by another write (expected revision ${expectedRevision})`,
+    );
   }
 
   async replacePresets(shaderId: string, rows: PresetRow[]): Promise<void> {
