@@ -352,6 +352,8 @@ prepare({
       saveState();
       pushWindowState();
     });
+    // Picks up the account's changes when the user comes back to the app.
+    win.on('focus', () => sync.focused());
     win.on('enter-full-screen', pushWindowState);
     win.on('leave-full-screen', pushWindowState);
 
