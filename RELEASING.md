@@ -4,6 +4,18 @@ Shader Studio has three Windows delivery paths. CI previews are temporary test
 builds, beta releases are opt-in Electron updates, and stable releases are
 versioned from `master`.
 
+Before promoting a commit, complete [the release-readiness checklist](docs/release-readiness.md).
+Record which checks passed and which still require manual validation in the release PR.
+
+## Desktop account configuration
+
+CI previews and the stable/beta workflows currently do not set
+`SHADER_STUDIO_ACCOUNT_URL`. Their desktop builds therefore have accounts
+disabled. To ship an account-enabled build, configure that origin in the build
+environment before packaging and validate the installed browser sign-in round
+trip. This is a build-time setting, not an installer preference; see
+[desktop accounts and uploads](README.md#desktop-accounts-and-uploads).
+
 ## Repository setup
 
 In **Settings → Actions → General**, enable **Allow GitHub Actions to create and
@@ -31,7 +43,7 @@ request from Conventional Commits:
 - `feat:` produces a minor release.
 - `feat!:` or a `BREAKING CHANGE:` footer produces a major release.
 
-The first release starts at `1.0.0`. Merge the generated release pull request
+Merge the generated release pull request
 when the accumulated changes are ready. Release Please updates `CHANGELOG.md`
 and `package.json`, creates the `v<version>` tag and a draft GitHub Release.
 The Windows job attaches the NSIS installer, portable executable, blockmap, and

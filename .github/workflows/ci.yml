@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, master, preview]
+    branches: [main, master, develop, preview]
   pull_request:
   workflow_dispatch:
 
@@ -58,6 +58,9 @@ jobs:
       - name: Build
         # Desktop packaging has its own Windows job below.
         run: pnpm nx affected -t build --exclude shader-studio,@shader-studio/desktop
+
+      - name: Production SSR smoke
+        run: pnpm build && pnpm smoke:ssr
 
   smoke:
     name: UI smoke

@@ -28,18 +28,18 @@ COPY . .
 
 # The web declarations consume the generated, typed Electron IPC contract even
 # though the runtime image does not contain Electron. Generate it in the build
-# stage, then produce the SSR bundle (which keeps `pg` external; see
+# stage, then produce the SSR bundle (which keeps `pg` and Swagger external; see
 # apps/web/angular.json) and the standalone migrate-files CLI.
 RUN pnpm gen:ipc \
     && pnpm build \
     && pnpm --filter @shader-studio/server build:cli
 
-# The runtime needs the PostgreSQL driver at runtime (it is deliberately not
-# bundled into the SSR output). Install just `pg` and its deps into an isolated
-# tree so the runtime image stays minimal.
+# The SSR output keeps PostgreSQL and Swagger external. Install their runtime
+# dependencies into an isolated tree; Swagger must remain external because its
+# CommonJS internals are not compatible with the bundled ESM server.
 RUN mkdir -p /runtime-deps && cd /runtime-deps \
     && npm init -y >/dev/null 2>&1 \
-    && npm install --omit=dev --no-package-lock pg@8.22.0
+    && npm install --omit=dev --no-package-lock pg@8.22.0 @nestjs/swagger@11.4.6
 
 # ---- runtime ----------------------------------------------------------------
 FROM node:24-alpine AS runtime
@@ -51,8 +51,8 @@ ENV NODE_ENV=production \
     SHADER_DATA_DIR=/data \
     SHADER_EXAMPLES_DIR=/app/examples
 
-# SSR bundle + examples + i18n catalogs + the CLI, plus the pg driver the
-# server imports at runtime. Everything else (Express, Angular) is inlined
+# SSR bundle + examples + i18n catalogs + the CLI, plus the PostgreSQL and
+# Swagger runtime dependencies. Express and Angular are inlined
 # into the bundle.
 COPY --from=build /app/dist/shader-studio ./dist/shader-studio
 COPY --from=build /app/examples ./examples
@@ -68,6 +68,6 @@ USER node
 EXPOSE 4000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 4000) + '/api/shaders').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+    CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 4000) + '/api/health', { signal: AbortSignal.timeout(4000) }).then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 CMD ["node", "dist/shader-studio/server/server.mjs"]

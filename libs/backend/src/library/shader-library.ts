@@ -128,6 +128,11 @@ export class ShaderLibrary {
     return this.repo.close();
   }
 
+  /** Checks database access without reading or returning any user's library. */
+  async checkHealth(): Promise<void> {
+    await this.repo.getMeta('schema_version');
+  }
+
   // --- Reads ---------------------------------------------------------------
 
   async list(): Promise<ShaderSummary[]> {

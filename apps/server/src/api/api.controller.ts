@@ -51,6 +51,25 @@ export class ApiController {
     return this.storage.as({ userId: principal.userId });
   }
 
+  @ApiTags('health')
+  @ApiOperation({ summary: 'Check API and database readiness' })
+  @ApiErrors(503)
+  @Public()
+  @Get('health')
+  @Header('Cache-Control', 'no-store')
+  async health(@Res() response: Response): Promise<void> {
+    try {
+      await this.storage.checkHealth();
+      response.json({ status: 'ok' });
+    } catch (error) {
+      this.logger.error(
+        'database readiness check failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+      response.status(503).json({ error: { code: 'internal', message: 'Service unavailable' } });
+    }
+  }
+
   @ApiTags('i18n')
   @ApiOperation({
     summary: 'Read a translation catalog',

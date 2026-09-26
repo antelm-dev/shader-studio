@@ -12,7 +12,7 @@
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LOCAL_SCOPE, ShaderLibrary } from '@shader-studio/backend/library';
 import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
@@ -27,6 +27,7 @@ import { createNestApi, type NestApi } from './bootstrap';
 const PASSWORD = 'correct horse battery staple';
 
 let library: ShaderLibrary;
+let repo: SqliteRepository;
 let server: Server;
 let base: string;
 let nestApi: NestApi;
@@ -61,7 +62,7 @@ let alice: TestUser;
 let bob: TestUser;
 
 beforeAll(async () => {
-  const repo = new SqliteRepository({ location: ':memory:' });
+  repo = new SqliteRepository({ location: ':memory:' });
   library = new ShaderLibrary(repo, LOCAL_SCOPE);
   await library.init();
 
@@ -105,6 +106,33 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await nestApi.app.close();
   await library.close();
+});
+
+describe('readiness', () => {
+  it('checks the database without a session or exposing library data', async () => {
+    const response = await fetch(base + '/api/health');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({ status: 'ok' });
+    expect((await fetch(base + '/api/shaders')).status).toBe(401);
+  });
+
+  it('returns a sanitized 503 on database failure and recovers on the next probe', async () => {
+    const probe = vi
+      .spyOn(repo, 'getMeta')
+      .mockRejectedValueOnce(new Error('private database details'));
+    try {
+      const response = await fetch(base + '/api/health');
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(await response.json()).toEqual({
+        error: { code: 'internal', message: 'Service unavailable' },
+      });
+      expect((await fetch(base + '/api/health')).status).toBe(200);
+    } finally {
+      probe.mockRestore();
+    }
+  });
 });
 
 // --- helpers ---------------------------------------------------------------
