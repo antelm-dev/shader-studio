@@ -133,7 +133,7 @@ export class PostgresRepository implements ShaderRepository {
 
   async transaction<T>(work: (tx: ShaderTx) => Promise<T>): Promise<T> {
     try {
-      return await this.database().transaction((tx) => work(new PgOps(tx)));
+      return await this.database().transaction((tx) => work(new PgOps(tx, true)));
     } catch (error) {
       throw asStorageError(error, 'Database transaction failed');
     }
@@ -165,8 +165,18 @@ export class PostgresRepository implements ShaderRepository {
   }
 }
 
+/**
+ * Lock order, in a write transaction: the shader row first (`FOR UPDATE`, by
+ * `loadShader` or `deleteShader`, the first statement of every such
+ * transaction), then its presets and assets. One order, so a child-row write
+ * and a delete's cascade never deadlock, and a conditional delete never sees
+ * a thumbnail that is about to change.
+ */
 class PgOps implements ShaderTx {
-  constructor(private readonly db: PostgresExecutor) {}
+  constructor(
+    private readonly db: PostgresExecutor,
+    private readonly inTransaction = false,
+  ) {}
 
   async listShaders(scope: UserScope): Promise<ShaderSummaryRow[]> {
     const thumbnails = alias(assets, 'thumbnail_asset');
@@ -229,11 +239,12 @@ class PgOps implements ShaderTx {
 
   async loadShader(scope: UserScope, id: string): Promise<StoredShader | null> {
     // Reads admit the shared templates; writes never do — see updateShader.
-    const [row] = await this.db
+    const query = this.db
       .select()
       .from(shaders)
       .where(and(eq(shaders.id, id), readable(scope)))
       .limit(1);
+    const [row] = this.inTransaction ? await query.for('update') : await query;
     if (!row) return null;
 
     const presetRows = await this.db
@@ -360,11 +371,9 @@ class PgOps implements ShaderTx {
   }
 
   /**
-   * The conditional form serializes on the shader row: it locks it, then reads
-   * the revision and thumbnail in a new statement (a fresh snapshot under READ
-   * COMMITTED), then deletes. Thumbnail writes lock the same row first
-   * (`lockForThumbnail`), so neither can slip in between the check and the
-   * delete's cascade.
+   * Locks the shader row, then, when conditional, reads the revision and
+   * thumbnail in a new statement (a fresh snapshot under READ COMMITTED), then
+   * deletes. Every child-row write holds the same lock first (see `PgOps`).
    */
   async deleteShader(
     scope: UserScope,
@@ -373,17 +382,16 @@ class PgOps implements ShaderTx {
     expectedThumbnail?: string | null,
   ): Promise<boolean> {
     const owned = and(eq(shaders.id, id), eq(shaders.ownerUserId, scope.userId));
-    if (expectedRevision === undefined && expectedThumbnail === undefined) {
-      const rows = await this.db.delete(shaders).where(owned).returning({ id: shaders.id });
-      return rows.length > 0;
-    }
-
     const [locked] = await this.db
       .select({ id: shaders.id })
       .from(shaders)
       .where(owned)
       .for('update');
     if (!locked) return false;
+    if (expectedRevision === undefined && expectedThumbnail === undefined) {
+      await this.db.delete(shaders).where(owned);
+      return true;
+    }
     const [current] = await this.db
       .select({
         revision: shaders.revision,
@@ -402,16 +410,6 @@ class PgOps implements ShaderTx {
     return true;
   }
 
-  /** A thumbnail write takes the shader row lock first: see `deleteShader`. */
-  private async lockForThumbnail(shaderId: string, key: AssetKey): Promise<void> {
-    if (key !== THUMBNAIL_ASSET_KEY) return;
-    await this.db
-      .select({ id: shaders.id })
-      .from(shaders)
-      .where(eq(shaders.id, shaderId))
-      .for('update');
-  }
-
   async replacePresets(shaderId: string, rows: PresetRow[]): Promise<void> {
     await this.db.delete(presets).where(eq(presets.shaderId, shaderId));
     if (rows.length === 0) return;
@@ -428,7 +426,6 @@ class PgOps implements ShaderTx {
   }
 
   async putAsset(shaderId: string, asset: StoredAsset): Promise<void> {
-    await this.lockForThumbnail(shaderId, asset.key);
     await this.db
       .insert(assets)
       .values({
@@ -453,7 +450,6 @@ class PgOps implements ShaderTx {
   }
 
   async deleteAsset(shaderId: string, key: AssetKey): Promise<void> {
-    await this.lockForThumbnail(shaderId, key);
     await this.db
       .delete(assets)
       .where(and(eq(assets.shaderId, shaderId), eq(assets.assetKey, key)));
@@ -464,7 +460,6 @@ class PgOps implements ShaderTx {
     asset: StoredAsset,
     expectedUpdatedAt: string | null,
   ): Promise<boolean> {
-    await this.lockForThumbnail(shaderId, asset.key);
     const values = {
       extension: asset.extension,
       width: asset.width,
@@ -498,7 +493,6 @@ class PgOps implements ShaderTx {
     key: AssetKey,
     expectedUpdatedAt: string,
   ): Promise<boolean> {
-    await this.lockForThumbnail(shaderId, key);
     const rows = await this.db
       .delete(assets)
       .where(

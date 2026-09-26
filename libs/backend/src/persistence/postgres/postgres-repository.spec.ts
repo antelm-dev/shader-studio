@@ -88,5 +88,36 @@ if (!url) {
         await lib.close();
       }
     });
+
+    it('never deadlocks a preset delete against a conditional delete', async () => {
+      await newHarness().cleanup();
+      const lib = new ShaderLibrary(new PostgresRepository({ connectionString: url }), LOCAL_SCOPE);
+      await lib.init();
+      try {
+        for (let round = 0; round < 20; round++) {
+          const { id } = await lib.create({ name: `Race ${round}` });
+          const preset = await lib.savePreset(id, { name: 'Only', values: {} });
+          const { revision } = await lib.read(id);
+
+          const results = await Promise.allSettled([
+            lib.deletePreset(id, preset.id),
+            lib.remove(id, revision),
+          ]);
+
+          for (const result of results) {
+            if (result.status === 'rejected') {
+              expect(['not_found', 'conflict']).toContain(
+                (result.reason as { code?: string }).code,
+              );
+            }
+          }
+          // Exactly one of them won: the shader is gone, or the preset is.
+          const fulfilled = results.filter((result) => result.status === 'fulfilled');
+          expect(fulfilled).toHaveLength(1);
+        }
+      } finally {
+        await lib.close();
+      }
+    });
   });
 }
