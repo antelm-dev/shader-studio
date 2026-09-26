@@ -991,6 +991,35 @@ describe('SyncService', () => {
       expect(await tombstones('user-b')).toEqual([]);
     });
 
+    it.each(['getMeta', 'read'] as const)(
+      'deletes nothing when another account signs in during its own %s',
+      async (step) => {
+        const { id } = await linked('Mid-read');
+        const confirmed = await request(id, 'everywhere');
+        const before = await links();
+        let switched = false;
+        const original = local[step].bind(local) as (arg: string) => Promise<unknown>;
+        vi.spyOn(local, step).mockImplementation((async (arg: string) => {
+          const value = await original(arg);
+          const ours = step === 'read' ? arg === id : arg === 'sync_links:user-a';
+          if (ours && !switched) {
+            switched = true;
+            account.set(userB);
+          }
+          return value;
+        }) as never);
+
+        expect(await sync.remove(confirmed)).toBe('account-changed');
+        vi.restoreAllMocks();
+
+        expect(switched).toBe(true);
+        expect((await local.read(id)).name).toBe('Mid-read');
+        expect(await links()).toEqual(before);
+        expect(await intents()).toEqual([]);
+        expect(await tombstones()).toEqual([]);
+      },
+    );
+
     it('deletes nothing when another account signed in while the delete waited', async () => {
       const { id, remoteId } = await linked('Switched');
       await remote.update(remoteId, { fragment: 'void main() { /* web */ }' });

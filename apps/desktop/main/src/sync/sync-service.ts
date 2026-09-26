@@ -344,10 +344,7 @@ export class SyncService {
    */
   private async removeNow(request: SyncRemoveRequest): Promise<SyncRemoveResult> {
     const { id, mode, userId, revision } = request;
-    // Re-signing in is not needed: the delete is local, the tombstone waits for the next run.
-    const state = this.account.state();
-    const current = state.status === 'signed-in' || state.status === 'reauth-required';
-    if (!current || state.user?.id !== userId) return 'account-changed';
+    if (!this.stillAccount(userId)) return 'account-changed';
     const link = (await this.readLinks(userId))[id];
     if (!link) return 'not-linked';
     const record = await this.library.read(id);
@@ -365,6 +362,8 @@ export class SyncService {
       name: record.name,
     };
     const deletes = await this.readDeletes();
+    // Checked again after the last await: a switch meanwhile commits nothing.
+    if (!this.stillAccount(userId)) return 'account-changed';
     await this.writeDeletes([...deletes, intent]);
     try {
       await this.library.remove(id, revision);
@@ -378,6 +377,13 @@ export class SyncService {
     if (mode === 'everywhere') void this.run();
     else this.publish();
     return 'ok';
+  }
+
+  /** Re-signing in is not needed: the delete is local, the tombstone waits for the next run. */
+  private stillAccount(userId: string): boolean {
+    const state = this.account.state();
+    const current = state.status === 'signed-in' || state.status === 'reauth-required';
+    return current && state.user?.id === userId;
   }
 
   /**
