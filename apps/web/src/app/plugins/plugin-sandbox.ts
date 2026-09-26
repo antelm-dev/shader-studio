@@ -10,11 +10,13 @@
  * (`frame-ancestors 'none'`) and a srcdoc is never fetched. The host talks to
  * the Worker over a MessagePort it created, which no other frame can post into.
  *
- * Termination removes the frame; a dedicated Worker dies with its owner
- * document, so a plugin stuck in a loop cannot keep running.
+ * Termination asks the frame's bootstrap to call `worker.terminate()`, which
+ * aborts a plugin stuck in a loop, and removes the frame once it confirms.
  */
 
 const BOOTSTRAP_PATH = 'plugin-sandbox.js';
+/** A frame that does not confirm has no running bootstrap, so no Worker to stop. */
+const STOP_ACK_TIMEOUT_MS = 1_000;
 
 export interface PluginSandboxOptions {
   /** Where to mount the hidden frame. Defaults to `document.body`. */
@@ -35,11 +37,13 @@ export class PluginSandbox {
   private readonly pending = new Map<number, Pending>();
   private nextId = 0;
   private terminated: Error | null = null;
+  private stopped: Promise<void> = Promise.resolve();
+  private onStopped: (() => void) | null = null;
+  private failStart: ((error: Error) => void) | null = null;
 
   private constructor(
     private readonly frame: HTMLIFrameElement,
     private readonly port: MessagePort,
-    private readonly onFrameMessage: (event: MessageEvent) => void,
   ) {}
 
   static start(code: string, options: PluginSandboxOptions = {}): Promise<PluginSandbox> {
@@ -53,21 +57,18 @@ export class PluginSandbox {
       `<script src="${bootstrap}"></script>`;
 
     const channel = new MessageChannel();
+    const sandbox = new PluginSandbox(frame, channel.port1);
     return new Promise<PluginSandbox>((resolve, reject) => {
-      const sandbox = new PluginSandbox(frame, channel.port1, (event) => {
-        if (event.source !== frame.contentWindow || event.data?.type !== 'sandbox-error') return;
-        const message = `Plugin failed: ${String(event.data.message)}`;
-        reject(new Error(message)); // no-op once started
-        sandbox.terminate(message);
-      });
+      sandbox.failStart = reject;
       const timer = setTimeout(() => {
-        sandbox.terminate('Plugin did not start in time');
         reject(new Error('Plugin did not start in time'));
+        void sandbox.terminate('Plugin did not start in time');
       }, options.readyTimeoutMs ?? 5_000);
 
       channel.port1.onmessage = ({ data }) => {
         if (data?.type === 'ready') {
           clearTimeout(timer);
+          sandbox.failStart = null;
           resolve(sandbox);
         } else if (data?.type === 'event') {
           options.onEvent?.(data.data);
@@ -91,7 +92,7 @@ export class PluginSandbox {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
-        () => this.terminate(`Plugin did not answer ${method} in time`),
+        () => void this.terminate(`Plugin did not answer ${method} in time`),
         timeoutMs,
       );
       this.pending.set(id, { resolve, reject, timer });
@@ -99,18 +100,32 @@ export class PluginSandbox {
     });
   }
 
-  /** Stop the plugin and reject everything it still owes. Safe to call twice. */
-  terminate(reason = 'Plugin was stopped'): void {
-    if (this.terminated) return;
+  /**
+   * Stop the plugin and reject everything it still owes. Calls are refused
+   * immediately; the returned promise settles once the Worker has been
+   * terminated and the frame removed. Safe to call twice.
+   */
+  terminate(reason = 'Plugin was stopped'): Promise<void> {
+    if (this.terminated) return this.stopped;
     this.terminated = new Error(reason);
-    removeEventListener('message', this.onFrameMessage);
     this.port.close();
-    this.frame.remove();
     for (const { reject, timer } of this.pending.values()) {
       clearTimeout(timer);
       reject(this.terminated);
     }
     this.pending.clear();
+    this.stopped = new Promise<void>((resolve) => {
+      const fallback = setTimeout(() => this.onStopped?.(), STOP_ACK_TIMEOUT_MS);
+      this.onStopped = () => {
+        this.onStopped = null;
+        clearTimeout(fallback);
+        removeEventListener('message', this.onFrameMessage);
+        this.frame.remove();
+        resolve();
+      };
+      this.frame.contentWindow?.postMessage({ type: 'stop' }, '*');
+    });
+    return this.stopped;
   }
 
   get running(): boolean {
@@ -121,6 +136,17 @@ export class PluginSandbox {
   get element(): HTMLIFrameElement {
     return this.frame;
   }
+
+  private readonly onFrameMessage = (event: MessageEvent): void => {
+    if (event.source !== this.frame.contentWindow) return;
+    if (event.data?.type === 'stopped') {
+      this.onStopped?.();
+    } else if (event.data?.type === 'sandbox-error') {
+      const error = new Error(`Plugin failed: ${String(event.data.message)}`);
+      this.failStart?.(error);
+      void this.terminate(error.message);
+    }
+  };
 
   private settle(data: { id?: unknown; result?: unknown; error?: unknown }): void {
     const call = typeof data.id === 'number' ? this.pending.get(data.id) : undefined;

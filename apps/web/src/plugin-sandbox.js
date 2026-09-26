@@ -30,17 +30,27 @@
 `;
 
   const fail = (message) => parent.postMessage({ type: 'sandbox-error', message }, '*');
+  let worker;
+  let stopped = false;
 
-  addEventListener('message', function start(event) {
-    if (event.source !== parent || event.data?.type !== 'start' || !event.ports[0]) return;
-    removeEventListener('message', start);
-    try {
-      const blob = new Blob([PRELUDE, event.data.code], { type: 'text/javascript' });
-      const worker = new Worker(URL.createObjectURL(blob));
-      worker.onerror = (error) => fail(error.message || 'Plugin worker failed to load');
-      worker.postMessage(null, [event.ports[0]]);
-    } catch (error) {
-      fail(String(error?.message ?? error));
+  addEventListener('message', (event) => {
+    if (event.source !== parent) return;
+    const { type } = event.data ?? {};
+    if (type === 'stop') {
+      // Abort the plugin's script outright; removing the frame alone only
+      // orphans the Worker. Acknowledge so the host knows it may remove us.
+      stopped = true;
+      worker?.terminate();
+      parent.postMessage({ type: 'stopped' }, '*');
+    } else if (type === 'start' && !worker && !stopped && event.ports[0]) {
+      try {
+        const blob = new Blob([PRELUDE, event.data.code], { type: 'text/javascript' });
+        worker = new Worker(URL.createObjectURL(blob));
+        worker.onerror = (error) => fail(error.message || 'Plugin worker failed to load');
+        worker.postMessage(null, [event.ports[0]]);
+      } catch (error) {
+        fail(String(error?.message ?? error));
+      }
     }
   });
 })();
