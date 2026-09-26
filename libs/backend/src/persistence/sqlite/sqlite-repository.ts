@@ -332,7 +332,9 @@ class SqliteTx implements ShaderTx {
     expectedThumbnail?: string | null,
   ): Promise<boolean> {
     const expected = expectedRevision ?? null;
-    // '' stands for "no thumbnail": a stored `updated_at` is never empty.
+    // '' stands for "no thumbnail": a stored `updated_at` is never empty. One
+    // statement is enough: SQLite runs one write transaction at a time, so no
+    // thumbnail write can commit between this check and the cascade.
     const thumbnail = expectedThumbnail === undefined ? null : (expectedThumbnail ?? '');
     const result = this.db
       .prepare(

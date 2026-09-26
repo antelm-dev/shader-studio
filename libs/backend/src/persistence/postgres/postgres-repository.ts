@@ -359,6 +359,13 @@ class PgOps implements ShaderTx {
     return updated.revision;
   }
 
+  /**
+   * The conditional form serializes on the shader row: it locks it, then reads
+   * the revision and thumbnail in a new statement (a fresh snapshot under READ
+   * COMMITTED), then deletes. Thumbnail writes lock the same row first
+   * (`lockForThumbnail`), so neither can slip in between the check and the
+   * delete's cascade.
+   */
   async deleteShader(
     scope: UserScope,
     id: string,
@@ -366,25 +373,43 @@ class PgOps implements ShaderTx {
     expectedThumbnail?: string | null,
   ): Promise<boolean> {
     const owned = and(eq(shaders.id, id), eq(shaders.ownerUserId, scope.userId));
-    // '' stands for "no thumbnail": a stored `updated_at` is never empty.
-    const thumbnail = sql`COALESCE((SELECT ${assets.updatedAt} FROM ${assets}
-      WHERE ${assets.shaderId} = ${shaders.id} AND ${assets.assetKey} = ${THUMBNAIL_ASSET_KEY}), '')`;
-    const predicate = and(
-      owned,
-      expectedRevision === undefined ? undefined : eq(shaders.revision, expectedRevision),
-      expectedThumbnail === undefined ? undefined : sql`${thumbnail} = ${expectedThumbnail ?? ''}`,
-    );
-    const rows = await this.db.delete(shaders).where(predicate).returning({ id: shaders.id });
-    if (rows.length > 0) return true;
-    if (expectedRevision === undefined && expectedThumbnail === undefined) return false;
+    if (expectedRevision === undefined && expectedThumbnail === undefined) {
+      const rows = await this.db.delete(shaders).where(owned).returning({ id: shaders.id });
+      return rows.length > 0;
+    }
 
-    const [existing] = await this.db
-      .select({ revision: shaders.revision })
+    const [locked] = await this.db
+      .select({ id: shaders.id })
       .from(shaders)
       .where(owned)
-      .limit(1);
-    if (!existing) return false;
-    throw new StorageError('conflict', `Shader "${id}" was modified by another write`);
+      .for('update');
+    if (!locked) return false;
+    const [current] = await this.db
+      .select({
+        revision: shaders.revision,
+        thumbnail: sql<string | null>`(SELECT ${assets.updatedAt} FROM ${assets}
+          WHERE ${assets.shaderId} = ${shaders.id} AND ${assets.assetKey} = ${THUMBNAIL_ASSET_KEY})`,
+      })
+      .from(shaders)
+      .where(owned);
+    const matches =
+      (expectedRevision === undefined || current.revision === expectedRevision) &&
+      (expectedThumbnail === undefined || current.thumbnail === expectedThumbnail);
+    if (!matches) {
+      throw new StorageError('conflict', `Shader "${id}" was modified by another write`);
+    }
+    await this.db.delete(shaders).where(owned);
+    return true;
+  }
+
+  /** A thumbnail write takes the shader row lock first: see `deleteShader`. */
+  private async lockForThumbnail(shaderId: string, key: AssetKey): Promise<void> {
+    if (key !== THUMBNAIL_ASSET_KEY) return;
+    await this.db
+      .select({ id: shaders.id })
+      .from(shaders)
+      .where(eq(shaders.id, shaderId))
+      .for('update');
   }
 
   async replacePresets(shaderId: string, rows: PresetRow[]): Promise<void> {
@@ -403,6 +428,7 @@ class PgOps implements ShaderTx {
   }
 
   async putAsset(shaderId: string, asset: StoredAsset): Promise<void> {
+    await this.lockForThumbnail(shaderId, asset.key);
     await this.db
       .insert(assets)
       .values({
@@ -427,6 +453,7 @@ class PgOps implements ShaderTx {
   }
 
   async deleteAsset(shaderId: string, key: AssetKey): Promise<void> {
+    await this.lockForThumbnail(shaderId, key);
     await this.db
       .delete(assets)
       .where(and(eq(assets.shaderId, shaderId), eq(assets.assetKey, key)));
@@ -437,6 +464,7 @@ class PgOps implements ShaderTx {
     asset: StoredAsset,
     expectedUpdatedAt: string | null,
   ): Promise<boolean> {
+    await this.lockForThumbnail(shaderId, asset.key);
     const values = {
       extension: asset.extension,
       width: asset.width,
@@ -470,6 +498,7 @@ class PgOps implements ShaderTx {
     key: AssetKey,
     expectedUpdatedAt: string,
   ): Promise<boolean> {
+    await this.lockForThumbnail(shaderId, key);
     const rows = await this.db
       .delete(assets)
       .where(

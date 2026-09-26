@@ -1,8 +1,10 @@
 import { Pool } from 'pg';
-import { afterAll, describe, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import { runShaderLibraryConformance, type ConformanceHarness } from '../../library/conformance';
+import { ShaderLibrary } from '../../library/shader-library';
 import type { AssetKey } from '../shader-repository';
+import { LOCAL_SCOPE } from '../user-scope';
 import { PostgresRepository } from './postgres-repository';
 
 /**
@@ -45,4 +47,46 @@ if (!url) {
   });
 
   runShaderLibraryConformance('postgres', newHarness);
+
+  describe('conditional delete vs a concurrent thumbnail write (postgres)', () => {
+    it('conflicts instead of deleting over a thumbnail committed meanwhile', async () => {
+      await newHarness().cleanup();
+      const repo = new PostgresRepository({ connectionString: url });
+      const lib = new ShaderLibrary(repo, LOCAL_SCOPE);
+      await lib.init();
+      try {
+        const { id } = await lib.create({ name: 'Contended' });
+        const bytes = new Uint8Array([1]);
+        const old = (await lib.setThumbnail(id, { ext: 'png', bytes })).thumbnail!.updatedAt;
+        const newer = '2999-01-01T00:00:00.000Z';
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => (release = resolve));
+        let wrote!: () => void;
+        const written = new Promise<void>((resolve) => (wrote = resolve));
+        // Transaction 1: the thumbnail write, held open.
+        const write = repo.transaction(async (tx) => {
+          const asset = { key: 'thumbnail' as const, extension: 'png', width: null, height: null };
+          await tx.putAssetIf(id, { ...asset, updatedAt: newer, data: bytes }, old);
+          wrote();
+          await held;
+        });
+        await written;
+
+        // Transaction 2: the delete, conditional on the old stamp, reaches the lock and waits.
+        const removal = lib.remove(id, 1, old);
+        const outcome = removal.then(
+          () => 'deleted',
+          (error: { code?: string }) => error.code,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        release();
+        await write;
+
+        expect(await outcome).toBe('conflict');
+        expect((await lib.read(id)).thumbnail?.updatedAt).toBe(newer);
+      } finally {
+        await lib.close();
+      }
+    });
+  });
 }
