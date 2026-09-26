@@ -27,6 +27,7 @@ import {
   type StoredAsset,
   type StoredShader,
   type AuthDatabase,
+  THUMBNAIL_ASSET_KEY,
 } from '../shader-repository';
 import type { UserScope } from '../user-scope';
 import { postgresAuthSchema } from './auth-schema';
@@ -358,13 +359,24 @@ class PgOps implements ShaderTx {
     return updated.revision;
   }
 
-  async deleteShader(scope: UserScope, id: string, expectedRevision?: number): Promise<boolean> {
+  async deleteShader(
+    scope: UserScope,
+    id: string,
+    expectedRevision?: number,
+    expectedThumbnail?: string | null,
+  ): Promise<boolean> {
     const owned = and(eq(shaders.id, id), eq(shaders.ownerUserId, scope.userId));
-    const predicate =
-      expectedRevision === undefined ? owned : and(owned, eq(shaders.revision, expectedRevision));
+    // '' stands for "no thumbnail": a stored `updated_at` is never empty.
+    const thumbnail = sql`COALESCE((SELECT ${assets.updatedAt} FROM ${assets}
+      WHERE ${assets.shaderId} = ${shaders.id} AND ${assets.assetKey} = ${THUMBNAIL_ASSET_KEY}), '')`;
+    const predicate = and(
+      owned,
+      expectedRevision === undefined ? undefined : eq(shaders.revision, expectedRevision),
+      expectedThumbnail === undefined ? undefined : sql`${thumbnail} = ${expectedThumbnail ?? ''}`,
+    );
     const rows = await this.db.delete(shaders).where(predicate).returning({ id: shaders.id });
     if (rows.length > 0) return true;
-    if (expectedRevision === undefined) return false;
+    if (expectedRevision === undefined && expectedThumbnail === undefined) return false;
 
     const [existing] = await this.db
       .select({ revision: shaders.revision })
@@ -372,10 +384,7 @@ class PgOps implements ShaderTx {
       .where(owned)
       .limit(1);
     if (!existing) return false;
-    throw new StorageError(
-      'conflict',
-      `Shader "${id}" was modified by another write (expected revision ${expectedRevision})`,
-    );
+    throw new StorageError('conflict', `Shader "${id}" was modified by another write`);
   }
 
   async replacePresets(shaderId: string, rows: PresetRow[]): Promise<void> {

@@ -174,7 +174,8 @@ export class ApiController {
     summary: 'Delete a shader',
     description:
       'Removes the shader with its presets, textures and thumbnail. Pass `expectedRevision` ' +
-      'to delete only if nobody has saved since you read: a 409 then deletes nothing.',
+      'to delete only if nobody has saved since you read, and `expectedThumbnail` to delete ' +
+      'only if the thumbnail is still the one you read: a 409 then deletes nothing.',
   })
   @ApiQuery({
     name: 'expectedRevision',
@@ -182,15 +183,26 @@ export class ApiController {
     type: 'integer',
     description: 'Revision the client last read; a positive integer.',
   })
+  @ApiQuery({
+    name: 'expectedThumbnail',
+    required: false,
+    type: 'string',
+    description: 'The `thumbnail.updatedAt` the client last read (ISO 8601), or `none`.',
+  })
   @ApiErrors(400, 404, 409)
   @Delete('shaders/:id')
   @HttpCode(204)
   async remove(
     @Param('id') id: string,
     @Query('expectedRevision') rawRevision: unknown,
+    @Query('expectedThumbnail') rawThumbnail: unknown,
     @CurrentUser() principal: Principal,
   ): Promise<void> {
-    await this.libraryFor(principal).remove(id, expectedRevision(rawRevision));
+    await this.libraryFor(principal).remove(
+      id,
+      expectedRevision(rawRevision),
+      expectedThumbnail(rawThumbnail),
+    );
     this.logger.log(`deleted shader "${id}"`);
     // Recorded after the fact, so a refused delete leaves no line claiming one
     // happened. A shader has no undo — this is the only trace it existed.
@@ -577,6 +589,19 @@ function expectedRevision(raw: unknown): number | undefined {
     );
   }
   return Number(raw);
+}
+
+/** `none` expects no thumbnail; otherwise the exact ISO 8601 `updatedAt`. */
+function expectedThumbnail(raw: unknown): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === 'none') return null;
+  if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(raw)) {
+    throw new StorageError(
+      'invalid',
+      'Query parameter "expectedThumbnail" must be an ISO 8601 UTC timestamp or "none"',
+    );
+  }
+  return raw;
 }
 
 function positiveInteger(raw: string | undefined, name: string): number {

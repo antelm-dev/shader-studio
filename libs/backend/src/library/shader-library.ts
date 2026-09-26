@@ -328,14 +328,23 @@ export class ShaderLibrary {
 
   /**
    * Deletes a shader the scope owns. With `expectedRevision`, deletes only if
-   * the stored revision still matches, or fails with `conflict` and deletes
-   * nothing. A template is never deleted: it reads as `not_found`.
+   * the stored revision still matches; with `expectedThumbnail` (the stored
+   * `thumbnail.updatedAt`, or `null` for none), only if the thumbnail still
+   * matches. Otherwise fails with `conflict` and deletes nothing. A template
+   * is never deleted: it reads as `not_found`.
    */
-  async remove(id: string, expectedRevision?: unknown): Promise<void> {
+  async remove(id: string, expectedRevision?: unknown, expectedThumbnail?: unknown): Promise<void> {
     const validId = this.validId(id);
     const revision = parseExpectedRevision(expectedRevision);
+    if (
+      expectedThumbnail !== undefined &&
+      expectedThumbnail !== null &&
+      (typeof expectedThumbnail !== 'string' || expectedThumbnail === '')
+    ) {
+      throw new StorageError('invalid', 'Invalid expected thumbnail');
+    }
     await this.repo.transaction(async (tx) => {
-      const existed = await tx.deleteShader(this.scope, validId, revision);
+      const existed = await tx.deleteShader(this.scope, validId, revision, expectedThumbnail);
       if (!existed) throw new StorageError('not_found', `Shader "${id}" was not found`);
     });
   }

@@ -589,6 +589,34 @@ export function runShaderLibraryConformance(
         expect(await lib.list()).toEqual([]);
       });
 
+      it('deletes only while the thumbnail is still the expected one', async () => {
+        const bare = await lib.create({ name: 'Bare' });
+        await expect(lib.remove(bare.id, 1, '2020-01-01T00:00:00.000Z')).rejects.toMatchObject({
+          code: 'conflict',
+        });
+        await lib.remove(bare.id, 1, null);
+        await expect(lib.read(bare.id)).rejects.toMatchObject({ code: 'not_found' });
+
+        const { id } = await lib.create({ name: 'Pictured' });
+        const first = await lib.setThumbnail(id, { ext: 'png', bytes: Buffer.from('a') });
+        await expect(lib.remove(id, 1, null)).rejects.toMatchObject({ code: 'conflict' });
+        const second = await lib.setThumbnail(id, { ext: 'png', bytes: Buffer.from('b') });
+        await expect(lib.remove(id, 1, first.thumbnail!.updatedAt)).rejects.toMatchObject({
+          code: 'conflict',
+        });
+        expect((await lib.read(id)).name).toBe('Pictured');
+
+        await lib.remove(id, 1, second.thumbnail!.updatedAt);
+        await expect(lib.read(id)).rejects.toMatchObject({ code: 'not_found' });
+      });
+
+      it('rejects an invalid expected thumbnail', async () => {
+        const { id } = await lib.create({ name: 'Kept' });
+        await expect(lib.remove(id, 1, '')).rejects.toMatchObject({ code: 'invalid' });
+        await expect(lib.remove(id, 1, 42)).rejects.toMatchObject({ code: 'invalid' });
+        expect((await lib.read(id)).name).toBe('Kept');
+      });
+
       it('404s a foreign shader and refuses a template', async () => {
         const alice = lib.as({ userId: 'user-alice' });
         const { id } = await alice.create({ name: 'Hers' });
