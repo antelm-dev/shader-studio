@@ -22,18 +22,26 @@ export interface SyncLink {
   localRevision: number;
   /** The local `thumbnail.updatedAt` at the last sync. */
   localThumbnail: string | null;
+  /** The account's `thumbnail.updatedAt` at the last sync; missing on older links: pull it once. */
+  remoteThumbnail?: string | null;
 }
 
 type Links = Record<string, SyncLink>;
+/** One unit of a run: the local id it reports on (none for a new pull), and its work. */
+type Task = [id: string | null, work: () => Promise<void>];
 
 /** Account ids that have a `sync_links:<id>` entry, so other accounts' links can be found. */
 const ACCOUNTS_KEY = 'sync_accounts';
 const linksKey = (userId: string) => `sync_links:${userId}`;
+/** Remote ids this computer must never pull. */
+const ignoredKey = (userId: string) => `sync_ignored:${userId}`;
 const CONFLICT_SUFFIX = ' (conflict)';
 const JSON_HEADERS = { 'content-type': 'application/json' };
 const SAVE_DEBOUNCE_MS = 2_000;
 const RETRY_MIN_MS = 5_000;
 const RETRY_MAX_MS = 5 * 60_000;
+const POLL_MS = 60_000;
+const FOCUS_MIN_MS = 15_000;
 
 /**
  * Ends a run: the account needs signing in again, the server is unreachable,
@@ -45,10 +53,18 @@ class Stop extends Error {
   }
 }
 
-function isDirty(summary: ShaderSummary, link: SyncLink): boolean {
+function isDirty(summary: ShaderSummary | ShaderRecord, link: SyncLink): boolean {
   return (
     summary.revision > link.localRevision ||
     (summary.thumbnail?.updatedAt ?? null) !== link.localThumbnail
+  );
+}
+
+/** The account moved on since the last sync: content, or a thumbnail (unknown on older links). */
+function remoteChanged(summary: ShaderSummary, link: SyncLink): boolean {
+  return (
+    summary.revision > link.remoteRevision ||
+    (summary.thumbnail?.updatedAt ?? null) !== link.remoteThumbnail
   );
 }
 
@@ -58,9 +74,11 @@ async function expectOk(response: Response): Promise<Response> {
 }
 
 /**
- * Pushes linked local shaders to the signed-in account (milestone 1: no pull).
- * The local library stays the source of truth; every failure path leaves it
- * untouched except "keep both", which first saves the local edits as a copy.
+ * Keeps linked local shaders and the signed-in account in step: each run reads
+ * the account's list, pushes local edits, then pulls the account's. Pulled
+ * shaders live in the local scope, like uploaded ones. Every failure path
+ * leaves the library untouched except "keep both", which first saves the local
+ * edits as a copy; a pull never replaces a local edit.
  */
 export class SyncService {
   private chain: Promise<void> = Promise.resolve();
@@ -69,12 +87,18 @@ export class SyncService {
   private progress: SyncChangedEvent['progress'] = null;
   private readonly resolved = new Set<string>();
   private readonly failed = new Set<string>();
-  /** Ids a keep-both replaced since the last event, for the renderer to reload. */
+  /** Linked ids the last run found in the account's list: only these can be `synced`. */
+  private readonly checked = new Set<string>();
+  /** Ids whose thumbnail this run pushed: the account's is ours, nothing to pull. */
+  private readonly thumbnailsSent = new Set<string>();
+  /** Ids a keep-both or a pull replaced since the last event, for the renderer to reload. */
   private replaced: string[] = [];
   private userId: string | undefined;
   private retryDelay = 0;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
+  private pollTimer: ReturnType<typeof setInterval> | undefined;
+  private lastFocusRun = -Infinity;
   private readonly unsubscribe: () => void;
   private disposed = false;
 
@@ -89,21 +113,32 @@ export class SyncService {
         this.userId = state.user?.id;
         this.resolved.clear();
         this.failed.clear();
+        this.checked.clear();
       }
+      this.poll(state);
       if (state.status === 'signed-in') void this.run();
       else this.publish();
     });
+    this.poll(account.state());
   }
 
   /**
-   * Pushes every dirty link. Runs never overlap: a trigger while one is waiting
-   * joins it, a trigger while one is going queues exactly one more.
+   * Reads the account, pushes every dirty link, then pulls. Runs never overlap:
+   * a trigger while one is waiting joins it, a trigger while one is going
+   * queues exactly one more.
    */
   run(): Promise<void> {
     return (this.queuedRun ??= this.enqueue(() => {
       this.queuedRun = null;
-      return this.pushDirty();
+      return this.syncNow();
     }));
+  }
+
+  /** The window gained focus: run, at most once every 15 s. */
+  focused(): void {
+    if (!this.signedInUser() || Date.now() - this.lastFocusRun < FOCUS_MIN_MS) return;
+    this.lastFocusRun = Date.now();
+    void this.run();
   }
 
   /** Links the given local shaders to the account. Templates and linked shaders are skipped. */
@@ -129,7 +164,18 @@ export class SyncService {
     this.disposed = true;
     clearTimeout(this.saveTimer);
     clearTimeout(this.retryTimer);
+    clearInterval(this.pollTimer);
     this.unsubscribe();
+  }
+
+  /** Runs every minute while signed in. */
+  private poll(state: AccountState): void {
+    if (state.status !== 'signed-in') {
+      clearInterval(this.pollTimer);
+      this.pollTimer = undefined;
+    } else if (!this.disposed) {
+      this.pollTimer ??= setInterval(() => void this.run(), POLL_MS);
+    }
   }
 
   async snapshot(): Promise<SyncChangedEvent> {
@@ -157,7 +203,8 @@ export class SyncService {
     if (this.failed.has(summary.id)) return 'error';
     if (!link) return others.has(summary.id) ? 'other-account' : 'local-only';
     if (state.status === 'reauth-required') return 'reauth-required';
-    if (isDirty(summary, link)) return 'pending';
+    // Synced means the last run found it in the account's list.
+    if (isDirty(summary, link) || !this.checked.has(summary.id)) return 'pending';
     return this.resolved.has(summary.id) ? 'conflict-resolved' : 'synced';
   }
 
@@ -176,16 +223,66 @@ export class SyncService {
     return state.status === 'signed-in' ? state.user?.id : undefined;
   }
 
-  private async pushDirty(): Promise<void> {
+  /** One `GET /api/shaders`, dead links dropped, then pushes, then pulls. */
+  private async syncNow(): Promise<void> {
     const userId = this.signedInUser();
     if (!userId) return this.publish();
-    const links = await this.readLinks(userId);
+    let remote: ShaderSummary[];
+    try {
+      const response = await expectOk(await this.call(userId, '/api/shaders'));
+      const { shaders } = (await response.json()) as { shaders: ShaderSummary[] };
+      remote = shaders.filter((summary) => summary.kind !== 'template');
+    } catch (error) {
+      if (!(error instanceof Stop)) throw error;
+      this.checked.clear();
+      return this.batch([], error);
+    }
+    const remoteIds = new Set(remote.map((summary) => summary.id));
     const summaries = new Map((await this.library.list()).map((s) => [s.id, s]));
-    const dirty = Object.keys(links).filter((id) => {
-      const summary = summaries.get(id);
-      return summary && summary.kind !== 'template' && isDirty(summary, links[id]);
-    });
-    await this.batch(dirty, (id) => this.push(userId, id, links));
+    const links = await this.readLinks(userId);
+    const ignored = await this.readIgnored(userId);
+
+    // Deleted here without a choice: never pulled back. Deleted on the account: ours stays.
+    const gone = Object.keys(links).filter((id) => !summaries.has(id));
+    const dropped = Object.keys(links).filter(
+      (id) => summaries.has(id) && !remoteIds.has(links[id].remoteId),
+    );
+    if (gone.length > 0) {
+      // Before the links: if that write fails, the next run finds the same links.
+      for (const id of gone) ignored.add(links[id].remoteId);
+      await this.writeIgnored(userId, ignored);
+    }
+    if (gone.length + dropped.length > 0) {
+      for (const id of [...gone, ...dropped]) {
+        delete links[id];
+        this.resolved.delete(id);
+      }
+      await this.writeLinks(userId, links);
+    }
+    if (this.userId === userId) {
+      this.checked.clear();
+      for (const id of Object.keys(links)) this.checked.add(id);
+    }
+
+    this.thumbnailsSent.clear();
+    const tasks = Object.keys(links)
+      .filter((id) => {
+        const summary = summaries.get(id)!;
+        return summary.kind !== 'template' && isDirty(summary, links[id]);
+      })
+      .map((id): Task => [id, () => this.push(userId, id, links)]);
+    const linkedTo = new Map(Object.entries(links).map(([id, link]) => [link.remoteId, id]));
+    for (const summary of remote) {
+      const id = linkedTo.get(summary.id);
+      if (id !== undefined) {
+        if (remoteChanged(summary, links[id])) {
+          tasks.push([id, () => this.pull(userId, id, summary, links)]);
+        }
+      } else if (!ignored.has(summary.id)) {
+        tasks.push([null, () => this.pullNew(userId, summary, links)]);
+      }
+    }
+    await this.batch(tasks);
   }
 
   private async uploadNow(ids: string[]): Promise<void> {
@@ -197,48 +294,53 @@ export class SyncService {
     const todo = ids.filter(
       (id) => summaries.get(id)?.kind === 'shader' && !links[id] && !others.has(id),
     );
-    await this.batch(todo, async (id) => {
-      // Revision first: an edit landing during the export is pushed next run.
-      const { revision } = await this.library.read(id);
-      const payload = await this.library.exportOne(id);
-      const response = await expectOk(
-        await this.call(userId, '/api/import', {
-          method: 'POST',
-          headers: JSON_HEADERS,
-          body: JSON.stringify({ bundle: buildShaderBundle(payload), mode: 'rename' }),
-        }),
-      );
-      const { imported } = (await response.json()) as ImportResult;
-      links[id] = {
-        remoteId: imported[0].id,
-        remoteRevision: 1,
-        localRevision: revision,
-        localThumbnail: payload.thumbnail?.updatedAt ?? null,
-      };
-      await this.writeLinks(userId, links);
-    });
+    await this.batch(todo.map((id): Task => [id, () => this.uploadOne(userId, id, links)]));
   }
 
-  /** One shader at a time, with progress. 401 or no network stops the batch. */
-  private async batch(ids: string[], work: (id: string) => Promise<void>): Promise<void> {
-    let stop: Stop | undefined;
-    if (ids.length > 0) {
-      this.progress = { done: 0, total: ids.length };
-      for (const id of ids) {
+  private async uploadOne(userId: string, id: string, links: Links): Promise<void> {
+    // Revision first: an edit landing during the export is pushed next run.
+    const { revision } = await this.library.read(id);
+    const payload = await this.library.exportOne(id);
+    const response = await expectOk(
+      await this.call(userId, '/api/import', {
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ bundle: buildShaderBundle(payload), mode: 'rename' }),
+      }),
+    );
+    const { imported } = (await response.json()) as ImportResult;
+    // An import keeps the thumbnail's `updatedAt`, so both sides start equal.
+    const thumbnail = payload.thumbnail?.updatedAt ?? null;
+    links[id] = {
+      remoteId: imported[0].id,
+      remoteRevision: 1,
+      localRevision: revision,
+      localThumbnail: thumbnail,
+      remoteThumbnail: thumbnail,
+    };
+    await this.writeLinks(userId, links);
+    if (this.userId === userId) this.checked.add(id);
+  }
+
+  /** One task at a time, with progress. 401 or no network stops the batch. */
+  private async batch(tasks: Task[], stop?: Stop): Promise<void> {
+    if (tasks.length > 0) {
+      this.progress = { done: 0, total: tasks.length };
+      for (const [id, work] of tasks) {
         this.syncing = id;
         this.publish();
         try {
-          await work(id);
-          this.failed.delete(id);
+          await work();
+          if (id !== null) this.failed.delete(id);
         } catch (error) {
           if (error instanceof Stop) {
             stop = error;
             break;
           }
-          console.warn(`[sync] "${id}" failed`, error);
-          this.failed.add(id);
+          console.warn(`[sync] "${id ?? 'new shader'}" failed`, error);
+          if (id !== null) this.failed.add(id);
         }
-        this.progress = { done: this.progress.done + 1, total: ids.length };
+        this.progress = { done: this.progress.done + 1, total: tasks.length };
       }
       this.syncing = null;
       this.progress = null;
@@ -311,10 +413,90 @@ export class SyncService {
         body: new Uint8Array(Buffer.from(thumbnail.data, 'base64')),
       });
       if (response.status === 404) return this.unlink(userId, id, links);
-      await expectOk(response);
+      const { shader } = (await (await expectOk(response)).json()) as { shader: ShaderRecord };
+      links[id] = { ...links[id], remoteThumbnail: shader.thumbnail?.updatedAt ?? null };
+      this.thumbnailsSent.add(id);
     }
     links[id] = { ...links[id], localThumbnail: thumbnail?.updatedAt ?? null };
     await this.writeLinks(userId, links);
+  }
+
+  /**
+   * The account changed a linked shader this computer has not. The content
+   * replace is checked against the revision just read, so a local edit landing
+   * meanwhile fails the pull instead of being overwritten.
+   */
+  private async pull(
+    userId: string,
+    id: string,
+    summary: ShaderSummary,
+    links: Links,
+  ): Promise<void> {
+    const link = links[id];
+    // Unlinked by a push this run, or dirty because its push failed: next run.
+    if (!link) return;
+    const local = await this.library.read(id);
+    if (isDirty(local, link)) return;
+    const content = summary.revision > link.remoteRevision;
+    const thumbnail =
+      (summary.thumbnail?.updatedAt ?? null) !== link.remoteThumbnail &&
+      !this.thumbnailsSent.has(id);
+    if (!content && !thumbnail) return;
+    const account = await this.fetchPayload(userId, link.remoteId);
+    if (!account) return this.unlink(userId, id, links);
+
+    let record = local;
+    if (content) {
+      record = await this.library.replaceFromPayload(id, account, local.revision);
+      this.replaced.push(id);
+      this.resolved.delete(id);
+    }
+    if (thumbnail) record = await this.applyThumbnail(id, account);
+    links[id] = {
+      ...link,
+      // The list's revision is never newer than the export: at worst the next run pulls again.
+      remoteRevision: content ? summary.revision : link.remoteRevision,
+      localRevision: record.revision,
+      localThumbnail: record.thumbnail?.updatedAt ?? null,
+      remoteThumbnail: thumbnail ? (account.thumbnail?.updatedAt ?? null) : link.remoteThumbnail,
+    };
+    await this.writeLinks(userId, links);
+  }
+
+  /** A shader only the account has: imported under a free local id, then linked. */
+  private async pullNew(userId: string, summary: ShaderSummary, links: Links): Promise<void> {
+    const account = await this.fetchPayload(userId, summary.id);
+    if (!account) return;
+    const { imported } = await this.library.importPayloads([account], 'rename');
+    const record = await this.library.read(imported[0].id);
+    links[record.id] = {
+      remoteId: summary.id,
+      remoteRevision: summary.revision,
+      localRevision: record.revision,
+      localThumbnail: record.thumbnail?.updatedAt ?? null,
+      remoteThumbnail: account.thumbnail?.updatedAt ?? null,
+    };
+    await this.writeLinks(userId, links);
+    if (this.userId === userId) this.checked.add(record.id);
+  }
+
+  /** The account's version of a shader, or `null` once it is gone. */
+  private async fetchPayload(userId: string, remoteId: string): Promise<ShaderPayload | null> {
+    const response = await this.call(userId, `/api/shaders/${encodeURIComponent(remoteId)}/export`);
+    if (response.status === 404) return null;
+    const parsed = parseBundle(await (await expectOk(response)).json());
+    if (!parsed.ok) throw new Error('The account version could not be read');
+    return parsed.value[0];
+  }
+
+  /** `replaceFromPayload` leaves thumbnails alone: write the payload's, or none. */
+  private applyThumbnail(id: string, payload: ShaderPayload): Promise<ShaderRecord> {
+    return payload.thumbnail?.data
+      ? this.library.setThumbnail(id, {
+          ext: payload.thumbnail.ext,
+          bytes: Buffer.from(payload.thumbnail.data, 'base64'),
+        })
+      : this.library.clearThumbnail(id);
   }
 
   /**
@@ -338,28 +520,21 @@ export class SyncService {
     const { shader: remote } = (await (await expectOk(current)).json()) as {
       shader: ShaderRecord;
     };
-    const exported = await this.call(userId, `${base}/export`);
-    if (exported.status === 404) return this.unlink(userId, id, links);
-    const parsed = parseBundle(await (await expectOk(exported)).json());
-    if (!parsed.ok) throw new Error('The account version could not be read');
-    const [account] = parsed.value;
+    const account = await this.fetchPayload(userId, link.remoteId);
+    if (!account) return this.unlink(userId, id, links);
 
     const name = local.name.slice(0, LIMITS.nameLength - CONFLICT_SUFFIX.length);
     await this.library.importPayloads([{ ...local, name: name + CONFLICT_SUFFIX }], 'rename');
     await this.library.replaceFromPayload(id, account, localRevision);
-    // The replace leaves thumbnails alone; the linked slot takes the account's, or none.
-    const record = account.thumbnail?.data
-      ? await this.library.setThumbnail(id, {
-          ext: account.thumbnail.ext,
-          bytes: Buffer.from(account.thumbnail.data, 'base64'),
-        })
-      : await this.library.clearThumbnail(id);
+    // The linked slot takes the account's thumbnail, or none.
+    const record = await this.applyThumbnail(id, account);
     this.replaced.push(id);
     links[id] = {
       remoteId: link.remoteId,
       remoteRevision: remote.revision,
       localRevision: record.revision,
       localThumbnail: record.thumbnail?.updatedAt ?? null,
+      remoteThumbnail: account.thumbnail?.updatedAt ?? null,
     };
     await this.writeLinks(userId, links);
     this.resolved.add(id);
@@ -398,6 +573,16 @@ export class SyncService {
     if (!accounts.includes(userId)) {
       await this.library.setMeta(ACCOUNTS_KEY, JSON.stringify([...accounts, userId]));
     }
+  }
+
+  private async readIgnored(userId: string): Promise<Set<string>> {
+    return new Set(
+      JSON.parse((await this.library.getMeta(ignoredKey(userId))) ?? '[]') as string[],
+    );
+  }
+
+  private async writeIgnored(userId: string, remoteIds: Set<string>): Promise<void> {
+    await this.library.setMeta(ignoredKey(userId), JSON.stringify([...remoteIds]));
   }
 
   private async accounts(): Promise<string[]> {
