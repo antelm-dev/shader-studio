@@ -300,6 +300,29 @@ describe('shader REST API', () => {
     expect(auditedEvents('shader.deleted').at(-1)?.subject).toBe(id);
   });
 
+  it('deletes under expectedThumbnail only while the thumbnail still matches', async () => {
+    const id = await createShader(alice, 'Pictured');
+    const remove = (query: string) =>
+      authFetch(alice, `/api/shaders/${id}${query}`, { method: 'DELETE' });
+
+    for (const bad of ['', 'yesterday', '2020-01-01', 'none&expectedThumbnail=none']) {
+      expect((await remove(`?expectedThumbnail=${bad}`)).status).toBe(400);
+    }
+    const put = await authFetch(alice, `/api/shaders/${id}/thumbnail`, {
+      method: 'PUT',
+      headers: { 'content-type': 'image/png' },
+      body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    });
+    const { shader } = (await put.json()) as { shader: { thumbnail: { updatedAt: string } } };
+    expect((await remove('?expectedRevision=1&expectedThumbnail=none')).status).toBe(409);
+    expect((await remove('?expectedThumbnail=2020-01-01T00:00:00.000Z')).status).toBe(409);
+    expect((await authFetch(alice, `/api/shaders/${id}`)).status).toBe(200);
+
+    const stamp = encodeURIComponent(shader.thumbnail.updatedAt);
+    expect((await remove(`?expectedRevision=1&expectedThumbnail=${stamp}`)).status).toBe(204);
+    expect((await authFetch(alice, `/api/shaders/${id}`)).status).toBe(404);
+  });
+
   it('404s an unknown shader and 400s an invalid body', async () => {
     expect((await authFetch(alice, '/api/shaders/nope')).status).toBe(404);
 

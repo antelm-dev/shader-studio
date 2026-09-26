@@ -31,6 +31,7 @@ import {
   type ShaderTx,
   type StoredAsset,
   type StoredShader,
+  THUMBNAIL_ASSET_KEY,
 } from '../shader-repository';
 import type { UserScope } from '../user-scope';
 import { sqliteAuthSchema } from './auth-schema';
@@ -324,24 +325,32 @@ class SqliteTx implements ShaderTx {
     return Number(after['revision']);
   }
 
-  async deleteShader(scope: UserScope, id: string, expectedRevision?: number): Promise<boolean> {
+  async deleteShader(
+    scope: UserScope,
+    id: string,
+    expectedRevision?: number,
+    expectedThumbnail?: string | null,
+  ): Promise<boolean> {
     const expected = expectedRevision ?? null;
+    // '' stands for "no thumbnail": a stored `updated_at` is never empty. One
+    // statement is enough: SQLite runs one write transaction at a time, so no
+    // thumbnail write can commit between this check and the cascade.
+    const thumbnail = expectedThumbnail === undefined ? null : (expectedThumbnail ?? '');
     const result = this.db
       .prepare(
-        'DELETE FROM shaders WHERE id = ? AND owner_user_id = ? AND (? IS NULL OR revision = ?)',
+        `DELETE FROM shaders WHERE id = ? AND owner_user_id = ? AND (? IS NULL OR revision = ?)
+           AND (? IS NULL OR COALESCE((SELECT updated_at FROM assets
+             WHERE shader_id = shaders.id AND asset_key = ?), '') = ?)`,
       )
-      .run(id, scope.userId, expected, expected);
+      .run(id, scope.userId, expected, expected, thumbnail, THUMBNAIL_ASSET_KEY, thumbnail);
     if (Number(result.changes) > 0) return true;
-    if (expectedRevision === undefined) return false;
+    if (expectedRevision === undefined && expectedThumbnail === undefined) return false;
 
     const existing = this.db
       .prepare('SELECT revision FROM shaders WHERE id = ? AND owner_user_id = ?')
       .get(id, scope.userId);
     if (!existing) return false;
-    throw new StorageError(
-      'conflict',
-      `Shader "${id}" was modified by another write (expected revision ${expectedRevision})`,
-    );
+    throw new StorageError('conflict', `Shader "${id}" was modified by another write`);
   }
 
   async replacePresets(shaderId: string, presets: PresetRow[]): Promise<void> {

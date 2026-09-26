@@ -524,9 +524,9 @@ export class ShaderStore {
     }
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, removeRecord?: () => Promise<boolean>): Promise<void> {
     try {
-      await this.persistence.remove(id);
+      if (!(await this.persistence.remove(id, removeRecord))) return;
       await this.refreshList();
 
       if (this.selectedId() === id) {

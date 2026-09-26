@@ -27,6 +27,7 @@ import {
   type StoredAsset,
   type StoredShader,
   type AuthDatabase,
+  THUMBNAIL_ASSET_KEY,
 } from '../shader-repository';
 import type { UserScope } from '../user-scope';
 import { postgresAuthSchema } from './auth-schema';
@@ -132,7 +133,7 @@ export class PostgresRepository implements ShaderRepository {
 
   async transaction<T>(work: (tx: ShaderTx) => Promise<T>): Promise<T> {
     try {
-      return await this.database().transaction((tx) => work(new PgOps(tx)));
+      return await this.database().transaction((tx) => work(new PgOps(tx, true)));
     } catch (error) {
       throw asStorageError(error, 'Database transaction failed');
     }
@@ -164,8 +165,18 @@ export class PostgresRepository implements ShaderRepository {
   }
 }
 
+/**
+ * Lock order, in a write transaction: the shader row first (`FOR UPDATE`, by
+ * `loadShader` or `deleteShader`, the first statement of every such
+ * transaction), then its presets and assets. One order, so a child-row write
+ * and a delete's cascade never deadlock, and a conditional delete never sees
+ * a thumbnail that is about to change.
+ */
 class PgOps implements ShaderTx {
-  constructor(private readonly db: PostgresExecutor) {}
+  constructor(
+    private readonly db: PostgresExecutor,
+    private readonly inTransaction = false,
+  ) {}
 
   async listShaders(scope: UserScope): Promise<ShaderSummaryRow[]> {
     const thumbnails = alias(assets, 'thumbnail_asset');
@@ -228,11 +239,12 @@ class PgOps implements ShaderTx {
 
   async loadShader(scope: UserScope, id: string): Promise<StoredShader | null> {
     // Reads admit the shared templates; writes never do — see updateShader.
-    const [row] = await this.db
+    const query = this.db
       .select()
       .from(shaders)
       .where(and(eq(shaders.id, id), readable(scope)))
       .limit(1);
+    const [row] = this.inTransaction ? await query.for('update') : await query;
     if (!row) return null;
 
     const presetRows = await this.db
@@ -358,24 +370,44 @@ class PgOps implements ShaderTx {
     return updated.revision;
   }
 
-  async deleteShader(scope: UserScope, id: string, expectedRevision?: number): Promise<boolean> {
+  /**
+   * Locks the shader row, then, when conditional, reads the revision and
+   * thumbnail in a new statement (a fresh snapshot under READ COMMITTED), then
+   * deletes. Every child-row write holds the same lock first (see `PgOps`).
+   */
+  async deleteShader(
+    scope: UserScope,
+    id: string,
+    expectedRevision?: number,
+    expectedThumbnail?: string | null,
+  ): Promise<boolean> {
     const owned = and(eq(shaders.id, id), eq(shaders.ownerUserId, scope.userId));
-    const predicate =
-      expectedRevision === undefined ? owned : and(owned, eq(shaders.revision, expectedRevision));
-    const rows = await this.db.delete(shaders).where(predicate).returning({ id: shaders.id });
-    if (rows.length > 0) return true;
-    if (expectedRevision === undefined) return false;
-
-    const [existing] = await this.db
-      .select({ revision: shaders.revision })
+    const [locked] = await this.db
+      .select({ id: shaders.id })
       .from(shaders)
       .where(owned)
-      .limit(1);
-    if (!existing) return false;
-    throw new StorageError(
-      'conflict',
-      `Shader "${id}" was modified by another write (expected revision ${expectedRevision})`,
-    );
+      .for('update');
+    if (!locked) return false;
+    if (expectedRevision === undefined && expectedThumbnail === undefined) {
+      await this.db.delete(shaders).where(owned);
+      return true;
+    }
+    const [current] = await this.db
+      .select({
+        revision: shaders.revision,
+        thumbnail: sql<string | null>`(SELECT ${assets.updatedAt} FROM ${assets}
+          WHERE ${assets.shaderId} = ${shaders.id} AND ${assets.assetKey} = ${THUMBNAIL_ASSET_KEY})`,
+      })
+      .from(shaders)
+      .where(owned);
+    const matches =
+      (expectedRevision === undefined || current.revision === expectedRevision) &&
+      (expectedThumbnail === undefined || current.thumbnail === expectedThumbnail);
+    if (!matches) {
+      throw new StorageError('conflict', `Shader "${id}" was modified by another write`);
+    }
+    await this.db.delete(shaders).where(owned);
+    return true;
   }
 
   async replacePresets(shaderId: string, rows: PresetRow[]): Promise<void> {

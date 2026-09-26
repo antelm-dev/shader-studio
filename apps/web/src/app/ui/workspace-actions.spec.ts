@@ -4,11 +4,14 @@ import { MatDialog } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 
+import type { SyncRemoveResult } from '@shader-studio/desktop-api/contracts';
 import { DEFAULT_CHANNELS, DEFAULT_RENDER, type ShaderRecord } from '@shader-studio/shared/model';
 import { migrateLegacyProject } from '@shader-studio/shared/project';
 import { ShaderApi } from '../api/shader-api';
 import { AuthService } from '../auth/auth.service';
+import { DesktopAccount } from '../desktop/desktop-account';
 import { DesktopPlatform } from '../desktop/desktop-platform';
+import { DesktopSync } from '../desktop/desktop-sync';
 import { DesktopUpdater } from '../desktop/desktop-updater';
 import { I18n } from '../i18n/i18n';
 import {
@@ -17,6 +20,8 @@ import {
   type WorkspacePreferences,
 } from '../prefs/preferences';
 import { ShaderStore } from '../workspace/shader-store';
+import { ConfirmDialog } from './dialogs/confirm-dialog';
+import { DeleteLinkedDialog } from './dialogs/delete-linked-dialog';
 import { OpenDocuments } from './editor/open-documents';
 import { WorkspaceActions } from './workspace-actions';
 
@@ -284,5 +289,120 @@ describe('WorkspaceActions.signOut', () => {
     await actions.signOut();
     expect(store.record()).not.toBeNull();
     expect(store.shaders()).toHaveLength(1);
+  });
+});
+
+describe('WorkspaceActions.deleteShader', () => {
+  const sync = {
+    isLinked: vi.fn(() => false),
+    remove: vi.fn(async (): Promise<SyncRemoveResult> => 'ok'),
+  };
+  const api = Object.assign(new FakeApi(), { remove: vi.fn(async () => undefined) });
+  let choices: unknown[];
+  let opened: unknown[];
+  let actions: WorkspaceActions;
+  let store: ShaderStore;
+
+  beforeEach(async () => {
+    TestBed.resetTestingModule();
+    vi.clearAllMocks();
+    opened = [];
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ShaderApi, useValue: api },
+        { provide: Preferences, useValue: new FakePreferences() },
+        { provide: DesktopPlatform, useValue: { available: false } },
+        { provide: DesktopSync, useValue: sync },
+        {
+          provide: DesktopAccount,
+          useValue: { state: signal({ status: 'signed-in', user: { id: 'user-a' } }) },
+        },
+        {
+          provide: I18n,
+          useValue: { locale: () => 'en', t: (key: string) => key },
+        },
+        {
+          provide: MatDialog,
+          useValue: {
+            open: (component: unknown) => {
+              opened.push(component);
+              return { afterClosed: () => of(choices.shift()) };
+            },
+          },
+        },
+      ],
+    });
+    actions = TestBed.inject(WorkspaceActions);
+    store = TestBed.inject(ShaderStore);
+    await store.initialize();
+  });
+
+  it.each(['local', 'everywhere'])(
+    'routes "%s" on a linked shader to sync.remove, bound to the account and revision',
+    async (mode) => {
+      sync.isLinked.mockReturnValue(true);
+      choices = [mode];
+
+      await actions.deleteShader('waves', 'Waves');
+
+      expect(opened).toEqual([DeleteLinkedDialog]);
+      expect(sync.remove).toHaveBeenCalledWith({
+        id: 'waves',
+        mode,
+        userId: 'user-a',
+        revision: 1,
+      });
+      expect(api.remove).not.toHaveBeenCalled();
+    },
+  );
+
+  it('deletes nothing when the linked dialog is cancelled', async () => {
+    sync.isLinked.mockReturnValue(true);
+    choices = [undefined];
+
+    await actions.deleteShader('waves', 'Waves');
+
+    expect(sync.remove).not.toHaveBeenCalled();
+    expect(api.remove).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the plain confirm, then a plain delete, when not linked after all', async () => {
+    sync.isLinked.mockReturnValue(true);
+    sync.remove.mockResolvedValueOnce('not-linked');
+    choices = ['everywhere', true];
+
+    await actions.deleteShader('waves', 'Waves');
+
+    expect(opened).toEqual([DeleteLinkedDialog, ConfirmDialog]);
+    expect(api.remove).toHaveBeenCalledWith('waves');
+  });
+
+  it.each(['changed', 'account-changed'] as const)(
+    'deletes nothing and tells the user when sync answers %s',
+    async (result) => {
+      sync.isLinked.mockReturnValue(true);
+      sync.remove.mockResolvedValueOnce(result);
+      choices = ['everywhere'];
+
+      await actions.deleteShader('waves', 'Waves');
+
+      expect(opened).toEqual([DeleteLinkedDialog]);
+      expect(api.remove).not.toHaveBeenCalled();
+      expect(store.shaders()).toHaveLength(1);
+      expect(store.notice()?.text).toBe(
+        result === 'changed' ? 'sync.deleteChanged' : 'sync.deleteAccountChanged',
+      );
+    },
+  );
+
+  it('keeps the plain confirm dialog for an unlinked shader', async () => {
+    sync.isLinked.mockReturnValue(false);
+    choices = [true];
+
+    await actions.deleteShader('waves', 'Waves');
+
+    expect(opened).toEqual([ConfirmDialog]);
+    expect(sync.remove).not.toHaveBeenCalled();
+    expect(api.remove).toHaveBeenCalledWith('waves');
   });
 });
