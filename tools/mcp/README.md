@@ -8,14 +8,21 @@ the app already exposes.
 
 This package runs entirely on your machine. It speaks MCP over stdio to your
 client and speaks a small authenticated WebSocket protocol to Shader Studio
-running in your browser (or the desktop app). It never makes outbound network
+running in your browser (or a desktop build with the bridge enabled). It never makes outbound network
 calls of its own.
 
 ## Prerequisites
 
 - Node.js (a version compatible with [Shader Studio](https://github.com/antelm-dev/shader-studio) itself — see [Version compatibility](#version-compatibility))
-- Shader Studio running and reachable at `http://localhost:4200` (`pnpm dev`) or the desktop app, with a tab open
+- Shader Studio running and reachable at `http://localhost:4200` (`pnpm dev`), with a tab open and signed in; or a desktop build with the MCP bridge enabled
 - An MCP client: [Codex](https://github.com/openai/codex), [Claude Code](https://docs.claude.com/claude-code), [Cursor](https://cursor.com), or any other MCP-compatible client
+
+The app's bridge is enabled by default in development. Production and packaged
+desktop builds must explicitly enable it through `provideMcpBridge({ enabled:
+true, host: '127.0.0.1', port: 4310, secure: false })` in their application
+providers, with the host, port and transport chosen for that deployment. Pairing
+a token alone does not enable the bridge. There is no user-facing pairing screen
+yet. See `apps/web/src/app/mcp/mcp-bridge-config.ts` for the configuration contract.
 
 ## Install & run
 

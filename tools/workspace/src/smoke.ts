@@ -74,6 +74,17 @@ try {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
 
+  // Readiness must work for the anonymous Docker probe without opening the library.
+  const readiness = await page.request.get(BASE + '/api/health');
+  if (!readiness.ok() || (await readiness.json()).status !== 'ok') {
+    throw new Error('API/database readiness failed');
+  }
+  if (readiness.headers()['cache-control'] !== 'no-store') {
+    throw new Error('Readiness must not be cached');
+  }
+  const anonymousLibrary = await page.request.get(BASE + '/api/shaders');
+  if (anonymousLibrary.status() !== 401) throw new Error('Anonymous library access must be denied');
+
   // The library is per-account now: sign up first. With verification off, the
   // sign-up response sets the session cookie on this browser context.
   const signUp = await page.request.post(`${BASE}/api/auth/sign-up/email`, {

@@ -42,7 +42,12 @@
     "verify:mcp": "nx run @shader-studio/mcp:verify",
     "affected": "nx affected",
     "graph": "nx graph",
-    "ci": "pnpm lint && pnpm format:check && pnpm check && pnpm typecheck && pnpm test && pnpm build:all"
+    "ci": "pnpm lint && pnpm format:check && pnpm check && pnpm typecheck && pnpm test && pnpm build:all && pnpm smoke:ssr",
+    "smoke:ssr": "nx run @shader-studio/workspace-tools:smoke:ssr"
+  },
+  "dependencies": {
+    "@nestjs/swagger": "11.4.6",
+    "pg": "8.22.0"
   },
   "devDependencies": {
     "@nx/angular": "23.1.0",

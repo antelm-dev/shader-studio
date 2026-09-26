@@ -14,7 +14,14 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import { ApiBody, ApiConsumes, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiProduces,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
 import { I18N_LOCALES, loadI18nCatalog } from '@shader-studio/backend/i18n';
@@ -49,6 +56,25 @@ export class ApiController {
 
   private libraryFor(principal: Principal): ShaderLibrary {
     return this.storage.as({ userId: principal.userId });
+  }
+
+  @ApiTags('health')
+  @ApiOperation({ summary: 'Check API and database readiness' })
+  @ApiErrors(503)
+  @Public()
+  @Get('health')
+  @Header('Cache-Control', 'no-store')
+  async health(@Res() response: Response): Promise<void> {
+    try {
+      await this.storage.checkHealth();
+      response.json({ status: 'ok' });
+    } catch (error) {
+      this.logger.error(
+        'database readiness check failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+      response.status(503).json({ error: { code: 'internal', message: 'Service unavailable' } });
+    }
   }
 
   @ApiTags('i18n')
@@ -146,13 +172,25 @@ export class ApiController {
 
   @ApiOperation({
     summary: 'Delete a shader',
-    description: 'Removes the shader with its presets, textures and thumbnail.',
+    description:
+      'Removes the shader with its presets, textures and thumbnail. Pass `expectedRevision` ' +
+      'to delete only if nobody has saved since you read: a 409 then deletes nothing.',
   })
-  @ApiErrors(404)
+  @ApiQuery({
+    name: 'expectedRevision',
+    required: false,
+    type: 'integer',
+    description: 'Revision the client last read; a positive integer.',
+  })
+  @ApiErrors(400, 404, 409)
   @Delete('shaders/:id')
   @HttpCode(204)
-  async remove(@Param('id') id: string, @CurrentUser() principal: Principal): Promise<void> {
-    await this.libraryFor(principal).remove(id);
+  async remove(
+    @Param('id') id: string,
+    @Query('expectedRevision') rawRevision: unknown,
+    @CurrentUser() principal: Principal,
+  ): Promise<void> {
+    await this.libraryFor(principal).remove(id, expectedRevision(rawRevision));
     this.logger.log(`deleted shader "${id}"`);
     // Recorded after the fact, so a refused delete leaves no line claiming one
     // happened. A shader has no undo — this is the only trace it existed.
@@ -528,6 +566,17 @@ function imageExtension(contentType: string | undefined): string {
     throw new StorageError('invalid', `Unsupported image type "${contentType ?? 'unknown'}"`);
   }
   return extension;
+}
+
+function expectedRevision(raw: unknown): number | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string' || !/^[1-9]\d*$/.test(raw)) {
+    throw new StorageError(
+      'invalid',
+      'Query parameter "expectedRevision" must be a positive integer',
+    );
+  }
+  return Number(raw);
 }
 
 function positiveInteger(raw: string | undefined, name: string): number {

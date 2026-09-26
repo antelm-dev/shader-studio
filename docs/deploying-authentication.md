@@ -1,8 +1,9 @@
 # Deploying Shader Studio with accounts
 
-Each web user gets a private library. The desktop app is unaffected — it is
-offline and single-user, stores everything locally, and shows no account
-controls at all.
+Each web user gets a private library. Desktop editing remains local and works
+offline. Desktop builds configured with `SHADER_STUDIO_ACCOUNT_URL` can sign in
+through the system browser and upload local shaders to an account; they do not
+yet download the full web library. See [desktop account setup](../README.md#desktop-accounts-and-uploads).
 
 ## What you need before you start
 
@@ -21,7 +22,8 @@ controls at all.
    `BETTER_AUTH_URL` is the origin **browsers** reach — `https://shaders.example`,
    not `http://localhost:4000`. It is what email links are built from and the
    only origin allowed to drive a cookie-authenticated request.
-2. `docker compose up -d`. The schema migrates on the first API request.
+2. `docker compose up -d --build`. The schema migrates on the first API request;
+   the container readiness probe triggers that request automatically.
 3. Open the app and sign up. Confirm the address from the email.
 4. If the instance is private, set `AUTH_REGISTRATION=invite-only` and restart.
    Sign-in keeps working; sign-up stops.
@@ -66,6 +68,12 @@ probed.
 | Audit log                                                           | `audit.ts`                                              |
 
 ## Operating notes
+
+**Readiness:** `GET /api/health` needs no session and performs a database metadata
+read after the API has initialized. It returns `200` with `{ "status": "ok" }`
+or a generic `503` on initialization/database failure, with `Cache-Control: no-store`.
+The Docker healthcheck uses this endpoint. It does not check SMTP delivery or
+the browser UI. Library endpoints, including `/api/shaders`, remain authenticated.
 
 **Sessions are database rows.** Revoking one takes effect on the next request —
 there is no cached copy to wait out. "Sign out everywhere" is in the account

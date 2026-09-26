@@ -128,6 +128,11 @@ export class ShaderLibrary {
     return this.repo.close();
   }
 
+  /** Checks database access without reading or returning any user's library. */
+  async checkHealth(): Promise<void> {
+    await this.repo.getMeta('schema_version');
+  }
+
   // --- Reads ---------------------------------------------------------------
 
   async list(): Promise<ShaderSummary[]> {
@@ -318,10 +323,16 @@ export class ShaderLibrary {
     return this.read(id);
   }
 
-  async remove(id: string): Promise<void> {
+  /**
+   * Deletes a shader the scope owns. With `expectedRevision`, deletes only if
+   * the stored revision still matches, or fails with `conflict` and deletes
+   * nothing. A template is never deleted: it reads as `not_found`.
+   */
+  async remove(id: string, expectedRevision?: unknown): Promise<void> {
     const validId = this.validId(id);
+    const revision = parseExpectedRevision(expectedRevision);
     await this.repo.transaction(async (tx) => {
-      const existed = await tx.deleteShader(this.scope, validId);
+      const existed = await tx.deleteShader(this.scope, validId, revision);
       if (!existed) throw new StorageError('not_found', `Shader "${id}" was not found`);
     });
   }

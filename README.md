@@ -7,7 +7,7 @@
   </p>
 
   <p>
-    <a href="https://gitlab.com/antelm-dev/shader-studio/-/pipelines"><img alt="CI status" src="https://gitlab.com/antelm-dev/shader-studio/badges/master/pipeline.svg" /></a>
+    <a href="https://github.com/antelm-dev/shader-studio/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/antelm-dev/shader-studio/actions/workflows/ci.yml/badge.svg?branch=develop" /></a>
     <a href="https://angular.dev/"><img alt="Angular 22" src="https://img.shields.io/badge/Angular-22-DD0031?logo=angular&amp;logoColor=white" /></a>
     <a href="https://nodejs.org/"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-22%2B-5FA04E?logo=nodedotjs&amp;logoColor=white" /></a>
     <a href="https://pnpm.io/"><img alt="pnpm 10" src="https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&amp;logoColor=white" /></a>
@@ -28,8 +28,8 @@ last valid version running and places compiler diagnostics in the editor.
   compile pipeline that preserves the last working render.
 - **Schema-generated controls** — describe numbers, booleans, colors, and selects
   once; Shader Studio builds the control panel and uniforms for you.
-- **A library that stays yours** — shaders and presets live as readable files on
-  disk, with atomic writes and no external database.
+- **A library that stays yours** — projects, presets, and assets live in SQLite
+  on desktop or PostgreSQL on the web, with transactional writes and portable exports.
 - **Portable by design** — export one shader or the complete collection to a
   versioned JSON bundle and import it elsewhere.
 - **Wallpaper Engine HTML** — export the current shader as one self-contained,
@@ -37,8 +37,8 @@ last valid version running and places compiler diagnostics in the editor.
 - **Interactive previews** — pointer velocity, click ripples, pause, screenshots,
   a configurable post-processing chain (Bloom, Vignette), render scaling, and
   texture inputs are built in.
-- **Web and desktop** — run the SSR web app on your own machine or package the
-  Electron desktop app for Windows.
+- **Web and desktop** — self-host the web app with private account libraries,
+  or use the Windows desktop app offline with optional uploads to an account.
 - **MCP server** — let Claude Code, Codex, or Cursor drive a running Shader
   Studio tab: list shaders, edit GLSL, tune uniforms, and capture screenshots.
 
@@ -76,7 +76,10 @@ pnpm dev
 ```
 
 Open [http://localhost:4200](http://localhost:4200). The development server runs
-the real Express API and SSR application; the API is not mocked.
+the real NestJS API on Express and the SSR application; the API is not mocked.
+Without `DATABASE_URL`, development uses a local SQLite database. Sign up in the
+web app and confirm your address; when SMTP is not configured in development,
+verification and password-reset links are printed in the server terminal.
 
 ## Self-hosting
 
@@ -92,8 +95,10 @@ cp .env.example .env         # then fill in the required values it lists
 docker compose up -d --build
 ```
 
-Shader Studio is then available at [http://localhost:4000](http://localhost:4000),
-with the five example shaders already seeded.
+Compose publishes the app on port 4000. Put an HTTPS reverse proxy in front of
+it and open the origin configured in `BETTER_AUTH_URL`; production session
+cookies require HTTPS. The five bundled examples are seeded as shared, read-only
+templates. Sign up and verify your address to create your private library.
 
 Each web user gets a private library, so the deployment needs a few things
 before it will start: `BETTER_AUTH_SECRET`, the public `BETTER_AUTH_URL`, and an
@@ -101,8 +106,9 @@ SMTP server for verification and password-reset mail. Compose refuses to come up
 without them rather than falling back to a development secret.
 **[docs/deploying-authentication.md](docs/deploying-authentication.md)** covers
 the setup, what to do with shaders that predate accounts, and what each control
-enforces. The desktop app is unaffected — it is offline and single-user, and has
-no accounts at all.
+enforces. Desktop editing remains local and works offline; builds configured
+with an account server can sign in and upload selected shaders (see [Desktop
+accounts and uploads](#desktop-accounts-and-uploads)).
 
 Keep `.env` local: it is ignored by both Git and the Docker build context.
 Only `.env.example`, which contains no usable credential, belongs in version
@@ -132,10 +138,12 @@ Build the production application and run its Node server against PostgreSQL:
 
 ```bash
 pnpm build
-DATABASE_URL=postgres://user:pass@localhost:5432/shader_studio pnpm serve:ssr
+NODE_ENV=production DATABASE_URL=postgres://user:pass@localhost:5432/shader_studio pnpm serve:ssr
 ```
 
-Shader Studio is then available at [http://localhost:4000](http://localhost:4000).
+Configure the authentication and SMTP variables described in
+[the deployment guide](docs/deploying-authentication.md) before starting, and
+serve the app through HTTPS. The Node server listens on port 4000 by default.
 When `DATABASE_URL` is set the server uses PostgreSQL; when it is **not** set the
 server falls back to a local SQLite file under `SHADER_DATA_DIR` (`./data`),
 which is convenient for `pnpm dev:server` but not intended for production. When
@@ -143,24 +151,30 @@ exposing the app beyond localhost, set `NG_ALLOWED_HOSTS` to the hostnames that
 are allowed to reach SSR.
 
 > [!IMPORTANT]
-> Shader Studio has no authentication or multi-user isolation. Deploy it only on
-> a trusted private network, behind an authenticated reverse proxy, or through a
-> private access layer.
+> The web app authenticates users and isolates their private libraries. Production
+> requires HTTPS, a configured authentication secret and public origin, and SMTP.
+> Set `AUTH_REGISTRATION=invite-only` after creating your accounts to close sign-up.
 
 ### Configuration
 
 The server reads these directly; under Compose they are derived from `.env`
 (see [`.env.example`](.env.example)).
 
-| Variable              | Default                     | Purpose                                                                      |
-| --------------------- | --------------------------- | ---------------------------------------------------------------------------- |
-| `DATABASE_URL`        | —                           | PostgreSQL connection string; when set, selects PostgreSQL, otherwise SQLite |
-| `PORT`                | `4000`                      | Port for the SSR server                                                      |
-| `SHADER_DATA_DIR`     | `./data`                    | SQLite database directory (used only when `DATABASE_URL` is unset)           |
-| `SHADER_EXAMPLES_DIR` | `./examples`                | Source directory for the bundled examples that seed an empty store           |
-| `SHADER_SEED`         | —                           | Set to `0` to disable seeding an empty store                                 |
-| `NG_ALLOWED_HOSTS`    | `localhost,127.0.0.1,[::1]` | Comma-separated hosts SSR may render for; set this when deploying            |
-| `DATABASE_POOL_MAX`   | `10`                        | Maximum PostgreSQL pool connections                                          |
+| Variable              | Default                                | Purpose                                                                      |
+| --------------------- | -------------------------------------- | ---------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`  | Development fallback only              | Cookie-signing secret; required in production                                |
+| `BETTER_AUTH_URL`     | `http://localhost:4200` in development | Public app origin; required in production                                    |
+| `MAIL_SMTP_URL`       | Console links in development           | SMTP transport; required in production                                       |
+| `MAIL_FROM`           | `Shader Studio <no-reply@localhost>`   | Transactional email sender                                                   |
+| `AUTH_REGISTRATION`   | `open`                                 | `invite-only` closes sign-up while allowing sign-in                          |
+| `TRUST_PROXY`         | `0`                                    | Enable only behind a reverse proxy you control                               |
+| `DATABASE_URL`        | —                                      | PostgreSQL connection string; when set, selects PostgreSQL, otherwise SQLite |
+| `PORT`                | `4000`                                 | Port for the SSR server                                                      |
+| `SHADER_DATA_DIR`     | `./data`                               | SQLite database directory (used only when `DATABASE_URL` is unset)           |
+| `SHADER_EXAMPLES_DIR` | `./examples`                           | Source directory for the bundled examples that seed an empty store           |
+| `SHADER_SEED`         | —                                      | Set to `0` to disable seeding an empty store                                 |
+| `NG_ALLOWED_HOSTS`    | `localhost,127.0.0.1,[::1]`            | Comma-separated hosts SSR may render for; set this when deploying            |
+| `DATABASE_POOL_MAX`   | `10`                                   | Maximum PostgreSQL pool connections                                          |
 
 Compose-only variables (`.env`): `POSTGRES_DB`, `POSTGRES_USER`,
 `POSTGRES_PASSWORD` (build `DATABASE_URL`), plus `SHADER_PORT` (host port) and
@@ -204,7 +218,11 @@ shaders and a deleted example does not reappear.
 **Diagnostics.** The app fails fast and loudly if the database is unreachable or
 its schema cannot be brought to the expected version — check the container logs
 (`docker compose logs shader-studio` / `docker compose logs postgres`). The
-health of the API is `GET /api/shaders` (also the container `HEALTHCHECK`).
+readiness endpoint is unauthenticated `GET /api/health` (also the container
+`HEALTHCHECK`): `200` with `{ "status": "ok" }` after a successful database
+metadata read, or `503` when initialization or database access fails. Responses
+are not cached and expose no library data. This checks API/database readiness,
+not SMTP delivery or browser rendering. `/api/shaders` requires a session.
 Internal database errors are never leaked to the client: the REST/IPC layer only
 ever returns `{ error: { code, message, details? } }`, never SQL, the connection
 string, or a stack trace.
@@ -224,23 +242,49 @@ The desktop target uses
 [`electron-run`](https://github.com/antelm-dev/electron-run). It stores its
 library in a SQLite database under Electron's per-user application-data directory
 (`<userData>/library/shader-studio.sqlite`) and does not start the Express
-server. The web and SSR targets use PostgreSQL behind the same REST API.
+server. The web and SSR targets use PostgreSQL (or SQLite for development)
+behind the NestJS REST API.
+
+### Desktop accounts and uploads
+
+Accounts are optional. Set `SHADER_STUDIO_ACCOUNT_URL` **before building** the
+desktop app to the origin of your Shader Studio server; the build embeds it in
+the Electron main process. Use HTTPS, or HTTP only for loopback development.
+Without a valid configured origin, account controls are disabled.
+
+For example, in PowerShell:
+
+```powershell
+$env:SHADER_STUDIO_ACCOUNT_URL = 'https://shaders.example.com'
+pnpm pack:win
+```
+
+Sign-in opens the system browser, where you confirm your password before
+returning to the app. The desktop session is kept in the main process and stored
+using Electron's encrypted storage. Upload individual local shaders or all
+local-only shaders from the account actions. Subsequent saved changes to linked
+shaders are pushed automatically, with status and retry controls in the UI.
+
+This is the first sync milestone: **uploads, not a full two-way library mirror**.
+There is no general download of shaders created on the web. Conflicts keep both
+versions; a linked shader deleted on the server remains local and becomes
+unlinked. Signing out leaves the local library available offline.
 
 ## Development
 
-The application uses Angular 22 (zoneless SSR), Angular Material, Express,
+The application uses Angular 22 (zoneless SSR), Angular Material, NestJS on Express,
 three.js, lil-gui, and Monaco.
 
-| Script           | What it does                                  |
-| ---------------- | --------------------------------------------- |
-| `pnpm dev`       | Dev server with HMR, SSR and the API          |
-| `pnpm build`     | Production build into `dist/`                 |
-| `pnpm serve:ssr` | Run the built SSR server                      |
-| `pnpm test`      | Unit tests (Vitest), incl. the MCP server     |
-| `pnpm lint`      | Oxlint                                        |
-| `pnpm format`    | Oxfmt                                         |
-| `pnpm typecheck` | `tsc -b`, strict                              |
-| `pnpm dev:mcp`   | Run the [MCP server](#mcp-server) from source |
+| Script           | What it does                                      |
+| ---------------- | ------------------------------------------------- |
+| `pnpm dev`       | Dev server with HMR, SSR and the API              |
+| `pnpm build`     | Production build into `dist/`                     |
+| `pnpm serve:ssr` | Run the built SSR server                          |
+| `pnpm test`      | Unit tests (Vitest), incl. the MCP server         |
+| `pnpm lint`      | Oxlint                                            |
+| `pnpm format`    | Oxfmt                                             |
+| `pnpm typecheck` | Generate IPC types and check workspace TypeScript |
+| `pnpm dev:mcp`   | Run the [MCP server](#mcp-server) from source     |
 
 ## Using Shader Studio
 
@@ -253,6 +297,11 @@ three.js, lil-gui, and Monaco.
 | `S`               | Save the frame as a PNG       |
 | `Ctrl`+`S`        | Save the shader               |
 | `Shift`+`Alt`+`F` | Format the GLSL in the editor |
+
+Web library requests require a signed-in account; mutations require a verified
+email address. Shared example templates are available within the signed-in
+library; editing a template creates your own copy. Desktop editing needs no
+account.
 
 ### The editor
 
@@ -274,7 +323,7 @@ Typing offers snippets for the things you would otherwise be looking up: `main`,
 
 ### Post-processing
 
-The **Effects Rack**, above the parameter controls in the Controls tab, is the
+The **Effects Rack**, in the inspector's Post-processing tab, is the
 configurable chain applied after the shader's own Image pass (never to Buffer
 A-D): **Bloom** and **Vignette** today, at most one instance of each. A master
 switch bypasses the whole chain without touching any effect's own settings;
@@ -314,10 +363,11 @@ apps/
     src/                 Angular browser, SSR, and desktop entry points
       app/               workspace state, rendering, editor, and UI
   server/
-    src/                 Express SSR host and REST API
-      api/               route parsing and HTTP error mapping
+    src/                 Express SSR host, NestJS REST API, and accounts
+      api/               controllers, authentication guard, and HTTP error mapping
+      auth/              sessions, transactional mail, and desktop sign-in handoff
       create-library.ts  picks PostgreSQL (DATABASE_URL) or SQLite, then seeds
-      cli.ts             `migrate-files` — one-shot legacy import
+      cli.ts             legacy import and pre-account shader ownership claims
   desktop/
     main/src/            Electron lifecycle, windows, updates, and IPC handlers
     preload/src/         sandboxed context bridge
@@ -359,8 +409,8 @@ longer the primary store but is kept as a read-only import source — imported o
 on the desktop, or on demand via `migrate-files` under Docker, and never deleted.
 
 The typed PostgreSQL model is in
-`libs/backend/src/persistence/postgres/schema.ts`. Add future server relations
-(users, sessions, memberships, invitations) there, and add the corresponding
+`libs/backend/src/persistence/postgres/schema.ts`. Users and sessions already share this database. Add future server relations
+(such as memberships or invitations) there, and add the corresponding
 ordered migration in `postgres/migrations.ts`. Migrations deliberately continue
 to use the existing `storage_metadata.schema_version` ledger: deployed databases
 already have that history, so introducing the ORM does not create a second
@@ -368,7 +418,9 @@ baseline or attempt to recreate live tables.
 
 Each directory above is a pnpm workspace package with its own dependency manifest and
 runtime-specific scripts/configuration. The root package only orchestrates workspace commands and
-retains the desktop application metadata consumed by Electron Builder.
+retains the desktop application metadata consumed by Electron Builder. Its
+production dependencies provide the PostgreSQL driver and Swagger package
+externalized by the SSR bundle, so `pnpm serve:ssr` can resolve them from `dist`.
 
 The store keeps three layers of state deliberately distinct:
 
@@ -384,13 +436,13 @@ Express serves the API and renders the app in the same process. During SSR the
 app calls its own `/api` over a same-origin request (the absolute origin comes
 from the incoming request; see `app.config.server.ts`).
 
-The rendered state is handed to the browser through Angular's `TransferState`, so
-the first client render is identical to the server's markup and hydration does
-not throw the page away. The server deliberately opens the _first_ shader rather
-than the last one you had open — it cannot read your `localStorage`, and
-rendering a different shader than the client would then hydrate is exactly the
-mismatch the snapshot exists to prevent. The client switches to your remembered
-shader once it takes over.
+SSR's library request does not forward the browser's session cookie, so it
+normally receives a `401` and renders the shell without private shader data.
+A failed list publishes no `TransferState` snapshot: the browser fetches its
+own authenticated library after hydration, then opens the routed or remembered
+shader. If SSR does obtain a successful list, `TransferState` carries that
+snapshot to the browser; the server cannot read `localStorage` to choose the
+last-opened shader itself.
 
 three.js, lil-gui and Monaco are all **dynamically imported**: none of them exist
 on the server (lil-gui injects a stylesheet at import time and would throw), and
@@ -698,14 +750,21 @@ HTML contains the key mapping in `window.__SHADER_STUDIO_WALLPAPER__.controls`.
 
 ## API
 
+Library endpoints require an authenticated web session or desktop bearer token.
+Mutations require a verified email address, and all library operations are
+scoped to that account. `GET /api/health` and translation catalogs are public.
+
 Interactive docs are served by the running app at `/api/docs` (OpenAPI JSON at
 `/api/docs-json`).
 
-All errors are `{ "error": { "code", "message", "details"? } }`.
-`400` invalid · `404` not found · `409` conflict.
+Shader library and readiness errors use `{ "error": { "code", "message", "details"? } }`.
+Authentication endpoints use Better Auth's own response format.
+`400` invalid · `401` unauthorized · `404` not found · `409` conflict.
+Readiness failures return `503` with a generic `internal` error.
 
 | Method   | Route                                | Purpose                                         |
 | -------- | ------------------------------------ | ----------------------------------------------- |
+| `GET`    | `/api/health`                        | API and database readiness (no session)         |
 | `GET`    | `/api/shaders`                       | List (summaries)                                |
 | `POST`   | `/api/shaders`                       | Create from the template                        |
 | `GET`    | `/api/shaders/:id`                   | Read one, in full                               |
@@ -731,7 +790,10 @@ on npm: an [MCP](https://modelcontextprotocol.io) server that lets Claude Code,
 Codex, Cursor, and other MCP clients drive a **locally-open Shader Studio
 tab** — list shaders, edit GLSL live, tune uniforms, apply presets, and
 capture screenshots — through the same authenticated localhost WebSocket
-bridge the app already exposes. It speaks MCP over stdio to the client and
+bridge. The app enables this bridge by default in development; production
+and packaged desktop builds must explicitly opt in through `provideMcpBridge()`
+in their application configuration. Token pairing alone does not enable the
+bridge in a production build. It speaks MCP over stdio to the client and
 makes no outbound network calls of its own.
 
 ```bash
@@ -764,6 +826,9 @@ and are licensed under Apache-2.0 with the rest of the project.
 ---
 
 ## Tests
+
+See [the release checklist](docs/release-readiness.md) for automated gates and
+manual validation required before publishing a release.
 
 ```bash
 pnpm test
@@ -825,9 +890,15 @@ pnpm test
 - **One active shader.** The browser list displays saved thumbnails, but it does
   not continuously render every shader in the library. The selected shader and
   the optional output window are the live render surfaces.
-- **No auth, no multi-user.** The web API uses PostgreSQL or SQLite and assumes a
-  single trusted user. It is a studio, not a public service; expose it only
-  behind an authenticated proxy or private access layer.
+- **Desktop sync is upload-first.** Account-enabled builds push linked local
+  shaders; they do not download the entire account library or propagate every
+  deletion in both directions.
+- **No public shader publishing or Explore feed.** Web libraries are private to
+  their accounts, alongside shared read-only example templates.
+- **Plugins are a sandbox prototype.** The isolated Worker host is exercised by
+  smoke tests; there is no user-facing plugin manager or stable extension API.
+- **MCP production setup is explicit.** Packaged builds need application
+  configuration to enable the bridge; there is no pairing screen yet.
 - **Bloom and Vignette are the only built-in post effects**, at most one
   instance of each. Tone mapping, color grading, chromatic aberration, FXAA
   and LUTs are not implemented. A preset can optionally capture the complete

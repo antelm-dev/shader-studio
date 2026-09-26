@@ -36,6 +36,7 @@ const ERROR_DESCRIPTIONS: Record<number, string> = {
   404: 'No such shader, preset or texture (`not_found`).',
   409: 'A concurrent write happened — `expectedRevision` is stale (`conflict`).',
   500: 'Unexpected server or storage failure (`internal`, `io`).',
+  503: 'API initialization or database readiness failed (`internal`).',
 };
 
 /** Documents the shared error envelope for the statuses a route can actually return. */

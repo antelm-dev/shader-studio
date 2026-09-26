@@ -1,7 +1,7 @@
 /**
  * The Express server. It does two jobs:
  *
- *  1. `/api/*` — the shader REST API, backed by the filesystem (`server/`).
+ *  1. `/api/*` — the NestJS REST API and accounts, backed by PostgreSQL or SQLite.
  *  2. everything else — server-side rendering of the Angular app.
  *
  * The same process serves both, which is what lets the app render on the server
@@ -67,7 +67,12 @@ function ensureRouter(): Promise<Application> {
 app.use('/api', (req, res, next) => {
   ensureRouter()
     .then((router) => router(req, res, next))
-    .catch(next);
+    .catch(() => {
+      // Initialization failures are logged in ensureRouter. Return no database
+      // details, and let the next readiness probe retry initialization.
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(503).json({ error: { code: 'internal', message: 'Service unavailable' } });
+    });
 });
 
 app.use(
