@@ -423,6 +423,57 @@ class PgOps implements ShaderTx {
       .where(and(eq(assets.shaderId, shaderId), eq(assets.assetKey, key)));
   }
 
+  async putAssetIf(
+    shaderId: string,
+    asset: StoredAsset,
+    expectedUpdatedAt: string | null,
+  ): Promise<boolean> {
+    const values = {
+      extension: asset.extension,
+      width: asset.width,
+      height: asset.height,
+      updatedAt: asset.updatedAt,
+      data: asset.data,
+    };
+    const rows =
+      expectedUpdatedAt === null
+        ? await this.db
+            .insert(assets)
+            .values({ ...values, shaderId, assetKey: asset.key })
+            .onConflictDoNothing({ target: [assets.shaderId, assets.assetKey] })
+            .returning({ key: assets.assetKey })
+        : await this.db
+            .update(assets)
+            .set(values)
+            .where(
+              and(
+                eq(assets.shaderId, shaderId),
+                eq(assets.assetKey, asset.key),
+                eq(assets.updatedAt, expectedUpdatedAt),
+              ),
+            )
+            .returning({ key: assets.assetKey });
+    return rows.length > 0;
+  }
+
+  async deleteAssetIf(
+    shaderId: string,
+    key: AssetKey,
+    expectedUpdatedAt: string,
+  ): Promise<boolean> {
+    const rows = await this.db
+      .delete(assets)
+      .where(
+        and(
+          eq(assets.shaderId, shaderId),
+          eq(assets.assetKey, key),
+          eq(assets.updatedAt, expectedUpdatedAt),
+        ),
+      )
+      .returning({ key: assets.assetKey });
+    return rows.length > 0;
+  }
+
   async getMeta(key: string): Promise<string | null> {
     const [row] = await this.db
       .select({ value: storageMetadata.value })

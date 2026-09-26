@@ -455,8 +455,18 @@ export class ShaderLibrary {
    * shader row: a thumbnail is a picture of the document, not a change to it, so
    * `updatedAt` and `revision` stay put and a "recently modified" list does not
    * reorder every time a preview refreshes.
+   *
+   * With `expectedThumbnail` (the stored `thumbnail.updatedAt`, or `null` for
+   * none) the compare and the write are one conditional statement: a thumbnail
+   * written meanwhile fails the call with `conflict` and nothing is written.
+   * Every write stamps a `thumbnail.updatedAt` strictly after the previous one,
+   * so a stamp never comes back and a stale expectation can never match again.
    */
-  async setThumbnail(id: string, input: { ext: string; bytes: Uint8Array }): Promise<ShaderRecord> {
+  async setThumbnail(
+    id: string,
+    input: { ext: string; bytes: Uint8Array },
+    expectedThumbnail?: string | null,
+  ): Promise<ShaderRecord> {
     const validId = this.validId(id);
     const ext = input.ext.toLowerCase();
     if (!TEXTURE_EXTENSIONS.has(ext)) {
@@ -472,31 +482,53 @@ export class ShaderLibrary {
       );
     }
 
-    await this.repo.transaction(async (tx) => {
+    return this.repo.transaction(async (tx) => {
       const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
-      await tx.putAsset(validId, {
+      const previous = stored.assets.find((asset) => asset.key === THUMBNAIL_ASSET_KEY);
+      const asset = {
         key: THUMBNAIL_ASSET_KEY,
         extension: ext,
         width: null,
         height: null,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nextStamp(expectedThumbnail ?? previous?.updatedAt),
         data: input.bytes,
-      });
+      };
+      if (expectedThumbnail === undefined) await tx.putAsset(validId, asset);
+      else if (!(await tx.putAssetIf(validId, asset, expectedThumbnail))) {
+        throw thumbnailConflict(id);
+      }
+      return this.mapRecord(await this.reload(tx, validId));
     });
-
-    return this.read(id);
   }
 
-  /** Drops the preview. Like {@link setThumbnail}, the shader row stays put. */
-  async clearThumbnail(id: string): Promise<ShaderRecord> {
+  /**
+   * Drops the preview. Like {@link setThumbnail}, the shader row stays put, and
+   * `expectedThumbnail` makes it conditional the same way.
+   */
+  async clearThumbnail(id: string, expectedThumbnail?: string | null): Promise<ShaderRecord> {
     const validId = this.validId(id);
-    await this.repo.transaction(async (tx) => {
+    return this.repo.transaction(async (tx) => {
       const stored = await tx.loadShader(this.scope, validId);
       if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
-      await tx.deleteAsset(validId, THUMBNAIL_ASSET_KEY);
+      if (expectedThumbnail === undefined) await tx.deleteAsset(validId, THUMBNAIL_ASSET_KEY);
+      else if (expectedThumbnail === null) {
+        // Nothing to delete: only a thumbnail present now breaks the expectation.
+        if (stored.assets.some((asset) => asset.key === THUMBNAIL_ASSET_KEY)) {
+          throw thumbnailConflict(id);
+        }
+      } else if (!(await tx.deleteAssetIf(validId, THUMBNAIL_ASSET_KEY, expectedThumbnail))) {
+        throw thumbnailConflict(id);
+      }
+      return this.mapRecord(await this.reload(tx, validId));
     });
-    return this.read(id);
+  }
+
+  /** The shader as this transaction just wrote it. */
+  private async reload(tx: ShaderTx, id: string): Promise<StoredShader> {
+    const stored = await tx.loadShader(this.scope, id);
+    if (!stored) throw new StorageError('not_found', `Shader "${id}" was not found`);
+    return stored;
   }
 
   /** The preview's raw image bytes, for serving to the client. */
@@ -1077,6 +1109,19 @@ function presetToRow(preset: Preset): PresetRow {
 
 function cloneDefaultChannels(): TextureChannels {
   return DEFAULT_CHANNELS.map((channel) => ({ ...channel })) as unknown as TextureChannels;
+}
+
+/** Now, or 1 ms after `previous` if the clock has not moved past it: stamps only ever grow. */
+function nextStamp(previous: string | undefined): string {
+  const after = previous === undefined ? 0 : Date.parse(previous) + 1;
+  return new Date(Math.max(Date.now(), after || 0)).toISOString();
+}
+
+function thumbnailConflict(id: string): StorageError {
+  return new StorageError(
+    'conflict',
+    `The thumbnail of "${id}" was changed by another write; nothing was written`,
+  );
 }
 
 function parseExpectedRevision(value: unknown): number | undefined {

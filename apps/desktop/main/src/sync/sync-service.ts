@@ -1,4 +1,4 @@
-import type { ShaderLibrary } from '@shader-studio/backend/library';
+import { StorageError, type ShaderLibrary } from '@shader-studio/backend/library';
 import type { SyncChangedEvent, SyncStatus } from '@shader-studio/desktop-api/contracts';
 import type {
   ImportResult,
@@ -453,16 +453,19 @@ export class SyncService {
       this.replaced.push(id);
       this.resolved.delete(id);
     }
-    const localThumbnail = thumbnail
+    const pulled = thumbnail
       ? await this.pullThumbnail(id, account, link.localThumbnail)
-      : link.localThumbnail;
+      : undefined;
     links[id] = {
       ...link,
       // The list's revision is never newer than the export: at worst the next run pulls again.
       remoteRevision: content ? summary.revision : link.remoteRevision,
       localRevision: revision,
-      localThumbnail,
-      remoteThumbnail: thumbnail ? (account.thumbnail?.updatedAt ?? null) : link.remoteThumbnail,
+      // Thumbnail not written: the link's thumbnail fields stay, the local one is pushed.
+      ...(pulled !== undefined && {
+        localThumbnail: pulled,
+        remoteThumbnail: account.thumbnail?.updatedAt ?? null,
+      }),
     };
     await this.writeLinks(userId, links);
   }
@@ -495,24 +498,31 @@ export class SyncService {
 
   /**
    * `replaceFromPayload` leaves thumbnails alone: write the payload's, or none —
-   * unless the local thumbnail is no longer `seen` (changed during the
-   * download): then the local one wins and stays unacknowledged, to be pushed.
-   * Returns the local `thumbnail.updatedAt` the link may acknowledge.
+   * only while the local thumbnail is still `seen`, in one conditional write.
+   * Returns the local `thumbnail.updatedAt` written, or `undefined` when a local
+   * thumbnail landed during the download: it wins and is pushed next run.
    */
-  // ponytail: re-read then write is not atomic; a conditional setThumbnail in the library would close the gap.
   private async pullThumbnail(
     id: string,
     payload: ShaderPayload,
     seen: string | null,
-  ): Promise<string | null> {
-    if (((await this.library.read(id)).thumbnail?.updatedAt ?? null) !== seen) return seen;
-    const record = payload.thumbnail?.data
-      ? await this.library.setThumbnail(id, {
-          ext: payload.thumbnail.ext,
-          bytes: Buffer.from(payload.thumbnail.data, 'base64'),
-        })
-      : await this.library.clearThumbnail(id);
-    return record.thumbnail?.updatedAt ?? null;
+  ): Promise<string | null | undefined> {
+    try {
+      const record = payload.thumbnail?.data
+        ? await this.library.setThumbnail(
+            id,
+            {
+              ext: payload.thumbnail.ext,
+              bytes: Buffer.from(payload.thumbnail.data, 'base64'),
+            },
+            seen,
+          )
+        : await this.library.clearThumbnail(id, seen);
+      return record.thumbnail?.updatedAt ?? null;
+    } catch (error) {
+      if (error instanceof StorageError && error.code === 'conflict') return undefined;
+      throw error;
+    }
   }
 
   /**
@@ -543,18 +553,17 @@ export class SyncService {
     await this.library.importPayloads([{ ...local, name: name + CONFLICT_SUFFIX }], 'rename');
     const { revision } = await this.library.replaceFromPayload(id, account, localRevision);
     // The linked slot takes the account's thumbnail, or none; a local one set meanwhile wins.
-    const localThumbnail = await this.pullThumbnail(
-      id,
-      account,
-      local.thumbnail?.updatedAt ?? null,
-    );
+    const pulled = await this.pullThumbnail(id, account, local.thumbnail?.updatedAt ?? null);
     this.replaced.push(id);
     links[id] = {
-      remoteId: link.remoteId,
+      ...link,
       remoteRevision: remote.revision,
       localRevision: revision,
-      localThumbnail,
-      remoteThumbnail: account.thumbnail?.updatedAt ?? null,
+      // Thumbnail not written: the link's thumbnail fields stay, the local one is pushed.
+      ...(pulled !== undefined && {
+        localThumbnail: pulled,
+        remoteThumbnail: account.thumbnail?.updatedAt ?? null,
+      }),
     };
     await this.writeLinks(userId, links);
     this.resolved.add(id);

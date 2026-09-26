@@ -384,6 +384,40 @@ class SqliteTx implements ShaderTx {
     this.db.prepare('DELETE FROM assets WHERE shader_id = ? AND asset_key = ?').run(shaderId, key);
   }
 
+  async putAssetIf(
+    shaderId: string,
+    asset: StoredAsset,
+    expectedUpdatedAt: string | null,
+  ): Promise<boolean> {
+    const values = [asset.extension, asset.width, asset.height, asset.updatedAt, asset.data];
+    const result =
+      expectedUpdatedAt === null
+        ? this.db
+            .prepare(
+              `INSERT INTO assets (extension, width, height, updated_at, data, shader_id, asset_key)
+               VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (shader_id, asset_key) DO NOTHING`,
+            )
+            .run(...values, shaderId, asset.key)
+        : this.db
+            .prepare(
+              `UPDATE assets SET extension = ?, width = ?, height = ?, updated_at = ?, data = ?
+               WHERE shader_id = ? AND asset_key = ? AND updated_at = ?`,
+            )
+            .run(...values, shaderId, asset.key, expectedUpdatedAt);
+    return Number(result.changes) > 0;
+  }
+
+  async deleteAssetIf(
+    shaderId: string,
+    key: AssetKey,
+    expectedUpdatedAt: string,
+  ): Promise<boolean> {
+    const result = this.db
+      .prepare('DELETE FROM assets WHERE shader_id = ? AND asset_key = ? AND updated_at = ?')
+      .run(shaderId, key, expectedUpdatedAt);
+    return Number(result.changes) > 0;
+  }
+
   async getMeta(key: string): Promise<string | null> {
     const row = this.db.prepare('SELECT value FROM storage_metadata WHERE key = ?').get(key);
     return row ? String(row['value']) : null;

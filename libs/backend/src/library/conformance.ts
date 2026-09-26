@@ -7,7 +7,7 @@
  * two backends.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_CHANNELS,
@@ -303,6 +303,84 @@ export function runShaderLibraryConformance(
       expect(cleared.thumbnail).toBeNull();
       expect(cleared.revision).toBe(created.revision);
       expect(await lib.readThumbnail(created.id)).toBeNull();
+    });
+
+    describe('thumbnail under expectedThumbnail', () => {
+      const img = (text: string) => ({ ext: 'png', bytes: Buffer.from(text) });
+
+      it('writes and clears only while the stored thumbnail matches', async () => {
+        const created = await lib.create({ name: 'Guarded' });
+        const first = await lib.setThumbnail(created.id, img('one'), null);
+        const stamp = first.thumbnail!.updatedAt;
+        expect(first.revision).toBe(created.revision);
+
+        const second = await lib.setThumbnail(created.id, img('two'), stamp);
+        expect(second.thumbnail!.updatedAt > stamp).toBe(true);
+        expect(second.revision).toBe(created.revision);
+        expect((await lib.readThumbnail(created.id))?.bytes).toEqual(
+          new Uint8Array(Buffer.from('two')),
+        );
+
+        const cleared = await lib.clearThumbnail(created.id, second.thumbnail!.updatedAt);
+        expect(cleared.thumbnail).toBeNull();
+        expect(cleared.revision).toBe(created.revision);
+        expect((await lib.clearThumbnail(created.id, null)).thumbnail).toBeNull();
+      });
+
+      it('writes nothing on a mismatch', async () => {
+        const created = await lib.create({ name: 'Moved On' });
+        const stored = await lib.setThumbnail(created.id, img('current'));
+        const stale = '2000-01-01T00:00:00.000Z';
+        const conflict = { code: 'conflict' };
+
+        await expect(lib.setThumbnail(created.id, img('stale'), stale)).rejects.toMatchObject(
+          conflict,
+        );
+        await expect(lib.setThumbnail(created.id, img('stale'), null)).rejects.toMatchObject(
+          conflict,
+        );
+        await expect(lib.clearThumbnail(created.id, stale)).rejects.toMatchObject(conflict);
+        await expect(lib.clearThumbnail(created.id, null)).rejects.toMatchObject(conflict);
+
+        expect((await lib.read(created.id)).thumbnail).toEqual(stored.thumbnail);
+        expect((await lib.readThumbnail(created.id))?.bytes).toEqual(
+          new Uint8Array(Buffer.from('current')),
+        );
+
+        const bare = await lib.create({ name: 'Bare' });
+        await expect(lib.setThumbnail(bare.id, img('x'), stale)).rejects.toMatchObject(conflict);
+        await expect(lib.clearThumbnail(bare.id, stale)).rejects.toMatchObject(conflict);
+        expect(await lib.readThumbnail(bare.id)).toBeNull();
+      });
+
+      it('treats another user’s shader as not found', async () => {
+        const id = (await lib.as({ userId: 'user-alice' }).create({ name: 'Alice' })).id;
+        const bob = lib.as({ userId: 'user-bob' });
+
+        await expect(bob.setThumbnail(id, img('x'), null)).rejects.toMatchObject({
+          code: 'not_found',
+        });
+        await expect(bob.clearThumbnail(id, null)).rejects.toMatchObject({ code: 'not_found' });
+        expect(await lib.as({ userId: 'user-alice' }).readThumbnail(id)).toBeNull();
+      });
+
+      it('stamps strictly increasing times under a frozen clock', async () => {
+        const created = await lib.create({ name: 'Frozen' });
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+          vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+          const one = (await lib.setThumbnail(created.id, img('1'))).thumbnail!.updatedAt;
+          const two = (await lib.setThumbnail(created.id, img('2'), one)).thumbnail!.updatedAt;
+          const three = (await lib.setThumbnail(created.id, img('3'))).thumbnail!.updatedAt;
+          expect(one < two && two < three).toBe(true);
+          // The first stamp can never match again.
+          await expect(lib.setThumbnail(created.id, img('4'), one)).rejects.toMatchObject({
+            code: 'conflict',
+          });
+        } finally {
+          vi.useRealTimers();
+        }
+      });
     });
 
     // 12 & 13 — import/export v2, rename and overwrite

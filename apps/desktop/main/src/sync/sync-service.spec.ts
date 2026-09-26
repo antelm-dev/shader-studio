@@ -513,6 +513,30 @@ describe('SyncService', () => {
         expect(await statusOf(shader.id)).toBe('synced');
       });
 
+      it('keeps a local thumbnail saved right before the pulled one is written', async () => {
+        const shader = await local.create({ name: 'Last moment' });
+        await sync.upload([shader.id]);
+        const { remoteId } = (await links())[shader.id];
+        await remote.setThumbnail(remoteId, { ext: 'png', bytes: PNG });
+        // The renderer's save commits between the download and the sync's write.
+        const setThumbnail = local.setThumbnail.bind(local);
+        const spy = vi
+          .spyOn(local, 'setThumbnail')
+          .mockImplementationOnce(async (id, input, expected) => {
+            await setThumbnail(id, { ext: 'png', bytes: LOCAL_PNG });
+            return setThumbnail(id, input, expected);
+          });
+
+        await sync.run();
+        spy.mockRestore();
+
+        expect((await local.readThumbnail(shader.id))?.bytes).toEqual(LOCAL_PNG);
+        expect(await statusOf(shader.id)).toBe('pending');
+        await sync.run();
+        expect((await remote.readThumbnail(remoteId))?.bytes).toEqual(LOCAL_PNG);
+        expect(await statusOf(shader.id)).toBe('synced');
+      });
+
       it('never acknowledges a content save during a content pull', async () => {
         const shader = await local.create({ name: 'Race' });
         await sync.upload([shader.id]);

@@ -132,6 +132,18 @@ export interface ShaderTx {
   replacePresets(shaderId: string, presets: PresetRow[]): Promise<void>;
   putAsset(shaderId: string, asset: StoredAsset): Promise<void>;
   deleteAsset(shaderId: string, key: AssetKey): Promise<void>;
+  /**
+   * `putAsset` in one conditional statement: writes only while the stored
+   * asset's `updatedAt` is still `expectedUpdatedAt` (`null`: only if there is
+   * none). Returns whether it wrote.
+   */
+  putAssetIf(
+    shaderId: string,
+    asset: StoredAsset,
+    expectedUpdatedAt: string | null,
+  ): Promise<boolean>;
+  /** `deleteAsset` in one statement, only while its `updatedAt` is still `expectedUpdatedAt`. */
+  deleteAssetIf(shaderId: string, key: AssetKey, expectedUpdatedAt: string): Promise<boolean>;
   getMeta(key: string): Promise<string | null>;
   setMeta(key: string, value: string): Promise<void>;
 }
