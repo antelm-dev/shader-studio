@@ -1,6 +1,6 @@
-# Shader Studio Bugbot rules
+# Shadergrove Bugbot rules
 
-Shader Studio is a pnpm 10/Nx monorepo for an Angular web application, an Electron desktop shell, an SSR server, and an MCP server.
+Shadergrove is a pnpm 10/Nx monorepo for an Angular web application, an Electron desktop shell, an SSR server, and an MCP server.
 
 ## Review priorities
 

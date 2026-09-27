@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>Shader Studio</h1>
+  <h1>Shadergrove</h1>
   <p><strong>Your self-hosted workspace for building, tuning, and collecting WebGL shaders.</strong></p>
   <p>
     Browse a shader library, edit GLSL with live diagnostics, generate controls from a schema,
@@ -7,7 +7,7 @@
   </p>
 
   <p>
-    <a href="https://github.com/antelm-dev/shader-studio/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/antelm-dev/shader-studio/actions/workflows/ci.yml/badge.svg?branch=develop" /></a>
+    <a href="https://github.com/antelm-dev/shadergrove/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/antelm-dev/shadergrove/actions/workflows/ci.yml/badge.svg?branch=develop" /></a>
     <a href="https://angular.dev/"><img alt="Angular 22" src="https://img.shields.io/badge/Angular-22-DD0031?logo=angular&amp;logoColor=white" /></a>
     <a href="https://nodejs.org/"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-22%2B-5FA04E?logo=nodedotjs&amp;logoColor=white" /></a>
     <a href="https://pnpm.io/"><img alt="pnpm 10" src="https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&amp;logoColor=white" /></a>
@@ -16,10 +16,10 @@
 
 <br />
 
-![Shader Studio showing the Warp Tunnel shader and its generated controls — sliders, a checkbox, a select, and color pickers](docs/shader-studio-preview.jpg)
+![Shadergrove showing the Warp Tunnel shader and its generated controls — sliders, a checkbox, a select, and color pickers](docs/shadergrove-preview.jpg)
 
 The shader you select becomes the application canvas, so you edit the thing you
-are looking at. A broken draft never blanks the preview: Shader Studio keeps the
+are looking at. A broken draft never blanks the preview: Shadergrove keeps the
 last valid version running and places compiler diagnostics in the editor.
 
 ## Highlights
@@ -27,7 +27,7 @@ last valid version running and places compiler diagnostics in the editor.
 - **Live GLSL workflow** — Monaco editing, driver-backed diagnostics, and a safe
   compile pipeline that preserves the last working render.
 - **Schema-generated controls** — describe numbers, booleans, colors, and selects
-  once; Shader Studio builds the control panel and uniforms for you.
+  once; Shadergrove builds the control panel and uniforms for you.
 - **A library that stays yours** — projects, presets, and assets live in SQLite
   on desktop or PostgreSQL on the web, with transactional writes and portable exports.
 - **Portable by design** — export one shader or the complete collection to a
@@ -47,7 +47,7 @@ last valid version running and places compiler diagnostics in the editor.
 - [Quick start](#quick-start)
 - [Self-hosting](#self-hosting)
 - [Desktop app](#desktop-app)
-- [Using Shader Studio](#using-shader-studio)
+- [Using Shadergrove](#using-shadergrove)
 - [Shader format](#shader-format)
 - [Import and export](#import-and-export)
 - [API](#api)
@@ -59,6 +59,21 @@ last valid version running and places compiler diagnostics in the editor.
 - [Known limitations](#known-limitations)
 - [License](#license)
 
+## Name and compatibility
+
+Shadergrove was previously named **Shader Studio**. The application, repository,
+and desktop installers now use Shadergrove. Existing installations keep their
+installer identity, data directories, `shader-studio:` protocol, browser storage
+keys, and `shader-studio/v1`–`v3` bundle tags. Configuration variables beginning
+with `SHADER_STUDIO_` and the published npm package `@shader-studio/mcp` also keep
+their existing names; current integrations continue to work.
+The Compose application service and container names also retain their original
+names so updating an existing deployment replaces its running containers.
+
+For an existing Docker Compose deployment, keep its checkout directory and
+Compose project name unchanged. If you move it to a directory named `shadergrove`,
+set `COMPOSE_PROJECT_NAME` to the previous project name to reuse its database volume.
+
 ## Quick start
 
 ### Requirements
@@ -69,8 +84,8 @@ last valid version running and places compiler diagnostics in the editor.
 Clone the repository and start the development server:
 
 ```bash
-git clone https://github.com/antelm-dev/shader-studio.git
-cd shader-studio
+git clone https://github.com/antelm-dev/shadergrove.git
+cd shadergrove
 pnpm install
 pnpm dev
 ```
@@ -85,12 +100,12 @@ verification and password-reset links are printed in the server terminal.
 
 ### Docker
 
-The fastest way to run Shader Studio. Compose brings up PostgreSQL and the app
+The fastest way to run Shadergrove. Compose brings up PostgreSQL and the app
 together; the app waits for the database to be healthy before it starts.
 
 ```bash
-git clone https://github.com/antelm-dev/shader-studio.git
-cd shader-studio
+git clone https://github.com/antelm-dev/shadergrove.git
+cd shadergrove
 cp .env.example .env         # then fill in the required values it lists
 docker compose up -d --build
 ```
@@ -165,7 +180,7 @@ The server reads these directly; under Compose they are derived from `.env`
 | `BETTER_AUTH_SECRET`  | Development fallback only              | Cookie-signing secret; required in production                                |
 | `BETTER_AUTH_URL`     | `http://localhost:4200` in development | Public app origin; required in production                                    |
 | `MAIL_SMTP_URL`       | Console links in development           | SMTP transport; required in production                                       |
-| `MAIL_FROM`           | `Shader Studio <no-reply@localhost>`   | Transactional email sender                                                   |
+| `MAIL_FROM`           | `Shadergrove <no-reply@localhost>`     | Transactional email sender                                                   |
 | `AUTH_REGISTRATION`   | `open`                                 | `invite-only` closes sign-up while allowing sign-in                          |
 | `TRUST_PROXY`         | `0`                                    | Enable only behind a reverse proxy you control                               |
 | `DATABASE_URL`        | —                                      | PostgreSQL connection string; when set, selects PostgreSQL, otherwise SQLite |
@@ -195,7 +210,9 @@ docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB
 **SQLite (Desktop / dev)** lives at one file. On the desktop app it is
 `<userData>/library/shader-studio.sqlite` (`%APPDATA%/Shader Studio/library` on
 Windows, `~/Library/Application Support/Shader Studio/library` on macOS,
-`~/.config/Shader Studio/library` on Linux). From-source dev without
+`~/.config/Shader Studio/library` on Linux). These original directory names are
+retained so upgrading to Shadergrove preserves existing libraries and preferences.
+From-source dev without
 `DATABASE_URL` uses `<SHADER_DATA_DIR>/shader-studio.sqlite`. Back it up by
 copying the file (and its `-wal`/`-shm` siblings) while the app is closed.
 
@@ -248,7 +265,7 @@ behind the NestJS REST API.
 ### Desktop accounts and uploads
 
 Accounts are optional. Set `SHADER_STUDIO_ACCOUNT_URL` **before building** the
-desktop app to the origin of your Shader Studio server; the build embeds it in
+desktop app to the origin of your Shadergrove server; the build embeds it in
 the Electron main process. Use HTTPS, or HTTP only for loopback development.
 Without a valid configured origin, account controls are disabled.
 
@@ -286,7 +303,7 @@ three.js, lil-gui, and Monaco.
 | `pnpm typecheck` | Generate IPC types and check workspace TypeScript |
 | `pnpm dev:mcp`   | Run the [MCP server](#mcp-server) from source     |
 
-## Using Shader Studio
+## Using Shadergrove
 
 ### Keyboard shortcuts
 
@@ -513,7 +530,7 @@ shader changes its display name only; the id, and therefore the path, is stable.
 {
   "name": "Hex Pulse",
   "description": "A hexagonal lattice that answers back.",
-  "author": "Shader Studio",
+  "author": "Shadergrove",
   "createdAt": "2026-07-12T00:00:00.000Z",
   "updatedAt": "2026-07-12T00:00:00.000Z",
   "controls": [/* see below */],
@@ -678,7 +695,7 @@ Everything needed to reproduce a shader elsewhere is in it: the whole project
     "id": "hex-pulse",
     "name": "Hex Pulse",
     "description": "...",
-    "author": "Shader Studio",
+    "author": "Shadergrove",
     "controls": [/* the schema */],
     "render": { "postProcessing": { "enabled": true, "effects": [/* see meta.json above */] } },
     "fragment": "precision highp float; ...",
@@ -787,7 +804,7 @@ never carry a value for a control that does not exist.
 
 `tools/mcp` publishes [`@shader-studio/mcp`](https://www.npmjs.com/package/@shader-studio/mcp)
 on npm: an [MCP](https://modelcontextprotocol.io) server that lets Claude Code,
-Codex, Cursor, and other MCP clients drive a **locally-open Shader Studio
+Codex, Cursor, and other MCP clients drive a **locally-open Shadergrove
 tab** — list shaders, edit GLSL live, tune uniforms, apply presets, and
 capture screenshots — through the same authenticated localhost WebSocket
 bridge. The app enables this bridge by default in development; production
@@ -799,7 +816,7 @@ makes no outbound network calls of its own.
 ```bash
 npx -y @shader-studio/mcp
 # or, wired into Claude Code:
-claude mcp add shader-studio -- npx -y @shader-studio/mcp
+claude mcp add shadergrove -- npx -y @shader-studio/mcp
 ```
 
 Pairing the browser tab, the security model, environment variables, and
@@ -820,7 +837,7 @@ per-client config (Codex, Cursor, Windows) are documented in
 Poured Paint and its five presets are carried over from the project this app grew
 out of, and are the reference for what the format can express.
 
-All shaders distributed in `examples/shaders` are original Shader Studio examples
+All shaders distributed in `examples/shaders` are original Shadergrove examples
 and are licensed under Apache-2.0 with the rest of the project.
 
 ---
@@ -918,6 +935,6 @@ pnpm test
 
 Copyright 2026 Adel Terki.
 
-Shader Studio is licensed under the [Apache License 2.0](LICENSE). Third-party
+Shadergrove is licensed under the [Apache License 2.0](LICENSE). Third-party
 software included by the project remains under its respective license; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

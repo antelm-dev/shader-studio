@@ -3,9 +3,9 @@ import { access, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
-import { ShaderLibrary } from '@shader-studio/backend/library';
-import { createLegacyReader } from '@shader-studio/backend/persistence/legacy';
-import type { MigrationResult } from '@shader-studio/desktop-api/contracts';
+import { ShaderLibrary } from '@shadergrove/backend/library';
+import { createLegacyReader } from '@shadergrove/backend/persistence/legacy';
+import type { MigrationResult } from '@shadergrove/desktop-api/contracts';
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -17,7 +17,7 @@ async function exists(path: string): Promise<boolean> {
 }
 
 /**
- * The user-initiated "import an existing Shader Studio data folder" flow. This is
+ * The user-initiated "import an existing Shadergrove data folder" flow. This is
  * separate from the automatic first-launch import of `<userData>/library`: it
  * lets the user point at any older data directory. It reads the folder read-only
  * and imports into the SQL library; it never deletes the source.
@@ -32,7 +32,7 @@ export function createMigrationIpc(library: ShaderLibrary, markerPath: string) {
       const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
       const options: OpenDialogOptions = {
         properties: ['openDirectory'],
-        title: 'Choose an existing Shader Studio data folder',
+        title: 'Choose an existing Shadergrove data folder',
       };
       const picked = owner
         ? await dialog.showOpenDialog(owner, options)

@@ -16,7 +16,7 @@ import {
   getBloomEffect,
   type ShaderPayload,
   type TextureChannelPayloads,
-} from '@shader-studio/shared/model';
+} from '@shadergrove/shared/model';
 import {
   addBuffer,
   addFile,
@@ -24,9 +24,9 @@ import {
   imagePass,
   migrateLegacyProject,
   setChannelBinding,
-} from '@shader-studio/shared/project';
-import { buildCollectionBundle, parseBundle } from '@shader-studio/shared/validate';
-import { DEFAULT_VERTEX, TEMPLATE_FRAGMENT } from '@shader-studio/shared/templates';
+} from '@shadergrove/shared/project';
+import { buildCollectionBundle, parseBundle } from '@shadergrove/shared/validate';
+import { DEFAULT_VERTEX, TEMPLATE_FRAGMENT } from '@shadergrove/shared/templates';
 
 import { ShaderLibrary, type PayloadSource } from './shader-library';
 import { StorageError } from './storage-error';

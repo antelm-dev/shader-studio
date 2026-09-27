@@ -14,12 +14,12 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { arrowKeyDelta } from '@shader-studio/shared/geometry';
+import { arrowKeyDelta } from '@shadergrove/shared/geometry';
 import {
   BOTTOM_PANEL_HEIGHT_LIMITS,
   DEFAULT_BOTTOM_PANEL_HEIGHT,
   type BottomPanelTab,
-} from '@shader-studio/shared/panel-prefs';
+} from '@shadergrove/shared/panel-prefs';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { Preferences } from '../../prefs/preferences';

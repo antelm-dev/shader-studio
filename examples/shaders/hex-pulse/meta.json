@@ -1,7 +1,7 @@
 {
   "name": "Hex Pulse",
   "description": "A hexagonal lattice that answers back: click to send a wavefront across the grid, or hover to light the cells under the cursor. Demonstrates the engine's u_clickData ripple slots.",
-  "author": "Shader Studio",
+  "author": "Shadergrove",
   "createdAt": "2026-07-12T00:00:00.000Z",
   "updatedAt": "2026-07-12T00:00:00.000Z",
   "controls": [

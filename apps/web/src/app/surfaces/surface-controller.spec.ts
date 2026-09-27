@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { createDefaultSurface } from '@shader-studio/shared/surfaces';
+import { createDefaultSurface } from '@shadergrove/shared/surfaces';
 
 import { SurfaceController } from './surface-controller';
 import { SurfaceRegistry } from './surface-registry';

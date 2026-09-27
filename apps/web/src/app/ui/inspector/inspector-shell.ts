@@ -9,9 +9,9 @@ import {
   inject,
 } from '@angular/core';
 
-import { PANEL_LIMITS } from '@shader-studio/shared/panel-prefs';
-import { isContainedPlacement } from '@shader-studio/shared/surfaces';
-import type { ResizeEdge } from '@shader-studio/shared/geometry';
+import { PANEL_LIMITS } from '@shadergrove/shared/panel-prefs';
+import { isContainedPlacement } from '@shadergrove/shared/surfaces';
+import type { ResizeEdge } from '@shadergrove/shared/geometry';
 import { InspectorPanel } from './inspector-panel';
 import { ReducedMotion } from '../../prefs/reduced-motion';
 import {

@@ -1,4 +1,4 @@
-import type { ShaderParams } from '@shader-studio/shared/model';
+import type { ShaderParams } from '@shadergrove/shared/model';
 import type { ShaderEngine } from './shader-engine';
 
 /**

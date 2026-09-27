@@ -11,7 +11,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { interval } from 'rxjs';
 
-import type { PassResolution } from '@shader-studio/shared';
+import type { PassResolution } from '@shadergrove/shared';
 import { Preferences } from '../../prefs/preferences';
 import { RendererHandle } from '../../rendering/renderer-handle';
 import type { ProfilerSnapshot } from '../../rendering/performance-profiler';

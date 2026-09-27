@@ -10,9 +10,9 @@ import {
   type McpErrorCode,
   type McpScreenshot,
   type McpStateSnapshot,
-} from '@shader-studio/shared/mcp-protocol';
-import { DEFAULT_RENDER, type ShaderControl, type ShaderParams } from '@shader-studio/shared/model';
-import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
+} from '@shadergrove/shared/mcp-protocol';
+import { DEFAULT_RENDER, type ShaderControl, type ShaderParams } from '@shadergrove/shared/model';
+import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { renderFrame } from '../rendering/frame-render';
 import { ShaderStore } from '../workspace/shader-store';

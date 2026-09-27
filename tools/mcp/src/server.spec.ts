@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { ShaderStudioController, RenderFrameOptions } from '@shader-studio/shared/controller';
+import type { ShadergroveController, RenderFrameOptions } from '@shadergrove/shared/controller';
 import type {
   CompileResult,
   DocumentSnapshot,
@@ -12,13 +12,13 @@ import type {
   RenderFrameResult,
   SetParamsResult,
   TextEdit,
-} from '@shader-studio/shared/mcp-protocol';
+} from '@shadergrove/shared/mcp-protocol';
 import {
   DEFAULT_RENDER,
   type ParamValue,
   type Preset,
   type ShaderSummary,
-} from '@shader-studio/shared/model';
+} from '@shadergrove/shared/model';
 
 import { buildServer } from './server';
 
@@ -47,7 +47,7 @@ const EMPTY_STATE: McpStateSnapshot = {
   diagnostics: [],
 };
 
-class FakeController implements ShaderStudioController {
+class FakeController implements ShadergroveController {
   revision = 1;
   documents = new Map<string, string>([
     ['image', 'void main() { gl_FragColor = vec4(1.0); }'],
@@ -205,7 +205,7 @@ function textOf(content: Record<string, unknown> | undefined): string {
   return typeof content?.['text'] === 'string' ? content['text'] : '';
 }
 
-async function createLinkedClient(controller: ShaderStudioController): Promise<Client> {
+async function createLinkedClient(controller: ShadergroveController): Promise<Client> {
   const server = buildServer(controller);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'test-client', version: '1.0.0' });

@@ -1,6 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 
-import type { Bundle, ImportMode } from '@shader-studio/shared/model';
+import type { Bundle, ImportMode } from '@shadergrove/shared/model';
 
 /** Semantic Help destinations — never pass raw URLs to the main process. */
 export type SupportLinkDestination = 'documentation' | 'issues';

@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 
-import type { ChannelBinding, ChannelBindings } from '@shader-studio/shared';
+import type { ChannelBinding, ChannelBindings } from '@shadergrove/shared';
 import type { BufferTargets } from '../pass-targets';
 import { CHANNEL_COUNT, type TextureManager } from './texture-manager';
 import type { UniformMap } from './uniform-registry';

@@ -1,5 +1,5 @@
 {
-  "name": "@shader-studio/desktop",
+  "name": "@shadergrove/desktop",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -16,9 +16,9 @@
     "typecheck": "pnpm gen:ipc && tsc --noEmit -p tsconfig.main.json && tsc --noEmit -p tsconfig.preload.json"
   },
   "dependencies": {
-    "@shader-studio/backend": "workspace:*",
-    "@shader-studio/desktop-api": "workspace:*",
-    "@shader-studio/shared": "workspace:*",
+    "@shadergrove/backend": "workspace:*",
+    "@shadergrove/desktop-api": "workspace:*",
+    "@shadergrove/shared": "workspace:*",
     "electron-ipc-module": "1.1.0",
     "electron-updater": "6.8.9"
   },

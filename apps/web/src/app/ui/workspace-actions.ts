@@ -6,10 +6,10 @@ import {
   hasActivePostProcessing,
   type ImportMode,
   type ShaderBundle,
-} from '@shader-studio/shared/model';
-import { composePass } from '@shader-studio/shared/pass-source';
-import { imagePass } from '@shader-studio/shared/project';
-import type { SyncRemoveMode, SyncRemoveResult } from '@shader-studio/desktop-api/contracts';
+} from '@shadergrove/shared/model';
+import { composePass } from '@shadergrove/shared/pass-source';
+import { imagePass } from '@shadergrove/shared/project';
+import type { SyncRemoveMode, SyncRemoveResult } from '@shadergrove/desktop-api/contracts';
 import { AuthService, type AuthResult } from '../auth/auth.service';
 import { DesktopAccount } from '../desktop/desktop-account';
 import { DesktopPlatform } from '../desktop/desktop-platform';
@@ -17,8 +17,8 @@ import { DesktopSync } from '../desktop/desktop-sync';
 import { DesktopUpdater } from '../desktop/desktop-updater';
 import { ShaderStore, type EditorDocument } from '../workspace/shader-store';
 import { I18n } from '../i18n/i18n';
-import { buildFullGlsl } from '@shader-studio/shared/glsl-export';
-import { convertShadertoy } from '@shader-studio/shared/shadertoy-import';
+import { buildFullGlsl } from '@shadergrove/shared/glsl-export';
+import { convertShadertoy } from '@shadergrove/shared/shadertoy-import';
 import type { ConfirmDialogData } from './dialogs/confirm-dialog';
 import type { DeleteLinkedDialogData } from './dialogs/delete-linked-dialog';
 import type { NewShaderDialogResult } from './dialogs/new-shader-dialog';
@@ -136,13 +136,13 @@ export class WorkspaceActions {
   }
 
   /**
-   * About Shader Studio… — same dialog as Check for Updates, without forcing a
+   * About Shadergrove… — same dialog as Check for Updates, without forcing a
    * network check. Also offered on the web, where it drops the update status.
    */
-  async openAboutShaderStudio(): Promise<void> {
+  async openAboutShadergrove(): Promise<void> {
     if (this.dialog.getDialogById(ABOUT_DIALOG_ID)) return;
-    const { AboutShaderStudioDialog } = await import('./dialogs/desktop-version-dialog');
-    this.dialog.open(AboutShaderStudioDialog, {
+    const { AboutShadergroveDialog } = await import('./dialogs/desktop-version-dialog');
+    this.dialog.open(AboutShadergroveDialog, {
       id: ABOUT_DIALOG_ID,
       width: '480px',
       maxWidth: '92vw',
@@ -157,7 +157,7 @@ export class WorkspaceActions {
   async checkForUpdates(): Promise<void> {
     if (!this.desktop.available) return;
     await this.updater.check();
-    await this.openAboutShaderStudio();
+    await this.openAboutShadergrove();
   }
 
   private async promptFor(data: PromptDialogData): Promise<PromptDialogResult | undefined> {
@@ -595,12 +595,10 @@ export class WorkspaceActions {
     try {
       const bundle = await this.store.exportAll();
       if (this.desktop.available) {
-        if (
-          !(await this.desktop.saveBundle('shader-studio-collection.shader.json', bundle as never))
-        )
+        if (!(await this.desktop.saveBundle('shadergrove-collection.shader.json', bundle as never)))
           return;
       } else {
-        this.download(bundle, 'shader-studio-collection.shader.json');
+        this.download(bundle, 'shadergrove-collection.shader.json');
       }
       this.store.notice.set({ text: this.i18n.t('notice.exportedAll'), error: false });
     } catch (error) {

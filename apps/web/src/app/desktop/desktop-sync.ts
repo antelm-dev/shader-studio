@@ -5,7 +5,7 @@ import type {
   SyncRemoveRequest,
   SyncRemoveResult,
   SyncStatus,
-} from '@shader-studio/desktop-api/contracts';
+} from '@shadergrove/desktop-api/contracts';
 import { I18n } from '../i18n/i18n';
 import { ShaderStore } from '../workspace/shader-store';
 

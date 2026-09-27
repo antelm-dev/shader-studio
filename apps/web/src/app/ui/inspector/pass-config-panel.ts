@@ -16,7 +16,7 @@ import {
   type RenderPass,
   type TextureFilterMode,
   type TextureWrapMode,
-} from '@shader-studio/shared';
+} from '@shadergrove/shared';
 
 import { ShaderStore } from '../../workspace/shader-store';
 

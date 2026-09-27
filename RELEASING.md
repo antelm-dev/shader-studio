@@ -1,6 +1,6 @@
-# Releasing Shader Studio
+# Releasing Shadergrove
 
-Shader Studio has three Windows delivery paths. CI previews are temporary test
+Shadergrove has three Windows delivery paths. CI previews are temporary test
 builds, beta releases are opt-in Electron updates, and stable releases are
 versioned from `master`.
 
@@ -31,7 +31,7 @@ with that token can trigger the normal pull-request CI; resources created with
 
 Push to or merge into the `preview` branch. CI runs the normal Windows packaging
 check and uploads the unpacked application as
-`shader-studio-preview-<commit>`. The artifact is available from the workflow
+`shadergrove-preview-<commit>`. The artifact is available from the workflow
 run for 14 days and is never published to the Electron update feed.
 
 ## Stable releases

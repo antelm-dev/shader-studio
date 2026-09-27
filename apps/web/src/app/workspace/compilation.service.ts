@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 
-import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
+import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import type { CompileOutcome } from './shader-store';
 
 interface CompileWaiter {

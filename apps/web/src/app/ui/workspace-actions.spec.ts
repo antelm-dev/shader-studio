@@ -4,9 +4,9 @@ import { MatDialog } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 
-import type { SyncRemoveResult } from '@shader-studio/desktop-api/contracts';
-import { DEFAULT_CHANNELS, DEFAULT_RENDER, type ShaderRecord } from '@shader-studio/shared/model';
-import { migrateLegacyProject } from '@shader-studio/shared/project';
+import type { SyncRemoveResult } from '@shadergrove/desktop-api/contracts';
+import { DEFAULT_CHANNELS, DEFAULT_RENDER, type ShaderRecord } from '@shadergrove/shared/model';
+import { migrateLegacyProject } from '@shadergrove/shared/project';
 import { ShaderApi } from '../api/shader-api';
 import { AuthService } from '../auth/auth.service';
 import { DesktopAccount } from '../desktop/desktop-account';
@@ -209,12 +209,12 @@ describe('WorkspaceActions Help flows', () => {
     expect(open).toHaveBeenCalledOnce();
   });
 
-  it('openAboutShaderStudio opens About without checking for updates', async () => {
-    await actions.openAboutShaderStudio();
+  it('openAboutShadergrove opens About without checking for updates', async () => {
+    await actions.openAboutShadergrove();
     expect(check).not.toHaveBeenCalled();
     expect(open).toHaveBeenCalledOnce();
     const [component, config] = open.mock.calls[0]!;
-    expect(String(component.name)).toMatch(/DesktopVersionDialog|AboutShaderStudioDialog/);
+    expect(String(component.name)).toMatch(/DesktopVersionDialog|AboutShadergroveDialog/);
     expect(config).toMatchObject({ id: 'about-shader-studio', width: '480px' });
   });
 

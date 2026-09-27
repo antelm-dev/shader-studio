@@ -17,7 +17,7 @@ import {
   type ChannelIndex,
   type RenderPass,
   type ShaderProject,
-} from '@shader-studio/shared';
+} from '@shadergrove/shared';
 
 import { GlContext, type GlBackend } from './gl-context';
 import { ShaderEngine, type EnginePass, type MultiPassSpec } from './shader-engine';

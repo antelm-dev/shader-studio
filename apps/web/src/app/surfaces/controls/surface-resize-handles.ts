@@ -8,8 +8,8 @@
 
 import { Component, computed, input, output } from '@angular/core';
 
-import { RESIZE_EDGES, type ResizeEdge } from '@shader-studio/shared/geometry';
-import type { DockSide } from '@shader-studio/shared/surfaces';
+import { RESIZE_EDGES, type ResizeEdge } from '@shadergrove/shared/geometry';
+import type { DockSide } from '@shadergrove/shared/surfaces';
 
 import {
   dockResizeEdge,

@@ -1,8 +1,8 @@
 import { isPlatformBrowser } from '@angular/common';
 import { DOCUMENT, Injectable, PLATFORM_ID, inject } from '@angular/core';
 
-import { sanitizeProject, type ShaderProject } from '@shader-studio/shared/project';
-import { validateRender } from '@shader-studio/shared/validate';
+import { sanitizeProject, type ShaderProject } from '@shadergrove/shared/project';
+import { validateRender } from '@shadergrove/shared/validate';
 import type { ShaderDraft } from './shader-store';
 
 const STORAGE_KEY = 'shader-studio.recovered-drafts';

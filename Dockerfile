@@ -32,7 +32,7 @@ COPY . .
 # apps/web/angular.json) and the standalone migrate-files CLI.
 RUN pnpm gen:ipc \
     && pnpm build \
-    && pnpm --filter @shader-studio/server build:cli
+    && pnpm --filter @shadergrove/server build:cli
 
 # The SSR output keeps PostgreSQL and Swagger external. Install their runtime
 # dependencies into an isolated tree; Swagger must remain external because its
@@ -54,7 +54,7 @@ ENV NODE_ENV=production \
 # SSR bundle + examples + i18n catalogs + the CLI, plus the PostgreSQL and
 # Swagger runtime dependencies. Express and Angular are inlined
 # into the bundle.
-COPY --from=build /app/dist/shader-studio ./dist/shader-studio
+COPY --from=build /app/dist/shadergrove ./dist/shadergrove
 COPY --from=build /app/examples ./examples
 COPY --from=build /app/i18n ./i18n
 COPY --from=build /runtime-deps/node_modules ./node_modules
@@ -70,4 +70,4 @@ EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 4000) + '/api/health', { signal: AbortSignal.timeout(4000) }).then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-CMD ["node", "dist/shader-studio/server/server.mjs"]
+CMD ["node", "dist/shadergrove/server/server.mjs"]

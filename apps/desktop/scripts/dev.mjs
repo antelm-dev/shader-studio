@@ -9,7 +9,7 @@ const commands = {
   angular: {
     name: 'angular',
     entry: pnpm,
-    args: ['--filter', '@shader-studio/web', 'dev:desktop'],
+    args: ['--filter', '@shadergrove/web', 'dev:desktop'],
     stdin: 'ignore',
   },
   rollup: {

@@ -43,7 +43,7 @@ export interface AccountState {
 
 export type SignInResult = 'ok' | 'cancelled' | 'timeout' | 'encryption-unavailable' | 'failed';
 
-/** Mirrors @shader-studio/shared SurfaceKind for the preload boundary. */
+/** Mirrors @shadergrove/shared SurfaceKind for the preload boundary. */
 export type NativeSurfaceKind =
   | 'preview'
   | 'editor'

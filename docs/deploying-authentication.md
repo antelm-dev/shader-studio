@@ -1,4 +1,4 @@
-# Deploying Shader Studio with accounts
+# Deploying Shadergrove with accounts
 
 Each web user gets a private library. Desktop editing remains local and works
 offline. Desktop builds configured with `SHADER_STUDIO_ACCOUNT_URL` can sign in

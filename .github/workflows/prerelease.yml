@@ -63,7 +63,7 @@ jobs:
           else
             gh release create "v$VERSION" \
               --target "$GITHUB_SHA" \
-              --title "Shader Studio v$VERSION" \
+              --title "Shadergrove v$VERSION" \
               --generate-notes \
               --prerelease \
               --draft

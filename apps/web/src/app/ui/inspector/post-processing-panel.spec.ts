@@ -11,7 +11,7 @@ import {
   getBloomEffect,
   getVignetteEffect,
   type RenderSettings,
-} from '@shader-studio/shared/model';
+} from '@shadergrove/shared/model';
 import { I18nCatalog, type I18nCatalogMap } from '../../i18n/catalog';
 import { I18n } from '../../i18n/i18n';
 import { Preferences, createDefaultWorkspacePreferences } from '../../prefs/preferences';

@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { WELL_KNOWN_SURFACE_IDS } from '@shader-studio/shared/surfaces';
+import { WELL_KNOWN_SURFACE_IDS } from '@shadergrove/shared/surfaces';
 
 import type { SecureWindowOptions } from './browser-window-factory';
 import { SurfaceWindowManager } from './surface-window-manager';

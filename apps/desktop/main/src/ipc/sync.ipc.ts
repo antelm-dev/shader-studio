@@ -1,8 +1,8 @@
 import { BrowserWindow } from 'electron';
 import { defineIpcEvents, defineIpcModule, handle } from 'electron-ipc-module';
 
-import { StorageError } from '@shader-studio/backend/library';
-import type { SyncChangedEvent, SyncRemoveRequest } from '@shader-studio/desktop-api/contracts';
+import { StorageError } from '@shadergrove/backend/library';
+import type { SyncChangedEvent, SyncRemoveRequest } from '@shadergrove/desktop-api/contracts';
 import type { SyncService } from '../sync/sync-service';
 
 type SyncEvents = { 'sync-changed': [event: SyncChangedEvent] };

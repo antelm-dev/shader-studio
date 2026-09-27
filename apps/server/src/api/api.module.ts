@@ -5,7 +5,7 @@ import {
   type NestModule,
 } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import type { ShaderLibrary } from '@shader-studio/backend/library';
+import type { ShaderLibrary } from '@shadergrove/backend/library';
 
 import type { Auditor } from '../auth/audit';
 import { consoleAuditor } from '../auth/audit';

@@ -19,8 +19,8 @@ import {
   DEFAULT_EDITOR_APPEARANCE,
   fontFamilyStack,
   type EditorAppearance,
-} from '@shader-studio/shared/editor-prefs';
-import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
+} from '@shadergrove/shared/editor-prefs';
+import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import { ReducedMotion } from '../prefs/reduced-motion';
 import { FontLoader, findFont, nearestWeight } from './google-fonts';
 import { monacoThemeId, resolveThemeId } from './editor-themes';

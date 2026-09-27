@@ -24,8 +24,8 @@ import {
   FILE_EXPLORER_LIMITS,
   FILE_EXPLORER_OVERLAY_BREAKPOINT,
   clampFileExplorerWidth,
-} from '@shader-studio/shared/panel-prefs';
-import { findPass } from '@shader-studio/shared/project';
+} from '@shadergrove/shared/panel-prefs';
+import { findPass } from '@shadergrove/shared/project';
 import { CodeEditor, type EditorDoc } from '../../editor/code-editor';
 import { EditorSettings } from '../../editor/editor-settings';
 import {

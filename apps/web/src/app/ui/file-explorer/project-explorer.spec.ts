@@ -1,11 +1,11 @@
-import { CONFIG_DOC, VERTEX_DOC } from '@shader-studio/shared/diagnostic';
+import { CONFIG_DOC, VERTEX_DOC } from '@shadergrove/shared/diagnostic';
 import {
   createProject,
   makePass,
   resolvePassOrder,
   type ChannelBindings,
   type ShaderProject,
-} from '@shader-studio/shared/project';
+} from '@shadergrove/shared/project';
 import { describe, expect, it } from 'vitest';
 
 import type { EditorDocument } from '../../workspace/shader-store';

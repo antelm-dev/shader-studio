@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import { loadI18nCatalog } from '@shader-studio/backend/i18n';
+import { loadI18nCatalog } from '@shadergrove/backend/i18n';
 import { I18nCatalog, type I18nCatalogMap } from './catalog';
 import type { AppLocale } from './keys';
 

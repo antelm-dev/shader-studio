@@ -6,7 +6,7 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
-import { LIMITS } from '@shader-studio/shared/validate';
+import { LIMITS } from '@shadergrove/shared/validate';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 
 export interface PromptDialogOption {

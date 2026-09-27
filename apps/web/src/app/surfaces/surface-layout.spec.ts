@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { DEFAULT_EDITOR_WINDOW } from '@shader-studio/shared/editor-prefs';
+import { DEFAULT_EDITOR_WINDOW } from '@shadergrove/shared/editor-prefs';
 import {
   COMPACT_VIEWPORT_WIDTH,
   DEFAULT_EDITOR_GROUP_ID,
@@ -10,8 +10,8 @@ import {
   editorSurfaceId,
   isContainedPlacement,
   migrateLayoutFromPreferences,
-} from '@shader-studio/shared/surfaces';
-import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
+} from '@shadergrove/shared/surfaces';
+import { DEFAULT_PREVIEW_WINDOW } from '@shadergrove/shared/preview-prefs';
 import { Preferences, type WorkspacePreferences } from '../prefs/preferences';
 import { SurfaceController } from './surface-controller';
 import { SurfaceLayoutService } from './surface-layout';

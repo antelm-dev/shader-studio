@@ -50,14 +50,14 @@ jobs:
         run: pnpm check
 
       - name: Typecheck
-        run: pnpm gen:ipc && pnpm typecheck:scripts && pnpm nx affected -t typecheck --exclude shader-studio
+        run: pnpm gen:ipc && pnpm typecheck:scripts && pnpm nx affected -t typecheck --exclude shadergrove
 
       - name: Test
-        run: pnpm nx affected -t test --exclude shader-studio
+        run: pnpm nx affected -t test --exclude shadergrove
 
       - name: Build
         # Desktop packaging has its own Windows job below.
-        run: pnpm nx affected -t build --exclude shader-studio,@shader-studio/desktop
+        run: pnpm nx affected -t build --exclude shadergrove,@shadergrove/desktop
 
       - name: Production SSR smoke
         run: pnpm build && pnpm smoke:ssr
@@ -81,7 +81,7 @@ jobs:
       - name: Generate IPC bridge
         run: pnpm gen:ipc
       - name: Install Chromium
-        run: pnpm --filter @shader-studio/workspace-tools exec playwright install chromium --with-deps
+        run: pnpm --filter @shadergrove/workspace-tools exec playwright install chromium --with-deps
       - name: Smoke
         run: pnpm smoke
 
@@ -93,7 +93,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Build production image
-        run: docker build --tag shader-studio:ci .
+        run: docker build --tag shadergrove:ci .
 
   desktop:
     name: Windows desktop package
@@ -115,7 +115,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/preview'
         uses: actions/upload-artifact@v4
         with:
-          name: shader-studio-preview-${{ github.sha }}
+          name: shadergrove-preview-${{ github.sha }}
           path: release/**
           if-no-files-found: error
           retention-days: 14

@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 
-import type { ThumbnailMeta } from '@shader-studio/shared/model';
-import { mimeFromExt } from '@shader-studio/shared/validate';
+import type { ThumbnailMeta } from '@shadergrove/shared/model';
+import { mimeFromExt } from '@shadergrove/shared/validate';
 import { API_BASE_URL } from '../api/api-base-url';
 import { DesktopPlatform } from '../desktop/desktop-platform';
 

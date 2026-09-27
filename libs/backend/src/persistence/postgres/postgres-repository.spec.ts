@@ -15,7 +15,7 @@ import { PostgresRepository } from './postgres-repository';
  * `pnpm test` stays green on a machine with no PostgreSQL.
  *
  *   docker run --rm -e POSTGRES_PASSWORD=test -p 5433:5432 postgres:16-alpine
- *   SHADER_TEST_DATABASE_URL=postgres://postgres:test@localhost:5433/postgres pnpm --filter @shader-studio/backend test
+ *   SHADER_TEST_DATABASE_URL=postgres://postgres:test@localhost:5433/postgres pnpm --filter @shadergrove/backend test
  */
 const url = process.env['SHADER_TEST_DATABASE_URL'] ?? process.env['DATABASE_URL'];
 

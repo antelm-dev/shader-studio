@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LOCAL_SCOPE, ShaderLibrary, StorageError } from '@shader-studio/backend/library';
-import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
-import type { SyncChangedEvent, SyncRemoveMode } from '@shader-studio/desktop-api/contracts';
-import { buildShaderBundle, extFromMime, parseBundle } from '@shader-studio/shared/validate';
+import { LOCAL_SCOPE, ShaderLibrary, StorageError } from '@shadergrove/backend/library';
+import { SqliteRepository } from '@shadergrove/backend/persistence/sqlite';
+import type { SyncChangedEvent, SyncRemoveMode } from '@shadergrove/desktop-api/contracts';
+import { buildShaderBundle, extFromMime, parseBundle } from '@shadergrove/shared/validate';
 import type { AccountState } from '../account/account-session';
 import { notifyingWrites, SyncService } from './sync-service';
 

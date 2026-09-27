@@ -39,8 +39,8 @@
          above this. Repeating it here is the second of the three stacked titles
          the toolbar is meant to be replacing. -->
     @if (!desktop.available) {
-    <span class="brand" aria-label="Shader Studio">
-      <span class="brand-title">Shader Studio</span>
+    <span class="brand" aria-label="Shadergrove">
+      <span class="brand-title">Shadergrove</span>
     </span>
     }
 
@@ -305,14 +305,14 @@
         <mat-icon>settings</mat-icon>
         <span>{{ 'menu.editorAppearance' | translate }}</span>
       </button>
-      <button mat-menu-item type="button" (click)="workspace.openAboutShaderStudio()">
+      <button mat-menu-item type="button" (click)="workspace.openAboutShadergrove()">
         <mat-icon>info</mat-icon>
         <span>{{ 'menu.desktopVersion' | translate }}</span>
       </button>
       @if (!desktop.available) {
       <a
         mat-menu-item
-        href="https://github.com/antelm-dev/shader-studio/releases/latest"
+        href="https://github.com/antelm-dev/shadergrove/releases/latest"
         target="_blank"
         rel="noopener"
       >

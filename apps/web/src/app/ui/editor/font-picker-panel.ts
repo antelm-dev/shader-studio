@@ -6,7 +6,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { fontFamilyStack } from '@shader-studio/shared/editor-prefs';
+import { fontFamilyStack } from '@shadergrove/shared/editor-prefs';
 import { EditorSettings } from '../../editor/editor-settings';
 import { FONT_CATALOGUE, FontLoader, SYSTEM_FONT } from '../../editor/google-fonts';
 import { FontPreview } from './font-preview';

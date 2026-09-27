@@ -1,23 +1,18 @@
-import { StorageError, type ShaderLibrary } from '@shader-studio/backend/library';
+import { StorageError, type ShaderLibrary } from '@shadergrove/backend/library';
 import type {
   SyncChangedEvent,
   SyncRemoveMode,
   SyncRemoveRequest,
   SyncRemoveResult,
   SyncStatus,
-} from '@shader-studio/desktop-api/contracts';
+} from '@shadergrove/desktop-api/contracts';
 import type {
   ImportResult,
   ShaderPayload,
   ShaderRecord,
   ShaderSummary,
-} from '@shader-studio/shared/model';
-import {
-  buildShaderBundle,
-  LIMITS,
-  mimeFromExt,
-  parseBundle,
-} from '@shader-studio/shared/validate';
+} from '@shadergrove/shared/model';
+import { buildShaderBundle, LIMITS, mimeFromExt, parseBundle } from '@shadergrove/shared/validate';
 import type { AccountSession, AccountState } from '../account/account-session';
 
 // --- C5 -------------------------------------------------------------------

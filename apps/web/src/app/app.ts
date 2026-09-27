@@ -26,8 +26,8 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { map } from 'rxjs';
 
-import type { ImportMode } from '@shader-studio/shared/model';
-import { DEFAULT_PANEL_WIDTHS, PANEL_LIMITS } from '@shader-studio/shared/panel-prefs';
+import type { ImportMode } from '@shadergrove/shared/model';
+import { DEFAULT_PANEL_WIDTHS, PANEL_LIMITS } from '@shadergrove/shared/panel-prefs';
 import {
   COLOR_SCHEME_OPTIONS,
   Preferences,

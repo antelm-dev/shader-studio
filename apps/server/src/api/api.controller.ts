@@ -24,9 +24,9 @@ import {
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
-import { I18N_LOCALES, loadI18nCatalog } from '@shader-studio/backend/i18n';
-import { ShaderLibrary, StorageError } from '@shader-studio/backend/library';
-import type { ShaderPayload } from '@shader-studio/shared/model';
+import { I18N_LOCALES, loadI18nCatalog } from '@shadergrove/backend/i18n';
+import { ShaderLibrary, StorageError } from '@shadergrove/backend/library';
+import type { ShaderPayload } from '@shadergrove/shared/model';
 import {
   buildCollectionBundle,
   buildShaderBundle,
@@ -34,7 +34,7 @@ import {
   mimeFromExt,
   parseBundle,
   validateImportMode,
-} from '@shader-studio/shared/validate';
+} from '@shadergrove/shared/validate';
 
 import { AUDITOR, SHADER_LIBRARY } from './api.constants';
 import { AllowUnverified, CurrentUser, Public } from './auth.guard';
@@ -420,7 +420,7 @@ export class ApiController {
   @ApiTags('transfer')
   @ApiOperation({ summary: 'Export the whole library', description: 'A collection bundle.' })
   @Get('export')
-  @Header('Content-Disposition', 'attachment; filename="shader-studio-collection.shader.json"')
+  @Header('Content-Disposition', 'attachment; filename="shadergrove-collection.shader.json"')
   @AllowUnverified()
   async exportAll(@CurrentUser() principal: Principal): Promise<unknown> {
     return buildCollectionBundle(await this.libraryFor(principal).exportAll());
@@ -542,7 +542,7 @@ export class ApiController {
 
     let result: { payload: ShaderPayload; warnings: string[] };
     try {
-      const { importShadertoyShader } = await import('@shader-studio/shared/shadertoy-api');
+      const { importShadertoyShader } = await import('@shadergrove/shared/shadertoy-api');
       result = await importShadertoyShader(idOrUrl, apiKey, { fetch });
     } catch (error) {
       this.logger.warn(`shadertoy import of "${idOrUrl}" failed: ${String(error)}`);

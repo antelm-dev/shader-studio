@@ -1,15 +1,15 @@
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
-import { importShadertoyShader } from '@shader-studio/shared/shadertoy-api';
-import type { UpdateShaderPatch } from '@shader-studio/shared/api';
-import { ShaderLibrary, StorageError } from '@shader-studio/backend/library';
-import type { ImportMode, RenderSettings, ShaderParams } from '@shader-studio/shared/model';
+import { importShadertoyShader } from '@shadergrove/shared/shadertoy-api';
+import type { UpdateShaderPatch } from '@shadergrove/shared/api';
+import { ShaderLibrary, StorageError } from '@shadergrove/backend/library';
+import type { ImportMode, RenderSettings, ShaderParams } from '@shadergrove/shared/model';
 import {
   buildCollectionBundle,
   buildShaderBundle,
   parseBundle,
   validateImportMode,
-} from '@shader-studio/shared/validate';
+} from '@shadergrove/shared/validate';
 
 function stringArg(value: unknown, name: string): string {
   if (typeof value !== 'string') throw new StorageError('invalid', `${name} must be a string`);

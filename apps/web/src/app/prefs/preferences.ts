@@ -1,8 +1,8 @@
 import { DOCUMENT, Injectable, PLATFORM_ID, computed, effect, inject, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
-import { DEFAULT_CAPTURE, type CaptureSettings } from '@shader-studio/shared/model';
-import { normalizeCapture } from '@shader-studio/shared/capture-plan';
+import { DEFAULT_CAPTURE, type CaptureSettings } from '@shadergrove/shared/model';
+import { normalizeCapture } from '@shadergrove/shared/capture-plan';
 import {
   DEFAULT_EDITOR_APPEARANCE,
   DEFAULT_EDITOR_WINDOW,
@@ -10,7 +10,7 @@ import {
   sanitizeWindowState,
   type EditorAppearance,
   type EditorWindowState,
-} from '@shader-studio/shared/editor-prefs';
+} from '@shadergrove/shared/editor-prefs';
 import {
   DEFAULT_BOTTOM_PANEL_HEIGHT,
   DEFAULT_BOTTOM_PANEL_OPEN,
@@ -29,19 +29,19 @@ import {
   type BottomPanelTab,
   type FileExplorerView,
   type InspectorTab,
-} from '@shader-studio/shared/panel-prefs';
+} from '@shadergrove/shared/panel-prefs';
 import {
   DEFAULT_PREVIEW_WINDOW,
   sanitizePreviewWindow,
   type PreviewWindowState,
-} from '@shader-studio/shared/preview-prefs';
+} from '@shadergrove/shared/preview-prefs';
 import {
   DEFAULT_EDITOR_GROUP_ID,
   WELL_KNOWN_SURFACE_IDS,
   editorSurfaceId,
   migrateLayoutFromPreferences,
   type LayoutPreferences,
-} from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/surfaces';
 import type { AppLocale } from '../i18n/i18n';
 
 /**

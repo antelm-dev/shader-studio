@@ -4,8 +4,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { EDITOR_DOCK_SIDES, type EditorDockSide } from '@shader-studio/shared/editor-prefs';
-import { COMPACT_VIEWPORT_WIDTH, isContainedPlacement } from '@shader-studio/shared/surfaces';
+import { EDITOR_DOCK_SIDES, type EditorDockSide } from '@shadergrove/shared/editor-prefs';
+import { COMPACT_VIEWPORT_WIDTH, isContainedPlacement } from '@shadergrove/shared/surfaces';
 import { SurfaceLayoutService, SurfaceRegistry, describeSurfaceCommands } from '../../surfaces';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';

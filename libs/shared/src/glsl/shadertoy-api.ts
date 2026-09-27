@@ -2,7 +2,7 @@ import {
   DEFAULT_RENDER,
   type ShaderPayload,
   type TextureChannelPayload,
-} from '@shader-studio/shared/model';
+} from '@shadergrove/shared/model';
 import {
   BUFFER_SLOTS,
   CHANNEL_COUNT,
@@ -17,10 +17,10 @@ import {
   type ChannelIndex,
   type RenderPass,
   type ShaderProject,
-} from '@shader-studio/shared/project';
-import { LIMITS, TEXTURE_EXTENSIONS, slugify } from '@shader-studio/shared/validate';
-import { decodeImage } from '@shader-studio/shared/image-dimensions';
-import { wrapMainImage } from '@shader-studio/shared/shadertoy-import';
+} from '@shadergrove/shared/project';
+import { LIMITS, TEXTURE_EXTENSIONS, slugify } from '@shadergrove/shared/validate';
+import { decodeImage } from '@shadergrove/shared/image-dimensions';
+import { wrapMainImage } from '@shadergrove/shared/shadertoy-import';
 
 const SHADERTOY_ORIGIN = 'https://www.shadertoy.com';
 

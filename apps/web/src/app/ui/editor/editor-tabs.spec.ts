@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { CONFIG_DOC, VERTEX_DOC } from '@shader-studio/shared/diagnostic';
+import { CONFIG_DOC, VERTEX_DOC } from '@shadergrove/shared/diagnostic';
 import {
   addBuffer,
   addFile,
@@ -12,7 +12,7 @@ import {
   imagePass,
   migrateLegacyProject,
   type ShaderProject,
-} from '@shader-studio/shared/project';
+} from '@shadergrove/shared/project';
 import { I18n } from '../../i18n/i18n';
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
 import {

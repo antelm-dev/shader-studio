@@ -6,18 +6,15 @@ import { TestBed } from '@angular/core/testing';
 import { MatMenuModule } from '@angular/material/menu';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_CAPTURE } from '@shader-studio/shared/model';
-import {
-  DEFAULT_EDITOR_APPEARANCE,
-  DEFAULT_EDITOR_WINDOW,
-} from '@shader-studio/shared/editor-prefs';
+import { DEFAULT_CAPTURE } from '@shadergrove/shared/model';
+import { DEFAULT_EDITOR_APPEARANCE, DEFAULT_EDITOR_WINDOW } from '@shadergrove/shared/editor-prefs';
 import {
   DEFAULT_FILE_EXPLORER_OPEN,
   DEFAULT_FILE_EXPLORER_VIEW,
   DEFAULT_FILE_EXPLORER_WIDTH,
   DEFAULT_PANEL_WIDTHS,
-} from '@shader-studio/shared/panel-prefs';
-import { DEFAULT_PREVIEW_WINDOW } from '@shader-studio/shared/preview-prefs';
+} from '@shadergrove/shared/panel-prefs';
+import { DEFAULT_PREVIEW_WINDOW } from '@shadergrove/shared/preview-prefs';
 import { DesktopPlatform } from '../../desktop/desktop-platform';
 import { I18nCatalog, type I18nCatalogMap } from '../../i18n/catalog';
 import { I18n } from '../../i18n/i18n';
@@ -55,7 +52,7 @@ describe('AppTitlebar Help and View menus', () => {
   const language = signal({ language: 'en' as 'en' | 'fr' });
   const openKeyboardShortcuts = vi.fn();
   const checkForUpdates = vi.fn();
-  const openAboutShaderStudio = vi.fn();
+  const openAboutShadergrove = vi.fn();
   const toggleDevTools = vi.fn();
   const openSupportLink = vi.fn();
 
@@ -63,7 +60,7 @@ describe('AppTitlebar Help and View menus', () => {
     language.set({ language: 'en' });
     openKeyboardShortcuts.mockReset();
     checkForUpdates.mockReset();
-    openAboutShaderStudio.mockReset();
+    openAboutShadergrove.mockReset();
     toggleDevTools.mockReset();
     openSupportLink.mockReset();
 
@@ -143,7 +140,7 @@ describe('AppTitlebar Help and View menus', () => {
           useValue: {
             openKeyboardShortcuts,
             checkForUpdates,
-            openAboutShaderStudio,
+            openAboutShadergrove,
             openEditorSettings: () => undefined,
           },
         },
@@ -216,7 +213,7 @@ describe('AppTitlebar Help and View menus', () => {
       'Documentation',
       'Report an Issue…',
       'Check for Updates…',
-      'About Shader Studio…',
+      'About Shadergrove…',
     ]);
 
     const panels = Array.from(
@@ -243,7 +240,7 @@ describe('AppTitlebar Help and View menus', () => {
     expect(checkForUpdates).toHaveBeenCalledOnce();
 
     items[4]!.click();
-    expect(openAboutShaderStudio).toHaveBeenCalledOnce();
+    expect(openAboutShadergrove).toHaveBeenCalledOnce();
   });
 
   it('keeps titlebar drag region and marks menus as no-drag', () => {

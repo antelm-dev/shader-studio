@@ -11,8 +11,8 @@
 import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
-import type { InspectorTab } from '@shader-studio/shared/panel-prefs';
-import type { Point, Rect } from '@shader-studio/shared/geometry';
+import type { InspectorTab } from '@shadergrove/shared/panel-prefs';
+import type { Point, Rect } from '@shadergrove/shared/geometry';
 import {
   DEFAULT_EDITOR_GROUP_ID,
   WELL_KNOWN_SURFACE_IDS,
@@ -24,7 +24,7 @@ import {
   type SurfaceId,
   type SurfaceKind,
   type SurfaceRecord,
-} from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/surfaces';
 
 import { DesktopPlatform } from '../desktop/desktop-platform';
 import { Preferences } from '../prefs/preferences';

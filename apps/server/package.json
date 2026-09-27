@@ -1,11 +1,11 @@
 {
-  "name": "@shader-studio/server",
+  "name": "@shadergrove/server",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build:cli": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:pg-native --outfile=../../dist/shader-studio/cli.mjs",
+    "build:cli": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:pg-native --outfile=../../dist/shadergrove/cli.mjs",
     "migrate:files": "tsx src/cli.ts migrate-files",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -16,8 +16,8 @@
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
     "@nestjs/swagger": "^11.4.6",
-    "@shader-studio/backend": "workspace:*",
-    "@shader-studio/shared": "workspace:*",
+    "@shadergrove/backend": "workspace:*",
+    "@shadergrove/shared": "workspace:*",
     "better-auth": "^1.7.5",
     "express": "^5.1.0",
     "nodemailer": "^10.0.10",
@@ -38,7 +38,7 @@
     "targets": {
       "build:cli": {
         "outputs": [
-          "{workspaceRoot}/dist/shader-studio/cli.mjs"
+          "{workspaceRoot}/dist/shadergrove/cli.mjs"
         ]
       },
       "dev": {

@@ -21,7 +21,7 @@ import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { fromNodeHeaders } from 'better-auth/node';
 
-import { StorageError } from '@shader-studio/backend/library';
+import { StorageError } from '@shadergrove/backend/library';
 
 import { resolvePrincipal, type Auth, type Principal } from '../auth/auth';
 import { AUTH_INSTANCE } from './api.constants';

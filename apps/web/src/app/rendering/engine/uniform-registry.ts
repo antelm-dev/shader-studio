@@ -5,7 +5,7 @@ import {
   type ParamValue,
   type ShaderControl,
   type ShaderParams,
-} from '@shader-studio/shared';
+} from '@shadergrove/shared';
 
 /**
  * The one place a uniform is written across more than one pass.

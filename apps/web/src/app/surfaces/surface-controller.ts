@@ -11,7 +11,7 @@
 
 import { Injectable, inject } from '@angular/core';
 
-import type { Point, Rect, Size } from '@shader-studio/shared/geometry';
+import type { Point, Rect, Size } from '@shadergrove/shared/geometry';
 import {
   closeSurface,
   dock,
@@ -32,7 +32,7 @@ import {
   type TransitionContext,
   type TransitionResult,
   type TransitionSuccess,
-} from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/surfaces';
 
 import { SurfaceRegistry } from './surface-registry';
 

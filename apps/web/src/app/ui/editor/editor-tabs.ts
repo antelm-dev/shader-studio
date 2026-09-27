@@ -7,7 +7,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
-import { DEFAULT_EDITOR_GROUP_ID, type EditorGroupId } from '@shader-studio/shared/surfaces';
+import { DEFAULT_EDITOR_GROUP_ID, type EditorGroupId } from '@shadergrove/shared/surfaces';
 import { EditorGroups } from './editor-groups';
 
 /** What a tab is doing, which is what its dot is coloured for. */

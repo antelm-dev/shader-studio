@@ -6,9 +6,9 @@ import {
   buildReleaseOwnershipCommand,
   editorGroupClientId,
   type EditorDocumentViewTransfer,
-} from '@shader-studio/shared/editor-groups';
-import type { SessionCommand, SessionEditorViewState } from '@shader-studio/shared/session';
-import type { EditorGroupId } from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/editor-groups';
+import type { SessionCommand, SessionEditorViewState } from '@shadergrove/shared/session';
+import type { EditorGroupId } from '@shadergrove/shared/surfaces';
 
 /**
  * In-process ownership bridge until the workspace session broker is wired in

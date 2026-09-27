@@ -53,7 +53,7 @@ import {
   type TextureChannelSettingsPatch,
   type ThumbnailMeta,
   type ThumbnailPayload,
-} from '@shader-studio/shared/model';
+} from '@shadergrove/shared/model';
 import {
   imagePass,
   migrateLegacyProject,
@@ -61,7 +61,7 @@ import {
   setPassSource,
   setVertexSource,
   type ShaderProject,
-} from '@shader-studio/shared/project';
+} from '@shadergrove/shared/project';
 import {
   LIMITS,
   sanitizeParams,
@@ -77,13 +77,13 @@ import {
   validateRender,
   validateSource,
   validateThumbnailMeta,
-} from '@shader-studio/shared/validate';
+} from '@shadergrove/shared/validate';
 import { expect, StorageError } from './storage-error';
 import {
   DEFAULT_VERTEX,
   TEMPLATE_CONTROLS,
   TEMPLATE_FRAGMENT,
-} from '@shader-studio/shared/templates';
+} from '@shadergrove/shared/templates';
 import type { StorageOptions } from './types';
 import {
   KeyedLock,

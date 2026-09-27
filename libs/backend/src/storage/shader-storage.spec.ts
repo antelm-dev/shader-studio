@@ -7,15 +7,15 @@ import {
   LEGACY_BUNDLE_FORMAT,
   getBloomEffect,
   type ShaderPayload,
-} from '@shader-studio/shared/model';
+} from '@shadergrove/shared/model';
 import {
   addBuffer,
   addFile,
   bufferPasses,
   imagePass,
   setChannelBinding,
-} from '@shader-studio/shared/project';
-import { buildCollectionBundle, parseBundle } from '@shader-studio/shared/validate';
+} from '@shadergrove/shared/project';
+import { buildCollectionBundle, parseBundle } from '@shadergrove/shared/validate';
 import { ShaderStorage, StorageError, DEFAULT_VERTEX, TEMPLATE_FRAGMENT } from './index';
 
 let root: string;

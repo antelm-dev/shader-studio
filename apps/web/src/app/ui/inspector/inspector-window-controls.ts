@@ -5,7 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { isContainedPlacement } from '@shader-studio/shared/surfaces';
+import { isContainedPlacement } from '@shadergrove/shared/surfaces';
 import { SurfaceLayoutService } from '../../surfaces';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 

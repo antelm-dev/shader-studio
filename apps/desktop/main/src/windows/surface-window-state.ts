@@ -6,9 +6,9 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-import type { Rect, Size } from '@shader-studio/shared/geometry';
-import type { SurfaceId, SurfaceKind } from '@shader-studio/shared/surfaces';
-import { SURFACE_MIN_SIZES } from '@shader-studio/shared/surfaces';
+import type { Rect, Size } from '@shadergrove/shared/geometry';
+import type { SurfaceId, SurfaceKind } from '@shadergrove/shared/surfaces';
+import { SURFACE_MIN_SIZES } from '@shadergrove/shared/surfaces';
 
 export const SURFACE_WINDOW_STATE_VERSION = 1 as const;
 

@@ -15,7 +15,7 @@ import type { Controller } from 'lil-gui';
 import { Preferences } from '../../prefs/preferences';
 import { ShaderStore } from '../../workspace/shader-store';
 import { RendererHandle } from '../../rendering/renderer-handle';
-import type { ShaderControl } from '@shader-studio/shared/model';
+import type { ShaderControl } from '@shadergrove/shared/model';
 
 /**
  * The parameter panel, generated entirely from the shader's control schema.

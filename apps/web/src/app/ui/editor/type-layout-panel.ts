@@ -8,7 +8,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSliderModule } from '@angular/material/slider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { EDITOR_LIMITS, type WordWrapMode } from '@shader-studio/shared/editor-prefs';
+import { EDITOR_LIMITS, type WordWrapMode } from '@shadergrove/shared/editor-prefs';
 import { EditorSettings } from '../../editor/editor-settings';
 import { findFont } from '../../editor/google-fonts';
 

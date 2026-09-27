@@ -1,5 +1,5 @@
-import type { ShaderControl } from '@shader-studio/shared/model';
-import { validateControls } from '@shader-studio/shared/validate';
+import type { ShaderControl } from '@shadergrove/shared/model';
+import { validateControls } from '@shadergrove/shared/validate';
 
 /**
  * The two questions anyone ever asks of the config buffer: "does this text

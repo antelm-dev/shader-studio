@@ -1,13 +1,13 @@
 {
-  "name": "@shader-studio/web",
+  "name": "@shadergrove/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "ng build",
-    "build:desktop": "ng run shader-studio:desktop:production",
+    "build:desktop": "ng run shadergrove:desktop:production",
     "dev": "ng serve",
-    "dev:desktop": "ng run shader-studio:desktop-serve:development",
+    "dev:desktop": "ng run shadergrove:desktop-serve:development",
     "test": "ng test",
     "test:watch": "ng test --watch",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit"
@@ -28,9 +28,9 @@
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
     "@nestjs/swagger": "^11.4.6",
-    "@shader-studio/backend": "workspace:*",
-    "@shader-studio/desktop-api": "workspace:*",
-    "@shader-studio/shared": "workspace:*",
+    "@shadergrove/backend": "workspace:*",
+    "@shadergrove/desktop-api": "workspace:*",
+    "@shadergrove/shared": "workspace:*",
     "better-auth": "^1.7.5",
     "drizzle-orm": "0.45.2",
     "express": "^5.1.0",
@@ -59,7 +59,7 @@
     "targets": {
       "build": {
         "outputs": [
-          "{workspaceRoot}/dist/shader-studio"
+          "{workspaceRoot}/dist/shadergrove"
         ]
       },
       "build:desktop": {

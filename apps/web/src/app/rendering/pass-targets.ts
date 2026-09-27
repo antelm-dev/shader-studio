@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 
-import type { PassResolution, TextureFilterMode, TextureWrapMode } from '@shader-studio/shared';
+import type { PassResolution, TextureFilterMode, TextureWrapMode } from '@shadergrove/shared';
 import type { GlContext } from './gl-context';
 
 /**

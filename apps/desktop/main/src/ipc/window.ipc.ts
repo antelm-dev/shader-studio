@@ -7,7 +7,7 @@ import type {
   NativeSurfaceOpenRequest,
   NativeSurfaceResult,
   NativeSurfaceSnapshot,
-} from '@shader-studio/desktop-api/contracts';
+} from '@shadergrove/desktop-api/contracts';
 
 import type { SurfaceWindowManager } from '../windows/surface-window-manager';
 import { resolveSupportLinkUrl } from './support-links';

@@ -19,13 +19,13 @@ const PORT = Number(process.env['SMOKE_PORT'] ?? 4321);
 const BASE = `http://127.0.0.1:${PORT}`;
 const READY = /Local:\s+http:\/\/(?:localhost|127\.0\.0\.1):/;
 
-const ipc = spawnSync('pnpm', ['--filter', '@shader-studio/desktop', 'gen:ipc'], {
+const ipc = spawnSync('pnpm', ['--filter', '@shadergrove/desktop', 'gen:ipc'], {
   cwd: root,
   encoding: 'utf8',
   shell: process.platform === 'win32',
 });
 if (ipc.status !== 0) {
-  log.error('smoke requires gen:ipc — window.electron types come from @shader-studio/desktop-api');
+  log.error('smoke requires gen:ipc — window.electron types come from @shadergrove/desktop-api');
   log.error(ipc.stderr || ipc.stdout);
   process.exit(ipc.status ?? 1);
 }
@@ -94,6 +94,11 @@ try {
   if (!signUp.ok()) throw new Error(`Sign-up failed: ${signUp.status()} ${await signUp.text()}`);
 
   await page.goto(BASE, { waitUntil: 'networkidle', timeout: 60_000 });
+  if ((await page.title()) !== 'Shadergrove') throw new Error('Unexpected application title');
+  await page
+    .locator('.brand-title')
+    .filter({ hasText: /^Shadergrove$/ })
+    .waitFor();
   await page.locator('mat-sidenav.drawer').waitFor({ state: 'visible', timeout: 30_000 });
   await page
     .locator('app-inspector-shell.inspector')

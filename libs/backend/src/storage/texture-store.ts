@@ -8,7 +8,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { TextureChannels } from '@shader-studio/shared/model';
+import type { TextureChannels } from '@shadergrove/shared/model';
 
 const TEXTURES_DIR = 'textures';
 export const THUMBNAIL_BASENAME = 'thumbnail';

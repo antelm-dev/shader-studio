@@ -103,7 +103,7 @@ if (isMainModule(import.meta.url) || process.env['pm_id']) {
       throw error;
     }
 
-    logger.log(`Shader Studio listening on http://localhost:${port}`);
+    logger.log(`Shadergrove listening on http://localhost:${port}`);
   });
 }
 

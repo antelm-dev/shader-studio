@@ -16,8 +16,8 @@ import {
   type ShaderParams,
   type ShaderRecord,
   type ShaderSummary,
-} from '@shader-studio/shared/model';
-import { imagePass, migrateLegacyProject } from '@shader-studio/shared/project';
+} from '@shadergrove/shared/model';
+import { imagePass, migrateLegacyProject } from '@shadergrove/shared/project';
 import {
   Preferences,
   createDefaultWorkspacePreferences,

@@ -4,8 +4,8 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
-import { parseBundle } from '@shader-studio/shared/validate';
-import type { DialogResult } from '@shader-studio/desktop-api/contracts';
+import { parseBundle } from '@shadergrove/shared/validate';
+import type { DialogResult } from '@shadergrove/desktop-api/contracts';
 
 // A textured shader's bundle inlines its channel images as base64, and a
 // collection can hold many shaders — comfortably larger than the old
@@ -174,7 +174,7 @@ export function createFilesIpc() {
         const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
         const options: OpenDialogOptions = {
           properties: ['openFile'],
-          filters: [{ name: 'Shader Studio bundle', extensions: ['json'] }],
+          filters: [{ name: 'Shadergrove bundle', extensions: ['json'] }],
         };
         const picked = owner
           ? await dialog.showOpenDialog(owner, options)
@@ -208,7 +208,7 @@ export function createFilesIpc() {
         const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
         const options = {
           defaultPath: basename(filename),
-          filters: [{ name: 'Shader Studio bundle', extensions: ['json'] }],
+          filters: [{ name: 'Shadergrove bundle', extensions: ['json'] }],
         };
         const picked = owner
           ? await dialog.showSaveDialog(owner, options)

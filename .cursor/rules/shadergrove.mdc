@@ -1,20 +1,20 @@
 ---
-description: Shader Studio project conventions — package manager, commands, formatting/linting, testing
+description: Shadergrove project conventions — package manager, commands, formatting/linting, testing
 alwaysApply: true
 ---
 
-# Shader Studio
+# Shadergrove
 
 A self-hosted WebGL shader viewer/editor. pnpm monorepo (`pnpm@10`, Node `^22.22.3 || ^24.15.0 || >=26.0.0`).
 
 ## Layout
 
-- `apps/web` — Angular 22 app (`@shader-studio/web`), the editor/viewer UI.
-- `apps/desktop` — Electron shell (`@shader-studio/desktop`), wraps the web app for desktop distribution.
-- `apps/server` — Express/Angular SSR server (`@shader-studio/server`).
+- `apps/web` — Angular 22 app (`@shadergrove/web`), the editor/viewer UI.
+- `apps/desktop` — Electron shell (`@shadergrove/desktop`), wraps the web app for desktop distribution.
+- `apps/server` — Express/Angular SSR server (`@shadergrove/server`).
 - `libs/backend` — shared backend logic (file storage, project model) used by web/server/desktop.
 - `libs/desktop-api` — typed IPC surface between web and Electron main (`gen:ipc` generates the bridge).
-- `tools/mcp` — MCP server exposing Shader Studio to AI tools (bridges to the running app via `SHADER_STUDIO_MCP_PORT`/`SHADER_STUDIO_MCP_TOKEN`, default port 4310).
+- `tools/mcp` — MCP server exposing Shadergrove to AI tools (bridges to the running app via `SHADER_STUDIO_MCP_PORT`/`SHADER_STUDIO_MCP_TOKEN`, default port 4310).
 - `libs/shared` — types/utilities shared across all packages.
 - `tools/workspace` — repository checks, generators, smoke tests, and automation.
 - `examples/shaders/*` — example GLSL shaders (`fragment.glsl` / `vertex.glsl` pairs), not app code.

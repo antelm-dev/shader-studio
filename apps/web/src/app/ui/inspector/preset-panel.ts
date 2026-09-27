@@ -3,7 +3,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 
-import type { Preset } from '@shader-studio/shared/model';
+import type { Preset } from '@shadergrove/shared/model';
 import { ShaderStore } from '../../workspace/shader-store';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';

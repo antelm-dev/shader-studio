@@ -1,20 +1,24 @@
-# @shader-studio/mcp
+# Shadergrove MCP
+
+The published package remains `@shader-studio/mcp`, with its existing
+`shader-studio-mcp` command, environment variables, pairing keys, and resource
+URIs. The Shadergrove rename does not require changing an existing MCP setup.
 
 An [MCP](https://modelcontextprotocol.io) server that lets Codex, Claude Code,
-Cursor, and other MCP clients drive a **locally-open Shader Studio tab**: list
+Cursor, and other MCP clients drive a **locally-open Shadergrove tab**: list
 shaders, edit GLSL live, tune uniforms, apply presets, and capture
 screenshots — all through the same authenticated localhost WebSocket bridge
 the app already exposes.
 
 This package runs entirely on your machine. It speaks MCP over stdio to your
-client and speaks a small authenticated WebSocket protocol to Shader Studio
+client and speaks a small authenticated WebSocket protocol to Shadergrove
 running in your browser (or a desktop build with the bridge enabled). It never makes outbound network
 calls of its own.
 
 ## Prerequisites
 
-- Node.js (a version compatible with [Shader Studio](https://github.com/antelm-dev/shader-studio) itself — see [Version compatibility](#version-compatibility))
-- Shader Studio running and reachable at `http://localhost:4200` (`pnpm dev`), with a tab open and signed in; or a desktop build with the MCP bridge enabled
+- Node.js (a version compatible with [Shadergrove](https://github.com/antelm-dev/shadergrove) itself — see [Version compatibility](#version-compatibility))
+- Shadergrove running and reachable at `http://localhost:4200` (`pnpm dev`), with a tab open and signed in; or a desktop build with the MCP bridge enabled
 - An MCP client: [Codex](https://github.com/openai/codex), [Claude Code](https://docs.claude.com/claude-code), [Cursor](https://cursor.com), or any other MCP-compatible client
 
 The app's bridge is enabled by default in development. Production and packaged
@@ -52,13 +56,13 @@ with no configured token, it prints something like:
 ## Pairing the app
 
 The server and the browser tab are two independent processes; the token is
-what proves the tab talking to the bridge is actually your Shader Studio
+what proves the tab talking to the bridge is actually your Shadergrove
 session, not some other local process guessing at `127.0.0.1:4310`.
 
 1. Start `shader-studio-mcp` (via your MCP client, or directly) and note the
    printed token — or set your own via `SHADER_STUDIO_MCP_TOKEN` (see below)
    and skip the auto-generated one entirely.
-2. Open Shader Studio in your browser.
+2. Open Shadergrove in your browser.
 3. Open the browser devtools console and run:
    ```js
    localStorage.setItem('shaderStudioMcpToken', '<the token>');
@@ -97,7 +101,7 @@ skip step 1 and use that value directly in step 3.
 
 ## Troubleshooting
 
-- **"Aucun onglet Shader Studio connecté" / no app connected** — the browser
+- **"Aucun onglet Shadergrove connecté" / no app connected** — the browser
   tab hasn't paired yet, or its token doesn't match. Re-check the pairing
   steps above; the token is regenerated every time the server restarts
   unless `SHADER_STUDIO_MCP_TOKEN` is set.
@@ -178,7 +182,7 @@ terminal does. If your client can't launch the server, wrap it:
 
 ## Development
 
-This package lives inside the [Shader Studio](https://github.com/antelm-dev/shader-studio)
+This package lives inside the [Shadergrove](https://github.com/antelm-dev/shadergrove)
 monorepo at `tools/mcp`. From the repo root:
 
 ```sh
@@ -198,8 +202,8 @@ client, without needing a browser open.
   Studio **bridge wire protocol version** are independent — the server
   reports both in any protocol-mismatch error, along with the app's own
   version, so you always know which side to update.
-- This package targets the same Node.js versions as the main Shader Studio
+- This package targets the same Node.js versions as the main Shadergrove
   project (see `engines` in `package.json`).
-- Always run the MCP server against a Shader Studio app from a compatible
+- Always run the MCP server against a Shadergrove app from a compatible
   release; if the two drift too far apart, the handshake is rejected with an
   explicit, actionable error rather than failing silently.

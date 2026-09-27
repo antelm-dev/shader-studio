@@ -15,9 +15,9 @@ import {
   type ShaderControl,
   type ShaderRecord,
   type ShaderSummary,
-} from '@shader-studio/shared';
+} from '@shadergrove/shared';
 
-import { CONFIG_DOC, VERTEX_DOC } from '@shader-studio/shared/diagnostic';
+import { CONFIG_DOC, VERTEX_DOC } from '@shadergrove/shared/diagnostic';
 import {
   Preferences,
   createDefaultWorkspacePreferences,

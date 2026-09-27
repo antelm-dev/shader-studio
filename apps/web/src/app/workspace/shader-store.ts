@@ -5,14 +5,14 @@ import {
   type ParamValue,
   type RenderSettings,
   type TextureChannelSettingsPatch,
-} from '@shader-studio/shared/model';
+} from '@shadergrove/shared/model';
 import {
   type ChannelBinding,
   type ChannelIndex,
   type PassResolution,
   type RenderPass,
-} from '@shader-studio/shared/project';
-import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
+} from '@shadergrove/shared/project';
+import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import { CompilationService } from './compilation.service';
 import { PersistenceService } from './persistence.service';
 import { PresetService } from './preset.service';
@@ -682,7 +682,7 @@ export class ShaderStore {
   /**
    * Fetches a shader from Shadertoy and imports it the same way a `.shader.json`
    * bundle is: buffers, the Common tab and channel wiring survive because the
-   * mapper (`@shader-studio/shared/shadertoy-api`) already produced a full
+   * mapper (`@shadergrove/shared/shadertoy-api`) already produced a full
    * bundle — this just runs it through the existing import pipeline.
    */
   async importShadertoyShader(idOrUrl: string, apiKey: string): Promise<void> {

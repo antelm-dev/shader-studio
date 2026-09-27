@@ -6,7 +6,7 @@ import {
   bufferPasses,
   imagePass,
   migrateLegacyProject,
-} from '@shader-studio/shared';
+} from '@shadergrove/shared';
 import type { ShaderDraft } from '../state/document-state';
 import {
   FRAGMENT,

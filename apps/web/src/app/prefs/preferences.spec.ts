@@ -7,7 +7,7 @@ import {
   DEFAULT_FILE_EXPLORER_VIEW,
   DEFAULT_FILE_EXPLORER_WIDTH,
   FILE_EXPLORER_LIMITS,
-} from '@shader-studio/shared/panel-prefs';
+} from '@shadergrove/shared/panel-prefs';
 import { Preferences } from './preferences';
 
 const STORAGE_KEY = 'shader-studio.preferences';

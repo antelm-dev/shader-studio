@@ -32,7 +32,7 @@ export interface RenderFrameOptions {
   params?: Record<string, ParamValue>;
 }
 
-export interface ShaderStudioController {
+export interface ShadergroveController {
   listShaders(): Promise<readonly ShaderSummary[]>;
   selectShader(shaderId: string): Promise<McpStateSnapshot>;
   getState(): Promise<McpStateSnapshot>;

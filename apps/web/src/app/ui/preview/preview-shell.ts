@@ -4,9 +4,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 
 import { DesktopPlatform } from '../../desktop/desktop-platform';
-import { isContainedPlacement } from '@shader-studio/shared/surfaces';
-import { PREVIEW_MINIMIZED_SIZE } from '@shader-studio/shared/preview-prefs';
-import type { ResizeEdge } from '@shader-studio/shared/geometry';
+import { isContainedPlacement } from '@shadergrove/shared/surfaces';
+import { PREVIEW_MINIMIZED_SIZE } from '@shadergrove/shared/preview-prefs';
+import type { ResizeEdge } from '@shadergrove/shared/geometry';
 import { COLOR_SCHEME_OPTIONS, Preferences, colorSchemeIcon } from '../../prefs/preferences';
 import { ShaderStore } from '../../workspace/shader-store';
 import { ShaderCanvas } from '../../rendering/shader-canvas';

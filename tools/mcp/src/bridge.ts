@@ -17,14 +17,14 @@ import {
   type HandshakeAck,
   type HandshakeRejected,
   type McpError,
-} from '@shader-studio/shared/mcp-protocol';
+} from '@shadergrove/shared/mcp-protocol';
 
 import { createLogger, type Logger } from './logger.js';
 import { resolveBridgeToken, tokensMatch } from './token.js';
 import { SERVER_VERSION } from './version.js';
 
 export const NO_APP =
-  'Aucun onglet Shader Studio connecté — lance `pnpm dev` et garde une page ouverte';
+  'Aucun onglet Shadergrove connecté — lance `pnpm dev` et garde une page ouverte';
 
 export const DEFAULT_TIMEOUT_MS = 8_000;
 export const SCREENSHOT_TIMEOUT_MS = 15_000;

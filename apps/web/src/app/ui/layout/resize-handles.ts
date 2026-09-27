@@ -1,6 +1,6 @@
 import { Component, input, output } from '@angular/core';
 
-import { RESIZE_EDGES, type ResizeEdge } from '@shader-studio/shared/geometry';
+import { RESIZE_EDGES, type ResizeEdge } from '@shadergrove/shared/geometry';
 
 /**
  * The eight grips a floating window is pulled from — one component instead of

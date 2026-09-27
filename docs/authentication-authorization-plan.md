@@ -2,7 +2,7 @@
 
 ## Goal
 
-Give each web user a private Shader Studio library containing one or more shaders, with authentication, account recovery, and server-enforced ownership. Keep the desktop app usable as a local, single-user application.
+Give each web user a private Shadergrove library containing one or more shaders, with authentication, account recovery, and server-enforced ownership. Keep the desktop app usable as a local, single-user application.
 
 The first release intentionally excludes shader sharing, collaborators, teams, organizations, and per-shader ACLs. The data model leaves room to add those features later.
 

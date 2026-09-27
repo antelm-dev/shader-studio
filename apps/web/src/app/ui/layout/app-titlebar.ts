@@ -43,9 +43,9 @@ import { WorkspaceActions } from '../workspace-actions';
 
       <div class="title" aria-hidden="true">
         @if (store.record(); as shader) {
-          <span class="title-text">{{ shader.name }} — Shader Studio</span>
+          <span class="title-text">{{ shader.name }} — Shadergrove</span>
         } @else {
-          <span class="title-text">Shader Studio</span>
+          <span class="title-text">Shadergrove</span>
         }
       </div>
 
@@ -208,9 +208,9 @@ import { WorkspaceActions } from '../workspace-actions';
         <mat-icon>system_update</mat-icon>
         <span>{{ 'menu.checkForUpdates' | translate }}</span>
       </button>
-      <button mat-menu-item type="button" (click)="workspace.openAboutShaderStudio()">
+      <button mat-menu-item type="button" (click)="workspace.openAboutShadergrove()">
         <mat-icon>info</mat-icon>
-        <span>{{ 'menu.aboutShaderStudio' | translate }}</span>
+        <span>{{ 'menu.aboutShadergrove' | translate }}</span>
       </button>
     </mat-menu>
   `,

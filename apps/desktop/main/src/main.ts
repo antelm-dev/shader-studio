@@ -4,12 +4,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { createIpcContainer } from 'electron-ipc-module';
 
-import { resolveI18nDir } from '@shader-studio/backend/i18n';
-import { LOCAL_SCOPE, ShaderLibrary } from '@shader-studio/backend/library';
-import { createLegacyReader, legacyLibraryExists } from '@shader-studio/backend/persistence/legacy';
-import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
-import { WELL_KNOWN_SURFACE_IDS } from '@shader-studio/shared/surfaces';
+import { resolveI18nDir } from '@shadergrove/backend/i18n';
+import { LOCAL_SCOPE, ShaderLibrary } from '@shadergrove/backend/library';
+import { createLegacyReader, legacyLibraryExists } from '@shadergrove/backend/persistence/legacy';
+import { SqliteRepository } from '@shadergrove/backend/persistence/sqlite';
+import { WELL_KNOWN_SURFACE_IDS } from '@shadergrove/shared/surfaces';
 import { DesktopAccountSession, findCallbackUrl } from './account/account-session';
+import { configureAppIdentity } from './core/app-identity';
 import { prepare } from './core/bootstrap';
 import { createCustomScheme } from './core/electron';
 import { UpdateController } from './core/updater';
@@ -31,6 +32,8 @@ import {
   SurfaceWindowRegistry,
   SurfaceWindowStateStore,
 } from './windows';
+
+configureAppIdentity(app, env.production);
 
 const scheme = createCustomScheme(env.scheme, {
   standard: true,

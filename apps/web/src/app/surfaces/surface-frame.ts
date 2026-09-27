@@ -14,8 +14,8 @@ import {
   type Point,
   type Rect,
   type Size,
-} from '@shader-studio/shared/geometry';
-import { DEFAULT_EDITOR_WINDOW } from '@shader-studio/shared/editor-prefs';
+} from '@shadergrove/shared/geometry';
+import { DEFAULT_EDITOR_WINDOW } from '@shadergrove/shared/editor-prefs';
 import {
   SURFACE_MIN_SIZES,
   clampDockSize,
@@ -29,7 +29,7 @@ import {
   type DockSide,
   type SurfaceKind,
   type SurfaceRecord,
-} from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/surfaces';
 
 /** Default collapsed chrome size for non-preview surfaces. */
 export const SURFACE_MINIMIZED_CHROME: Size = { width: 232, height: 34 };

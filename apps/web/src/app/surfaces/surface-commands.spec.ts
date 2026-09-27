@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDefaultSurface } from '@shader-studio/shared/surfaces';
+import { createDefaultSurface } from '@shadergrove/shared/surfaces';
 
 import { availableSurfaceCommands, describeSurfaceCommands } from './surface-commands';
 

@@ -19,8 +19,8 @@ import {
   SetParamsResultSchema,
   mcpError,
   type McpError,
-} from '@shader-studio/shared/mcp-protocol';
-import type { ShaderStudioController } from '@shader-studio/shared/controller';
+} from '@shadergrove/shared/mcp-protocol';
+import type { ShadergroveController } from '@shadergrove/shared/controller';
 
 import { installBridgeShutdown, McpBridgeError, startBridge } from './bridge.js';
 import { ConfigError, loadConfig } from './config.js';
@@ -84,15 +84,15 @@ const readOnly: ToolAnnotations = {
 /**
  * Registers every tool and resource against `controller` and hands back the
  * server, unconnected. Split from `main()` so tests can wire it to an
- * `InMemoryTransport` and a fake `ShaderStudioController` instead of a real
+ * `InMemoryTransport` and a fake `ShadergroveController` instead of a real
  * bridge and stdio.
  */
-export function buildServer(controller: ShaderStudioController): McpServer {
+export function buildServer(controller: ShadergroveController): McpServer {
   const server = new McpServer(
-    { name: 'shader-studio', version: '1.0.0' },
+    { name: 'shadergrove', version: '1.0.0' },
     {
       instructions:
-        'Contrôle une session Shader Studio ouverte dans le navigateur. ' +
+        'Contrôle une session Shadergrove ouverte dans le navigateur. ' +
         'Lance `pnpm dev` (ou ouvre l’app packagée), colle le token du bridge ' +
         '(`localStorage.setItem("shaderStudioMcpToken", "…")`) puis édite les shaders live, ' +
         'règle les uniforms et capture le canvas. Un seul onglet à la fois. ' +

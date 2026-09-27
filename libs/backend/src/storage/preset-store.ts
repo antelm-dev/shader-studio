@@ -2,8 +2,8 @@
 
 import * as path from 'node:path';
 
-import type { Preset, ShaderControl } from '@shader-studio/shared/model';
-import { slugify, uniqueId, validateId, validatePreset } from '@shader-studio/shared/validate';
+import type { Preset, ShaderControl } from '@shadergrove/shared/model';
+import { slugify, uniqueId, validateId, validatePreset } from '@shadergrove/shared/validate';
 
 import { pathExists, readJson, writeFileAtomic } from './file-store';
 

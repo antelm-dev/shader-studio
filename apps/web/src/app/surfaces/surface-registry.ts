@@ -10,7 +10,7 @@
 
 import { Injectable, computed, signal } from '@angular/core';
 
-import type { Size } from '@shader-studio/shared/geometry';
+import type { Size } from '@shadergrove/shared/geometry';
 import {
   LAYOUT_VERSION,
   createDefaultSurface,
@@ -21,7 +21,7 @@ import {
   type SurfaceId,
   type SurfaceKind,
   type SurfaceRecord,
-} from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/surfaces';
 
 /** Base z-index for stacked contained windows; foreground is base + order. */
 export const SURFACE_STACK_Z_BASE = 3;

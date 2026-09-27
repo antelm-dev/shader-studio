@@ -1,7 +1,7 @@
 import { isPlatformServer } from '@angular/common';
 import { Injectable, PLATFORM_ID, TransferState, inject, makeStateKey } from '@angular/core';
 
-import type { ShaderRecord, ShaderSummary } from '@shader-studio/shared/model';
+import type { ShaderRecord, ShaderSummary } from '@shadergrove/shared/model';
 import { ShaderApi } from '../../api/shader-api';
 import { Preferences } from '../../prefs/preferences';
 import { OutputLog } from '../../ui/bottom-panel/output-log';

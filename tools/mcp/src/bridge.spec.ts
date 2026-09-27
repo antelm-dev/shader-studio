@@ -8,7 +8,7 @@ import {
   MCP_LIMITS,
   type Handshake,
   type McpStateSnapshot,
-} from '@shader-studio/shared/mcp-protocol';
+} from '@shadergrove/shared/mcp-protocol';
 
 import { callApp, closeBridge, startBridge } from './bridge';
 import { resetBridgeTokenForTests } from './token';

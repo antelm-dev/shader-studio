@@ -5,10 +5,10 @@ import { resolveSupportLinkUrl } from './support-links';
 describe('resolveSupportLinkUrl', () => {
   it('maps allowlisted destinations to the approved HTTPS URLs', () => {
     expect(resolveSupportLinkUrl('documentation')).toBe(
-      'https://github.com/antelm-dev/shader-studio#using-shader-studio',
+      'https://github.com/antelm-dev/shadergrove#using-shadergrove',
     );
     expect(resolveSupportLinkUrl('issues')).toBe(
-      'https://github.com/antelm-dev/shader-studio/issues/new',
+      'https://github.com/antelm-dev/shadergrove/issues/new',
     );
   });
 

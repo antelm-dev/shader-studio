@@ -38,13 +38,13 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@shader-studio/backend':
+      '@shadergrove/backend':
         specifier: workspace:*
         version: link:../../libs/backend
-      '@shader-studio/desktop-api':
+      '@shadergrove/desktop-api':
         specifier: workspace:*
         version: link:../../libs/desktop-api
-      '@shader-studio/shared':
+      '@shadergrove/shared':
         specifier: workspace:*
         version: link:../../libs/shared
       electron-ipc-module:
@@ -111,10 +111,10 @@ importers:
       '@nestjs/swagger':
         specifier: ^11.4.6
         version: 11.4.6(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(reflect-metadata@0.2.2)
-      '@shader-studio/backend':
+      '@shadergrove/backend':
         specifier: workspace:*
         version: link:../../libs/backend
-      '@shader-studio/shared':
+      '@shadergrove/shared':
         specifier: workspace:*
         version: link:../../libs/shared
       better-auth:
@@ -205,13 +205,13 @@ importers:
       '@nestjs/swagger':
         specifier: ^11.4.6
         version: 11.4.6(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(reflect-metadata@0.2.2)
-      '@shader-studio/backend':
+      '@shadergrove/backend':
         specifier: workspace:*
         version: link:../../libs/backend
-      '@shader-studio/desktop-api':
+      '@shadergrove/desktop-api':
         specifier: workspace:*
         version: link:../../libs/desktop-api
-      '@shader-studio/shared':
+      '@shadergrove/shared':
         specifier: workspace:*
         version: link:../../libs/shared
       better-auth:
@@ -281,7 +281,7 @@ importers:
 
   libs/backend:
     dependencies:
-      '@shader-studio/shared':
+      '@shadergrove/shared':
         specifier: workspace:*
         version: link:../shared
       drizzle-orm:
@@ -349,7 +349,7 @@ importers:
       '@rollup/plugin-typescript':
         specifier: ^12.1.2
         version: 12.3.0(rollup@4.60.2)(tslib@2.8.1)(typescript@6.0.3)
-      '@shader-studio/shared':
+      '@shadergrove/shared':
         specifier: workspace:*
         version: link:../../libs/shared
       '@types/node':

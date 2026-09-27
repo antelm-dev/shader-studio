@@ -23,8 +23,8 @@ import {
   type EditorDocumentViewTransfer,
   type EditorGroupPresentation,
   type EditorGroupsState,
-} from '@shader-studio/shared/editor-groups';
-import { DEFAULT_EDITOR_GROUP_ID, type EditorGroupId } from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/editor-groups';
+import { DEFAULT_EDITOR_GROUP_ID, type EditorGroupId } from '@shadergrove/shared/surfaces';
 
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
 import { EditorGroupSession } from './editor-group-session';

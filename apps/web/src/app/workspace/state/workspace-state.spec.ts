@@ -6,7 +6,7 @@ import {
   DEFAULT_RENDER,
   type ShaderControl,
   type ShaderRecord,
-} from '@shader-studio/shared/model';
+} from '@shadergrove/shared/model';
 import {
   bufferPasses,
   commonPass,
@@ -14,8 +14,8 @@ import {
   imagePass,
   migrateLegacyProject,
   type ShaderProject,
-} from '@shader-studio/shared/project';
-import { CONFIG_DOC, VERTEX_DOC } from '@shader-studio/shared/diagnostic';
+} from '@shadergrove/shared/project';
+import { CONFIG_DOC, VERTEX_DOC } from '@shadergrove/shared/diagnostic';
 import { CompilationService } from '../compilation.service';
 import { DocumentState, type ShaderDraft } from './document-state';
 import { ProjectMutations } from './project-mutations';

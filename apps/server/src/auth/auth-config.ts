@@ -98,7 +98,7 @@ export function readAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig
     // Turning this off is a deliberate choice for a private deployment, not a
     // default: unverified addresses make password reset an account-takeover.
     requireEmailVerification: env['AUTH_REQUIRE_VERIFIED_EMAIL'] !== '0',
-    mail: { url: mailUrl, from: env['MAIL_FROM']?.trim() || 'Shader Studio <no-reply@localhost>' },
+    mail: { url: mailUrl, from: env['MAIL_FROM']?.trim() || 'Shadergrove <no-reply@localhost>' },
     production,
     trustProxy: env['TRUST_PROXY'] === '1',
     checkCompromisedPasswords: env['AUTH_CHECK_COMPROMISED_PASSWORDS'] !== '0',

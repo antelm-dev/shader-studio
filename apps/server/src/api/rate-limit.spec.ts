@@ -12,8 +12,8 @@ import type { Server } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { LOCAL_SCOPE, ShaderLibrary } from '@shader-studio/backend/library';
-import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
+import { LOCAL_SCOPE, ShaderLibrary } from '@shadergrove/backend/library';
+import { SqliteRepository } from '@shadergrove/backend/persistence/sqlite';
 
 import { silentAuditor } from '../auth/audit';
 import { createAuth } from '../auth/auth';

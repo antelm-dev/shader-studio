@@ -20,7 +20,7 @@ export function prepare(options: PrepareOptions): void {
       await options.onReady();
     } catch (error) {
       dialog.showErrorBox(
-        'Shader Studio could not start',
+        'Shadergrove could not start',
         error instanceof Error ? error.message : String(error),
       );
       app.exit(1);

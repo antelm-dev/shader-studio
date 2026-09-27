@@ -1,15 +1,15 @@
 import { Injectable } from '@angular/core';
 
-import type { ParamValue, ShaderControl } from '@shader-studio/shared/model';
+import type { ParamValue, ShaderControl } from '@shadergrove/shared/model';
 import {
   findPass,
   setFileSource,
   setPassSource,
   setVertexSource,
   type ShaderProject,
-} from '@shader-studio/shared/project';
-import { validateParamValue } from '@shader-studio/shared/validate';
-import { CONFIG_DOC, VERTEX_DOC } from '@shader-studio/shared/diagnostic';
+} from '@shadergrove/shared/project';
+import { validateParamValue } from '@shadergrove/shared/validate';
+import { CONFIG_DOC, VERTEX_DOC } from '@shadergrove/shared/diagnostic';
 import type { ApplyPatchResult, DraftTextEdit, EditorDocument } from './shader-store';
 
 type PatchPlan =

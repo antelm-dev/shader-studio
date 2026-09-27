@@ -5,13 +5,13 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { UpdateState } from '@shader-studio/desktop-api/contracts';
+import type { UpdateState } from '@shadergrove/desktop-api/contracts';
 import { DesktopPlatform } from '../../desktop/desktop-platform';
 import { DesktopUpdater } from '../../desktop/desktop-updater';
 import { I18nCatalog, type I18nCatalogMap } from '../../i18n/catalog';
 import { I18n } from '../../i18n/i18n';
 import { Preferences, type WorkspacePreferences } from '../../prefs/preferences';
-import { AboutShaderStudioDialog, DesktopVersionDialog } from './desktop-version-dialog';
+import { AboutShadergroveDialog, DesktopVersionDialog } from './desktop-version-dialog';
 
 class FileCatalog extends I18nCatalog {
   override load(locale: 'en' | 'fr'): Promise<I18nCatalogMap> {
@@ -81,16 +81,16 @@ describe('DesktopVersionDialog', () => {
     return fixture;
   };
 
-  it('exports AboutShaderStudioDialog as an alias of DesktopVersionDialog', () => {
-    expect(AboutShaderStudioDialog).toBe(DesktopVersionDialog);
+  it('exports AboutShadergroveDialog as an alias of DesktopVersionDialog', () => {
+    expect(AboutShadergroveDialog).toBe(DesktopVersionDialog);
   });
 
   it('renders About title, version, and live status without forcing a check', async () => {
     const fixture = await mount('en');
     const root = fixture.nativeElement as HTMLElement;
 
-    expect(root.querySelector('h2')?.textContent?.trim()).toBe('About Shader Studio');
-    expect(root.textContent).toContain('Shader Studio');
+    expect(root.querySelector('h2')?.textContent?.trim()).toBe('About Shadergrove');
+    expect(root.textContent).toContain('Shadergrove');
     expect(root.textContent).toContain('Version 1.2.3');
     expect(root.textContent).toContain('You are on the latest version.');
 
@@ -224,7 +224,7 @@ describe('DesktopVersionDialog', () => {
   it('localizes the About title in French', async () => {
     const fixture = await mount('fr');
     const root = fixture.nativeElement as HTMLElement;
-    expect(root.querySelector('h2')?.textContent?.trim()).toBe('À propos de Shader Studio');
+    expect(root.querySelector('h2')?.textContent?.trim()).toBe('À propos de Shadergrove');
     expect(root.textContent).toContain('Version 1.2.3');
   });
 

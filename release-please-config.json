@@ -7,7 +7,7 @@
   "force-tag-creation": true,
   "packages": {
     ".": {
-      "package-name": "shader-studio",
+      "package-name": "shadergrove",
       "initial-version": "1.0.0"
     }
   }

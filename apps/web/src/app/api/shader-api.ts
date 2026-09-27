@@ -12,9 +12,9 @@ import type {
   ShaderParams,
   ShaderRecord,
   ShaderSummary,
-} from '@shader-studio/shared/model';
-import type { UpdateShaderPatch } from '@shader-studio/shared/api';
-import { mimeFromExt } from '@shader-studio/shared/validate';
+} from '@shadergrove/shared/model';
+import type { UpdateShaderPatch } from '@shadergrove/shared/api';
+import { mimeFromExt } from '@shadergrove/shared/validate';
 import { API_BASE_URL } from './api-base-url';
 
 /** The bytes and decoded dimensions of an image about to be assigned to a channel. */
@@ -48,7 +48,7 @@ export class ApiError extends Error {
   }
 }
 
-export type { UpdateShaderPatch } from '@shader-studio/shared/api';
+export type { UpdateShaderPatch } from '@shadergrove/shared/api';
 
 export abstract class ShaderApi {
   abstract list(): Promise<ShaderSummary[]>;

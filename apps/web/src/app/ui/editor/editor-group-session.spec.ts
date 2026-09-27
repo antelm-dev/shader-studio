@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_EDITOR_GROUP_ID } from '@shader-studio/shared/surfaces';
-import { toViewTransfer } from '@shader-studio/shared/editor-groups';
+import { DEFAULT_EDITOR_GROUP_ID } from '@shadergrove/shared/surfaces';
+import { toViewTransfer } from '@shadergrove/shared/editor-groups';
 import { EditorGroupSession } from './editor-group-session';
 
 describe('EditorGroupSession', () => {

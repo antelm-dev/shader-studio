@@ -1,4 +1,4 @@
-import type { BufferSlot, ChannelIndex } from '@shader-studio/shared/project';
+import type { BufferSlot, ChannelIndex } from '@shadergrove/shared/project';
 
 import type { TranslationKey } from '../../i18n/keys';
 

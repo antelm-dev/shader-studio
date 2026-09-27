@@ -2,16 +2,16 @@
  * Deliberate, one-shot maintenance commands for the PostgreSQL deployment.
  * Neither runs automatically on container start — you invoke them by hand.
  *
- *   shader-studio migrate-files --source=<path> [--mode=rename|overwrite]
+ *   shadergrove migrate-files --source=<path> [--mode=rename|overwrite]
  *
  * Imports a legacy file library. It opens the source read-only, imports every
  * shader (with presets, project, textures and thumbnails), prints a summary and
  * exits non-zero on failure. It never deletes or modifies the source:
  *
  *   docker compose run --rm shader-studio \
- *     node dist/shader-studio/cli.mjs migrate-files --source=/legacy-data
+ *     node dist/shadergrove/cli.mjs migrate-files --source=/legacy-data
  *
- *   shader-studio claim-shaders --email=<address> [--dry-run]
+ *   shadergrove claim-shaders --email=<address> [--dry-run]
  *
  * Hands the shaders that predate authentication — the ones the ownership
  * migration backfilled to the system account — to a real user, who must already
@@ -19,16 +19,13 @@
  * belong to nobody in particular:
  *
  *   docker compose run --rm shader-studio \
- *     node dist/shader-studio/cli.mjs claim-shaders --email=you@example.com
+ *     node dist/shadergrove/cli.mjs claim-shaders --email=you@example.com
  */
 
-import { ShaderLibrary, SYSTEM_SCOPE } from '@shader-studio/backend/library';
-import { createLegacyReader } from '@shader-studio/backend/persistence/legacy';
-import {
-  claimSystemShaders,
-  PostgresRepository,
-} from '@shader-studio/backend/persistence/postgres';
-import type { ImportMode } from '@shader-studio/shared/model';
+import { ShaderLibrary, SYSTEM_SCOPE } from '@shadergrove/backend/library';
+import { createLegacyReader } from '@shadergrove/backend/persistence/legacy';
+import { claimSystemShaders, PostgresRepository } from '@shadergrove/backend/persistence/postgres';
+import type { ImportMode } from '@shadergrove/shared/model';
 
 interface Args {
   command: string | undefined;
@@ -61,11 +58,11 @@ function parseArgs(argv: string[]): Args {
 function usage(): void {
   console.error(
     'Usage:\n' +
-      '  shader-studio migrate-files --source=<path> [--mode=rename|overwrite]\n\n' +
+      '  shadergrove migrate-files --source=<path> [--mode=rename|overwrite]\n\n' +
       '    Imports a legacy file library (a folder containing a shaders/ directory)\n' +
       '    into the PostgreSQL database named by DATABASE_URL. The source is opened\n' +
       '    read-only and never modified.\n\n' +
-      '  shader-studio claim-shaders --email=<address> [--dry-run]\n\n' +
+      '  shadergrove claim-shaders --email=<address> [--dry-run]\n\n' +
       '    Moves the shaders that predate authentication from the system account\n' +
       '    to the named user, who must already have signed up. Bundled examples\n' +
       '    stay where they are — they are templates, not anyone’s documents.',

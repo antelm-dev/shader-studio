@@ -5,7 +5,7 @@ import type {
   PostProcessingEffect,
   RenderSettings,
   VignetteSettings,
-} from '@shader-studio/shared';
+} from '@shadergrove/shared';
 import { GlContext } from '../gl-context';
 import { FakeRenderer, FakeScene, fakeBackend } from '../testing/fake-gl';
 import { PostProcessing, type PostProcessingModules } from './post-processing';

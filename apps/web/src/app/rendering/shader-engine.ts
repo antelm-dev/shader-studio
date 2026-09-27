@@ -7,8 +7,8 @@ import {
   type RenderSettings,
   type ShaderControl,
   type ShaderParams,
-} from '@shader-studio/shared';
-import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
+} from '@shadergrove/shared';
+import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import type { EngineOutputLevel, EngineOutputSink, EngineOutputSource } from './engine-output-sink';
 import { GlContext, type GlContextOptions, type ThreeModule } from './gl-context';
 import { BufferTargets, type TargetSpec } from './pass-targets';

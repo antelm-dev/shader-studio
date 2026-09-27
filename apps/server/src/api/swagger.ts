@@ -3,7 +3,7 @@
  * so the UI lands on `/api/docs` and the raw document on `/api/docs-json`.
  *
  * Request bodies are described loosely on purpose: the authoritative shape
- * lives in `@shader-studio/shared` and is enforced by `validate*` at the
+ * lives in `@shadergrove/shared` and is enforced by `validate*` at the
  * storage boundary. Transcribing those types into DTO classes here would give
  * two definitions to keep in sync, and the second one would rot.
  */
@@ -76,9 +76,9 @@ export const IMAGE_BODY_SCHEMA: SchemaObject = { type: 'string', format: 'binary
 
 export function setupSwagger(app: INestApplication): void {
   const config = new DocumentBuilder()
-    .setTitle('Shader Studio API')
+    .setTitle('Shadergrove API')
     .setDescription(
-      'REST API backing the Shader Studio editor: shaders, presets, textures, ' +
+      'REST API backing the Shadergrove editor: shaders, presets, textures, ' +
         'bundle import/export and UI translations.',
     )
     .setVersion('1.0')
@@ -91,6 +91,6 @@ export function setupSwagger(app: INestApplication): void {
 
   SwaggerModule.setup('docs', app, () => SwaggerModule.createDocument(app, config), {
     jsonDocumentUrl: 'docs-json',
-    customSiteTitle: 'Shader Studio API',
+    customSiteTitle: 'Shadergrove API',
   });
 }

@@ -11,10 +11,10 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { DEFAULT_RENDER } from '@shader-studio/shared/model';
-import { composePass } from '@shader-studio/shared/pass-source';
+import { DEFAULT_RENDER } from '@shadergrove/shared/model';
+import { composePass } from '@shadergrove/shared/pass-source';
 import { Preferences } from '../prefs/preferences';
-import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
+import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import { ShaderStore } from '../workspace/shader-store';
 import { TextureAssets } from '../assets/texture-assets';
 import { OutputLog } from '../ui/bottom-panel/output-log';

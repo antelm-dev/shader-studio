@@ -1,6 +1,6 @@
 import type { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 
-import type { VignetteSettings } from '@shader-studio/shared';
+import type { VignetteSettings } from '@shadergrove/shared';
 
 /**
  * A resolution-independent vignette: every quantity in the fragment shader is

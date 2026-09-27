@@ -1,7 +1,7 @@
 import { isPlatformBrowser } from '@angular/common';
 import { DOCUMENT, Injectable, PLATFORM_ID, inject } from '@angular/core';
 
-import { sanitizeProject, type ShaderProject } from '@shader-studio/shared/project';
+import { sanitizeProject, type ShaderProject } from '@shadergrove/shared/project';
 
 /**
  * Where a pre-upgrade shader's passes and files live until they are migrated.

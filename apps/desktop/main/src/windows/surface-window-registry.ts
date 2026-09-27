@@ -4,7 +4,7 @@
 
 import type { BrowserWindow } from 'electron';
 
-import { capabilitiesFor, type SurfaceId, type SurfaceKind } from '@shader-studio/shared/surfaces';
+import { capabilitiesFor, type SurfaceId, type SurfaceKind } from '@shadergrove/shared/surfaces';
 
 export type SurfaceWindowRole = 'main' | 'satellite';
 

@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
-import type { UpdateState } from '@shader-studio/desktop-api/contracts';
+import type { UpdateState } from '@shadergrove/desktop-api/contracts';
 import { updateChannelForVersion } from './update-channel';
 
 const unsupportedState = (): UpdateState => ({

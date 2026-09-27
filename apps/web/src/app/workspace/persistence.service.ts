@@ -5,8 +5,8 @@ import type {
   ShaderParams,
   ShaderRecord,
   ThumbnailMeta,
-} from '@shader-studio/shared/model';
-import { sanitizeParams } from '@shader-studio/shared/validate';
+} from '@shadergrove/shared/model';
+import { sanitizeParams } from '@shadergrove/shared/validate';
 import { ShaderApi } from '../api/shader-api';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { ThumbnailAssets } from '../assets/thumbnail-assets';

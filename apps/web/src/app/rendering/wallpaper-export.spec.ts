@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_VERTEX, makePass, type ShaderProject } from '@shader-studio/shared/project';
-import type { TextureChannelPayloads } from '@shader-studio/shared/model';
+import { DEFAULT_VERTEX, makePass, type ShaderProject } from '@shadergrove/shared/project';
+import type { TextureChannelPayloads } from '@shadergrove/shared/model';
 
 import {
   buildWallpaperDocument,

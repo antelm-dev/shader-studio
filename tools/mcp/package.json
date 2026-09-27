@@ -1,21 +1,22 @@
 {
   "name": "@shader-studio/mcp",
   "version": "0.1.0",
-  "description": "MCP server that lets Codex, Claude Code, Cursor, and other MCP clients drive a locally-open Shader Studio tab.",
+  "description": "MCP server that lets Codex, Claude Code, Cursor, and other MCP clients drive a locally-open Shadergrove tab.",
   "keywords": [
     "glsl",
     "mcp",
     "model-context-protocol",
     "shader-studio",
+    "shadergrove",
     "shaders"
   ],
-  "homepage": "https://github.com/antelm-dev/shader-studio/tree/master/tools/mcp",
-  "bugs": "https://github.com/antelm-dev/shader-studio/issues",
+  "homepage": "https://github.com/antelm-dev/shadergrove/tree/master/tools/mcp",
+  "bugs": "https://github.com/antelm-dev/shadergrove/issues",
   "license": "Apache-2.0",
   "author": "Adel Terki",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/antelm-dev/shader-studio.git",
+    "url": "git+https://github.com/antelm-dev/shadergrove.git",
     "directory": "tools/mcp"
   },
   "bin": {
@@ -44,7 +45,7 @@
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-typescript": "^12.1.2",
-    "@shader-studio/shared": "workspace:*",
+    "@shadergrove/shared": "workspace:*",
     "@types/node": "^20.17.19",
     "@types/ws": "^8.18.1",
     "rollup": "^4.30.1",

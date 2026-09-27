@@ -11,7 +11,7 @@ const nodeBuiltins = new Set([...builtinModules, ...builtinModules.map((id) => `
 
 // `@rollup/plugin-typescript` only transforms files under its filter's
 // resolve base (the tsconfig `rootDir`, which defaults to this package's own
-// directory). `src/server.ts` pulls in `@shader-studio/shared` source
+// directory). `src/server.ts` pulls in `@shadergrove/shared` source
 // directly (see `../../libs/shared`'s `exports` map — every subpath resolves
 // straight to `.ts`), a sibling package outside that base, so the base has
 // to be widened to the monorepo root or those files reach Rollup's core

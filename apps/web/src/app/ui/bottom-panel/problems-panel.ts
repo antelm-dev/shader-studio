@@ -1,7 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 
-import type { CompileDiagnostic } from '@shader-studio/shared/diagnostic';
+import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import { EditorNavigation } from '../../editor/editor-navigation';
 import { SurfaceLayoutService } from '../../surfaces/surface-layout';
 import { I18n } from '../../i18n/i18n';

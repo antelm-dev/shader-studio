@@ -18,11 +18,11 @@ const updateChannel = process.env['ELECTRON_UPDATE_CHANNEL'];
 const commands = {
   clean: ['pnpm', 'run', 'clean'],
   ipc: ['pnpm', 'run', 'gen:ipc'],
-  webTypes: ['pnpm', '--filter', '@shader-studio/web', 'typecheck'],
-  backendTypes: ['pnpm', '--filter', '@shader-studio/backend', 'typecheck'],
+  webTypes: ['pnpm', '--filter', '@shadergrove/web', 'typecheck'],
+  backendTypes: ['pnpm', '--filter', '@shadergrove/backend', 'typecheck'],
   mainTypes: ['pnpm', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.main.json'],
   preloadTypes: ['pnpm', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.preload.json'],
-  web: ['pnpm', '--filter', '@shader-studio/web', 'build:desktop'],
+  web: ['pnpm', '--filter', '@shadergrove/web', 'build:desktop'],
   main: ['pnpm', 'run', 'build:main'],
 };
 
@@ -47,7 +47,7 @@ async function packageDesktop() {
   const target = options.mode === 'pack' ? 'dir' : null;
   const arch = options.arch ? [options.arch] : [];
   const useStaging = process.platform === 'win32';
-  const stagingDir = join(tmpdir(), 'shader-studio-electron-out');
+  const stagingDir = join(tmpdir(), 'shadergrove-electron-out');
 
   log.info(`package: ${platform.name}${target ? ` (${target})` : ''}`);
   if (useStaging) {
@@ -65,7 +65,7 @@ async function packageDesktop() {
             publish: {
               provider: 'github',
               owner: 'antelm-dev',
-              repo: 'shader-studio',
+              repo: 'shadergrove',
               channel: updateChannel,
               releaseType: updateChannel === 'latest' ? 'release' : 'prerelease',
             },

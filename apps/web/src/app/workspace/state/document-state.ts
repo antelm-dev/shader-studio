@@ -9,7 +9,7 @@ import {
   type ShaderRecord,
   type ShaderSummary,
   type TextureChannels,
-} from '@shader-studio/shared/model';
+} from '@shadergrove/shared/model';
 import {
   bufferPasses,
   displayPasses,
@@ -22,9 +22,9 @@ import {
   type ProjectError,
   type RenderPass,
   type ShaderProject,
-} from '@shader-studio/shared/project';
-import { defaultParams } from '@shader-studio/shared/validate';
-import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
+} from '@shadergrove/shared/project';
+import { defaultParams } from '@shadergrove/shared/validate';
+import { CONFIG_DOC, VERTEX_DOC, type CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import { CompilationService } from '../compilation.service';
 import { controlsToText } from '../controls-text';
 import type { RecoveredDraft } from '../draft-recovery';

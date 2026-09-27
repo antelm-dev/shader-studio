@@ -10,11 +10,8 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  DEFAULT_EDITOR_APPEARANCE,
-  DEFAULT_EDITOR_WINDOW,
-} from '@shader-studio/shared/editor-prefs';
-import { FILE_EXPLORER_LIMITS } from '@shader-studio/shared/panel-prefs';
+import { DEFAULT_EDITOR_APPEARANCE, DEFAULT_EDITOR_WINDOW } from '@shadergrove/shared/editor-prefs';
+import { FILE_EXPLORER_LIMITS } from '@shadergrove/shared/panel-prefs';
 import {
   addBuffer,
   addFile,
@@ -23,8 +20,8 @@ import {
   migrateLegacyProject,
   resolvePassOrder,
   type ShaderProject,
-} from '@shader-studio/shared/project';
-import { migrateLayoutFromPreferences } from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/project';
+import { migrateLayoutFromPreferences } from '@shadergrove/shared/surfaces';
 import {
   Preferences,
   createDefaultWorkspacePreferences,

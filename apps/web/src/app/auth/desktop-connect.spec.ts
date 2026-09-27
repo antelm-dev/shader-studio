@@ -122,7 +122,7 @@ describe('DesktopConnect', () => {
     button(fixture, 'Try again').click();
     await settle(fixture);
     expect(auth.refresh).toHaveBeenCalledTimes(1);
-    expect(root.textContent).toContain('Confirm your password to connect Shader Studio Desktop.');
+    expect(root.textContent).toContain('Confirm your password to connect Shadergrove Desktop.');
 
     const input = root.querySelector<HTMLInputElement>('input[type="password"]')!;
     input.value = 'correct horse battery staple';

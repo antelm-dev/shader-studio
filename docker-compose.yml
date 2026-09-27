@@ -23,9 +23,10 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  # Stable service/container names let existing deployments upgrade in place.
   shader-studio:
     build: .
-    image: shader-studio:latest
+    image: shadergrove:latest
     container_name: shader-studio
     restart: unless-stopped
     depends_on:
@@ -50,7 +51,7 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set (see .env.example)}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL must be set (see .env.example)}
       MAIL_SMTP_URL: ${MAIL_SMTP_URL:?MAIL_SMTP_URL must be set (see .env.example)}
-      MAIL_FROM: ${MAIL_FROM:-Shader Studio <no-reply@localhost>}
+      MAIL_FROM: ${MAIL_FROM:-Shadergrove <no-reply@localhost>}
       AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-}
       AUTH_REGISTRATION: ${AUTH_REGISTRATION:-open}
       # Optional. Empty means "use the built-in default" — see .env.example.
@@ -71,7 +72,7 @@ services:
   #   docker compose --profile migrate run --rm migrate --source=/legacy-data
   migrate:
     profiles: ['migrate']
-    image: shader-studio:latest
+    image: shadergrove:latest
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,7 +80,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-shader_studio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-shader_studio}
     volumes:
       - ./legacy-data:/legacy-data:ro
-    entrypoint: ['node', 'dist/shader-studio/cli.mjs', 'migrate-files']
+    entrypoint: ['node', 'dist/shadergrove/cli.mjs', 'migrate-files']
     command: ['--source=/legacy-data']
 
   # Hands the shaders that predate authentication to a real account. Sign that
@@ -88,13 +89,13 @@ services:
   # Add --dry-run to see the count without moving anything.
   claim:
     profiles: ['claim']
-    image: shader-studio:latest
+    image: shadergrove:latest
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-shader_studio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-shader_studio}
-    entrypoint: ['node', 'dist/shader-studio/cli.mjs', 'claim-shaders']
+    entrypoint: ['node', 'dist/shadergrove/cli.mjs', 'claim-shaders']
 
 volumes:
   postgres-data:

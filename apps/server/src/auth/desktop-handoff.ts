@@ -28,7 +28,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { fromNodeHeaders } from 'better-auth/node';
 
-import { StorageError } from '@shader-studio/backend/library';
+import { StorageError } from '@shadergrove/backend/library';
 
 import { AUDITOR, AUTH_INSTANCE } from '../api/api.constants';
 import { CurrentUser, Public } from '../api/auth.guard';
@@ -37,7 +37,7 @@ import { requestContext, type Auditor } from './audit';
 import type { Auth, Principal } from './auth';
 
 /** What the desktop's sessions are listed as in the account's device list. */
-export const DESKTOP_USER_AGENT = 'Shader Studio Desktop';
+export const DESKTOP_USER_AGENT = 'Shadergrove Desktop';
 
 const CODE_SECONDS = 60;
 /** The same budget as a password sign-in, for each endpoint: ten a minute per address. */

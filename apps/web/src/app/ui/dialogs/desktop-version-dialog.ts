@@ -16,7 +16,7 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
  * install/restart still come exclusively from `DesktopUpdater`.
  *
  * Stable export name kept for existing `WorkspaceActions` dynamic import.
- * Prefer `AboutShaderStudioDialog` at new call sites (Task 03).
+ * Prefer `AboutShadergroveDialog` at new call sites (Task 03).
  */
 @Component({
   selector: 'app-desktop-version-dialog',
@@ -27,7 +27,7 @@ import { TranslatePipe } from '../../i18n/translate.pipe';
       <div class="identity">
         <mat-icon class="app-icon" aria-hidden="true">auto_awesome</mat-icon>
         <div>
-          <strong>Shader Studio</strong>
+          <strong>Shadergrove</strong>
           <span>{{
             'desktop.versionLabel' | translate: { version: updater.state().currentVersion || '—' }
           }}</span>
@@ -162,7 +162,7 @@ export class DesktopVersionDialog {
   private readonly i18n = inject(I18n);
 
   protected readonly changelogUrl =
-    'https://github.com/antelm-dev/shader-studio/blob/master/CHANGELOG.md';
+    'https://github.com/antelm-dev/shadergrove/blob/master/CHANGELOG.md';
 
   protected readonly statusText = computed(() => {
     const state = this.updater.state();
@@ -247,5 +247,5 @@ export class DesktopVersionDialog {
   }
 }
 
-/** Preferred alias for Help → About Shader Studio… call sites. */
-export { DesktopVersionDialog as AboutShaderStudioDialog };
+/** Preferred alias for Help → About Shadergrove… call sites. */
+export { DesktopVersionDialog as AboutShadergroveDialog };

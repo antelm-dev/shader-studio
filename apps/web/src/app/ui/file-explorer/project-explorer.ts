@@ -1,4 +1,4 @@
-import { CONFIG_DOC, VERTEX_DOC } from '@shader-studio/shared/diagnostic';
+import { CONFIG_DOC, VERTEX_DOC } from '@shadergrove/shared/diagnostic';
 import {
   BUFFER_SLOTS,
   CHANNEL_INDICES,
@@ -7,7 +7,7 @@ import {
   type ChannelIndex,
   type RenderPass,
   type ShaderProject,
-} from '@shader-studio/shared/project';
+} from '@shadergrove/shared/project';
 
 import type { EditorDocument } from '../../workspace/shader-store';
 import {

@@ -12,9 +12,9 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { EDITOR_LIMITS } from '@shader-studio/shared/editor-prefs';
-import { isContainedPlacement } from '@shader-studio/shared/surfaces';
-import type { ResizeEdge } from '@shader-studio/shared/geometry';
+import { EDITOR_LIMITS } from '@shadergrove/shared/editor-prefs';
+import { isContainedPlacement } from '@shadergrove/shared/surfaces';
+import type { ResizeEdge } from '@shadergrove/shared/geometry';
 import { EditorPanel } from './editor-panel';
 import { ReducedMotion } from '../../prefs/reduced-motion';
 import {

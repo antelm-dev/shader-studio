@@ -24,7 +24,7 @@ import {
   type PostProcessingEffectType,
   type RenderSettings,
   type VignetteEffect,
-} from '@shader-studio/shared/model';
+} from '@shadergrove/shared/model';
 import { I18n } from '../../i18n/i18n';
 import type { TranslationKey } from '../../i18n/keys';
 import { TranslatePipe } from '../../i18n/translate.pipe';
@@ -42,7 +42,7 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
  * cramped fourth tab, and it belongs next to the params it renders alongside.
  *
  * Every mutation reads the draft's `render`, runs it through one of the pure
- * chain helpers from `@shader-studio/shared/model`, and writes the whole
+ * chain helpers from `@shadergrove/shared/model`, and writes the whole
  * result back through `ShaderStore.setRender` — exactly like a parameter
  * edit: one immutable value, the draft marked dirty, surviving save/reload
  * and recovery the same way.

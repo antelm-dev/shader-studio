@@ -1,9 +1,9 @@
 ---
 name: verify
-description: Build, run and drive Shader Studio in a real browser to confirm a change works. Use when verifying UI, layout, editor, renderer or preferences behaviour in this repo.
+description: Build, run and drive Shadergrove in a real browser to confirm a change works. Use when verifying UI, layout, editor, renderer or preferences behaviour in this repo.
 ---
 
-# Verifying Shader Studio
+# Verifying Shadergrove
 
 The app is an Angular 22 (zoneless, signals, SSR) shader browser/editor. Almost
 every change lands somewhere visible, so the surface is **pixels in a browser** —

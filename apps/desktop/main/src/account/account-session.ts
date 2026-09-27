@@ -14,9 +14,9 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { AccountState, AccountUser, SignInResult } from '@shader-studio/desktop-api/contracts';
+import type { AccountState, AccountUser, SignInResult } from '@shadergrove/desktop-api/contracts';
 
-export type { AccountState } from '@shader-studio/desktop-api/contracts';
+export type { AccountState } from '@shadergrove/desktop-api/contracts';
 
 export interface AccountSession {
   state(): AccountState;

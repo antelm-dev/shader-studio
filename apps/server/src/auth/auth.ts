@@ -13,7 +13,7 @@ import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/a
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { bearer, haveIBeenPwned } from 'better-auth/plugins';
 
-import type { AuthDatabase } from '@shader-studio/backend/persistence';
+import type { AuthDatabase } from '@shadergrove/backend/persistence';
 
 import { consoleAuditor, eventForPath, requestContext, type Auditor } from './audit';
 import { type AuthConfig } from './auth-config';
@@ -79,7 +79,7 @@ export function createAuth(
       sendResetPassword: async ({ user, url }) => {
         await mail.send({
           to: user.email,
-          subject: 'Reset your Shader Studio password',
+          subject: 'Reset your Shadergrove password',
           text:
             `Open this link within 15 minutes to choose a new password:\n\n${url}\n\n` +
             'If you did not ask for this, nothing has changed and you can ignore this email.',
@@ -95,7 +95,7 @@ export function createAuth(
       sendVerificationEmail: async ({ user, url }) => {
         await mail.send({
           to: user.email,
-          subject: 'Confirm your Shader Studio address',
+          subject: 'Confirm your Shadergrove address',
           text: `Confirm this address to finish setting up your library:\n\n${url}`,
           link: url,
         });

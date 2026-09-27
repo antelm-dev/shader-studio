@@ -16,7 +16,7 @@ export interface UserScope {
 /**
  * The owner of rows that predate authentication and of the bundled examples.
  * A deployment reassigns the pre-existing rows to a real account (see
- * `shader-studio claim-shaders`); the examples stay here as templates.
+ * `shadergrove claim-shaders`); the examples stay here as templates.
  */
 export const SYSTEM_OWNER_ID = 'system';
 

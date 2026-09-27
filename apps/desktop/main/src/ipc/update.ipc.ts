@@ -1,6 +1,6 @@
 import { defineIpcEvents, defineIpcModule, handle, listen } from 'electron-ipc-module';
 
-import type { UpdateState } from '@shader-studio/desktop-api/contracts';
+import type { UpdateState } from '@shadergrove/desktop-api/contracts';
 import type { UpdateController } from '../core/updater';
 
 type UpdateEvents = { 'update-state-changed': [state: UpdateState] };

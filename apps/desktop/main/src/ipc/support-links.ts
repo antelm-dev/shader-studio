@@ -1,6 +1,6 @@
 const SUPPORT_LINK_URLS = {
-  documentation: 'https://github.com/antelm-dev/shader-studio#using-shader-studio',
-  issues: 'https://github.com/antelm-dev/shader-studio/issues/new',
+  documentation: 'https://github.com/antelm-dev/shadergrove#using-shadergrove',
+  issues: 'https://github.com/antelm-dev/shadergrove/issues/new',
 } as const;
 
 export type SupportLinkDestination = keyof typeof SUPPORT_LINK_URLS;

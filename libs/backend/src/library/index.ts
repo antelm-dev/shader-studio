@@ -5,7 +5,7 @@ export {
   DEFAULT_VERTEX,
   TEMPLATE_CONTROLS,
   TEMPLATE_FRAGMENT,
-} from '@shader-studio/shared/templates';
+} from '@shadergrove/shared/templates';
 export type { ShaderKind, UserScope } from '../persistence/user-scope';
 export {
   LOCAL_SCOPE,

@@ -8,8 +8,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
-import type { SyncStatus } from '@shader-studio/desktop-api/contracts';
-import type { ThumbnailMeta } from '@shader-studio/shared/model';
+import type { SyncStatus } from '@shadergrove/desktop-api/contracts';
+import type { ThumbnailMeta } from '@shadergrove/shared/model';
 import { DesktopAccount } from '../../desktop/desktop-account';
 import { DesktopSync } from '../../desktop/desktop-sync';
 import { ShaderStore } from '../../workspace/shader-store';

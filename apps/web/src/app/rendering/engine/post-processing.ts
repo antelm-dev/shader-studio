@@ -9,7 +9,7 @@ import {
   type PostProcessingEffect,
   type PostProcessingEffectType,
   type RenderSettings,
-} from '@shader-studio/shared';
+} from '@shadergrove/shared';
 import type { GlContext } from '../gl-context';
 import { VIGNETTE_SHADER, setVignetteUniforms } from './vignette-pass';
 

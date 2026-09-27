@@ -7,13 +7,13 @@
 
 import { screen, type BrowserWindow } from 'electron';
 
-import type { Rect } from '@shader-studio/shared/geometry';
+import type { Rect } from '@shadergrove/shared/geometry';
 import {
   WELL_KNOWN_SURFACE_IDS,
   asSurfaceId,
   type SurfaceId,
   type SurfaceKind,
-} from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/surfaces';
 
 import {
   applyNavigationPolicy,

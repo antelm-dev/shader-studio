@@ -5,7 +5,7 @@
       "command": "npx",
       "args": ["-y", "@angular/cli@22", "mcp"]
     },
-    "shader-studio": {
+    "shadergrove": {
       "type": "stdio",
       "command": "node",
       "args": ["tools/mcp/dist/server.mjs"],

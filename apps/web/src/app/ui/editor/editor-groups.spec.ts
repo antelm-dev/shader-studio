@@ -2,10 +2,10 @@ import { computed, provideZonelessChangeDetection, signal } from '@angular/core'
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { VERTEX_DOC } from '@shader-studio/shared/diagnostic';
-import { openIdsForGroup } from '@shader-studio/shared/editor-groups';
-import { imagePass, migrateLegacyProject } from '@shader-studio/shared/project';
-import { DEFAULT_EDITOR_GROUP_ID } from '@shader-studio/shared/surfaces';
+import { VERTEX_DOC } from '@shadergrove/shared/diagnostic';
+import { openIdsForGroup } from '@shadergrove/shared/editor-groups';
+import { imagePass, migrateLegacyProject } from '@shadergrove/shared/project';
+import { DEFAULT_EDITOR_GROUP_ID } from '@shadergrove/shared/surfaces';
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
 import { EditorGroupSession } from './editor-group-session';
 import { EditorGroups } from './editor-groups';

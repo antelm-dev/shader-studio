@@ -7,7 +7,7 @@ import {
   MCP_BRIDGE_PROTOCOL_VERSION,
   type ControllerRequest,
   type Handshake,
-} from '@shader-studio/shared/mcp-protocol';
+} from '@shadergrove/shared/mcp-protocol';
 
 import { callApp, closeBridge, resetBridgeForTests, startBridge } from '../src/bridge.js';
 import { resetBridgeTokenForTests } from '../src/token.js';

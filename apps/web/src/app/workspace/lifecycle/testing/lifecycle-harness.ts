@@ -9,8 +9,8 @@ import {
   type ShaderControl,
   type ShaderRecord,
   type ShaderSummary,
-} from '@shader-studio/shared/model';
-import { migrateLegacyProject } from '@shader-studio/shared/project';
+} from '@shadergrove/shared/model';
+import { migrateLegacyProject } from '@shadergrove/shared/project';
 import { ShaderApi, type UpdateShaderPatch } from '../../../api/shader-api';
 import {
   Preferences,

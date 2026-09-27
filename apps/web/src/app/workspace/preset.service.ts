@@ -5,8 +5,8 @@ import type {
   RenderSettings,
   ShaderControl,
   ShaderParams,
-} from '@shader-studio/shared/model';
-import { sanitizeParams } from '@shader-studio/shared/validate';
+} from '@shadergrove/shared/model';
+import { sanitizeParams } from '@shadergrove/shared/validate';
 import { ShaderApi } from '../api/shader-api';
 
 export interface PresetApplyPlan {

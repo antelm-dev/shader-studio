@@ -17,7 +17,7 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
         "--filter",
-        "@shader-studio/server",
+        "@shadergrove/server",
         "exec",
         "tsx",
         "--inspect-brk",

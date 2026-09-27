@@ -1,8 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 
-import type { ShaderRecord, TextureChannelSettingsPatch } from '@shader-studio/shared/model';
-import type { ChannelIndex } from '@shader-studio/shared/project';
-import { extFromMime, LIMITS } from '@shader-studio/shared/validate';
+import type { ShaderRecord, TextureChannelSettingsPatch } from '@shadergrove/shared/model';
+import type { ChannelIndex } from '@shadergrove/shared/project';
+import { extFromMime, LIMITS } from '@shadergrove/shared/validate';
 import { ShaderApi } from '../api/shader-api';
 import { TextureAssets } from '../assets/texture-assets';
 

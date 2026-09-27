@@ -1,8 +1,8 @@
 import { ArgumentsHost, Catch, HttpException, Logger, type ExceptionFilter } from '@nestjs/common';
 import type { Response } from 'express';
 
-import { StorageError } from '@shader-studio/backend/library';
-import type { ApiErrorBody } from '@shader-studio/shared/model';
+import { StorageError } from '@shadergrove/backend/library';
+import type { ApiErrorBody } from '@shadergrove/shared/model';
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {

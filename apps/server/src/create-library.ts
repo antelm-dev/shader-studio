@@ -16,9 +16,9 @@ import {
   ShaderLibrary,
   SYSTEM_SCOPE,
   type UserScope,
-} from '@shader-studio/backend/library';
-import { createLegacyReader } from '@shader-studio/backend/persistence/legacy';
-import type { AuthDatabase, ShaderRepository } from '@shader-studio/backend/persistence';
+} from '@shadergrove/backend/library';
+import { createLegacyReader } from '@shadergrove/backend/persistence/legacy';
+import type { AuthDatabase, ShaderRepository } from '@shadergrove/backend/persistence';
 
 const logger = new Logger('library');
 
@@ -60,7 +60,7 @@ async function createRepository(): Promise<{
     // Imported lazily so `pg` stays out of the module graph unless it is used —
     // in particular, Angular's build-time route extraction (no DATABASE_URL)
     // must never try to resolve the external `pg` package.
-    const { PostgresRepository } = await import('@shader-studio/backend/persistence/postgres');
+    const { PostgresRepository } = await import('@shadergrove/backend/persistence/postgres');
     logger.log('using PostgreSQL (DATABASE_URL is set)');
     return {
       repo: new PostgresRepository({
@@ -75,7 +75,7 @@ async function createRepository(): Promise<{
   // `node:sqlite` is imported lazily so it never loads on the Postgres path.
   // A SQLite store is single-user, and its ownership migration backfills to the
   // local user, so the bootstrap scope has to match or the rows go invisible.
-  const { SqliteRepository } = await import('@shader-studio/backend/persistence/sqlite');
+  const { SqliteRepository } = await import('@shadergrove/backend/persistence/sqlite');
   const dir = process.env['SHADER_DATA_DIR'] ?? join(process.cwd(), 'data');
   await mkdir(dir, { recursive: true });
   logger.warn(`DATABASE_URL is not set — using a local SQLite database in ${dir}`);

@@ -4,15 +4,11 @@ import type {
   ShaderParams,
   ShaderPayload,
   TextureChannelPayload,
-} from '@shader-studio/shared/model';
-import { buildFullGlsl, expandMacros } from '@shader-studio/shared/glsl-export';
-import { composePass } from '@shader-studio/shared/pass-source';
-import {
-  resolvePassOrder,
-  type RenderPass,
-  type ShaderProject,
-} from '@shader-studio/shared/project';
-import { mimeFromExt } from '@shader-studio/shared/validate';
+} from '@shadergrove/shared/model';
+import { buildFullGlsl, expandMacros } from '@shadergrove/shared/glsl-export';
+import { composePass } from '@shadergrove/shared/pass-source';
+import { resolvePassOrder, type RenderPass, type ShaderProject } from '@shadergrove/shared/project';
+import { mimeFromExt } from '@shadergrove/shared/validate';
 
 export interface WallpaperExportInput {
   name: string;
@@ -288,7 +284,7 @@ export const WALLPAPER_RUNTIME = String.raw`(function () {
 
   function fail(message) {
     if (errorBox) { errorBox.hidden = false; errorBox.textContent = String(message); }
-    console.error("[Shader Studio wallpaper]", message);
+    console.error("[Shadergrove wallpaper]", message);
   }
 
   function declares(source, name) {

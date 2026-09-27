@@ -2,7 +2,7 @@ import { computed, provideZonelessChangeDetection, signal } from '@angular/core'
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { CONFIG_DOC, VERTEX_DOC } from '@shader-studio/shared/diagnostic';
+import { CONFIG_DOC, VERTEX_DOC } from '@shadergrove/shared/diagnostic';
 import {
   addBuffer,
   addFile,
@@ -10,7 +10,7 @@ import {
   imagePass,
   migrateLegacyProject,
   type ShaderProject,
-} from '@shader-studio/shared/project';
+} from '@shadergrove/shared/project';
 import { ShaderStore, type EditorDocument } from '../../workspace/shader-store';
 import { EditorGroupSession } from './editor-group-session';
 import { EditorGroups } from './editor-groups';

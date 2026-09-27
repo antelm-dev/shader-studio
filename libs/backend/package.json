@@ -1,5 +1,5 @@
 {
-  "name": "@shader-studio/backend",
+  "name": "@shadergrove/backend",
   "version": "0.0.0",
   "private": true,
   "description": "",
@@ -44,7 +44,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@shader-studio/shared": "workspace:*",
+    "@shadergrove/shared": "workspace:*",
     "drizzle-orm": "0.45.2",
     "pg": "^8.13.1"
   },

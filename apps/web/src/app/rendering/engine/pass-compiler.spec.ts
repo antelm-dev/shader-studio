@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
-import { DEFAULT_RENDER, legacyTextureBindings, type ShaderControl } from '@shader-studio/shared';
+import { DEFAULT_RENDER, legacyTextureBindings, type ShaderControl } from '@shadergrove/shared';
 
 import type { EngineOutputLevel, EngineOutputSource } from '../engine-output-sink';
 import { GlContext } from '../gl-context';

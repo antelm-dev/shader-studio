@@ -12,10 +12,10 @@ import {
   type SourceSpan,
   type TextureFilterMode,
   type TextureWrapMode,
-} from '@shader-studio/shared';
-import { VERTEX_DOC, type CompileDiagnostic } from '@shader-studio/shared/diagnostic';
-import { parseInfoLog, prefixLineCount } from '@shader-studio/shared/glsl-diagnostics';
-import { expandMacros } from '@shader-studio/shared/glsl-export';
+} from '@shadergrove/shared';
+import { VERTEX_DOC, type CompileDiagnostic } from '@shadergrove/shared/diagnostic';
+import { parseInfoLog, prefixLineCount } from '@shadergrove/shared/glsl-diagnostics';
+import { expandMacros } from '@shadergrove/shared/glsl-export';
 
 import type { EngineOutputLevel, EngineOutputSource } from '../engine-output-sink';
 import type { GlContext } from '../gl-context';

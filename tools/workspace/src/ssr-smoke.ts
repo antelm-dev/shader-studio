@@ -22,7 +22,7 @@ for (const failing of [false, true]) {
   // A file where a directory is needed forces the real lazy initializer to fail.
   if (failing) await writeFile(data, 'blocked');
 
-  const child = spawn(process.execPath, [join(root, 'dist/shader-studio/server/server.mjs')], {
+  const child = spawn(process.execPath, [join(root, 'dist/shadergrove/server/server.mjs')], {
     cwd: root,
     windowsHide: true,
     env: {

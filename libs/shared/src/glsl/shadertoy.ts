@@ -65,7 +65,7 @@ export function wrapMainImage(source: string, options: WrapMainImageOptions = {}
   return { fragment, warnings };
 }
 
-/** Convert a Shadertoy Image pass into Shader Studio's WebGL 1 fragment format. */
+/** Convert a Shadertoy Image pass into Shadergrove's WebGL 1 fragment format. */
 export function convertShadertoy(source: string): ShadertoyImport {
   return wrapMainImage(source);
 }

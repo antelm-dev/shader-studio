@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 
-import type { ParamValue, RenderSettings } from '@shader-studio/shared/model';
+import type { ParamValue, RenderSettings } from '@shadergrove/shared/model';
 import {
   addBuffer,
   addFile,
@@ -29,9 +29,9 @@ import {
   type PassResolution,
   type RenderPass,
   type ShaderProject,
-} from '@shader-studio/shared/project';
-import { defaultParams, sanitizeParams } from '@shader-studio/shared/validate';
-import { CONFIG_DOC, VERTEX_DOC } from '@shader-studio/shared/diagnostic';
+} from '@shadergrove/shared/project';
+import { defaultParams, sanitizeParams } from '@shadergrove/shared/validate';
+import { CONFIG_DOC, VERTEX_DOC } from '@shadergrove/shared/diagnostic';
 import { CompilationService } from '../compilation.service';
 import { McpPatchService } from '../mcp-patch.service';
 import { DocumentState } from './document-state';

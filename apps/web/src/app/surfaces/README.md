@@ -1,7 +1,7 @@
 # Contained-surface runtime (Agent 03)
 
 Reusable Angular mechanics for contained windows, built on
-`@shader-studio/shared/surfaces`. Production `EditorShell` / `PreviewShell` are
+`@shadergrove/shared/surfaces`. Production `EditorShell` / `PreviewShell` are
 **not** migrated here — that is Agent 06.
 
 ## Integration API for Agent 06

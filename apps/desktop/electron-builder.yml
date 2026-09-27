@@ -1,5 +1,6 @@
+# Stable installer identity so Shadergrove upgrades existing Shader Studio installations.
 appId: com.adelterki.shaderstudio
-productName: Shader Studio
+productName: Shadergrove
 directories:
   output: release
   buildResources: public
@@ -20,7 +21,7 @@ win:
   target:
     - nsis
     - portable
-  executableName: shader-studio
+  executableName: shadergrove
   artifactName: ${name}-${version}-${arch}.${ext}
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
@@ -33,6 +34,6 @@ portable:
 publish:
   provider: github
   owner: antelm-dev
-  repo: shader-studio
+  repo: shadergrove
   channel: latest
   releaseType: release

@@ -134,7 +134,7 @@ export const POSTGRES_MIGRATIONS: readonly Migration[] = [
         CREATE INDEX idx_verifications_identifier ON verifications(identifier);
 
         INSERT INTO users (id, name, email, email_verified)
-        VALUES ('system', 'Shader Studio', 'system@shader-studio.invalid', true);
+        VALUES ('system', 'Shadergrove', 'system@shader-studio.invalid', true);
 
         ALTER TABLE shaders
           ADD CONSTRAINT fk_shaders_owner

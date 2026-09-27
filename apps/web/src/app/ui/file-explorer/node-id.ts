@@ -1,4 +1,4 @@
-import type { ChannelIndex } from '@shader-studio/shared/project';
+import type { ChannelIndex } from '@shadergrove/shared/project';
 
 import type { ExplorerViewMode } from './contract';
 

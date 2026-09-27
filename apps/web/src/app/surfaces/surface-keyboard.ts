@@ -9,14 +9,14 @@ import {
   type Rect,
   type ResizeEdge,
   type Size,
-} from '@shader-studio/shared/geometry';
+} from '@shadergrove/shared/geometry';
 import {
   SURFACE_MIN_SIZES,
   clampDockSize,
   clampFloatingRect,
   type DockSide,
   type SurfaceKind,
-} from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/surfaces';
 
 export interface KeyboardResizeResult {
   readonly rect?: Rect;

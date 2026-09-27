@@ -9,7 +9,7 @@ import {
   bufferPasses,
   imagePass,
   migrateLegacyProject,
-} from '@shader-studio/shared';
+} from '@shadergrove/shared';
 import { DraftRecovery } from './draft-recovery';
 import type { ShaderDraft } from './shader-store';
 

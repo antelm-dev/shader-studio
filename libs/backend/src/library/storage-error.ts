@@ -1,4 +1,4 @@
-import type { Result } from '@shader-studio/shared/validate';
+import type { Result } from '@shadergrove/shared/validate';
 
 /**
  * The one error type the storage layer speaks. Every repository translates its

@@ -20,7 +20,7 @@ export const TRANSLATION_KEYS = [
   'menu.documentation',
   'menu.reportIssue',
   'menu.checkForUpdates',
-  'menu.aboutShaderStudio',
+  'menu.aboutShadergrove',
   'menu.toggleDevTools',
   'menu.application',
   'action.more',

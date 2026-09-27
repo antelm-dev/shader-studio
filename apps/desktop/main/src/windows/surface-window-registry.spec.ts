@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { asSurfaceId, WELL_KNOWN_SURFACE_IDS } from '@shader-studio/shared/surfaces';
+import { asSurfaceId, WELL_KNOWN_SURFACE_IDS } from '@shadergrove/shared/surfaces';
 
 import { assertSafeSurfacePath, createAppUrlChecker } from './browser-window-factory';
 import { authorizeSurfaceAction } from './surface-ipc-auth';

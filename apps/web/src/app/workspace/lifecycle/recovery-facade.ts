@@ -1,13 +1,13 @@
 import { isPlatformServer } from '@angular/common';
 import { Injectable, PLATFORM_ID, effect, inject } from '@angular/core';
 
-import type { ShaderRecord } from '@shader-studio/shared/model';
+import type { ShaderRecord } from '@shadergrove/shared/model';
 import {
   imagePass,
   setPassSource,
   setVertexSource,
   type ShaderProject,
-} from '@shader-studio/shared/project';
+} from '@shadergrove/shared/project';
 import { ShaderApi } from '../../api/shader-api';
 import { OutputLog } from '../../ui/bottom-panel/output-log';
 import { DraftRecovery, type RecoveredDraft } from '../draft-recovery';

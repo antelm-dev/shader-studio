@@ -9,7 +9,7 @@ import type {
   ShaderParams,
   ShaderRecord,
   ShaderSummary,
-} from '@shader-studio/shared/model';
+} from '@shadergrove/shared/model';
 import {
   ApiError,
   ShaderApi,

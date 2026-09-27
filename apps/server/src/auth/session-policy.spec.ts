@@ -7,8 +7,8 @@
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LOCAL_SCOPE, ShaderLibrary } from '@shader-studio/backend/library';
-import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
+import { LOCAL_SCOPE, ShaderLibrary } from '@shadergrove/backend/library';
+import { SqliteRepository } from '@shadergrove/backend/persistence/sqlite';
 
 import { createAuth, resolvePrincipal, type Auth } from './auth';
 import { readAuthConfig } from './auth-config';

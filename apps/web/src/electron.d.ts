@@ -1,4 +1,4 @@
-import type { bridge } from '@shader-studio/desktop-api';
+import type { bridge } from '@shadergrove/desktop-api';
 
 type ElectronApi = { bridge: typeof bridge };
 

@@ -1,11 +1,11 @@
 /**
  * Backward-compatible primary-group adapter over shader-scoped editor groups.
  *
- * New code should prefer `EditorGroups` and `@shader-studio/shared/editor-groups`
+ * New code should prefer `EditorGroups` and `@shadergrove/shared/editor-groups`
  * directly. These helpers expose only the primary contained group tab strip.
  */
 
-import { DEFAULT_EDITOR_GROUP_ID } from '@shader-studio/shared/surfaces';
+import { DEFAULT_EDITOR_GROUP_ID } from '@shadergrove/shared/surfaces';
 import {
   closeDocumentInGroup,
   closeOtherDocumentsInGroup,
@@ -16,7 +16,7 @@ import {
   pruneStaleDocumentsInShader,
   reorderDocumentInGroup,
   type EditorGroupsState,
-} from '@shader-studio/shared/editor-groups';
+} from '@shadergrove/shared/editor-groups';
 
 export type OpenDocumentsState = EditorGroupsState;
 

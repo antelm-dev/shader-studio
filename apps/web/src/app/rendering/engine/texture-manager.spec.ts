@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
-import type { TextureFilterMode, TextureWrapMode } from '@shader-studio/shared';
+import type { TextureFilterMode, TextureWrapMode } from '@shadergrove/shared';
 import { GlContext, ownerOf, type GlBackend, type ThreeModule } from '../gl-context';
 import { FakeTexture, fakeBackend, fakeThree } from '../testing/fake-gl';
 import { TextureManager, type ChannelSource } from './texture-manager';

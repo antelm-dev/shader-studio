@@ -1,6 +1,6 @@
 # Third-party notices
 
-Shader Studio is licensed under Apache-2.0. The following third-party runtime
+Shadergrove is licensed under Apache-2.0. The following third-party runtime
 dependencies remain under their own licenses. This list describes direct runtime
 dependencies used by the web and desktop applications; transitive dependencies
 retain the notices and license texts shipped in their respective packages.
@@ -27,6 +27,6 @@ Binary distributors must preserve those notices and comply with the applicable
 terms, including the file-level source availability requirements of MPL-2.0 for
 Mediabunny-covered files.
 
-Shader Studio does not claim copyright in third-party software, trademarks, or
+Shadergrove does not claim copyright in third-party software, trademarks, or
 other materials. No Creative Commons NonCommercial shader is distributed in the
 `examples/shaders` collection.

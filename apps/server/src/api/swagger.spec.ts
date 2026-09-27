@@ -5,8 +5,8 @@ import type { Server } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
-import { LOCAL_SCOPE, ShaderLibrary } from '@shader-studio/backend/library';
-import { SqliteRepository } from '@shader-studio/backend/persistence/sqlite';
+import { LOCAL_SCOPE, ShaderLibrary } from '@shadergrove/backend/library';
+import { SqliteRepository } from '@shadergrove/backend/persistence/sqlite';
 import { silentAuditor } from '../auth/audit';
 import { createAuth } from '../auth/auth';
 import { readAuthConfig } from '../auth/auth-config';
@@ -64,5 +64,5 @@ it('serves an OpenAPI document covering the shader routes', async () => {
 it('serves the Swagger UI', async () => {
   const response = await fetch(`${base}/api/docs`);
   expect(response.status).toBe(200);
-  expect(await response.text()).toContain('Shader Studio API');
+  expect(await response.text()).toContain('Shadergrove API');
 });

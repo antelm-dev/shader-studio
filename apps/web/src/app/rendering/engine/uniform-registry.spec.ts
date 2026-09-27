@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ShaderControl } from '@shader-studio/shared';
+import type { ShaderControl } from '@shadergrove/shared';
 
 import { UniformRegistry, type UniformMap } from './uniform-registry';
 

@@ -1,4 +1,4 @@
-import { THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '@shader-studio/shared/model';
+import { THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '@shadergrove/shared/model';
 import type { ThumbnailUpload } from '../api/shader-api';
 
 /**

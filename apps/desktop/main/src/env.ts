@@ -8,6 +8,7 @@ declare const __SHADER_STUDIO_ACCOUNT_URL__: string;
 
 export const env = Object.freeze({
   production: __ELECTRON_PRODUCTION__,
+  // Stable origin: changing it would lose Chromium preferences and account callbacks.
   scheme: 'shader-studio',
   accountUrl: __SHADER_STUDIO_ACCOUNT_URL__,
   devServerUrl: 'http://localhost:4201',

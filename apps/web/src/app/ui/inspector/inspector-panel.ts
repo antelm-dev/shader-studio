@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { INSPECTOR_TABS, type InspectorTab } from '@shader-studio/shared/panel-prefs';
+import { INSPECTOR_TABS, type InspectorTab } from '@shadergrove/shared/panel-prefs';
 import { ShaderStore } from '../../workspace/shader-store';
 import { GuiPanel } from './gui-panel';
 import { InspectorWindowControls } from './inspector-window-controls';

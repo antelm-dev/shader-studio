@@ -4,7 +4,7 @@ import { ExpressAdapter, type NestExpressApplication } from '@nestjs/platform-ex
 import { toNodeHandler } from 'better-auth/node';
 import express, { type Application, type NextFunction, type Request, type Response } from 'express';
 
-import type { ShaderLibrary } from '@shader-studio/backend/library';
+import type { ShaderLibrary } from '@shadergrove/backend/library';
 
 import type { Auditor } from '../auth/audit';
 import type { Auth } from '../auth/auth';

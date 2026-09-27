@@ -4,5 +4,5 @@ export {
   DEFAULT_VERTEX,
   TEMPLATE_CONTROLS,
   TEMPLATE_FRAGMENT,
-} from '@shader-studio/shared/templates';
+} from '@shadergrove/shared/templates';
 export type { StorageOptions } from './types';

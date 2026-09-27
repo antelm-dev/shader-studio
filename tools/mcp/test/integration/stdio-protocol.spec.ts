@@ -13,7 +13,7 @@ import {
   HandshakeAckSchema,
   MCP_BRIDGE_PROTOCOL_VERSION,
   type Handshake,
-} from '@shader-studio/shared/mcp-protocol';
+} from '@shadergrove/shared/mcp-protocol';
 
 /**
  * Exercises the *built* `dist/server.mjs` as an end user would run it — a
@@ -101,7 +101,7 @@ describe('built server.mjs', () => {
     expect(contents).not.toMatch(/^import .*from ['"]ws['"]/m);
     expect(contents).not.toMatch(/^import .*from ['"]zod['"]/m);
     expect(contents).not.toMatch(/^import .*from ['"]@modelcontextprotocol\/sdk/m);
-    expect(contents).not.toMatch(/^import .*from ['"]@shader-studio\/shared/m);
+    expect(contents).not.toMatch(/^import .*from ['"]@shadergrove\/shared/m);
   });
 
   it('writes only JSON-RPC frames to stdout, and startup logs only to stderr', async () => {

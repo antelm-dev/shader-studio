@@ -13,7 +13,7 @@ import {
   type DockSide,
   type SurfaceCapabilities,
   type SurfaceRecord,
-} from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/surfaces';
 
 export type SurfaceCommandId =
   | 'showOnStage'

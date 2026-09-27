@@ -6,7 +6,7 @@ import {
   createDefaultSurface,
   editorSurfaceId,
   asEditorGroupId,
-} from '@shader-studio/shared/surfaces';
+} from '@shadergrove/shared/surfaces';
 
 import { SURFACE_STACK_Z_BASE, SurfaceRegistry } from './surface-registry';
 
