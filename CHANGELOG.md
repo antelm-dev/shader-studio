@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/antelm-dev/shader-studio/compare/v1.3.0...v1.3.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **desktop:** stop web auth client from blanking desktop startup ([c4ba8e4](https://github.com/antelm-dev/shader-studio/commit/c4ba8e48b019fae4f80a7e57d2bb3416aa1c4d30))
+
 ## [1.3.0](https://github.com/antelm-dev/shader-studio/compare/v1.2.0...v1.3.0) (2026-09-27)
 
 
