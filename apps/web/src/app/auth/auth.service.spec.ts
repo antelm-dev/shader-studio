@@ -11,6 +11,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { API_BASE_URL } from '../api/api-base-url';
+import { DesktopPlatform } from '../desktop/desktop-platform';
 import { AuthService } from './auth.service';
 
 const USER = {
@@ -162,5 +163,26 @@ describe('AuthService', () => {
     ].join(' ');
     expect(stored).not.toContain('secret');
     expect(stored).not.toContain(USER.email);
+  });
+
+  it('never builds the web client on desktop, where the origin is not a URL', async () => {
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as typeof fetch;
+    TestBed.configureTestingModule({
+      providers: [
+        AuthService,
+        // `shader-studio://bundle/` has the origin "null": the URL Better Auth
+        // rejected at construction, leaving v1.3.0 on a black screen.
+        { provide: API_BASE_URL, useValue: 'null' },
+        { provide: DesktopPlatform, useValue: { available: true } },
+      ],
+    });
+
+    const auth = TestBed.inject(AuthService);
+    expect(auth.status()).toBe('anonymous');
+    await auth.refresh();
+
+    expect(auth.status()).toBe('anonymous');
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

@@ -16,6 +16,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { createAuthClient } from 'better-auth/client';
 
 import { API_BASE_URL } from '../api/api-base-url';
+import { DesktopPlatform } from '../desktop/desktop-platform';
 
 export interface AuthUser {
   id: string;
@@ -54,12 +55,30 @@ const OK: AuthResult = { ok: true };
 export class AuthService {
   private readonly baseUrl = inject(API_BASE_URL);
 
-  private readonly client = createAuthClient({
-    baseURL: authEndpoint(this.baseUrl),
-    fetchOptions: { credentials: 'include' },
-  });
+  private readonly desktop = inject(DesktopPlatform);
 
-  private readonly statusSignal = signal<AuthStatus>('loading');
+  private webClient: ReturnType<typeof createAuthClient> | undefined;
+
+  /**
+   * Built on first use, never on desktop: the app is served from a custom
+   * scheme whose origin is `"null"`, and Better Auth throws on that URL — at
+   * construction, which took the whole shell down with it. Desktop sign-in
+   * goes through `DesktopAccount` instead.
+   */
+  private get client(): ReturnType<typeof createAuthClient> {
+    if (this.desktop.available) {
+      throw new Error('Web authentication is unavailable on desktop');
+    }
+
+    return (this.webClient ??= createAuthClient({
+      baseURL: authEndpoint(this.baseUrl),
+      fetchOptions: { credentials: 'include' },
+    }));
+  }
+
+  private readonly statusSignal = signal<AuthStatus>(
+    this.desktop.available ? 'anonymous' : 'loading',
+  );
   private readonly userSignal = signal<AuthUser | null>(null);
   private readonly errorSignal = signal<string | null>(null);
 
@@ -82,6 +101,11 @@ export class AuthService {
    * than assumed away.
    */
   async refresh(): Promise<void> {
+    if (this.desktop.available) {
+      this.apply(null);
+      return;
+    }
+
     this.statusSignal.set('loading');
     try {
       const { data, error } = await this.client.getSession();
