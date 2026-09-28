@@ -98,6 +98,8 @@ import {
       align-self: stretch;
       min-width: 0;
       margin: 12px;
+      // Docked panels are part of the workspace: a border, no lift.
+      box-shadow: none;
     }
 
     :host(.minimized) {

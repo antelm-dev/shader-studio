@@ -4,6 +4,21 @@
 // chrome renders the same offline, in the desktop app, and on a cold cache.
 $ui-font: 'Inter Variable', system-ui, sans-serif;
 
+// Controls take 4px corners, overlays (dialogs) up to 8px. Passed to every
+// `mat.theme` call, since each one re-emits the corner tokens.
+$corners: (
+  corner-extra-large: 8px,
+  corner-extra-large-top: (8px 8px 0 0),
+  corner-extra-small: 4px,
+  corner-extra-small-top: (4px 4px 0 0),
+  corner-large: 8px,
+  corner-large-end: (0 8px 8px 0),
+  corner-large-start: (8px 0 0 8px),
+  corner-large-top: (8px 8px 0 0),
+  corner-medium: 4px,
+  corner-small: 4px,
+);
+
 html {
   height: 100%;
 
@@ -22,19 +37,107 @@ html {
       typography: $ui-font,
       density: 0,
     ),
+    $corners
+  );
+
+  // Neutral graphite chrome. The cyan palette tints Material's neutrals blue,
+  // which competes with whatever the shader is painting; the chrome should be
+  // colourless so the only colour on screen is the accent and the canvas.
+  @include mat.theme-overrides(
     (
-      corner-extra-large: 8px,
-      corner-extra-large-top: (8px 8px 0 0),
-      corner-extra-small: 2px,
-      corner-extra-small-top: (2px 2px 0 0),
-      corner-large: 4px,
-      corner-large-end: (0 4px 4px 0),
-      corner-large-start: (4px 0 0 4px),
-      corner-large-top: (4px 4px 0 0),
-      corner-medium: 4px,
-      corner-small: 4px,
+      background: light-dark(#f7f7f8, #141416),
+      on-background: light-dark(#1b1b1d, #e6e6e8),
+      surface: light-dark(#f7f7f8, #141416),
+      surface-dim: light-dark(#d9d9dc, #141416),
+      surface-bright: light-dark(#fbfbfc, #39393d),
+      surface-container-lowest: light-dark(#ffffff, #0e0e10),
+      surface-container-low: light-dark(#f2f2f3, #1a1a1c),
+      surface-container: light-dark(#ececee, #1f1f22),
+      surface-container-high: light-dark(#e6e6e8, #28282b),
+      surface-container-highest: light-dark(#e0e0e3, #323236),
+      surface-variant: light-dark(#e0e0e3, #323236),
+      on-surface: light-dark(#1b1b1d, #e6e6e8),
+      on-surface-variant: light-dark(#4f4f55, #a9a9af),
+      outline: light-dark(#7b7b82, #7b7b82),
+      outline-variant: light-dark(#c9c9ce, #3b3b40),
+      inverse-surface: light-dark(#303033, #e6e6e8),
+      inverse-on-surface: light-dark(#f2f2f3, #303033),
+      // Selection is a quiet tint of the accent rather than a second hue.
+      secondary-container:
+        color-mix(in srgb, var(--mat-sys-primary) 20%, var(--mat-sys-surface-container)),
+      on-secondary-container: var(--mat-sys-on-surface),
     )
   );
+
+  // Overlays sit over a moving, possibly bright shader: an opaque surface one
+  // step above the panels, and a shadow to lift them off it.
+  @include mat.menu-overrides(
+    (
+      container-color: var(--mat-sys-surface-container-high),
+      container-elevation-shadow: var(--mat-sys-level2),
+    )
+  );
+  @include mat.select-overrides(
+    (
+      panel-background-color: var(--mat-sys-surface-container-high),
+      container-elevation-shadow: var(--mat-sys-level2),
+    )
+  );
+  @include mat.dialog-overrides(
+    (
+      container-shape: var(--mat-sys-corner-large),
+      container-elevation-shadow: var(--mat-sys-level3),
+    )
+  );
+
+  // Pills are a phone idiom; on a tool's chrome every button is a 4px control.
+  @include mat.button-overrides(
+    (
+      filled-container-shape: var(--mat-sys-corner-small),
+      outlined-container-shape: var(--mat-sys-corner-small),
+      protected-container-shape: var(--mat-sys-corner-small),
+      text-container-shape: var(--mat-sys-corner-small),
+      tonal-container-shape: var(--mat-sys-corner-small),
+    )
+  );
+  @include mat.icon-button-overrides(
+    (
+      container-shape: var(--mat-sys-corner-small),
+    )
+  );
+
+  // Keyboard focus draws a 2px accent ring on every Material control, visible
+  // on both the pale and the graphite surfaces.
+  @include mat.strong-focus-indicators(
+    (
+      border-color: var(--mat-sys-primary),
+      border-width: 2px,
+      border-radius: var(--mat-sys-corner-small),
+    )
+  );
+
+  // A desktop tool, not a phone app: compact controls under a mouse on a wide
+  // window. Touch and phone-width layouts keep density 0 and its touch targets.
+  @media (pointer: fine) and (min-width: 601px) {
+    @include mat.theme(
+      (
+        density: -2,
+      ),
+      $corners
+    );
+
+    // Density -2 hides a filled field's label (the browser's "Filter"), so form
+    // fields stop at -1, the most compact size that still shows it.
+    @include mat.form-field-overrides(
+      (
+        container-height: 52px,
+        filled-label-display: block,
+        container-vertical-padding: 14px,
+        filled-with-label-container-padding-top: 22px,
+        filled-with-label-container-padding-bottom: 6px,
+      )
+    );
+  }
 
   // Material's letter-spacing is tuned for Roboto. Inter is already spaced for
   // UI sizes, and the extra tracking makes small labels look loose.
@@ -58,7 +161,7 @@ body {
   overflow: hidden; // the shader owns the viewport; the page itself never scrolls
   // Only ever seen for the instant before the canvas paints, so it is the one
   // colour here that does not come from a token: it has to match the void.
-  background-color: light-dark(#eef1f6, #0a0c10);
+  background-color: light-dark(#f0f0f2, #0b0b0c);
   color: var(--mat-sys-on-surface);
   font: var(--mat-sys-body-medium);
 }
@@ -72,11 +175,14 @@ body {
   --background-color: transparent;
   --title-background-color: transparent;
   --widget-color: var(--mat-sys-surface-container-highest);
-  --hover-color: var(--mat-sys-surface-container-high);
-  --focus-color: var(--mat-sys-primary);
+  // Hover and focus are state layers over the widget, as Material draws them,
+  // so they read correctly in both schemes.
+  --hover-color: color-mix(in srgb, var(--mat-sys-on-surface) 8%, var(--widget-color));
+  --focus-color: color-mix(in srgb, var(--mat-sys-primary) 22%, var(--widget-color));
   --number-color: var(--mat-sys-primary);
   --string-color: var(--mat-sys-tertiary);
   --text-color: var(--mat-sys-on-surface);
+  --title-text-color: var(--mat-sys-on-surface);
   --font-family: #{$ui-font};
   --font-size: 12px;
   --input-font-size: 12px;
@@ -101,10 +207,6 @@ body {
 
 .mat-drawer {
   --mat-sidenav-container-shape: none;
-}
-
-.mat-mdc-dialog-container {
-  --mat-dialog-container-shape: var(--mat-sys-corner-medium);
 }
 
 .mat-mdc-menu-item .menu-hint,
