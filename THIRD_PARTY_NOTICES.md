@@ -11,7 +11,9 @@ retain the notices and license texts shipped in their respective packages.
 | Electron                                            | 40.10.6 | MIT        |
 | electron-updater                                    |   6.8.9 | MIT        |
 | Express                                             |   5.2.1 | MIT        |
+| Inter font (`@fontsource-variable/inter`)           |   5.3.0 | OFL-1.1    |
 | lil-gui                                             |  0.21.0 | MIT        |
+| Material Symbols font (`material-symbols`)          |  0.47.5 | Apache-2.0 |
 | Mediabunny                                          |  1.50.8 | MPL-2.0    |
 | Monaco Editor                                       |  0.55.1 | MIT        |
 | RxJS                                                |   7.8.2 | Apache-2.0 |

@@ -1,5 +1,9 @@
 @use '@angular/material' as mat;
 
+// Inter and Material Symbols ship with the app (angular.json `styles`), so the
+// chrome renders the same offline, in the desktop app, and on a cold cache.
+$ui-font: 'Inter Variable', system-ui, sans-serif;
+
 html {
   height: 100%;
 
@@ -15,7 +19,7 @@ html {
           primary: mat.$cyan-palette,
           tertiary: mat.$magenta-palette,
         ),
-      typography: Roboto,
+      typography: $ui-font,
       density: 0,
     ),
     (
@@ -29,6 +33,21 @@ html {
       corner-large-top: (4px 4px 0 0),
       corner-medium: 4px,
       corner-small: 4px,
+    )
+  );
+
+  // Material's letter-spacing is tuned for Roboto. Inter is already spaced for
+  // UI sizes, and the extra tracking makes small labels look loose.
+  @include mat.theme-overrides(
+    (
+      body-large-tracking: 0,
+      body-medium-tracking: 0,
+      body-small-tracking: 0,
+      label-large-tracking: 0,
+      label-medium-tracking: 0,
+      label-small-tracking: 0,
+      title-medium-tracking: 0,
+      title-small-tracking: 0,
     )
   );
 }
@@ -58,7 +77,7 @@ body {
   --number-color: var(--mat-sys-primary);
   --string-color: var(--mat-sys-tertiary);
   --text-color: var(--mat-sys-on-surface);
-  --font-family: Roboto, sans-serif;
+  --font-family: #{$ui-font};
   --font-size: 12px;
   --input-font-size: 12px;
   --padding: 6px;
@@ -95,8 +114,18 @@ body {
   color: var(--mat-sys-on-surface-variant);
 }
 
-// Do not apply a text-font shorthand to Material icons: it replaces the
-// Material Symbols font and exposes the icon ligature (for example, "check").
+// One optical setting for every icon. The chrome draws them at 16–20 px, where
+// the 20 px optical size keeps a regular-weight stroke crisp without going bold.
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 20;
+}
+
+// Do not apply a text-font shorthand to an icon: it replaces the Material
+// Symbols font and exposes the ligature text (for example, "check").
 .mat-mdc-menu-item span.menu-hint,
 .mat-mdc-menu-item span.hint {
   font: var(--mat-sys-label-small);
