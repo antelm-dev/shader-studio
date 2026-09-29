@@ -4,6 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
+import { activePostProcessingCount } from '@shadergrove/shared/model';
 import { INSPECTOR_TABS, type InspectorTab } from '@shadergrove/shared/panel-prefs';
 import { ShaderStore } from '../../workspace/shader-store';
 import { GuiPanel } from './gui-panel';
@@ -130,7 +131,7 @@ import { WorkspaceActions } from '../workspace-actions';
       <mat-tab>
         <ng-template mat-tab-label>
           {{ 'inspector.postProcessing' | translate }}
-          @if (store.controls().length; as count) {
+          @if (activeEffects(); as count) {
             <span class="badge">{{ count }}</span>
           }
         </ng-template>
@@ -254,6 +255,12 @@ export class InspectorPanel {
   protected readonly boundChannels = computed(
     () => this.store.channels().filter((channel) => channel.ext !== null).length,
   );
+
+  /** How many post-processing effects are actually applied to the frame. */
+  protected readonly activeEffects = computed(() => {
+    const render = this.store.draft()?.render;
+    return render ? activePostProcessingCount(render) : 0;
+  });
 
   protected selectTab(index: number): void {
     const tab = INSPECTOR_TABS[index];
