@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { AdminPublicationsPage } from './admin/admin-publications-page';
 import { RouteAnchor } from './ui/layout/route-anchor';
 import { resetPasswordLink, verifyEmailLink } from './auth/auth-link.guard';
 import { DesktopConnect, desktopConnectLink } from './auth/desktop-connect';
@@ -23,5 +24,8 @@ export const routes: Routes = [
   // page still waiting for its chunk would not be there yet.
   { path: 'explore', component: ExplorePage, canActivate: [exploreOnWeb] },
   { path: 'explore/:publicationId', component: PublicationPage, canActivate: [exploreOnWeb] },
+  // Reachable by anyone, useful to nobody but a moderator: the page fetches
+  // nothing until the server has said the account is one.
+  { path: 'admin/publications', component: AdminPublicationsPage, canActivate: [exploreOnWeb] },
   { path: '**', component: RouteAnchor },
 ];

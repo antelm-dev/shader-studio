@@ -636,7 +636,6 @@
   "admin.reporter": "Reported by account {id}",
   "admin.resolution": "Resolved: {text}",
   "admin.sources": "Sources",
-  "admin.runSnapshot": "Run this snapshot",
   "admin.restrictHint": "Restricting hides every publication of this account and blocks publishing. Private editing is not affected.",
   "admin.unrestrictHint": "Lifting the restriction lets the account publish again. Hidden publications stay hidden until you restore each one.",
   "admin.restoreHint": "Restoring does not republish a shader its owner has unpublished.",

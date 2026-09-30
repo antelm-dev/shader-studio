@@ -639,7 +639,6 @@ export const TRANSLATION_KEYS = [
   'admin.reporter',
   'admin.resolution',
   'admin.sources',
-  'admin.runSnapshot',
   'admin.restrictHint',
   'admin.unrestrictHint',
   'admin.restoreHint',

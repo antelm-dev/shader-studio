@@ -636,7 +636,6 @@
   "admin.reporter": "Signalé par le compte {id}",
   "admin.resolution": "Résolu : {text}",
   "admin.sources": "Sources",
-  "admin.runSnapshot": "Exécuter cet instantané",
   "admin.restrictHint": "La restriction masque toutes les publications de ce compte et bloque la publication. L’édition privée n’est pas concernée.",
   "admin.unrestrictHint": "Lever la restriction permet au compte de publier à nouveau. Les publications masquées le restent tant que vous ne les rétablissez pas une à une.",
   "admin.restoreHint": "Le rétablissement ne republie pas un shader que son auteur a dépublié.",
