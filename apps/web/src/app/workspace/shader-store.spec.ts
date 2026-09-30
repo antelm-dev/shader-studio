@@ -25,6 +25,7 @@ import {
 } from '../prefs/preferences';
 import { ApiError, type UpdateShaderPatch } from '../api/shader-api';
 import { ShaderApi } from '../api/shader-api';
+import { RendererHandle } from '../rendering/renderer-handle';
 import { documentWith, MemoryStorage } from './lifecycle/testing/lifecycle-harness';
 import { ShaderStore } from './shader-store';
 
@@ -985,5 +986,63 @@ describe('ShaderStore: setParamsValidated', () => {
     expect(result.errors['glow']).toBeDefined();
     expect(result.errors['unknown']).toBeDefined();
     expect(store.params()['speed']).toBe(5);
+  });
+});
+
+describe('ShaderStore: captureMissingPreview', () => {
+  const PREVIEW = { ext: 'webp', updatedAt: '2024-02-02T00:00:00.000Z' };
+
+  /** The store with a renderer that has a frame to give and an API that stores it. */
+  function setupWithRenderer(record: ShaderRecord) {
+    const api = new FakeApi(record);
+    const setThumbnail = vi.fn((id: string) =>
+      Promise.resolve({ ...api.records.get(id)!, thumbnail: PREVIEW }),
+    );
+    Object.assign(api, { setThumbnail });
+    const captureThumbnail = vi.fn(() =>
+      Promise.resolve({ ext: 'webp', bytes: new Uint8Array([1]) }),
+    );
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ShaderApi, useValue: api },
+        { provide: Preferences, useValue: new FakePreferences() },
+        { provide: RendererHandle, useValue: { captureThumbnail } },
+      ],
+    });
+
+    return { store: TestBed.inject(ShaderStore), setThumbnail };
+  }
+
+  it('photographs an open shader that has no preview, once', async () => {
+    const { store, setThumbnail } = setupWithRenderer(makeRecord());
+    await store.initialize();
+
+    store.captureMissingPreview('waves');
+    await vi.waitFor(() => expect(store.record()?.thumbnail).toEqual(PREVIEW));
+    expect(store.shaders()[0].thumbnail).toEqual(PREVIEW);
+
+    store.captureMissingPreview('waves');
+    expect(setThumbnail).toHaveBeenCalledOnce();
+  });
+
+  it('leaves alone a shader that has a preview, is not the open one, or is being edited', async () => {
+    const { store, setThumbnail } = setupWithRenderer(makeRecord({ thumbnail: PREVIEW }));
+    await store.initialize();
+
+    store.captureMissingPreview('waves');
+    store.captureMissingPreview('another');
+    expect(setThumbnail).not.toHaveBeenCalled();
+  });
+
+  it('does not photograph an unsaved draft', async () => {
+    const { store, setThumbnail } = setupWithRenderer(makeRecord());
+    await store.initialize();
+
+    store.setFragment('void main() { gl_FragColor = vec4(0.5); }');
+    expect(store.dirty()).toBe(true);
+
+    store.captureMissingPreview('waves');
+    expect(setThumbnail).not.toHaveBeenCalled();
   });
 });

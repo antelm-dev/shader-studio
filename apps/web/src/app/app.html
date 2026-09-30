@@ -1,7 +1,7 @@
 <!-- The shader is the page: everything below is painted on top of it — until you
      detach it, at which point the same canvas becomes a window over the stage it
      was. The output window only ever gets the page. -->
-<app-preview-shell [stageOnly]="outputMode" />
+<app-preview-shell [stageOnly]="outputMode || commands.zen()" />
 <router-outlet />
 
 @if (!outputMode) {
@@ -16,369 +16,251 @@
   (change)="onFilePicked($event)"
 />
 
-<div class="shell" [style.z-index]="shellZIndex()">
+<!-- Zen mode hides the whole shell. The way back is the key that got you here,
+     Escape, or this: a hot edge along the top that shows a button — on hover,
+     on a tap, and on keyboard focus — because the chrome that would normally
+     explain how to leave is exactly what is hidden. -->
+@if (commands.zen()) {
+<div class="zen-edge" [class.near]="zenExitNear()">
+  <button type="button" class="zen-exit" (click)="commands.zen.set(false)">
+    <mat-icon aria-hidden="true">fullscreen_exit</mat-icon>
+    <span>{{ 'action.exitZen' | translate }}</span>
+    <kbd>Z</kbd>
+  </button>
+</div>
+}
+
+<div class="shell" [class.zen]="commands.zen()" [style.z-index]="shellZIndex()">
   <!-- Fullscreen only takes away the window chrome: the OS frame is gone, so the
        title bar that stands in for it goes with it. The app's own surfaces stay. -->
   @if (desktop.available && !desktop.fullscreen()) {
   <app-titlebar />
   }
 
+  <!-- Three zones: where you are (the browser toggle and the brand), what you
+       are working on (the document, centred, like any document window), and
+       what you can do (the preview's transport, the view toggles, the account,
+       Save). The menus are declared after the bar so they are not its children. -->
   <mat-toolbar class="toolbar">
-    <button
-      matIconButton
-      type="button"
-      [matTooltip]="'toolbar.toggleBrowser' | translate"
-      [attr.aria-label]="'toolbar.toggleBrowser' | translate"
-      [attr.aria-expanded]="drawerOpen()"
-      (click)="toggleBrowser()"
-    >
-      <mat-icon>menu</mat-icon>
-    </button>
-
-    <!-- The desktop title bar already carries the app's identity a few pixels
-         above this. Repeating it here is the second of the three stacked titles
-         the toolbar is meant to be replacing. -->
-    @if (!desktop.available) {
-    <span class="brand" aria-label="Shadergrove">
-      <span class="brand-title">Shadergrove</span>
-    </span>
-    }
-
-    <!-- The open document: its name, and what it is doing. Not a pill — a title. -->
-    @if (store.record(); as shader) {
-    <div class="document">
-      <span
-        class="doc-name"
-        [title]="'toolbar.documentActions' | translate: { description: shader.description }"
-        [matContextMenuTriggerFor]="shaderMenu"
-      >
-        {{ shader.name }}
-      </span>
-
-      <span class="doc-meta">
-        @if (status.state() !== 'none') {
-        <span class="doc-status" [class]="'is-' + status.state()" aria-live="polite">
-          @if (status.state() === 'unsaved') {
-          <span class="dot" aria-hidden="true">•</span>
-          } @else if (status.state() === 'saved') {
-          <mat-icon class="status-icon" aria-hidden="true">check</mat-icon>
-          } {{ status.label() }}
-        </span>
-        }
-
-        <!-- Errors are not a save state: you can save a shader that does not
-             compile. They get their own affordance, which opens the editor. -->
-        @if (status.errorCount(); as errors) {
-        <button
-          type="button"
-          class="doc-errors"
-          [matTooltip]="status.errorHint()"
-          [attr.aria-label]="status.errorHint()"
-          (click)="openProblems()"
-        >
-          <mat-icon aria-hidden="true">error</mat-icon>
-          {{ errors }}
-        </button>
-        }
-      </span>
-    </div>
-
-    <mat-menu #shaderMenu="matMenu">
-      @for (item of documentCommands; track item.id) {
-      <button mat-menu-item type="button" (click)="item.action()">
-        <mat-icon>{{ item.icon() }}</mat-icon>
-        <span>{{ item.label() }}</span>
-      </button>
-      }
-    </mat-menu>
-    }
-
-    <span class="spacer"></span>
-
-    <!-- The most-used view toggles, promoted out of "More actions" for when
-         there is room to hold them — see the container query in app.scss.
-         They duplicate entries in `moreMenu` rather than replace them, so
-         nothing becomes less discoverable on a narrow window. -->
-    <div class="quick-actions">
-      @for (item of quickActions; track item.id) {
+    <div class="bar-start">
       <button
         matIconButton
         type="button"
-        [matTooltip]="item.shortcut ? item.label() + ' (' + item.shortcut + ')' : item.label()"
-        [attr.aria-label]="item.label()"
-        [attr.aria-pressed]="isQuickActionActive(item.id)"
-        [class.is-active]="isQuickActionActive(item.id)"
-        [disabled]="item.disabled?.() ?? false"
-        (click)="item.action()"
+        [matTooltip]="'toolbar.toggleBrowser' | translate"
+        [attr.aria-label]="'toolbar.toggleBrowser' | translate"
+        [attr.aria-expanded]="drawerOpen()"
+        (click)="toggleBrowser()"
       >
-        <mat-icon>{{ item.icon() }}</mat-icon>
+        <mat-icon>menu</mat-icon>
       </button>
+
+      <!-- The desktop title bar already carries the app's identity a few pixels
+           above this. Repeating it here is the second of the three stacked titles
+           the toolbar is meant to be replacing. -->
+      @if (!desktop.available) {
+      <span class="brand" aria-label="Shadergrove">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-title">Shadergrove</span>
+      </span>
       }
     </div>
 
-    <button
-      matIconButton
-      type="button"
-      [matTooltip]="'action.more' | translate"
-      [attr.aria-label]="'action.more' | translate"
-      [matMenuTriggerFor]="moreMenu"
-    >
-      <mat-icon>more_vert</mat-icon>
-    </button>
+    <div class="bar-center">
+      <!-- The open document: its name, and what it is doing. Not a pill — a title. -->
+      @if (store.record(); as shader) {
+      <div class="document">
+        <span
+          class="doc-name"
+          [title]="'toolbar.documentActions' | translate: { description: shader.description }"
+          [matContextMenuTriggerFor]="shaderMenu"
+        >
+          {{ shader.name }}
+        </span>
 
-    <!-- Hidden on the desktop app, which is offline and single-user: there is
-         no account to sign in to, so offering one would only be a dead end. -->
-    @if (cloudAccounts) { @if (auth.authenticated()) {
-    <button
-      matButton="tonal"
-      type="button"
-      class="account"
-      [matTooltip]="'auth.accountMenu' | translate"
-      [attr.aria-label]="'auth.accountMenu' | translate"
-      [matMenuTriggerFor]="accountMenu"
-    >
-      <mat-icon>person</mat-icon>
-      <span>{{ auth.displayName() }}</span>
-    </button>
+        <span class="doc-meta">
+          @if (status.state() !== 'none') {
+          <span class="doc-status" [class]="'is-' + status.state()" aria-live="polite">
+            @if (status.state() === 'unsaved') {
+            <span class="dot" aria-hidden="true">•</span>
+            } @else if (status.state() === 'saved') {
+            <mat-icon class="status-icon" aria-hidden="true">check</mat-icon>
+            } {{ status.label() }}
+          </span>
+          }
 
-    <mat-menu #accountMenu="matMenu">
-      <button mat-menu-item type="button" (click)="openAccount()">
-        <mat-icon>manage_accounts</mat-icon>
-        <span>{{ 'auth.profile' | translate }}</span>
-      </button>
-      <button mat-menu-item type="button" (click)="openAccount()">
-        <mat-icon>devices</mat-icon>
-        <span>{{ 'auth.sessionsTitle' | translate }}</span>
-      </button>
-      <button mat-menu-item type="button" (click)="signOut()">
-        <mat-icon>logout</mat-icon>
-        <span>{{ 'auth.signOut' | translate }}</span>
-      </button>
-    </mat-menu>
-    } @else {
-    <button
-      matButton="tonal"
-      type="button"
-      class="account"
-      [disabled]="auth.status() === 'loading'"
-      [matTooltip]="'auth.accountTooltip' | translate"
-      [attr.aria-label]="'auth.accountTooltip' | translate"
-      (click)="openSignIn()"
-    >
-      <mat-icon>person</mat-icon>
-      <span>{{ 'auth.login' | translate }}</span>
-    </button>
-    } }
+          <!-- Errors are not a save state: you can save a shader that does not
+               compile. They get their own affordance, which opens the editor. -->
+          @if (status.errorCount(); as errors) {
+          <button
+            type="button"
+            class="doc-errors"
+            [matTooltip]="status.errorHint()"
+            [attr.aria-label]="status.errorHint()"
+            (click)="openProblems()"
+          >
+            <mat-icon aria-hidden="true">error</mat-icon>
+            {{ errors }}
+          </button>
+          }
+        </span>
+      </div>
+      }
+    </div>
 
-    <!-- The desktop's account: present only when the build names a server. -->
-    @if (desktopAccountShown(); as account) { @if (account.user; as user) {
-    <button
-      matButton="tonal"
-      type="button"
-      class="account"
-      [matTooltip]="'auth.accountMenu' | translate"
-      [attr.aria-label]="'auth.accountMenu' | translate"
-      [matMenuTriggerFor]="desktopAccountMenu"
-    >
-      <mat-icon>{{ account.status === 'reauth-required' ? 'sync_problem' : 'person' }}</mat-icon>
-      <span>{{ user.name || user.email }}</span>
-    </button>
+    <div class="bar-end">
+      <app-transport-bar class="transport" />
 
-    <mat-menu #desktopAccountMenu="matMenu">
-      <div class="menu-section">{{ user.email }}</div>
-      @if (account.status === 'reauth-required') {
+      <!-- The most-used view toggles, promoted out of "More actions" for when
+           there is room to hold them — see the container query in app.scss.
+           They duplicate entries in `moreMenu` rather than replace them, so
+           nothing becomes less discoverable on a narrow window. -->
+      <div class="quick-actions">
+        @for (item of quickActions; track item.id) {
+        <button
+          matIconButton
+          type="button"
+          [matTooltip]="item.shortcut ? item.label() + ' (' + item.shortcut + ')' : item.label()"
+          [attr.aria-label]="item.label()"
+          [attr.aria-pressed]="isQuickActionActive(item.id)"
+          [class.is-active]="isQuickActionActive(item.id)"
+          [disabled]="item.disabled?.() ?? false"
+          (click)="item.action()"
+        >
+          <mat-icon>{{ item.icon() }}</mat-icon>
+        </button>
+        }
+      </div>
+
+      <!-- Every command and every shader by name. It stays at any width: it is
+           what stands in for the quick actions once they no longer fit. -->
       <button
-        mat-menu-item
+        matIconButton
         type="button"
+        [matTooltip]="'palette.open' | translate"
+        [attr.aria-label]="'palette.openAria' | translate"
+        (click)="openPalette()"
+      >
+        <mat-icon>search</mat-icon>
+      </button>
+
+      <button
+        matIconButton
+        type="button"
+        [matTooltip]="'action.more' | translate"
+        [attr.aria-label]="'action.more' | translate"
+        [matMenuTriggerFor]="moreMenu"
+      >
+        <mat-icon>more_vert</mat-icon>
+      </button>
+
+      <!-- Hidden on the desktop app, which is offline and single-user: there is
+           no account to sign in to, so offering one would only be a dead end. -->
+      @if (cloudAccounts) { @if (auth.authenticated()) {
+      <button
+        matButton="tonal"
+        type="button"
+        class="account"
+        [matTooltip]="'auth.accountMenu' | translate"
+        [attr.aria-label]="'auth.accountMenu' | translate"
+        [matMenuTriggerFor]="accountMenu"
+      >
+        <mat-icon>person</mat-icon>
+        <span>{{ auth.displayName() }}</span>
+      </button>
+      } @else {
+      <button
+        matButton="tonal"
+        type="button"
+        class="account"
+        [disabled]="auth.status() === 'loading'"
+        [matTooltip]="'auth.accountTooltip' | translate"
+        [attr.aria-label]="'auth.accountTooltip' | translate"
+        (click)="openSignIn()"
+      >
+        <mat-icon>person</mat-icon>
+        <span>{{ 'auth.login' | translate }}</span>
+      </button>
+      } }
+
+      <!-- The desktop's account: present only when the build names a server. -->
+      @if (desktopAccountShown(); as account) { @if (account.user; as user) {
+      <button
+        matButton="tonal"
+        type="button"
+        class="account"
+        [matTooltip]="'auth.accountMenu' | translate"
+        [attr.aria-label]="'auth.accountMenu' | translate"
+        [matMenuTriggerFor]="desktopAccountMenu"
+      >
+        <mat-icon>{{ account.status === 'reauth-required' ? 'sync_problem' : 'person' }}</mat-icon>
+        <span>{{ user.name || user.email }}</span>
+      </button>
+
+      <!-- Stays beside its trigger: it reads `account` and `user` from this block. -->
+      <mat-menu #desktopAccountMenu="matMenu">
+        <div class="menu-section">{{ user.email }}</div>
+        @if (account.status === 'reauth-required') {
+        <button
+          mat-menu-item
+          type="button"
+          [disabled]="desktopAccount.signingIn()"
+          (click)="desktopSignIn()"
+        >
+          <mat-icon>login</mat-icon>
+          <span>{{ 'account.signInAgain' | translate }}</span>
+        </button>
+        } @if (account.status === 'signed-in' && sync.hasLocalOnly()) {
+        <button mat-menu-item type="button" (click)="sync.uploadAll()">
+          <mat-icon>cloud_upload</mat-icon>
+          <span>{{ 'sync.uploadAll' | translate }}</span>
+        </button>
+        }
+        <button mat-menu-item type="button" (click)="desktopAccount.openAccountPage()">
+          <mat-icon>manage_accounts</mat-icon>
+          <span>{{ 'account.manage' | translate }}</span>
+        </button>
+        <button mat-menu-item type="button" (click)="desktopAccount.signOut()">
+          <mat-icon>logout</mat-icon>
+          <span>{{ 'auth.signOut' | translate }}</span>
+        </button>
+      </mat-menu>
+      } @else {
+      <button
+        matButton="tonal"
+        type="button"
+        class="account"
+        [matTooltip]="
+          (desktopAccount.signingIn() ? 'account.waiting' : 'account.signInTooltip') | translate
+        "
+        [attr.aria-label]="'account.signInTooltip' | translate"
         [disabled]="desktopAccount.signingIn()"
+        [disabledInteractive]="true"
         (click)="desktopSignIn()"
       >
-        <mat-icon>login</mat-icon>
-        <span>{{ 'account.signInAgain' | translate }}</span>
+        <mat-icon>{{ desktopAccount.signingIn() ? 'open_in_browser' : 'person' }}</mat-icon>
+        <span>{{ 'auth.login' | translate }}</span>
       </button>
-      } @if (account.status === 'signed-in' && sync.hasLocalOnly()) {
-      <button mat-menu-item type="button" (click)="sync.uploadAll()">
-        <mat-icon>cloud_upload</mat-icon>
-        <span>{{ 'sync.uploadAll' | translate }}</span>
-      </button>
-      }
-      <button mat-menu-item type="button" (click)="desktopAccount.openAccountPage()">
-        <mat-icon>manage_accounts</mat-icon>
-        <span>{{ 'account.manage' | translate }}</span>
-      </button>
-      <button mat-menu-item type="button" (click)="desktopAccount.signOut()">
-        <mat-icon>logout</mat-icon>
-        <span>{{ 'auth.signOut' | translate }}</span>
-      </button>
-    </mat-menu>
-    } @else {
-    <button
-      matButton="tonal"
-      type="button"
-      class="account"
-      [matTooltip]="
-        (desktopAccount.signingIn() ? 'account.waiting' : 'account.signInTooltip') | translate
-      "
-      [attr.aria-label]="'account.signInTooltip' | translate"
-      [disabled]="desktopAccount.signingIn()"
-      [disabledInteractive]="true"
-      (click)="desktopSignIn()"
-    >
-      <mat-icon>{{ desktopAccount.signingIn() ? 'open_in_browser' : 'person' }}</mat-icon>
-      <span>{{ 'auth.login' | translate }}</span>
-    </button>
-    } }
+      } }
 
-    <!-- Four sections, because a flat list of nine commands is a list you read
-         rather than a menu you scan. -->
-    <mat-menu #moreMenu="matMenu">
-      <h3 class="menu-section">{{ 'menu.view' | translate }}</h3>
-      @for (item of viewCommands; track item.id) {
+      <!-- `disabledInteractive` keeps the button focusable and hoverable while it
+           is disabled, which is the only way a disabled control can explain itself:
+           a plain `disabled` button takes no pointer events and no focus, so its
+           tooltip can never be read and a screen reader is told nothing but
+           "dimmed". `saveHint` names whichever of the four reasons applies. -->
       <button
-        mat-menu-item
+        matButton="tonal"
         type="button"
-        [disabled]="item.disabled?.() ?? false"
-        (click)="item.action()"
+        class="save"
+        [disabledInteractive]="true"
+        [disabled]="!status.canSave()"
+        [matTooltip]="status.saveHint()"
+        [attr.aria-label]="'toolbar.saveLabel' | translate: { hint: status.saveHint() }"
+        (click)="store.save()"
       >
-        <mat-icon>{{ item.icon() }}</mat-icon>
-        <span>{{ item.label() }}</span>
-        @if (item.shortcut) {
-        <span class="menu-hint">{{ item.shortcut }}</span>
-        }
+        <mat-icon>save</mat-icon>
+        {{ (store.saving() ? 'action.saving' : 'action.saveShader') | translate }}
       </button>
-      }
-      <!-- The output window is the desktop's alone, and it is a toggle over a
-           window that may not exist — it does not reduce to a command. -->
-      @if (desktop.available) {
-      <button
-        mat-menu-item
-        type="button"
-        [disabled]="!store.record()"
-        (click)="desktop.outputOpen() ? desktop.closeOutput() : desktop.openOutput()"
-      >
-        <mat-icon>{{ desktop.outputOpen() ? 'close_fullscreen' : 'open_in_new' }}</mat-icon>
-        <span
-          >{{ (desktop.outputOpen() ? 'action.closeOutput' : 'action.openOutput') | translate
-          }}</span
-        >
-      </button>
-      }
-
-      <mat-divider />
-
-      <h3 class="menu-section">{{ 'menu.shader' | translate }}</h3>
-      @for (item of shaderCommands; track item.id) {
-      <button
-        mat-menu-item
-        type="button"
-        [disabled]="item.disabled?.() ?? false"
-        (click)="item.action()"
-      >
-        <mat-icon>{{ item.icon() }}</mat-icon>
-        <span>{{ item.label() }}</span>
-      </button>
-      }
-
-      <mat-divider />
-
-      <h3 class="menu-section">{{ 'menu.importExport' | translate }}</h3>
-      @for (item of importExportCommands; track item.id) {
-      <button
-        mat-menu-item
-        type="button"
-        [disabled]="item.disabled?.() ?? false"
-        (click)="item.action()"
-      >
-        <mat-icon>{{ item.icon() }}</mat-icon>
-        <span>{{ item.label() }}</span>
-      </button>
-      }
-
-      <mat-divider />
-
-      <h3 class="menu-section">{{ 'menu.settings' | translate }}</h3>
-      <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
-        <mat-icon>{{ themeIcon() }}</mat-icon>
-        <span>{{ 'menu.theme' | translate }}</span>
-      </button>
-      <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
-        <mat-icon>settings</mat-icon>
-        <span>{{ 'menu.editorAppearance' | translate }}</span>
-      </button>
-      <button mat-menu-item type="button" (click)="workspace.openAboutShadergrove()">
-        <mat-icon>info</mat-icon>
-        <span>{{ 'menu.desktopVersion' | translate }}</span>
-      </button>
-      @if (!desktop.available) {
-      <a
-        mat-menu-item
-        href="https://github.com/antelm-dev/shadergrove/releases/latest"
-        target="_blank"
-        rel="noopener"
-      >
-        <mat-icon>download</mat-icon>
-        <span>{{ 'menu.downloadDesktop' | translate }}</span>
-      </a>
-      }
-      <button mat-menu-item type="button" [matMenuTriggerFor]="languageMenu">
-        <mat-icon>language</mat-icon>
-        <span>{{ 'menu.language' | translate }}</span>
-      </button>
-    </mat-menu>
-
-    <mat-menu #themeMenu="matMenu">
-      @for (option of colorSchemeOptions; track option.value) {
-      <button
-        mat-menu-item
-        type="button"
-        [attr.aria-checked]="preferences.value().colorScheme === option.value"
-        (click)="setColorScheme(option.value)"
-      >
-        <mat-icon>{{ option.icon }}</mat-icon>
-        <span>{{ themeLabel(option.value) }}</span>
-        @if (preferences.value().colorScheme === option.value) {
-        <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
-        }
-      </button>
-      }
-    </mat-menu>
-
-    <mat-menu #languageMenu="matMenu">
-      @for (option of languageOptions; track option.value) {
-      <button
-        mat-menu-item
-        type="button"
-        role="menuitemradio"
-        [attr.aria-checked]="i18n.locale() === option.value"
-        (click)="setLanguage(option.value)"
-      >
-        <mat-icon>translate</mat-icon>
-        <span>{{ option.labelKey | translate }}</span>
-        @if (i18n.locale() === option.value) {
-        <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
-        }
-      </button>
-      }
-    </mat-menu>
-
-    <!-- `disabledInteractive` keeps the button focusable and hoverable while it
-         is disabled, which is the only way a disabled control can explain itself:
-         a plain `disabled` button takes no pointer events and no focus, so its
-         tooltip can never be read and a screen reader is told nothing but
-         "dimmed". `saveHint` names whichever of the four reasons applies. -->
-    <button
-      matButton="tonal"
-      type="button"
-      class="save"
-      [disabledInteractive]="true"
-      [disabled]="!status.canSave()"
-      [matTooltip]="status.saveHint()"
-      [attr.aria-label]="'toolbar.saveLabel' | translate: { hint: status.saveHint() }"
-      (click)="store.save()"
-    >
-      <mat-icon>save</mat-icon>
-      {{ (store.saving() ? 'action.saving' : 'action.saveShader') | translate }}
-    </button>
+    </div>
 
     @if (store.loading() || store.saving()) {
     <mat-progress-bar
@@ -395,6 +277,161 @@
     />
     }
   </mat-toolbar>
+
+  <mat-menu #shaderMenu="matMenu">
+    @for (item of documentCommands; track item.id) {
+    <button mat-menu-item type="button" (click)="item.action()">
+      <mat-icon>{{ item.icon() }}</mat-icon>
+      <span>{{ item.label() }}</span>
+    </button>
+    }
+  </mat-menu>
+
+  <mat-menu #accountMenu="matMenu">
+    <button mat-menu-item type="button" (click)="openAccount()">
+      <mat-icon>manage_accounts</mat-icon>
+      <span>{{ 'auth.profile' | translate }}</span>
+    </button>
+    <button mat-menu-item type="button" (click)="openAccount()">
+      <mat-icon>devices</mat-icon>
+      <span>{{ 'auth.sessionsTitle' | translate }}</span>
+    </button>
+    <button mat-menu-item type="button" (click)="signOut()">
+      <mat-icon>logout</mat-icon>
+      <span>{{ 'auth.signOut' | translate }}</span>
+    </button>
+  </mat-menu>
+
+  <!-- Four sections, because a flat list of nine commands is a list you read
+       rather than a menu you scan. -->
+  <mat-menu #moreMenu="matMenu">
+    <h3 class="menu-section">{{ 'menu.view' | translate }}</h3>
+    @for (item of viewCommands; track item.id) {
+    <button
+      mat-menu-item
+      type="button"
+      [disabled]="item.disabled?.() ?? false"
+      (click)="item.action()"
+    >
+      <mat-icon>{{ item.icon() }}</mat-icon>
+      <span>{{ item.label() }}</span>
+      @if (item.shortcut) {
+      <span class="menu-hint">{{ item.shortcut }}</span>
+      }
+    </button>
+    }
+    <!-- The output window is the desktop's alone, and it is a toggle over a
+         window that may not exist — it does not reduce to a command. -->
+    @if (desktop.available) {
+    <button
+      mat-menu-item
+      type="button"
+      [disabled]="!store.record()"
+      (click)="desktop.outputOpen() ? desktop.closeOutput() : desktop.openOutput()"
+    >
+      <mat-icon>{{ desktop.outputOpen() ? 'close_fullscreen' : 'open_in_new' }}</mat-icon>
+      <span
+        >{{ (desktop.outputOpen() ? 'action.closeOutput' : 'action.openOutput') | translate }}</span
+      >
+    </button>
+    }
+
+    <mat-divider />
+
+    <h3 class="menu-section">{{ 'menu.shader' | translate }}</h3>
+    @for (item of shaderCommands; track item.id) {
+    <button
+      mat-menu-item
+      type="button"
+      [disabled]="item.disabled?.() ?? false"
+      (click)="item.action()"
+    >
+      <mat-icon>{{ item.icon() }}</mat-icon>
+      <span>{{ item.label() }}</span>
+    </button>
+    }
+
+    <mat-divider />
+
+    <h3 class="menu-section">{{ 'menu.importExport' | translate }}</h3>
+    @for (item of importExportCommands; track item.id) {
+    <button
+      mat-menu-item
+      type="button"
+      [disabled]="item.disabled?.() ?? false"
+      (click)="item.action()"
+    >
+      <mat-icon>{{ item.icon() }}</mat-icon>
+      <span>{{ item.label() }}</span>
+    </button>
+    }
+
+    <mat-divider />
+
+    <h3 class="menu-section">{{ 'menu.settings' | translate }}</h3>
+    <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
+      <mat-icon>{{ themeIcon() }}</mat-icon>
+      <span>{{ 'menu.theme' | translate }}</span>
+    </button>
+    <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
+      <mat-icon>settings</mat-icon>
+      <span>{{ 'menu.editorAppearance' | translate }}</span>
+    </button>
+    <button mat-menu-item type="button" (click)="workspace.openAboutShadergrove()">
+      <mat-icon>info</mat-icon>
+      <span>{{ 'menu.desktopVersion' | translate }}</span>
+    </button>
+    @if (!desktop.available) {
+    <a
+      mat-menu-item
+      href="https://github.com/antelm-dev/shadergrove/releases/latest"
+      target="_blank"
+      rel="noopener"
+    >
+      <mat-icon>download</mat-icon>
+      <span>{{ 'menu.downloadDesktop' | translate }}</span>
+    </a>
+    }
+    <button mat-menu-item type="button" [matMenuTriggerFor]="languageMenu">
+      <mat-icon>language</mat-icon>
+      <span>{{ 'menu.language' | translate }}</span>
+    </button>
+  </mat-menu>
+
+  <mat-menu #themeMenu="matMenu">
+    @for (option of colorSchemeOptions; track option.value) {
+    <button
+      mat-menu-item
+      type="button"
+      [attr.aria-checked]="preferences.value().colorScheme === option.value"
+      (click)="setColorScheme(option.value)"
+    >
+      <mat-icon>{{ option.icon }}</mat-icon>
+      <span>{{ themeLabel(option.value) }}</span>
+      @if (preferences.value().colorScheme === option.value) {
+      <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
+      }
+    </button>
+    }
+  </mat-menu>
+
+  <mat-menu #languageMenu="matMenu">
+    @for (option of languageOptions; track option.value) {
+    <button
+      mat-menu-item
+      type="button"
+      role="menuitemradio"
+      [attr.aria-checked]="i18n.locale() === option.value"
+      (click)="setLanguage(option.value)"
+    >
+      <mat-icon>translate</mat-icon>
+      <span>{{ option.labelKey | translate }}</span>
+      @if (i18n.locale() === option.value) {
+      <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
+      }
+    </button>
+    }
+  </mat-menu>
 
   <mat-sidenav-container class="body" [hasBackdrop]="isHandset()">
     <mat-sidenav

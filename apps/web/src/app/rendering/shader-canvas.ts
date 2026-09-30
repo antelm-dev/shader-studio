@@ -59,7 +59,7 @@ export const RECOMPILE_DEBOUNCE_MS = 400;
     :host {
       display: block;
       position: relative;
-      background: #0a0c10;
+      background: #0b0b0c;
     }
 
     .shader-canvas {
@@ -366,6 +366,7 @@ export class ShaderCanvas {
     }
 
     engine.onFps = (fps) => this.handle.fps.set(fps);
+    engine.onResize = (width, height) => this.handle.resolution.set({ width, height });
     engine.onFrameRendered = () => this.onFrameRendered();
     engine.onTextureSettled = () => this.armRevealWhenReady();
 

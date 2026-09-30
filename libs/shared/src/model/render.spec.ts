@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  activePostProcessingCount,
   addPostProcessingEffect,
   createBloomEffect,
   createVignetteEffect,
@@ -99,6 +100,18 @@ describe('hasActivePostProcessing', () => {
         render([createBloomEffect({ enabled: false }), createVignetteEffect({ enabled: true })]),
       ),
     ).toBe(true);
+  });
+});
+
+describe('activePostProcessingCount', () => {
+  it('counts only enabled effects, and none while the master switch is off', () => {
+    const effects = [
+      createBloomEffect({ enabled: true }),
+      createVignetteEffect({ enabled: false }),
+    ];
+    expect(activePostProcessingCount(render(effects))).toBe(1);
+    expect(activePostProcessingCount(render(effects, false))).toBe(0);
+    expect(activePostProcessingCount(render([]))).toBe(0);
   });
 });
 

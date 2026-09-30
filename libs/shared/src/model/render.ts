@@ -172,7 +172,13 @@ function createDefaultEffect(type: PostProcessingEffectType): PostProcessingEffe
  * re-deriving it from `postProcessing.enabled` and each effect separately.
  */
 export function hasActivePostProcessing(render: RenderSettings): boolean {
-  return render.postProcessing.enabled && render.postProcessing.effects.some((e) => e.enabled);
+  return activePostProcessingCount(render) > 0;
+}
+
+/** How many effects actually alter the frame: none while the master switch is off. */
+export function activePostProcessingCount(render: RenderSettings): number {
+  const { enabled, effects } = render.postProcessing;
+  return enabled ? effects.filter((effect) => effect.enabled).length : 0;
 }
 
 /** The chain's master switch only — every effect and its order are untouched. */

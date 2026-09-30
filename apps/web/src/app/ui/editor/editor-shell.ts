@@ -70,8 +70,7 @@ import {
       overflow: visible;
       pointer-events: auto;
       border: 1px solid var(--mat-sys-outline-variant);
-      background: color-mix(in srgb, var(--mat-sys-surface-container-lowest) 94%, transparent);
-      backdrop-filter: blur(18px);
+      background: var(--mat-sys-surface-container-lowest);
     }
 
     :host(.surface-frame--animating) {
@@ -122,10 +121,14 @@ import {
       border-width: 1px 0 0;
     }
 
+    // Floating over the shader: nearly opaque still, because code has to stay
+    // legible over any frame, with the blur softening what shows through.
     :host(.floating) {
       position: absolute;
       overflow: hidden;
-      border-radius: var(--mat-sys-corner-medium, 8px);
+      border-radius: var(--mat-sys-corner-large);
+      background: color-mix(in srgb, var(--mat-sys-surface-container-lowest) 94%, transparent);
+      backdrop-filter: var(--studio-glass-filter);
       box-shadow: var(--mat-sys-level4);
     }
 

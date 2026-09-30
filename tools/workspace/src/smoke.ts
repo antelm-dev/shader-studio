@@ -7,6 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { chromium } from 'playwright';
 
+import { checkOfflineFonts } from './font-smoke.js';
 import { createLogger } from './lib/logger.js';
 import { root } from './lib/paths.js';
 import { checkPluginSandbox } from './plugin-sandbox-smoke.js';
@@ -204,6 +205,11 @@ try {
   await bottomPanel.locator('app-output-panel').waitFor({ state: 'visible', timeout: 10_000 });
   // preserveContent keeps ProfilerPanel mounted; disable-on-leave is covered by
   // mounted unit tests via setProfilingEnabled(false). Smoke asserts the tab left.
+
+  await checkOfflineFonts(browser, BASE);
+  log.info(
+    'offline fonts ok — Inter, JetBrains Mono and Material Symbols load with the network blocked',
+  );
 
   await checkPluginSandbox(browser, BASE);
   log.info('plugin sandbox ok — escapes blocked, terminate destroys the Worker');

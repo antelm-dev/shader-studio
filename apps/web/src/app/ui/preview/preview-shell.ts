@@ -184,7 +184,7 @@ import { PreviewWindowControls } from './preview-window-controls';
       }
     </mat-menu>
 
-    @if (projected().resizableFloating) {
+    @if (windowed() && projected().resizableFloating) {
       <surface-resize-handles
         mode="floating"
         [label]="resizeLabel"
@@ -199,7 +199,7 @@ import { PreviewWindowControls } from './preview-window-controls';
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: #0a0c10;
+      background: #0b0b0c;
     }
 
     :host(.stage) {
@@ -210,7 +210,7 @@ import { PreviewWindowControls } from './preview-window-controls';
     :host(.floating),
     :host(.minimized) {
       border: 1px solid var(--mat-sys-outline-variant);
-      border-radius: var(--mat-sys-corner-medium, 8px);
+      border-radius: var(--mat-sys-corner-large);
       box-shadow: var(--mat-sys-level4);
     }
 
@@ -236,8 +236,8 @@ import { PreviewWindowControls } from './preview-window-controls';
       min-height: 34px;
       padding: 2px 5px 2px 8px;
       border-bottom: 1px solid var(--mat-sys-outline-variant);
-      background: color-mix(in srgb, var(--mat-sys-surface-container-high) 92%, transparent);
-      backdrop-filter: blur(18px);
+      background: var(--studio-glass);
+      backdrop-filter: var(--studio-glass-filter);
       color: var(--mat-sys-on-surface);
       font: var(--mat-sys-label-large);
       user-select: none;
@@ -346,14 +346,21 @@ export class PreviewShell {
     });
   });
 
-  protected readonly frame = computed(() => this.projected().frame);
+  // On the stage there is no frame, whatever the stored placement says: `stageOnly`
+  // (the output window, zen mode) shows a detached preview full-window without
+  // touching its placement, so leaving the mode puts it back where it was.
+  protected readonly frame = computed(() => (this.onStage() ? null : this.projected().frame));
 
   protected readonly frameHeight = computed<number | null>(() =>
     this.minimized() ? null : (this.frame()?.height ?? null),
   );
 
   protected readonly windowZIndex = computed(() =>
-    this.projected().stacked ? (this.registry.foreground() === this.previewId ? 4 : 2) : null,
+    this.windowed() && this.projected().stacked
+      ? this.registry.foreground() === this.previewId
+        ? 4
+        : 2
+      : null,
   );
 
   protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;

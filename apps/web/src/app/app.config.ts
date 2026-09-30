@@ -1,10 +1,13 @@
 import {
   ApplicationConfig,
+  inject,
+  provideAppInitializer,
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
 } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideClientHydration, withEventReplay } from '@angular/platform-browser';
+import { MatIconRegistry } from '@angular/material/icon';
 import { provideRouter } from '@angular/router';
 
 import { routes } from './app.routes';
@@ -24,6 +27,13 @@ export const appConfig: ApplicationConfig = {
     HttpShaderApi,
     { provide: ShaderApi, useExisting: HttpShaderApi },
     provideI18n(HttpI18nCatalog),
+    // Icons are ligatures in the bundled Material Symbols font, not legacy Material Icons.
+    provideAppInitializer(() => {
+      inject(MatIconRegistry).setDefaultFontSetClass(
+        'material-symbols-outlined',
+        'mat-ligature-font',
+      );
+    }),
     provideClientHydration(withEventReplay()),
   ],
 };

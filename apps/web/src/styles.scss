@@ -1,4 +1,79 @@
+@use 'sass:map';
 @use '@angular/material' as mat;
+
+// Inter and Material Symbols ship with the app (angular.json `styles`), so the
+// chrome renders the same offline, in the desktop app, and on a cold cache.
+$ui-font: 'Inter Variable', system-ui, sans-serif;
+// Values, hex colours and readouts: a mono face with tabular figures, so a
+// number that changes under a drag does not jitter the row around it.
+$mono-font: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+// Controls take 4px corners, overlays (dialogs) up to 8px. Passed to every
+// `mat.theme` call, since each one re-emits the corner tokens.
+$corners: (
+  corner-extra-large: 8px,
+  corner-extra-large-top: (8px 8px 0 0),
+  corner-extra-small: 4px,
+  corner-extra-small-top: (4px 4px 0 0),
+  corner-large: 8px,
+  corner-large-end: (0 8px 8px 0),
+  corner-large-start: (8px 0 0 8px),
+  corner-large-top: (8px 8px 0 0),
+  corner-medium: 4px,
+  corner-small: 4px,
+);
+
+// The accent: a leaf green of the app's own — the grove in the name — rather
+// than one of Material's stock hues. Both ramps come from
+// `ng generate @angular/material:theme-color --primary-color=#6FDD3C`; change
+// the seed and paste the new ramps to change the accent. Dark mode draws the
+// accent at tone 80 (#71df3e) and light mode at tone 40 (#276c00).
+$accent: (
+  0: #000000,
+  10: #072100,
+  20: #103800,
+  25: #164500,
+  30: #1b5200,
+  35: #215f00,
+  40: #276c00,
+  50: #328800,
+  60: #3fa500,
+  70: #56c220,
+  80: #71df3e,
+  90: #8cfd58,
+  95: #cdffb0,
+  98: #eeffde,
+  99: #f7ffec,
+  100: #ffffff,
+);
+$accent-secondary: (
+  0: #000000,
+  10: #072100,
+  20: #103800,
+  25: #164500,
+  30: #1e5105,
+  35: #2a5e12,
+  40: #366a1e,
+  50: #4f8435,
+  60: #679f4c,
+  70: #81ba64,
+  80: #9bd67c,
+  90: #b6f396,
+  95: #cdffb0,
+  98: #eeffde,
+  99: #f7ffec,
+  100: #ffffff,
+);
+
+// A Material palette is a ramp plus the secondary, neutral and error ramps
+// that go with it. The error ramp is Material's own, and the neutrals are
+// overridden with graphite below, so only the first two are replaced.
+$accent-palette: map.merge(
+  map.merge(mat.$cyan-palette, $accent),
+  (
+    secondary: $accent-secondary,
+  )
+);
 
 html {
   height: 100%;
@@ -12,23 +87,212 @@ html {
   @include mat.theme(
     (
       color: (
-          primary: mat.$cyan-palette,
+          primary: $accent-palette,
           tertiary: mat.$magenta-palette,
         ),
-      typography: Roboto,
+      typography: $ui-font,
       density: 0,
     ),
+    $corners
+  );
+
+  // Neutral graphite chrome. Material derives its neutrals from the primary
+  // hue, and a tinted chrome competes with whatever the shader is painting; it
+  // should be colourless, so the only colour on screen is the accent and the
+  // canvas.
+  @include mat.theme-overrides(
     (
-      corner-extra-large: 8px,
-      corner-extra-large-top: (8px 8px 0 0),
-      corner-extra-small: 2px,
-      corner-extra-small-top: (2px 2px 0 0),
-      corner-large: 4px,
-      corner-large-end: (0 4px 4px 0),
-      corner-large-start: (4px 0 0 4px),
-      corner-large-top: (4px 4px 0 0),
-      corner-medium: 4px,
-      corner-small: 4px,
+      background: light-dark(#f7f7f8, #141416),
+      on-background: light-dark(#1b1b1d, #e6e6e8),
+      surface: light-dark(#f7f7f8, #141416),
+      surface-dim: light-dark(#d9d9dc, #141416),
+      surface-bright: light-dark(#fbfbfc, #39393d),
+      surface-container-lowest: light-dark(#ffffff, #0e0e10),
+      surface-container-low: light-dark(#f2f2f3, #1a1a1c),
+      surface-container: light-dark(#ececee, #1f1f22),
+      surface-container-high: light-dark(#e6e6e8, #28282b),
+      surface-container-highest: light-dark(#e0e0e3, #323236),
+      surface-variant: light-dark(#e0e0e3, #323236),
+      on-surface: light-dark(#1b1b1d, #e6e6e8),
+      on-surface-variant: light-dark(#4f4f55, #a9a9af),
+      outline: light-dark(#7b7b82, #7b7b82),
+      // Hairlines between panels: present, never the loudest thing in a row.
+      outline-variant: light-dark(#d3d3d8, #2e2e33),
+      inverse-surface: light-dark(#303033, #e6e6e8),
+      inverse-on-surface: light-dark(#f2f2f3, #303033),
+      // Selection is a quiet tint of the accent rather than a second hue.
+      secondary-container:
+        color-mix(in srgb, var(--mat-sys-primary) 14%, var(--mat-sys-surface-container)),
+      on-secondary-container: var(--mat-sys-on-surface),
+    )
+  );
+
+  // --- Studio surfaces -----------------------------------------------------
+  // Docked panels are part of the workspace: opaque `surface-container-*`
+  // fills and a hairline, with no blur to recompute under an animating canvas.
+  // Floating panels hover over the shader, so they are glass. Material has no
+  // token for either decision or for the mono face, hence these three.
+  --studio-font-mono: #{$mono-font};
+  --studio-glass: color-mix(in srgb, var(--mat-sys-surface-container) 82%, transparent);
+  --studio-glass-filter: blur(20px) saturate(140%);
+
+  // Overlays sit over a moving, possibly bright shader: an opaque surface one
+  // step above the panels, and a shadow to lift them off it. Rows are sized
+  // for a mouse, like the rest of the chrome (see the row height below).
+  @include mat.menu-overrides(
+    (
+      container-color: var(--mat-sys-surface-container-high),
+      container-elevation-shadow: var(--mat-sys-level2),
+      item-label-text-size: 13px,
+      item-icon-size: 18px,
+      item-spacing: 10px,
+      item-leading-spacing: 10px,
+      item-with-icon-leading-spacing: 10px,
+      divider-top-spacing: 4px,
+      divider-bottom-spacing: 4px,
+    )
+  );
+  @include mat.select-overrides(
+    (
+      panel-background-color: var(--mat-sys-surface-container-high),
+      container-elevation-shadow: var(--mat-sys-level2),
+    )
+  );
+  // A dialog is a panel that happens to be modal: a title the size of a panel
+  // heading and the same 13px body, not Material's 24px headline over a form.
+  @include mat.dialog-overrides(
+    (
+      container-shape: var(--mat-sys-corner-large),
+      container-elevation-shadow: var(--mat-sys-level3),
+      subhead-size: 16px,
+      subhead-line-height: 24px,
+      subhead-weight: 600,
+      supporting-text-size: 13px,
+      supporting-text-line-height: 20px,
+      headline-padding: 0 20px 4px,
+      content-padding: 12px 20px,
+      with-actions-content-padding: 12px 20px 0,
+      actions-padding: 12px 16px 14px,
+    )
+  );
+
+  // Pills are a phone idiom; on a tool's chrome every button is a 4px control.
+  @include mat.button-overrides(
+    (
+      filled-container-shape: var(--mat-sys-corner-small),
+      outlined-container-shape: var(--mat-sys-corner-small),
+      protected-container-shape: var(--mat-sys-corner-small),
+      text-container-shape: var(--mat-sys-corner-small),
+      tonal-container-shape: var(--mat-sys-corner-small),
+    )
+  );
+  @include mat.icon-button-overrides(
+    (
+      container-shape: var(--mat-sys-corner-small),
+    )
+  );
+
+  // Keyboard focus draws a 2px accent ring on every Material control, visible
+  // on both the pale and the graphite surfaces.
+  @include mat.strong-focus-indicators(
+    (
+      border-color: var(--mat-sys-primary),
+      border-width: 2px,
+      border-radius: var(--mat-sys-corner-small),
+    )
+  );
+
+  // A desktop tool, not a phone app: compact controls under a mouse on a wide
+  // window. Touch and phone-width layouts keep density 0 and its touch targets.
+  @media (pointer: fine) and (min-width: 601px) {
+    @include mat.theme(
+      (
+        density: -2,
+      ),
+      $corners
+    );
+
+    // Form fields go further than the rest: Material's density -4 (40px), in
+    // the 14px the chrome is set in. Every field in the app is outlined, where
+    // the label floats onto the border and needs no room inside the box.
+    @include mat.form-field-overrides(
+      (
+        container-height: 40px,
+        container-vertical-padding: 8px,
+        container-text-size: 14px,
+        container-text-line-height: 24px,
+        outlined-label-text-size: 14px,
+        subscript-text-size: 11px,
+      )
+    );
+    @include mat.select-overrides(
+      (
+        trigger-text-size: 14px,
+        trigger-text-line-height: 24px,
+      )
+    );
+    @include mat.option-overrides(
+      (
+        label-text-size: 13px,
+        label-text-line-height: 20px,
+      )
+    );
+
+    // Material's sliders and switches, drawn like the parameter panel's own
+    // (see the lil-gui rules below): a 3px track with a tick for a knob, and a
+    // switch the height of a text line. Fingers keep Material's sizes.
+    @include mat.slider-overrides(
+      (
+        active-track-height: 3px,
+        inactive-track-height: 3px,
+        active-track-shape: 2px,
+        inactive-track-shape: 2px,
+        inactive-track-color: color-mix(in srgb, var(--mat-sys-on-surface) 14%, transparent),
+        handle-width: 4px,
+        handle-height: 14px,
+        handle-shape: 2px,
+        handle-color: var(--mat-sys-on-surface),
+        hover-handle-color: var(--mat-sys-on-surface),
+        focus-handle-color: var(--mat-sys-on-surface),
+        handle-elevation: none,
+      )
+    );
+    @include mat.slide-toggle-overrides(
+      (
+        track-width: 28px,
+        track-height: 16px,
+        track-outline-width: 1px,
+        selected-track-outline-width: 1px,
+        disabled-unselected-track-outline-width: 1px,
+        state-layer-size: 24px,
+        selected-handle-size: 12px,
+        unselected-handle-size: 10px,
+        with-icon-handle-size: 12px,
+        pressed-handle-size: 12px,
+        selected-handle-horizontal-margin: 0 14px,
+        selected-with-icon-handle-horizontal-margin: 0 14px,
+        selected-pressed-handle-horizontal-margin: 0 14px,
+        unselected-handle-horizontal-margin: 0 3px,
+        unselected-with-icon-handle-horizontal-margin: 0 2px,
+        unselected-pressed-handle-horizontal-margin: 0 2px,
+        selected-icon-size: 0,
+        unselected-icon-size: 0,
+      )
+    );
+  }
+
+  // Material's letter-spacing is tuned for Roboto. Inter is already spaced for
+  // UI sizes, and the extra tracking makes small labels look loose.
+  @include mat.theme-overrides(
+    (
+      body-large-tracking: 0,
+      body-medium-tracking: 0,
+      body-small-tracking: 0,
+      label-large-tracking: 0,
+      label-medium-tracking: 0,
+      label-small-tracking: 0,
+      title-medium-tracking: 0,
+      title-small-tracking: 0,
     )
   );
 }
@@ -39,53 +303,303 @@ body {
   overflow: hidden; // the shader owns the viewport; the page itself never scrolls
   // Only ever seen for the instant before the canvas paints, so it is the one
   // colour here that does not come from a token: it has to match the void.
-  background-color: light-dark(#eef1f6, #0a0c10);
+  background-color: light-dark(#f0f0f2, #0b0b0c);
   color: var(--mat-sys-on-surface);
   font: var(--mat-sys-body-medium);
+  // Thin scrollbars with a quiet thumb: panels scroll, and a full system track
+  // in every one of them is chrome for nothing. The colour inherits.
+  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 22%, transparent) transparent;
+}
+
+* {
+  scrollbar-width: thin;
+}
+
+// Material zeroes a dialog content's top padding when it follows a title, and
+// the content clips because it scrolls — so an outlined field that comes first
+// loses the top half of its floating label. A spacer inside the scroll box
+// gives it the room without fighting Material's rule or each dialog's own.
+mat-dialog-content::before {
+  content: '';
+  display: block;
+  height: 8px;
+}
+
+// Menus and select options have no density tokens, so their row height is set
+// on our own `mat-menu-item` and `mat-option` elements: 32px rows under a
+// mouse, Material's 48px on touch. The element (and role) prefix outranks
+// Material's single-class rule.
+@media (pointer: fine) and (min-width: 601px) {
+  button[mat-menu-item],
+  a[mat-menu-item],
+  mat-option[role='option'] {
+    min-height: 32px;
+  }
+}
+
+// Material sizes a menu icon's box from the token but leaves the glyph at the
+// icon font's 24px, which would clip it.
+button[mat-menu-item] > mat-icon,
+a[mat-menu-item] > mat-icon {
+  font-size: var(--mat-menu-item-icon-size);
 }
 
 // --- lil-gui ---------------------------------------------------------------
-// lil-gui ships its own look. Re-skinning it with the Material system variables
-// keeps the generated parameter panel from reading as a foreign object bolted
-// onto the side of the app.
+// lil-gui builds the parameter panel; this makes it the app's instrument panel
+// instead of a foreign object bolted onto the side: one row per parameter, the
+// name on the left, a thin track filled in the accent, and the value in the
+// mono face on the right. lil-gui injects its stylesheet ahead of every other
+// one, so a rule here only has to match the specificity of the one it replaces.
+// Its class names are 0.21's, which prefixes every one of them with `lil-`.
 
 .lil-gui {
   --background-color: transparent;
   --title-background-color: transparent;
-  --widget-color: var(--mat-sys-surface-container-highest);
-  --hover-color: var(--mat-sys-surface-container-high);
-  --focus-color: var(--mat-sys-primary);
-  --number-color: var(--mat-sys-primary);
-  --string-color: var(--mat-sys-tertiary);
+  // Widgets are state layers over whatever the panel is — opaque when docked,
+  // glass when floating — so they read correctly on both and in both schemes.
+  --widget-color: color-mix(in srgb, var(--mat-sys-on-surface) 7%, transparent);
+  --hover-color: color-mix(in srgb, var(--mat-sys-on-surface) 12%, transparent);
+  --focus-color: color-mix(in srgb, var(--mat-sys-primary) 18%, transparent);
+  // Values are plain text; the accent is kept for what is being turned.
+  --number-color: var(--mat-sys-on-surface);
+  --string-color: var(--mat-sys-on-surface);
   --text-color: var(--mat-sys-on-surface);
-  --font-family: Roboto, sans-serif;
+  --title-text-color: var(--mat-sys-on-surface-variant);
+  --font-family: #{$ui-font};
+  --font-family-mono: var(--studio-font-mono);
   --font-size: 12px;
-  --input-font-size: 12px;
-  --padding: 6px;
-  --spacing: 6px;
+  --input-font-size: 11.5px;
+  --padding: 0px;
+  --spacing: 4px;
   --widget-height: 22px;
+  --name-width: 42%;
+  --slider-knob-width: 3px;
+  --slider-input-width: 30%;
+  --slider-input-min-width: 52px;
+  --widget-border-radius: var(--mat-sys-corner-extra-small);
+  --widget-padding: 0 6px;
+  --folder-indent: 0px;
 }
 
-// lil-gui 0.21 prefixes every one of its class names with `lil-`.
+// Folders: a quiet uppercase heading and a hairline between sections, rather
+// than lil-gui's boxed title bars and indented, ruled children.
 .lil-gui .lil-title {
+  // From the widget height rather than a fixed 28px, so lil-gui's own touch
+  // sizes (a taller widget under a coarse pointer) carry through to it.
+  height: calc(var(--widget-height) + var(--spacing) * 1.5);
   border-radius: var(--mat-sys-corner-extra-small);
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.lil-gui .lil-children {
-  border-left: 1px solid var(--mat-sys-outline-variant);
+.lil-gui .lil-title:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: -2px;
+  text-decoration: none;
 }
 
-.lil-gui .lil-controller .lil-name {
+// A drawn chevron instead of lil-gui's icon font, turning as the folder closes.
+.lil-gui .lil-title:before,
+.lil-gui.lil-closed > .lil-title:before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  margin: 0 9px 2px 3px;
+  padding: 0;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+  transition: transform 140ms ease;
+}
+
+.lil-gui.lil-closed > .lil-title:before {
+  margin-bottom: 1px;
+  transform: rotate(-45deg);
+}
+
+.lil-gui.lil-root > .lil-children > .lil-gui > .lil-title {
+  border: 0;
+}
+
+.lil-gui.lil-root > .lil-children > .lil-gui + .lil-gui {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.lil-gui .lil-controller > .lil-name {
+  flex: 0 0 var(--name-width);
+  min-width: 0;
+  overflow: hidden;
   color: var(--mat-sys-on-surface-variant);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The name of a number is a handle: drag it to scrub the value (see GuiPanel).
+.lil-gui .lil-controller.lil-number > .lil-name {
+  cursor: ew-resize;
+}
+
+.lil-gui input[type='text'],
+.lil-gui input[type='number'] {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.lil-gui input[type='text']:focus,
+.lil-gui input[type='number']:focus {
+  box-shadow: inset 0 0 0 1px var(--mat-sys-primary);
+}
+
+.lil-gui .lil-controller.lil-number input {
+  text-align: right;
+}
+
+// The slider: a 3px track, the part below the value filled in the accent, and
+// a tick for a knob. lil-gui sizes `.lil-fill` inline, so the geometry is its.
+.lil-gui .lil-controller.lil-number .lil-slider,
+.lil-gui .lil-controller.lil-number .lil-slider:hover,
+.lil-gui .lil-controller.lil-number .lil-slider.lil-active {
+  position: relative;
+  overflow: visible;
+  border-radius: 0;
+  background: none;
+}
+
+.lil-gui .lil-controller.lil-number .lil-slider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 14%, transparent);
+  transition: background-color 140ms ease;
+}
+
+.lil-gui .lil-controller.lil-number .lil-slider:hover::before,
+.lil-gui .lil-controller.lil-number .lil-slider.lil-active::before {
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 24%, transparent);
+}
+
+.lil-gui .lil-controller.lil-number .lil-fill {
+  position: relative;
+  height: 3px;
+  margin-top: calc((var(--widget-height) - 3px) / 2);
+  border-right: 0;
+  border-radius: 2px;
+  background: var(--mat-sys-primary);
+}
+
+.lil-gui .lil-controller.lil-number .lil-fill::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: calc(-1 * var(--slider-knob-width));
+  width: var(--slider-knob-width);
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 2px;
+  background: var(--mat-sys-on-surface);
+  transition: transform 140ms ease;
+}
+
+.lil-gui .lil-controller.lil-number .lil-slider.lil-active .lil-fill::after {
+  transform: scaleY(1.2);
+}
+
+// Colour: a swatch and its hex, rather than a bar the width of the panel.
+.lil-gui .lil-controller.lil-color .lil-display {
+  flex: 0 0 36px;
+  width: 36px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mat-sys-on-surface) 20%, transparent);
+}
+
+.lil-gui .lil-controller.lil-color input[type='text'] {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  text-transform: uppercase;
+}
+
+// A boolean is a switch: the checkbox lil-gui draws, reshaped.
+.lil-gui input[type='checkbox'] {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 20%, transparent);
+  transition: background-color 140ms ease;
+}
+
+.lil-gui input[type='checkbox']::before,
+.lil-gui input[type='checkbox']:checked::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--mat-sys-on-surface);
+  transition: transform 140ms ease;
+}
+
+.lil-gui input[type='checkbox']:checked {
+  background: var(--mat-sys-primary);
+}
+
+.lil-gui input[type='checkbox']:checked::before {
+  background: var(--mat-sys-on-primary);
+  transform: translateX(12px);
+}
+
+.lil-gui input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
+
+// A select: the same field as a value, with a drawn chevron.
+.lil-gui .lil-controller.lil-option .lil-display {
+  padding-left: 6px;
+}
+
+.lil-gui .lil-controller.lil-option .lil-display::after {
+  content: '';
+  top: 50%;
+  right: 8px;
+  bottom: auto;
+  width: 5px;
+  height: 5px;
+  margin-top: -4px;
+  padding: 0;
+  border: solid var(--mat-sys-on-surface-variant);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+// A command row is an outlined button, so it does not read as a value field.
+.lil-gui .lil-controller button {
+  height: 24px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lil-gui *,
+  .lil-gui *::before,
+  .lil-gui *::after {
+    transition: none !important;
+  }
 }
 
 .mat-drawer {
   --mat-sidenav-container-shape: none;
-}
-
-.mat-mdc-dialog-container {
-  --mat-dialog-container-shape: var(--mat-sys-corner-medium);
 }
 
 .mat-mdc-menu-item .menu-hint,
@@ -95,8 +609,37 @@ body {
   color: var(--mat-sys-on-surface-variant);
 }
 
-// Do not apply a text-font shorthand to Material icons: it replaces the
-// Material Symbols font and exposes the icon ligature (for example, "check").
+// One optical setting for every icon. The chrome draws them at 16–20 px, where
+// the 20 px optical size and a light stroke read as drawn, not stamped.
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 300,
+    'GRAD' 0,
+    'opsz' 20;
+  transition: font-variation-settings 160ms ease;
+}
+
+// An active toggle, tab or option fills its icon: the one state change the
+// Symbols font gives for free, and it reads before the colour does.
+[aria-pressed='true'] mat-icon,
+[aria-selected='true'] mat-icon,
+[aria-checked='true'] mat-icon {
+  font-variation-settings:
+    'FILL' 1,
+    'wght' 300,
+    'GRAD' 0,
+    'opsz' 20;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .material-symbols-outlined {
+    transition: none;
+  }
+}
+
+// Do not apply a text-font shorthand to an icon: it replaces the Material
+// Symbols font and exposes the ligature text (for example, "check").
 .mat-mdc-menu-item span.menu-hint,
 .mat-mdc-menu-item span.hint {
   font: var(--mat-sys-label-small);
@@ -104,29 +647,29 @@ body {
 
 .mat-mdc-menu-item mat-icon.menu-hint,
 .mat-mdc-menu-item mat-icon.hint {
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
-  font-size: 20px;
-  line-height: 24px;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  line-height: 18px;
 }
 
 // Selection is secondary information: pin it to the trailing edge instead of
 // letting it interrupt the leading icon-and-label pair.
 .mat-mdc-menu-item:has(.theme-check) {
-  padding-right: 48px;
+  padding-right: 40px;
 }
 
 .mat-mdc-menu-item:has(.theme-check) .mat-mdc-menu-item-text {
-  padding-right: 64px;
+  padding-right: 32px;
 }
 
 .mat-mdc-menu-item .theme-check {
   position: absolute;
-  right: 16px;
-  width: 20px;
-  height: 20px;
+  right: 12px;
+  width: 18px;
+  height: 18px;
   margin: 0;
-  font-size: 20px;
-  line-height: 20px;
+  font-size: 18px;
+  line-height: 18px;
 }

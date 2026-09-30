@@ -228,8 +228,7 @@ import { WorkspaceActions } from '../workspace-actions';
       align-items: center;
       height: 28px;
       padding-inline: 8px 0;
-      background: color-mix(in srgb, var(--mat-sys-surface-container) 90%, transparent);
-      backdrop-filter: blur(18px);
+      background: var(--mat-sys-surface-container-lowest);
       border-bottom: 1px solid var(--mat-sys-outline-variant);
       -webkit-app-region: drag;
       user-select: none;
@@ -382,6 +381,7 @@ export class AppTitlebar {
       action: () => this.layout.toggleInspectorOpen(),
     },
     this.commands.toggleEditor,
+    this.commands.zenMode,
   ];
 
   protected readonly captureCommands: readonly MenuCommand[] = [

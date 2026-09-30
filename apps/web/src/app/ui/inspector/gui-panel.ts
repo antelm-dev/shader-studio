@@ -16,6 +16,7 @@ import { Preferences } from '../../prefs/preferences';
 import { ShaderStore } from '../../workspace/shader-store';
 import { RendererHandle } from '../../rendering/renderer-handle';
 import type { ShaderControl } from '@shadergrove/shared/model';
+import { scrubValue } from './label-scrub';
 
 /**
  * The parameter panel, generated entirely from the shader's control schema.
@@ -34,7 +35,7 @@ const DEFAULT_FOLDER = 'Parameters';
 @Component({
   selector: 'app-gui-panel',
   template: `
-    <div #host class="gui-host"></div>
+    <div #host class="gui-host" (pointerdown)="onNamePointerDown($event)"></div>
     @if (store.controls().length === 0 && store.record()) {
       <p class="empty">This shader declares no controls. Add some in the Config tab.</p>
     }
@@ -222,6 +223,46 @@ export class GuiPanel {
     folder.add(this.system, 'savePng').name('Capture Image (S)');
     folder.add(this.system, 'resetParams').name('Reset Parameters');
     folder.close();
+  }
+
+  /**
+   * Dragging a number's name scrubs its value: the label is a far larger
+   * target than lil-gui's 3px knob, and it is where the hand already is after
+   * reading what the control does. Shift slows the drag to a tenth.
+   */
+  protected onNamePointerDown(event: PointerEvent): void {
+    if (event.button !== 0) return;
+
+    const name = (event.target as HTMLElement).closest<HTMLElement>(
+      '.lil-controller.lil-number > .lil-name',
+    );
+    const row = name?.parentElement;
+    const controller = this.gui
+      ?.controllersRecursive()
+      .find((candidate) => candidate.domElement === row);
+    // The System folder's numbers live on another object, under keys a shader
+    // is free to reuse, so the match is on the object and not just the key.
+    if (!name || !controller || controller.object !== this.proxy) return;
+
+    const control = this.store.controls().find((item) => item.key === controller.property);
+    if (control?.type !== 'number') return;
+
+    event.preventDefault();
+    const startX = event.clientX;
+    const startValue = controller.getValue() as number;
+    name.setPointerCapture(event.pointerId);
+
+    const move = (moved: PointerEvent) => {
+      controller.setValue(scrubValue(control, startValue, moved.clientX - startX, moved.shiftKey));
+    };
+    const end = () => {
+      name.removeEventListener('pointermove', move);
+      name.removeEventListener('pointerup', end);
+      name.removeEventListener('pointercancel', end);
+    };
+    name.addEventListener('pointermove', move);
+    name.addEventListener('pointerup', end);
+    name.addEventListener('pointercancel', end);
   }
 
   private async savePng(): Promise<void> {

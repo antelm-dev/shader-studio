@@ -28,6 +28,9 @@
             "polyfills": ["@angular/localize/init"],
             "assets": [{ "glob": "plugin-sandbox.js", "input": "src", "output": "/" }],
             "styles": [
+              "node_modules/@fontsource-variable/inter/wght.css",
+              "node_modules/@fontsource-variable/jetbrains-mono/wght.css",
+              "node_modules/material-symbols/outlined.css",
               "src/styles.scss",
               "node_modules/monaco-editor/min/vs/editor/editor.main.css"
             ],
@@ -105,6 +108,9 @@
             "polyfills": ["@angular/localize/init"],
             "assets": [{ "glob": "plugin-sandbox.js", "input": "src", "output": "/" }],
             "styles": [
+              "node_modules/@fontsource-variable/inter/wght.css",
+              "node_modules/@fontsource-variable/jetbrains-mono/wght.css",
+              "node_modules/material-symbols/outlined.css",
               "src/styles.scss",
               "node_modules/monaco-editor/min/vs/editor/editor.main.css"
             ],

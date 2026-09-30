@@ -1,5 +1,6 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DesktopPlatform } from '../../desktop/desktop-platform';
@@ -44,6 +45,10 @@ describe('GlobalShortcuts', () => {
   const activate = vi.fn();
   const toggleFullscreen = vi.fn();
   const patch = vi.fn();
+  const toggleZen = vi.fn();
+  const openPalette = vi.fn();
+  let openDialogs: unknown[] = [];
+  const zen = signal(false);
   let desktopAvailable = true;
 
   beforeEach(() => {
@@ -58,6 +63,10 @@ describe('GlobalShortcuts', () => {
     activate.mockReset();
     toggleFullscreen.mockReset();
     patch.mockReset();
+    toggleZen.mockReset();
+    openPalette.mockReset();
+    openDialogs = [];
+    zen.set(false);
     desktopAvailable = true;
 
     TestBed.configureTestingModule({
@@ -93,7 +102,22 @@ describe('GlobalShortcuts', () => {
         },
         {
           provide: MenuCommands,
-          useValue: { toggle, toggleInspectorOpen, captureImage },
+          useValue: {
+            toggle,
+            toggleInspectorOpen,
+            captureImage,
+            zen,
+            zenMode: { action: toggleZen },
+            openPalette,
+          },
+        },
+        {
+          provide: MatDialog,
+          useValue: {
+            get openDialogs() {
+              return openDialogs;
+            },
+          },
         },
         {
           provide: WorkspaceActions,
@@ -193,5 +217,65 @@ describe('GlobalShortcuts', () => {
     window.dispatchEvent(chordEvent('h'));
     expect(toggleInspectorOpen).toHaveBeenCalledOnce();
     expect(toggle).not.toHaveBeenCalled();
+  });
+
+  it('toggles zen mode on a bare Z, and leaves Ctrl+Z to undo', () => {
+    window.dispatchEvent(chordEvent('z'));
+    expect(toggleZen).toHaveBeenCalledOnce();
+
+    window.dispatchEvent(chordEvent('z', { ctrlKey: true }));
+    window.dispatchEvent(chordEvent('z', { altKey: true }));
+    expect(toggleZen).toHaveBeenCalledOnce();
+  });
+
+  it('leaves zen mode on Escape', () => {
+    zen.set(true);
+    window.dispatchEvent(chordEvent('Escape'));
+    expect(zen()).toBe(false);
+  });
+
+  it('opens the command palette on Ctrl+K, even from a text field', () => {
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    try {
+      const event = chordEvent('k', { ctrlKey: true, target: input });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      expect(openPalette).toHaveBeenCalledOnce();
+    } finally {
+      input.remove();
+    }
+  });
+
+  it('leaves Ctrl+K to Monaco, where it starts the editor chords', () => {
+    const editor = document.createElement('div');
+    editor.className = 'monaco-editor';
+    const inner = document.createElement('textarea');
+    editor.appendChild(inner);
+    document.body.appendChild(editor);
+    try {
+      const event = chordEvent('k', { ctrlKey: true, target: inner });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(openPalette).not.toHaveBeenCalled();
+    } finally {
+      editor.remove();
+    }
+  });
+
+  it('leaves bare-letter shortcuts alone while a dialog is open, but not chords', () => {
+    openDialogs = [{}];
+
+    window.dispatchEvent(chordEvent('h'));
+    window.dispatchEvent(chordEvent('s'));
+    window.dispatchEvent(chordEvent(' '));
+    window.dispatchEvent(chordEvent('z'));
+    expect(toggleInspectorOpen).not.toHaveBeenCalled();
+    expect(captureImage).not.toHaveBeenCalled();
+    expect(patch).not.toHaveBeenCalled();
+    expect(toggleZen).not.toHaveBeenCalled();
+
+    window.dispatchEvent(chordEvent('s', { ctrlKey: true }));
+    expect(save).toHaveBeenCalledOnce();
   });
 });

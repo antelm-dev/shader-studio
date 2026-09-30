@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 
 import type { ImportMode } from '@shadergrove/shared/model';
 import { DesktopPlatform } from '../desktop/desktop-platform';
@@ -61,6 +61,21 @@ export class MenuCommands {
    */
   useFilePicker(pick: (mode: ImportMode) => void): void {
     this.filePicker = pick;
+  }
+
+  private palette: (() => void) | null = null;
+
+  /**
+   * The command palette is opened from a keyboard shortcut, but what it lists
+   * is the root component's menus — so, like the file picker, the component
+   * that owns them registers how.
+   */
+  usePalette(open: () => void): void {
+    this.palette = open;
+  }
+
+  openPalette(): void {
+    this.palette?.();
   }
 
   // --- Actions ------------------------------------------------------------
@@ -190,6 +205,21 @@ export class MenuCommands {
       ),
     shortcut: 'Ctrl+J',
     action: () => this.toggle('bottomPanelOpen'),
+  };
+
+  /**
+   * Zen mode: the whole shell steps aside and the shader has the window. It is
+   * a way of looking, not a layout, so it is never persisted — a reload always
+   * comes back with the chrome.
+   */
+  readonly zen = signal(false);
+
+  readonly zenMode: MenuCommand = {
+    id: 'zen-mode',
+    icon: () => 'fit_screen',
+    label: () => this.i18n.t(this.zen() ? 'action.exitZen' : 'action.enterZen'),
+    shortcut: 'Z',
+    action: () => this.zen.update((on) => !on),
   };
 
   /** The label is the menu's own: "Import shader…" reads oddly under a File menu. */

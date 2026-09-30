@@ -64,6 +64,12 @@ export const SHORTCUT_CATALOG: readonly ShortcutSection[] = [
         chord: chord(['Ctrl', 'Shift', 'I']),
         source: 'app',
       },
+      {
+        id: 'command-palette',
+        labelKey: 'help.shortcuts.commandPalette',
+        chord: chord(['Ctrl', 'K']),
+        source: 'app',
+      },
     ],
   },
   {
@@ -122,6 +128,12 @@ export const SHORTCUT_CATALOG: readonly ShortcutSection[] = [
         id: 'capture-png',
         labelKey: 'help.shortcuts.capturePng',
         chord: chord(['S']),
+        source: 'app',
+      },
+      {
+        id: 'zen-mode',
+        labelKey: 'help.shortcuts.zenMode',
+        chord: chord(['Z']),
         source: 'app',
       },
     ],

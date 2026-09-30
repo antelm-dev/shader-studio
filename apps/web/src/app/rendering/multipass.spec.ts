@@ -486,6 +486,20 @@ describe('multi-pass rendering', () => {
       expect(bufferTargets().every((target) => target.resizes === 0)).toBe(true);
       expect(bufferTargets().every((target) => target.width === 256)).toBe(true);
     });
+
+    it('reports the drawing buffer once per size, starting with the one set before anyone listened', () => {
+      // The first sizing happens inside `create`, so a listener attached after
+      // it must still hear about the size the engine already has.
+      const sizes: string[] = [];
+      engine.onResize = (width, height) => sizes.push(`${width}x${height}`);
+
+      engine.resize();
+      engine.resize();
+      vi.spyOn(canvas, 'clientWidth', 'get').mockReturnValue(1024);
+      engine.resize();
+
+      expect(sizes).toEqual([`${CANVAS.width}x${CANVAS.height}`, `1024x${CANVAS.height}`]);
+    });
   });
 
   // ---------------------------------------------------------------------------
