@@ -312,6 +312,8 @@ three.js, lil-gui, and Monaco.
 | `Space`           | Pause / resume time           |
 | `H`               | Show / hide the controls      |
 | `S`               | Save the frame as a PNG       |
+| `Z`               | Zen mode: hide all the chrome |
+| `Ctrl`+`K`        | Command palette               |
 | `Ctrl`+`S`        | Save the shader               |
 | `Shift`+`Alt`+`F` | Format the GLSL in the editor |
 
