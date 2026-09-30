@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.4.0](https://github.com/antelm-dev/shadergrove/compare/v1.3.1...v1.4.0) (2026-09-30)
+
+
+### Features
+
+* **web:** a leaf-green accent of the app's own ([653b989](https://github.com/antelm-dev/shadergrove/commit/653b989e63fae75a11e305fedfd9e529a1e191e1))
+* **web:** command palette on Ctrl+K ([ef8b2c7](https://github.com/antelm-dev/shadergrove/commit/ef8b2c72687d571b7d98318b1f7068c072d28de8))
+* **web:** compact dialogs and an export settings sheet ([a49cc08](https://github.com/antelm-dev/shadergrove/commit/a49cc0820236c260705b89f6196c9fd684792fbf))
+* **web:** neutral studio theme, compact density and opaque overlays ([c5bea40](https://github.com/antelm-dev/shadergrove/commit/c5bea40c27653a940abc0c6cd58546dc81342f32))
+* **web:** opaque workspace, glass windows and an instrument-style inspector ([31f55d1](https://github.com/antelm-dev/shadergrove/commit/31f55d155e5f6803104cc8ef2ae9e78979823c33))
+* **web:** self-host Inter and Material Symbols ([118af89](https://github.com/antelm-dev/shadergrove/commit/118af897900a2e41977be7b17b6e8b77d39572cd))
+* **web:** shader browser with real previews, a grid view and a compact search ([4d16a36](https://github.com/antelm-dev/shadergrove/commit/4d16a36bb3d9b15e26f8db29fdf1a4fc20e7bb41))
+* **web:** studio visual refresh milestone 2 ([12a17fc](https://github.com/antelm-dev/shadergrove/commit/12a17fc6acb72273d87e1864d376f20055a9f276))
+* **web:** toolbar transport, centred document title and zen mode ([b4b43e9](https://github.com/antelm-dev/shadergrove/commit/b4b43e971148379b4ff0a4a3fe880db3d5b09a7b))
+
+
+### Bug Fixes
+
+* **web:** count active effects on the post-processing tab badge ([da8cc65](https://github.com/antelm-dev/shadergrove/commit/da8cc65709508cd6fe22d6668888911c16031d77))
+* **web:** keep touch targets on the new inspector tabs, headings and transport ([582a7c5](https://github.com/antelm-dev/shadergrove/commit/582a7c514520c395c0bc25c51a3f1a1aed32484c))
+* **web:** keys typed after Ctrl+K go to the palette, not the workspace ([8a78601](https://github.com/antelm-dev/shadergrove/commit/8a786011ceb183ece18a2c0314b0b2f303be0a05))
+* **web:** never open the command palette over another dialog ([a04e69d](https://github.com/antelm-dev/shadergrove/commit/a04e69dcfc7717083707005c03b6ed69c2354e8c))
+* **web:** zen mode fills the window with a detached preview and frees the top strip ([868c7ce](https://github.com/antelm-dev/shadergrove/commit/868c7ce3136212ba65ecca532902dbf7e9cc8b29))
+
 ## [1.3.1](https://github.com/antelm-dev/shader-studio/compare/v1.3.0...v1.3.1) (2026-09-27)
 
 
