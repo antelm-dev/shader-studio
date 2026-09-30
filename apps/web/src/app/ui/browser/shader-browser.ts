@@ -11,6 +11,7 @@ import { DesktopAccount } from '../../desktop/desktop-account';
 import { DesktopPlatform } from '../../desktop/desktop-platform';
 import { DesktopSync } from '../../desktop/desktop-sync';
 import { Preferences } from '../../prefs/preferences';
+import { ExploreAccess } from '../../publications/explore-access';
 import { ShaderStore } from '../../workspace/shader-store';
 import { ThumbnailAssets } from '../../assets/thumbnail-assets';
 import { I18n } from '../../i18n/i18n';
@@ -162,6 +163,16 @@ const PREVIEW_SETTLE_MS = 2000;
           <mat-icon>download</mat-icon>
           <span>{{ 'action.export' | translate }}</span>
         </button>
+        @if (canPublish() && shader.kind === 'shader') {
+          <button
+            mat-menu-item
+            type="button"
+            (click)="workspace.openPublish(shader.id, shader.name)"
+          >
+            <mat-icon>public</mat-icon>
+            <span>{{ 'publish.menu' | translate }}</span>
+          </button>
+        }
         @if (syncShown()) {
           @switch (sync.statuses()[shader.id]) {
             @case ('local-only') {
@@ -458,6 +469,7 @@ export class ShaderBrowser {
   private readonly preferences = inject(Preferences);
   private readonly auth = inject(AuthService);
   private readonly desktop = inject(DesktopPlatform);
+  private readonly access = inject(ExploreAccess);
 
   private readonly thumbnails = inject(ThumbnailAssets);
 
@@ -494,6 +506,11 @@ export class ShaderBrowser {
 
   /** The desktop's library is local; on the web, writing needs a confirmed address. */
   private readonly writable = computed(() => this.desktop.available || this.auth.verified());
+
+  /** Publishing needs a server that offers Explore and an account that may write to it. */
+  protected readonly canPublish = computed(
+    () => this.access.capabilities().publicExplore && this.auth.verified(),
+  );
 
   /** Preview URL per shader id, for the shaders that have one. */
   protected readonly previews = computed(() => {

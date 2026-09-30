@@ -90,6 +90,14 @@ app.use(
   }),
 );
 
+// The Explore and moderation pages render publications into the HTML itself,
+// and a publication can be hidden at any moment: a cached page would keep
+// showing it, exactly as a cached API response would.
+app.use(['/explore', '/admin'], (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+
 app.use((req, res, next) => {
   angularApp
     .handle(req)

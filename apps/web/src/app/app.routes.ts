@@ -2,6 +2,9 @@ import { Routes } from '@angular/router';
 import { RouteAnchor } from './ui/layout/route-anchor';
 import { resetPasswordLink, verifyEmailLink } from './auth/auth-link.guard';
 import { DesktopConnect, desktopConnectLink } from './auth/desktop-connect';
+import { exploreOnWeb } from './publications/explore-access';
+import { ExplorePage } from './publications/explore-page';
+import { PublicationPage } from './publications/publication-page';
 
 export const routes: Routes = [
   { path: '', component: RouteAnchor },
@@ -13,5 +16,12 @@ export const routes: Routes = [
   { path: 'verify-email', component: RouteAnchor, canActivate: [verifyEmailLink] },
   // Where the desktop app sends the system browser to sign in.
   { path: 'desktop/connect', component: DesktopConnect, canActivate: [desktopConnectLink] },
+  // Public shaders: pages of their own, laid over the editor rather than
+  // replacing it (see `RoutingCoordinator.onStandalonePage`). Not lazy on
+  // purpose. The coordinator pulls the URL back to the selection as soon as the
+  // library has loaded, unless the router is already on one of these — and a
+  // page still waiting for its chunk would not be there yet.
+  { path: 'explore', component: ExplorePage, canActivate: [exploreOnWeb] },
+  { path: 'explore/:publicationId', component: PublicationPage, canActivate: [exploreOnWeb] },
   { path: '**', component: RouteAnchor },
 ];
