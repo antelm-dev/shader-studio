@@ -195,6 +195,8 @@ export const TRANSLATION_KEYS = [
   'browser.new',
   'browser.create',
   'browser.filter',
+  'browser.viewGrid',
+  'browser.viewList',
   'browser.empty',
   'browser.noMatch',
   'browser.contextTip',

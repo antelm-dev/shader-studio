@@ -24,9 +24,11 @@ import {
   clampFileExplorerWidth,
   clampPanelWidth,
   sanitizeBottomPanelTab,
+  sanitizeBrowserView,
   sanitizeFileExplorerView,
   sanitizeInspectorTab,
   type BottomPanelTab,
+  type BrowserView,
   type FileExplorerView,
   type InspectorTab,
 } from '@shadergrove/shared/panel-prefs';
@@ -82,6 +84,8 @@ export interface WorkspacePreferences {
   guiVisible: boolean;
   /** Width of the shader browser, in pixels. */
   browserWidth: number;
+  /** Rows, or a grid of previews, in the shader browser. */
+  browserView: BrowserView;
   /** Width of the inspector rail, in pixels. */
   inspectorWidth: number;
   /** Which inspector tab was last open. */
@@ -126,6 +130,7 @@ const DEFAULTS: WorkspacePreferences = {
   editorOpen: false,
   guiVisible: true,
   browserWidth: DEFAULT_PANEL_WIDTHS.browser,
+  browserView: 'list',
   inspectorWidth: DEFAULT_PANEL_WIDTHS.inspector,
   inspectorTab: 'controls',
   bottomPanelOpen: DEFAULT_BOTTOM_PANEL_OPEN,
@@ -296,6 +301,7 @@ export class Preferences {
         editorOpen,
         guiVisible: resolvedGuiVisible,
         browserWidth,
+        browserView: sanitizeBrowserView(parsed.browserView),
         inspectorWidth,
         inspectorTab: resolvedInspectorTab,
         bottomPanelOpen,

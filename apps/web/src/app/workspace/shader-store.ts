@@ -483,6 +483,27 @@ export class ShaderStore {
     }
   }
 
+  /** Shaders already photographed without a save this session, so a failure is not retried in a loop. */
+  private readonly previewAttempted = new Set<string>();
+
+  /**
+   * Gives a shader that has never had a preview one, from what is on screen.
+   *
+   * The seeded examples, and anything imported, arrive without a preview and
+   * would show a placeholder in the library until their first save — which for
+   * a shader you only came to look at is never. Only for the open shader, as
+   * saved and compiling: an unsaved draft or an error frame is not what the
+   * shader in the library looks like. Once per shader per session.
+   */
+  captureMissingPreview(id: string): void {
+    const record = this.record();
+    if (record?.id !== id || record.thumbnail) return;
+    if (this.dirty() || this.hasErrors() || this.previewAttempted.has(id)) return;
+
+    this.previewAttempted.add(id);
+    void this.capturePreview(id);
+  }
+
   revert(): void {
     this.discardCurrentDraft();
   }

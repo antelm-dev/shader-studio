@@ -59,7 +59,7 @@ export const RECOMPILE_DEBOUNCE_MS = 400;
     :host {
       display: block;
       position: relative;
-      background: #0a0c10;
+      background: #0b0b0c;
     }
 
     .shader-canvas {

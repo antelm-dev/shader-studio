@@ -192,6 +192,8 @@
   "browser.new": "Nouveau shader",
   "browser.create": "Créer un nouveau shader",
   "browser.filter": "Filtrer",
+  "browser.viewGrid": "Afficher en grille",
+  "browser.viewList": "Afficher en liste",
   "browser.empty": "Aucun shader pour le moment.",
   "browser.noMatch": "Aucun shader ne correspond à ce filtre.",
   "browser.contextTip": "Clic droit pour les actions",

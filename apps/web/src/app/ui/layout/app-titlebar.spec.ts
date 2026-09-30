@@ -72,6 +72,7 @@ describe('AppTitlebar Help and View menus', () => {
       editorOpen: false,
       guiVisible: true,
       browserWidth: DEFAULT_PANEL_WIDTHS.browser,
+      browserView: 'list',
       inspectorWidth: DEFAULT_PANEL_WIDTHS.inspector,
       inspectorTab: 'controls',
       bottomPanelOpen: false,

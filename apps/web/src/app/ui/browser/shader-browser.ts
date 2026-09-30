@@ -1,17 +1,16 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatListModule } from '@angular/material/list';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 
 import type { SyncStatus } from '@shadergrove/desktop-api/contracts';
 import type { ThumbnailMeta } from '@shadergrove/shared/model';
+import { AuthService } from '../../auth/auth.service';
 import { DesktopAccount } from '../../desktop/desktop-account';
+import { DesktopPlatform } from '../../desktop/desktop-platform';
 import { DesktopSync } from '../../desktop/desktop-sync';
+import { Preferences } from '../../prefs/preferences';
 import { ShaderStore } from '../../workspace/shader-store';
 import { ThumbnailAssets } from '../../assets/thumbnail-assets';
 import { I18n } from '../../i18n/i18n';
@@ -19,25 +18,43 @@ import type { TranslationKey } from '../../i18n/keys';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { WorkspaceActions } from '../workspace-actions';
 
+/**
+ * How long an opened shader is left to render before it is photographed for
+ * the library: long enough to compile, decode its textures and get past the
+ * black first frames of anything driven by time.
+ */
+const PREVIEW_SETTLE_MS = 2000;
+
+/**
+ * The library: every shader, as a row or as a card, with a preview.
+ *
+ * The rows are plain buttons in a list rather than a selection list: opening
+ * a shader is navigation, not a selection you then act on, and `aria-current`
+ * says which one is open. The arrow keys, Home and End move between them.
+ */
 @Component({
   selector: 'app-shader-browser',
-  imports: [
-    FormsModule,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatIconModule,
-    MatInputModule,
-    MatListModule,
-    MatMenuModule,
-    MatTooltipModule,
-    TranslatePipe,
-  ],
+  imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
   template: `
     <header class="browser-header">
-      <h2 class="browser-title">{{ 'browser.title' | translate }}</h2>
+      <h2 class="browser-title">
+        {{ 'browser.title' | translate }}
+        @if (store.shaders().length; as total) {
+          <span class="count">{{ total }}</span>
+        }
+      </h2>
       @if (sync.progress(); as progress) {
         <span class="sync-progress" role="status">{{ 'sync.progress' | translate: progress }}</span>
       }
+      <button
+        matIconButton
+        type="button"
+        [matTooltip]="(grid() ? 'browser.viewList' : 'browser.viewGrid') | translate"
+        [attr.aria-label]="(grid() ? 'browser.viewList' : 'browser.viewGrid') | translate"
+        (click)="toggleView()"
+      >
+        <mat-icon>{{ grid() ? 'view_list' : 'grid_view' }}</mat-icon>
+      </button>
       <button
         matIconButton
         type="button"
@@ -49,66 +66,74 @@ import { WorkspaceActions } from '../workspace-actions';
       </button>
     </header>
 
-    <mat-form-field appearance="fill" subscriptSizing="dynamic" class="search">
-      <mat-icon matPrefix>search</mat-icon>
-      <mat-label>{{ 'browser.filter' | translate }}</mat-label>
+    <label class="search">
+      <mat-icon aria-hidden="true">search</mat-icon>
       <input
-        matInput
+        #search
         type="search"
+        class="search-input"
         autocomplete="off"
-        [ngModel]="query()"
-        (ngModelChange)="query.set($event)"
+        spellcheck="false"
+        [placeholder]="'browser.filter' | translate"
+        [attr.aria-label]="'browser.filter' | translate"
+        [value]="query()"
+        (input)="query.set(search.value)"
       />
-    </mat-form-field>
+    </label>
 
     @if (filtered().length === 0) {
       <p class="empty">
         {{ (store.shaders().length === 0 ? 'browser.empty' : 'browser.noMatch') | translate }}
       </p>
     } @else {
-      <mat-selection-list
+      <ul
         class="shader-list"
+        [class.grid]="grid()"
         [attr.aria-label]="'browser.title' | translate"
-        [multiple]="false"
-        [hideSingleSelectionIndicator]="true"
-        (selectionChange)="select($event.options[0].value)"
+        (keydown)="onListKeydown($event)"
       >
         @for (shader of filtered(); track shader.id) {
-          <mat-list-option
-            class="shader-row"
-            [class.selected]="shader.id === store.selectedId()"
-            [value]="shader.id"
-            [selected]="shader.id === store.selectedId()"
-            [title]="'browser.contextTip' | translate"
-            [matContextMenuTriggerFor]="rowMenu"
-            [matContextMenuTriggerData]="{ shader }"
-          >
-            @let preview = previews()[shader.id];
-            @if (preview) {
-              <img matListItemAvatar class="row-preview" [src]="preview" alt="" />
-            } @else {
-              <span matListItemAvatar class="row-preview row-preview-empty" aria-hidden="true">
-                <mat-icon>image</mat-icon>
-              </span>
-            }
-            <span matListItemTitle class="row-title">
-              @let status = syncShown() ? sync.statuses()[shader.id] : undefined;
-              @if (status) {
-                <mat-icon
-                  class="sync-icon"
-                  [class.sync-alert]="status === 'error' || status === 'reauth-required'"
-                  role="img"
-                  [attr.aria-label]="syncLabels[status] | translate"
-                  [matTooltip]="syncLabels[status] | translate"
-                  >{{ syncIcons[status] }}</mat-icon
-                >
+          @let current = shader.id === store.selectedId();
+          <li>
+            <button
+              type="button"
+              class="shader-row"
+              [class.selected]="current"
+              [attr.aria-current]="current ? 'true' : null"
+              [title]="'browser.contextTip' | translate"
+              [matContextMenuTriggerFor]="rowMenu"
+              [matContextMenuTriggerData]="{ shader }"
+              (click)="select(shader.id)"
+            >
+              @let preview = previews()[shader.id];
+              @if (preview) {
+                <img class="row-preview" [src]="preview" alt="" />
+              } @else {
+                <span class="row-preview row-preview-empty" aria-hidden="true">
+                  <mat-icon>blur_on</mat-icon>
+                </span>
               }
-              {{ shader.name }}
-            </span>
-            <span matListItemLine class="row-meta">{{ meta(shader) }}</span>
-          </mat-list-option>
+              <span class="row-text">
+                <span class="row-title">
+                  @let status = syncShown() ? sync.statuses()[shader.id] : undefined;
+                  @if (status) {
+                    <mat-icon
+                      class="sync-icon"
+                      [class.sync-alert]="status === 'error' || status === 'reauth-required'"
+                      role="img"
+                      [attr.aria-label]="syncLabels[status] | translate"
+                      [matTooltip]="syncLabels[status] | translate"
+                      >{{ syncIcons[status] }}</mat-icon
+                    >
+                  }
+                  {{ shader.name }}
+                </span>
+                <span class="row-meta">{{ meta(shader) }}</span>
+              </span>
+            </button>
+          </li>
         }
-      </mat-selection-list>
+      </ul>
     }
 
     <mat-menu #rowMenu="matMenu">
@@ -175,14 +200,22 @@ import { WorkspaceActions } from '../workspace-actions';
     .browser-header {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 12px 8px 4px 16px;
+      gap: 2px;
+      padding: 6px 6px 6px 14px;
     }
 
     .browser-title {
+      display: flex;
+      align-items: baseline;
       flex: 1;
+      gap: 8px;
       margin: 0;
-      font: var(--mat-sys-title-medium);
+      font: var(--mat-sys-title-small);
+    }
+
+    .count {
+      color: var(--mat-sys-on-surface-variant);
+      font: 10.5px / 1 var(--studio-font-mono);
     }
 
     .sync-progress {
@@ -190,35 +223,114 @@ import { WorkspaceActions } from '../workspace-actions';
       font: var(--mat-sys-body-small);
     }
 
+    /* A field the height of a row, not a form field: it filters what is
+       already on screen and is cleared as often as it is typed into. */
     .search {
-      margin: 4px 12px 8px;
+      display: flex;
+      align-items: center;
+      flex: 0 0 auto;
+      gap: 6px;
+      height: 28px;
+      margin: 0 10px 8px;
+      padding: 0 8px;
+      border-radius: var(--mat-sys-corner-small);
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 7%, transparent);
+      cursor: text;
+      transition: background-color 140ms ease;
+    }
+
+    .search:hover {
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 11%, transparent);
+    }
+
+    .search:focus-within {
+      box-shadow: inset 0 0 0 1px var(--mat-sys-primary);
+    }
+
+    .search mat-icon {
+      flex: 0 0 auto;
+      width: 16px;
+      height: 16px;
+      color: var(--mat-sys-on-surface-variant);
+      font-size: 16px;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      padding: 0;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: var(--mat-sys-on-surface);
+      font: var(--mat-sys-body-medium);
+    }
+
+    .search-input::placeholder {
+      color: var(--mat-sys-on-surface-variant);
     }
 
     .shader-list {
       flex: 1;
       min-height: 0;
+      margin: 0;
+      padding: 0 6px 8px;
       overflow-y: auto;
-      padding-top: 0;
+      list-style: none;
     }
 
     .shader-row {
-      cursor: context-menu;
-      transition: background-color 120ms ease;
-      /* Reserve the width of a 16:9 preview in the leading slot, not a square. */
-      --mat-list-list-item-leading-avatar-size: 64px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 5px 8px;
+      border: 0;
+      border-radius: var(--mat-sys-corner-small);
+      background: transparent;
+      color: var(--mat-sys-on-surface);
+      text-align: left;
+      cursor: pointer;
+      transition: background-color 140ms ease;
     }
 
-    /*
-     * A leading avatar is a round 40px portrait by Material's own rules, and a
-     * shader preview is a 16:9 frame. Overriding both takes the same
-     * specificity Material uses (class + class), hence the doubled selector.
-     */
-    .shader-row .row-preview.row-preview {
-      width: 64px;
-      height: 36px;
-      border-radius: 4px;
+    .shader-row:hover {
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 7%, transparent);
+    }
+
+    .shader-row:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: -2px;
+    }
+
+    .shader-row.selected {
+      background: var(--mat-sys-secondary-container);
+    }
+
+    /* The open shader is marked twice: a tint, and a bar that still reads when
+       the tint is too quiet against a bright preview. */
+    .shader-row.selected::before {
+      content: '';
+      position: absolute;
+      top: 8px;
+      bottom: 8px;
+      left: 0;
+      width: 2px;
+      border-radius: 1px;
+      background: var(--mat-sys-primary);
+    }
+
+    /* A 16:9 frame, like the thing it is a picture of. */
+    .row-preview {
+      flex: 0 0 auto;
+      width: 60px;
+      aspect-ratio: 16 / 9;
+      border-radius: 3px;
       object-fit: cover;
-      background: var(--mat-sys-surface-container-highest);
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mat-sys-on-surface) 10%, transparent);
     }
 
     .row-preview-empty {
@@ -229,46 +341,111 @@ import { WorkspaceActions } from '../workspace-actions';
     }
 
     .row-preview-empty mat-icon {
-      font-size: 20px;
-      width: 20px;
-      height: 20px;
+      width: 16px;
+      height: 16px;
+      font-size: 16px;
       opacity: 0.6;
     }
 
-    .shader-row.selected {
-      background: color-mix(in srgb, var(--mat-sys-primary) 16%, transparent);
+    .row-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
     }
 
-    .shader-row.selected:hover {
-      background: color-mix(in srgb, var(--mat-sys-primary) 22%, transparent);
+    .row-title,
+    .row-meta {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .row-title {
-      font: var(--mat-sys-body-large);
+      font: var(--mat-sys-body-medium);
+    }
+
+    .row-meta {
+      color: var(--mat-sys-on-surface-variant);
+      font: var(--mat-sys-label-small);
     }
 
     .sync-icon {
-      font-size: 16px;
-      width: 16px;
-      height: 16px;
-      vertical-align: -2px;
-      margin-inline-end: 4px;
+      width: 14px;
+      height: 14px;
+      margin-inline-end: 3px;
       color: var(--mat-sys-on-surface-variant);
+      font-size: 14px;
+      vertical-align: -2px;
     }
 
     .sync-icon.sync-alert {
       color: var(--mat-sys-error);
     }
 
-    .row-meta {
-      color: var(--mat-sys-on-surface-variant);
-      font: var(--mat-sys-body-small);
+    /* Grid: the preview is the row, and the name sits under it. */
+    .shader-list.grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+      align-content: start;
+      gap: 6px;
+      padding-inline: 10px;
+    }
+
+    .grid .shader-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+      padding: 5px;
+    }
+
+    .grid .row-preview {
+      width: 100%;
+    }
+
+    .grid .row-preview-empty mat-icon {
+      width: 20px;
+      height: 20px;
+      font-size: 20px;
+    }
+
+    .grid .row-meta {
+      display: none;
+    }
+
+    .grid .row-title {
+      font: var(--mat-sys-label-medium);
+    }
+
+    .grid .shader-row.selected::before {
+      display: none;
+    }
+
+    .grid .shader-row.selected .row-preview {
+      box-shadow: 0 0 0 2px var(--mat-sys-primary);
     }
 
     .empty {
-      margin: 8px 16px;
+      margin: 4px 16px;
       color: var(--mat-sys-on-surface-variant);
       font: var(--mat-sys-body-medium);
+    }
+
+    @media (pointer: coarse) {
+      .search {
+        height: 40px;
+      }
+
+      .shader-row {
+        padding-block: 8px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .search,
+      .shader-row {
+        transition: none;
+      }
     }
   `,
 })
@@ -278,6 +455,10 @@ export class ShaderBrowser {
   protected readonly workspace = inject(WorkspaceActions);
   protected readonly sync = inject(DesktopSync);
   private readonly account = inject(DesktopAccount);
+  private readonly preferences = inject(Preferences);
+  private readonly auth = inject(AuthService);
+  private readonly desktop = inject(DesktopPlatform);
+
   private readonly thumbnails = inject(ThumbnailAssets);
 
   protected readonly syncIcons: Record<SyncStatus, string> = {
@@ -309,6 +490,10 @@ export class ShaderBrowser {
   });
 
   protected readonly query = signal('');
+  protected readonly grid = computed(() => this.preferences.value().browserView === 'grid');
+
+  /** The desktop's library is local; on the web, writing needs a confirmed address. */
+  private readonly writable = computed(() => this.desktop.available || this.auth.verified());
 
   /** Preview URL per shader id, for the shaders that have one. */
   protected readonly previews = computed(() => {
@@ -340,6 +525,24 @@ export class ShaderBrowser {
         this.requested.add(key);
         void this.resolveBlob(shader.id, shader.thumbnail);
       }
+    });
+
+    // A shader opened without a preview gets one from what is on screen, once
+    // it has had a moment to render. Switching away first cancels it; the
+    // store decides whether what is on screen is fit to be photographed.
+    //
+    // Only where the library can be written. An account that has not confirmed
+    // its address is read-only, and an upload nobody asked for would come back
+    // 401 and open a sign-in dialog out of nowhere.
+    effect((onCleanup) => {
+      const record = this.store.record();
+      if (!record || record.thumbnail || !this.writable()) return;
+
+      const timer = setTimeout(
+        () => this.store.captureMissingPreview(record.id),
+        PREVIEW_SETTLE_MS,
+      );
+      onCleanup(() => clearTimeout(timer));
     });
   }
 
@@ -376,5 +579,35 @@ export class ShaderBrowser {
 
   protected select(id: string): void {
     void this.workspace.selectShader(id);
+  }
+
+  protected toggleView(): void {
+    this.preferences.patch({ browserView: this.grid() ? 'list' : 'grid' });
+  }
+
+  /** Arrow keys, Home and End move the focus between rows. */
+  protected onListKeydown(event: KeyboardEvent): void {
+    const rows = [
+      ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('.shader-row'),
+    ];
+    const current = rows.indexOf(event.target as HTMLElement);
+    if (current < 0) return;
+
+    // ponytail: every arrow steps one row, so Up/Down in the grid move along
+    // the reading order instead of by a column. Count the columns if the grid
+    // ever gets wide enough for that to matter.
+    const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key];
+    const target =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? rows.length - 1
+          : step === undefined
+            ? null
+            : current + step;
+    if (target === null) return;
+
+    event.preventDefault();
+    rows[Math.min(rows.length - 1, Math.max(0, target))].focus();
   }
 }

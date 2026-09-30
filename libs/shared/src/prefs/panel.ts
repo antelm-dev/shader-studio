@@ -59,6 +59,13 @@ export function sanitizeInspectorTab(value: unknown): InspectorTab {
   return INSPECTOR_TABS.includes(value as InspectorTab) ? (value as InspectorTab) : 'controls';
 }
 
+/** How the shader browser lays the library out: rows, or a grid of previews. */
+export type BrowserView = 'list' | 'grid';
+
+export function sanitizeBrowserView(value: unknown): BrowserView {
+  return value === 'grid' ? 'grid' : 'list';
+}
+
 // ---------------------------------------------------------------------------
 // Bottom panel
 // ---------------------------------------------------------------------------
