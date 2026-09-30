@@ -1,7 +1,7 @@
 <!-- The shader is the page: everything below is painted on top of it — until you
      detach it, at which point the same canvas becomes a window over the stage it
      was. The output window only ever gets the page. -->
-<app-preview-shell [stageOnly]="outputMode" />
+<app-preview-shell [stageOnly]="outputMode || commands.zen()" />
 <router-outlet />
 
 @if (!outputMode) {
@@ -21,7 +21,7 @@
      on a tap, and on keyboard focus — because the chrome that would normally
      explain how to leave is exactly what is hidden. -->
 @if (commands.zen()) {
-<div class="zen-edge">
+<div class="zen-edge" [class.near]="zenExitNear()">
   <button type="button" class="zen-exit" (click)="commands.zen.set(false)">
     <mat-icon aria-hidden="true">fullscreen_exit</mat-icon>
     <span>{{ 'action.exitZen' | translate }}</span>

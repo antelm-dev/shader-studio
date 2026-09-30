@@ -319,9 +319,13 @@ app-titlebar {
   visibility: hidden;
 }
 
-// A strip along the top edge. Hovering, tapping or tabbing into it brings the
-// way out back; the rest of the window belongs to the shader.
+// A strip along the top edge. Moving the pointer into it, tapping it or
+// tabbing to the button brings the way out back. The strip itself takes no
+// pointer events — a shader that follows the mouse has to keep receiving them
+// all the way to the top — so `App` watches the pointer and sets `.near`, and
+// only the button, while it is showing, can be hit.
 .zen-edge {
+  pointer-events: none;
   position: fixed;
   top: 0;
   right: 0;
@@ -370,8 +374,9 @@ app-titlebar {
   }
 }
 
-.zen-edge:hover .zen-exit,
+.zen-edge.near .zen-exit,
 .zen-exit:focus-visible {
+  pointer-events: auto;
   opacity: 1;
   transform: none;
   animation: none;

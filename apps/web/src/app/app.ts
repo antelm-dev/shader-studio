@@ -63,6 +63,9 @@ import { AuthPrompt } from './auth/auth-prompt';
 import { AccountDialog } from './ui/dialogs/account-dialog';
 import { AuthDialog, type AuthDialogData } from './ui/dialogs/auth-dialog';
 
+/** Height of the strip at the top of the window that reveals zen mode's exit button. */
+const ZEN_EDGE_PX = 48;
+
 @Component({
   selector: 'app-root',
   hostDirectives: [GlobalShortcuts],
@@ -153,6 +156,9 @@ export class App {
   );
 
   protected readonly inspectorOpen = computed(() => this.layout.inspectorOpen());
+
+  /** Whether the pointer is in the strip along the top edge that reveals zen mode's exit. */
+  protected readonly zenExitNear = signal(false);
 
   // --- Menus --------------------------------------------------------------
   // One section of the "More actions" menu each. The items that are not plain
@@ -460,6 +466,23 @@ export class App {
       this.store.selectedId();
       untracked(() => {
         if (this.isHandset()) this.handsetDrawerOpen.set(false);
+      });
+    });
+
+    // Zen mode's exit button shows while the pointer is in the top strip. The
+    // listeners exist only while zen is on and are attached by hand, so an
+    // ordinary pointer move costs the app nothing.
+    effect((onCleanup) => {
+      if (!this.commands.zen()) {
+        this.zenExitNear.set(false);
+        return;
+      }
+      const track = (event: PointerEvent) => this.zenExitNear.set(event.clientY < ZEN_EDGE_PX);
+      window.addEventListener('pointermove', track);
+      window.addEventListener('pointerdown', track);
+      onCleanup(() => {
+        window.removeEventListener('pointermove', track);
+        window.removeEventListener('pointerdown', track);
       });
     });
 
