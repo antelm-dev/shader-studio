@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -559,6 +559,7 @@ export class AdminPublicationsPage {
   protected readonly auth = inject(AuthService);
   private readonly i18n = inject(I18n);
   private readonly access = inject(ExploreAccess).capabilities;
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   protected readonly tabs: readonly { id: Tab; label: TranslationKey }[] = [
     { id: 'publications', label: 'admin.publications' },
@@ -622,6 +623,8 @@ export class AdminPublicationsPage {
     this.searchTerm = '';
     this.stateFilter = 'all';
     this.statusFilter = 'open';
+    // And the panel above them belongs to the list it was opened from.
+    this.inspected.set(null);
     this.tab.set(tab);
     void this.attempt(() => this.load(null));
   }
@@ -761,6 +764,8 @@ export class AdminPublicationsPage {
     this.inspectedReports.set(reports.reports);
     this.inspectedHistory.set(history.entries);
     this.restriction.set(restriction);
+    // The panel opens above the list; bring it to the operator rather than the other way round.
+    this.host.scrollTo?.({ top: 0 });
   }
 
   private clear(): void {
