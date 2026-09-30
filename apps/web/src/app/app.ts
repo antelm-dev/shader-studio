@@ -376,6 +376,9 @@ export class App {
         data,
         ariaLabel: this.i18n.t('palette.title'),
         autoFocus: 'input',
+        // Focus at once, not after the open animation: the next key pressed
+        // is the first letter of what is being searched for.
+        delayFocusTrap: false,
         restoreFocus: true,
         width: '560px',
         maxWidth: 'calc(100vw - 32px)',

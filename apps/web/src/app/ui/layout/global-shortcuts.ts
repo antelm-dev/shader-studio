@@ -1,4 +1,5 @@
 import { Directive, inject } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 
 import { DesktopPlatform } from '../../desktop/desktop-platform';
 import { MenuCommands } from '../menu-commands';
@@ -15,8 +16,9 @@ import { OpenDocuments } from '../editor/open-documents';
  * The split matters. The chorded shortcuts — Ctrl+S, Ctrl+N, the tab
  * shortcuts — work *while you are typing*, because that is exactly when you
  * want them: saving and switching files are things you do with your hands on
- * the keyboard, mid-edit. The bare-letter ones (Space, H, S) are ignored
- * inside a text field or the code editor, where they are simply characters.
+ * the keyboard, mid-edit. The bare-letter ones (Space, H, S, Z) are ignored
+ * inside a text field or the code editor, where they are simply characters,
+ * and while a dialog is open, where they are meant for the dialog.
  */
 @Directive({
   selector: '[appGlobalShortcuts]',
@@ -32,6 +34,7 @@ export class GlobalShortcuts {
   private readonly commands = inject(MenuCommands);
   private readonly workspace = inject(WorkspaceActions);
   private readonly openDocs = inject(OpenDocuments);
+  private readonly dialog = inject(MatDialog);
 
   protected onKeydown(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
@@ -44,6 +47,10 @@ export class GlobalShortcuts {
 
     if (this.onChordKeydown(event)) return;
     if (this.isTyping(event.target)) return;
+    // The bare-letter shortcuts belong to the workspace. Under a modal dialog
+    // — or in the moment before one has taken the focus — a key is meant for
+    // the dialog, and must not capture an image or hide a panel behind it.
+    if (this.dialog.openDialogs.length > 0) return;
 
     switch (event.key.toLowerCase()) {
       case ' ':

@@ -1,5 +1,6 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DesktopPlatform } from '../../desktop/desktop-platform';
@@ -46,6 +47,7 @@ describe('GlobalShortcuts', () => {
   const patch = vi.fn();
   const toggleZen = vi.fn();
   const openPalette = vi.fn();
+  let openDialogs: unknown[] = [];
   const zen = signal(false);
   let desktopAvailable = true;
 
@@ -63,6 +65,7 @@ describe('GlobalShortcuts', () => {
     patch.mockReset();
     toggleZen.mockReset();
     openPalette.mockReset();
+    openDialogs = [];
     zen.set(false);
     desktopAvailable = true;
 
@@ -106,6 +109,14 @@ describe('GlobalShortcuts', () => {
             zen,
             zenMode: { action: toggleZen },
             openPalette,
+          },
+        },
+        {
+          provide: MatDialog,
+          useValue: {
+            get openDialogs() {
+              return openDialogs;
+            },
           },
         },
         {
@@ -250,5 +261,21 @@ describe('GlobalShortcuts', () => {
     } finally {
       editor.remove();
     }
+  });
+
+  it('leaves bare-letter shortcuts alone while a dialog is open, but not chords', () => {
+    openDialogs = [{}];
+
+    window.dispatchEvent(chordEvent('h'));
+    window.dispatchEvent(chordEvent('s'));
+    window.dispatchEvent(chordEvent(' '));
+    window.dispatchEvent(chordEvent('z'));
+    expect(toggleInspectorOpen).not.toHaveBeenCalled();
+    expect(captureImage).not.toHaveBeenCalled();
+    expect(patch).not.toHaveBeenCalled();
+    expect(toggleZen).not.toHaveBeenCalled();
+
+    window.dispatchEvent(chordEvent('s', { ctrlKey: true }));
+    expect(save).toHaveBeenCalledOnce();
   });
 });
