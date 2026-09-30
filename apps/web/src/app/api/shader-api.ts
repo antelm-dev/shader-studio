@@ -50,6 +50,26 @@ export class ApiError extends Error {
 
 export type { UpdateShaderPatch } from '@shadergrove/shared/api';
 
+/** Normalise every transport/HTTP failure into an `ApiError`. */
+export async function apiRequest<T>(source: Promise<T>): Promise<T> {
+  try {
+    return await source;
+  } catch (error) {
+    if (error instanceof HttpErrorResponse) {
+      const body = error.error as ApiErrorBody | string | null;
+      if (body && typeof body === 'object' && 'error' in body) {
+        throw new ApiError(body.error.message, body.error.details ?? [], error.status);
+      }
+      throw new ApiError(
+        error.status === 0 ? 'Cannot reach the server' : `Request failed (${error.status})`,
+        [],
+        error.status,
+      );
+    }
+    throw new ApiError(String(error));
+  }
+}
+
 export abstract class ShaderApi {
   abstract list(): Promise<ShaderSummary[]>;
   abstract read(id: string): Promise<ShaderRecord>;
@@ -87,24 +107,8 @@ export class HttpShaderApi extends ShaderApi {
     return `${this.baseUrl}/api${path}`;
   }
 
-  /** Normalise every transport/HTTP failure into an `ApiError`. */
-  private async request<T>(source: Promise<T>): Promise<T> {
-    try {
-      return await source;
-    } catch (error) {
-      if (error instanceof HttpErrorResponse) {
-        const body = error.error as ApiErrorBody | string | null;
-        if (body && typeof body === 'object' && 'error' in body) {
-          throw new ApiError(body.error.message, body.error.details ?? [], error.status);
-        }
-        throw new ApiError(
-          error.status === 0 ? 'Cannot reach the server' : `Request failed (${error.status})`,
-          [],
-          error.status,
-        );
-      }
-      throw new ApiError(String(error));
-    }
+  private request<T>(source: Promise<T>): Promise<T> {
+    return apiRequest(source);
   }
 
   private get<T>(path: string): Promise<T> {
