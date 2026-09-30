@@ -1,0 +1,19 @@
+meta {
+  name: Capabilities
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/capabilities
+  body: none
+  auth: none
+}
+
+tests {
+  test("capabilities are explicit", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().publicExplore).to.be.a("boolean");
+    expect(res.getBody().admin).to.be.a("boolean");
+  });
+}

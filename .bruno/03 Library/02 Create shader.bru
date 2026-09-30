@@ -1,0 +1,29 @@
+meta {
+  name: Create shader
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/shaders
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Bruno API test"
+  }
+}
+
+tests {
+  test("shader was created", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().shader).to.have.property("id");
+    expect(res.getBody().shader.name).to.equal("Bruno API test");
+  });
+}

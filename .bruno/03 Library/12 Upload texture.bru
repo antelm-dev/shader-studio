@@ -1,0 +1,22 @@
+meta {
+  name: Upload texture
+  type: http
+  seq: 12
+}
+
+put {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}/textures/{{channel}}?width=1&height=1
+  body: file
+  auth: none
+}
+
+body:file {
+  file: @file(fixtures/one-pixel.png) @contentType(image/png)
+}
+
+tests {
+  test("channel texture was stored", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().shader).to.have.property("id");
+  });
+}

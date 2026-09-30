@@ -1,0 +1,17 @@
+meta {
+  name: Own publication status
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}/publication
+  body: none
+  auth: none
+}
+
+tests {
+  test("status is available for owned shader", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

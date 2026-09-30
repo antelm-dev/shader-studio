@@ -1,0 +1,18 @@
+meta {
+  name: Read shader
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("shader id matches", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().shader.id).to.equal(bru.getEnvVar("shaderId"));
+  });
+}

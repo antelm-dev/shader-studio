@@ -1,0 +1,22 @@
+meta {
+  name: Upload thumbnail
+  type: http
+  seq: 11
+}
+
+put {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}/thumbnail
+  body: file
+  auth: none
+}
+
+body:file {
+  file: @file(fixtures/one-pixel.png) @contentType(image/png)
+}
+
+tests {
+  test("thumbnail was stored", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().shader).to.have.property("id");
+  });
+}

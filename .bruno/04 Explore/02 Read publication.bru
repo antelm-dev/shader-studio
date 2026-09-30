@@ -1,0 +1,18 @@
+meta {
+  name: Read publication
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/publications/{{publicationId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("public publication is visible", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().publication).to.have.property("id");
+  });
+}

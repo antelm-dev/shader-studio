@@ -1,0 +1,18 @@
+meta {
+  name: Export library
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/export
+  body: none
+  auth: none
+}
+
+tests {
+  test("collection bundle is returned", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().kind).to.equal("collection");
+  });
+}

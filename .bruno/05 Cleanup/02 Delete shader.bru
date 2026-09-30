@@ -1,0 +1,17 @@
+meta {
+  name: Delete shader
+  type: http
+  seq: 2
+}
+
+delete {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}?expectedRevision={{expectedRevision}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("shader was removed", function () {
+    expect(res.getStatus()).to.equal(204);
+  });
+}

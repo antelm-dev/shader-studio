@@ -1,0 +1,22 @@
+meta {
+  name: Unpublish shader
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}/publication
+  body: none
+  auth: none
+}
+
+headers {
+  Origin: {{baseUrl}}
+}
+
+tests {
+  test("publication is no longer owner-visible", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().publication.ownerVisible).to.equal(false);
+  });
+}

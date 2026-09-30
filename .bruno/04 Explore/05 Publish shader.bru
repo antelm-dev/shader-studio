@@ -1,0 +1,32 @@
+meta {
+  name: Publish shader
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}/publication
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Origin: {{baseUrl}}
+}
+
+body:json {
+  {
+    "expectedRevision": {{expectedRevision}},
+    "authorLabel": "Shadergrove developer",
+    "license": "CC-BY-4.0",
+    "rightsConfirmed": true
+  }
+}
+
+tests {
+  test("snapshot was published", function () {
+    expect([200, 201]).to.include(res.getStatus());
+    expect(res.getBody().publication).to.have.property("id");
+  });
+}

@@ -1,0 +1,18 @@
+meta {
+  name: List shaders
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/shaders
+  body: none
+  auth: none
+}
+
+tests {
+  test("library returns summaries", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().shaders).to.be.an("array");
+  });
+}

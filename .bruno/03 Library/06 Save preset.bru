@@ -1,0 +1,29 @@
+meta {
+  name: Save preset
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}/presets
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Bruno preset",
+    "values": {}
+  }
+}
+
+tests {
+  test("preset was saved", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().preset).to.have.property("id");
+  });
+}

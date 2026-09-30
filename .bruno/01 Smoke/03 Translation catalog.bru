@@ -1,0 +1,19 @@
+meta {
+  name: Translation catalog
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/i18n/{{locale}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("catalog matches requested locale", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().locale).to.equal(bru.getEnvVar("locale"));
+    expect(res.getBody().catalog).to.be.an("object");
+  });
+}

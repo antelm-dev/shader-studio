@@ -1,0 +1,17 @@
+meta {
+  name: Delete preset
+  type: http
+  seq: 1
+}
+
+delete {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}/presets/{{presetId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("preset was removed", function () {
+    expect(res.getStatus()).to.equal(204);
+  });
+}

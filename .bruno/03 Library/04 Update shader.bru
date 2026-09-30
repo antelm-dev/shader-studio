@@ -1,0 +1,29 @@
+meta {
+  name: Update shader
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "description": "Edited from Bruno",
+    "expectedRevision": {{expectedRevision}}
+  }
+}
+
+tests {
+  test("revision-aware update succeeded", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().shader.description).to.equal("Edited from Bruno");
+  });
+}

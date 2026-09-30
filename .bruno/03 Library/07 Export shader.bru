@@ -1,0 +1,18 @@
+meta {
+  name: Export shader
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}/export
+  body: none
+  auth: none
+}
+
+tests {
+  test("single shader bundle is returned", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().kind).to.equal("shader");
+  });
+}

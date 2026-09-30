@@ -1,0 +1,18 @@
+meta {
+  name: List presets
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/shaders/{{shaderId}}/presets
+  body: none
+  auth: none
+}
+
+tests {
+  test("presets are an array", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().presets).to.be.an("array");
+  });
+}

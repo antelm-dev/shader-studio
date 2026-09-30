@@ -780,6 +780,7 @@ scoped to that account. `GET /api/health` and translation catalogs are public.
 
 Interactive docs are served by the running app at `/api/docs` (OpenAPI JSON at
 `/api/docs-json`).
+For local manual requests, open the [Bruno collection](.bruno/README.md).
 
 Shader library and readiness errors use `{ "error": { "code", "message", "details"? } }`.
 Authentication endpoints use Better Auth's own response format.

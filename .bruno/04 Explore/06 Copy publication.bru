@@ -1,0 +1,22 @@
+meta {
+  name: Copy publication
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/publications/{{publicationId}}/copy
+  body: none
+  auth: none
+}
+
+headers {
+  Origin: {{baseUrl}}
+}
+
+tests {
+  test("public shader was copied into private library", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().shader).to.have.property("id");
+  });
+}

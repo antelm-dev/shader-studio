@@ -1,0 +1,19 @@
+meta {
+  name: Export publication
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/publications/{{publicationId}}/export
+  body: none
+  auth: none
+}
+
+tests {
+  test("public shader bundle carries credits", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().kind).to.equal("shader");
+    expect(res.getBody().publication).to.be.an("object");
+  });
+}

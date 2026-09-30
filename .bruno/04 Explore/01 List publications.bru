@@ -1,0 +1,18 @@
+meta {
+  name: List publications
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/publications?limit=24
+  body: none
+  auth: none
+}
+
+tests {
+  test("publications are returned", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().publications).to.be.an("array");
+  });
+}
