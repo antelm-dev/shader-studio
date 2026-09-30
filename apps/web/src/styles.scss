@@ -1,3 +1,4 @@
+@use 'sass:map';
 @use '@angular/material' as mat;
 
 // Inter and Material Symbols ship with the app (angular.json `styles`), so the
@@ -22,6 +23,58 @@ $corners: (
   corner-small: 4px,
 );
 
+// The accent: a leaf green of the app's own — the grove in the name — rather
+// than one of Material's stock hues. Both ramps come from
+// `ng generate @angular/material:theme-color --primary-color=#6FDD3C`; change
+// the seed and paste the new ramps to change the accent. Dark mode draws the
+// accent at tone 80 (#71df3e) and light mode at tone 40 (#276c00).
+$accent: (
+  0: #000000,
+  10: #072100,
+  20: #103800,
+  25: #164500,
+  30: #1b5200,
+  35: #215f00,
+  40: #276c00,
+  50: #328800,
+  60: #3fa500,
+  70: #56c220,
+  80: #71df3e,
+  90: #8cfd58,
+  95: #cdffb0,
+  98: #eeffde,
+  99: #f7ffec,
+  100: #ffffff,
+);
+$accent-secondary: (
+  0: #000000,
+  10: #072100,
+  20: #103800,
+  25: #164500,
+  30: #1e5105,
+  35: #2a5e12,
+  40: #366a1e,
+  50: #4f8435,
+  60: #679f4c,
+  70: #81ba64,
+  80: #9bd67c,
+  90: #b6f396,
+  95: #cdffb0,
+  98: #eeffde,
+  99: #f7ffec,
+  100: #ffffff,
+);
+
+// A Material palette is a ramp plus the secondary, neutral and error ramps
+// that go with it. The error ramp is Material's own, and the neutrals are
+// overridden with graphite below, so only the first two are replaced.
+$accent-palette: map.merge(
+  map.merge(mat.$cyan-palette, $accent),
+  (
+    secondary: $accent-secondary,
+  )
+);
+
 html {
   height: 100%;
 
@@ -34,7 +87,7 @@ html {
   @include mat.theme(
     (
       color: (
-          primary: mat.$cyan-palette,
+          primary: $accent-palette,
           tertiary: mat.$magenta-palette,
         ),
       typography: $ui-font,
@@ -43,9 +96,10 @@ html {
     $corners
   );
 
-  // Neutral graphite chrome. The cyan palette tints Material's neutrals blue,
-  // which competes with whatever the shader is painting; the chrome should be
-  // colourless so the only colour on screen is the accent and the canvas.
+  // Neutral graphite chrome. Material derives its neutrals from the primary
+  // hue, and a tinted chrome competes with whatever the shader is painting; it
+  // should be colourless, so the only colour on screen is the accent and the
+  // canvas.
   @include mat.theme-overrides(
     (
       background: light-dark(#f7f7f8, #141416),
