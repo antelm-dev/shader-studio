@@ -119,6 +119,8 @@ All under `/api/admin`, all `403 forbidden` for anyone not on the configured lis
 - Every write commits together with its audit row (actor, action, target,
   reason, time). A refused or failed write leaves no audit row.
 - Restoring a publication does not make it public if its owner unpublished it.
+- A publication cannot be restored while its publisher is restricted (`400 invalid`,
+  nothing changes and nothing is audited): lift the restriction first.
 - Restricting a publisher hides all their current publications and blocks
   publish, update and republish. Lifting the restriction restores nothing: each
   publication stays hidden until a moderator restores it.

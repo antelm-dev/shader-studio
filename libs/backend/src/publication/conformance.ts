@@ -197,6 +197,23 @@ export function runPublicationConformance(
       }
     });
 
+    it('never pairs one revision’s credits with another revision’s sources', async () => {
+      const { id: shaderId } = await alice.create({ name: 'Rev 0' });
+      await pubs.publish(ALICE, shaderId, terms({ expectedRevision: 1 }));
+      const { id } = (await pubs.status(ALICE, shaderId)).publication!;
+
+      for (let round = 1; round <= 8; round += 1) {
+        const { revision } = await alice.update(shaderId, { name: `Rev ${round}` });
+        const [, ...reads] = await Promise.all([
+          pubs.publish(ALICE, shaderId, terms({ expectedRevision: revision })),
+          ...Array.from({ length: 6 }, () => pubs.readPublic(id)),
+          pubs.adminRead(id),
+        ]);
+        // Whichever side of the update a read landed on, it is all from that side.
+        for (const detail of reads) expect(detail.shader.name).toBe(detail.title);
+      }
+    });
+
     // --- AC-LIFECYCLE / AC-PRIVACY ------------------------------------------
 
     it('hides an unpublished publication everywhere and brings it back under the same id', async () => {
@@ -456,6 +473,21 @@ export function runPublicationConformance(
       // Private work carries on.
       expect((await alice.update(shader.id, { name: 'Still mine' })).name).toBe('Still mine');
       expect((await alice.create({ name: 'New private' })).id).toBe('new-private');
+
+      // Nothing of a restricted publisher's can be put back on Explore.
+      const hidden = await pubs.adminRead(id);
+      const restore = () =>
+        code(
+          pubs.moderate(ADMIN, id, {
+            hidden: false,
+            reason: 'Too early',
+            expectedModerationRevision: hidden.moderationRevision,
+          }),
+        );
+      expect(await restore()).toBe('invalid');
+      expect(await publicReads(id)).toEqual(ALL_GONE);
+      expect((await pubs.adminRead(id)).moderationRevision).toBe(hidden.moderationRevision);
+      expect((await pubs.listAudit({ targetId: id })).entries).toEqual([]);
 
       expect(await restrict(false, 1)).toBe('ok');
       // Lifting it restores nothing by itself…

@@ -240,6 +240,21 @@ export class PublicationStore {
     return row ? toPublicationRow(row) : null;
   }
 
+  /**
+   * The row and its snapshot in one statement. Read separately, an owner's
+   * update landing in between would pair the old title, license and revision
+   * with the new sources.
+   */
+  async findWithSnapshot(
+    id: string,
+  ): Promise<{ row: PublicationRow; snapshotJson: string } | null> {
+    const [row] = await this.db.all(
+      `SELECT ${PUBLICATION_COLUMNS}, p.snapshot_json FROM publications p WHERE p.id = ?`,
+      [id],
+    );
+    return row ? { row: toPublicationRow(row), snapshotJson: String(row['snapshot_json']) } : null;
+  }
+
   async findBySource(shaderId: string): Promise<PublicationRow | null> {
     const [row] = await this.db.all(
       `SELECT ${PUBLICATION_COLUMNS} FROM publications p WHERE p.source_shader_id = ?`,

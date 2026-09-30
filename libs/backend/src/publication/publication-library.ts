@@ -94,9 +94,9 @@ export class PublicationLibrary {
   }
 
   async readPublic(id: string): Promise<PublicationDetail> {
-    const store = this.repo.publications;
-    const row = await this.visible(store, id);
-    return { ...toSummary(row), ...credits(row), shader: await snapshotOf(store, row.id) };
+    const { row, shader } = await detailed(this.repo.publications, id);
+    if (!isPublic(row)) throw notFound();
+    return { ...toSummary(row), ...credits(row), shader };
   }
 
   async readPublicAsset(id: string, key: AssetKey): Promise<{ bytes: Uint8Array; ext: string }> {
@@ -278,9 +278,8 @@ export class PublicationLibrary {
 
   /** Readable whatever its visibility — this is how a reported snapshot is inspected. */
   async adminRead(id: string): Promise<AdminPublicationDetail> {
-    const store = this.repo.publications;
-    const row = await found(store, id);
-    return { ...toAdmin(row), ...credits(row), shader: await snapshotOf(store, row.id) };
+    const { row, shader } = await detailed(this.repo.publications, id);
+    return { ...toAdmin(row), ...credits(row), shader };
   }
 
   async adminAsset(id: string, key: AssetKey): Promise<{ bytes: Uint8Array; ext: string }> {
@@ -292,6 +291,20 @@ export class PublicationLibrary {
     const reason = text(input['reason'], 'reason', { required: true });
     const expected = integer(input['expectedModerationRevision'], 'expectedModerationRevision', 1);
     return this.repo.publicationTransaction(async (_tx, store) => {
+      if (!hidden) {
+        // A restriction is what hid this publisher's work; restoring one piece
+        // of it while the restriction stands would put a restricted account
+        // back on Explore. Held under the publisher's lock, so a restriction
+        // arriving at the same moment either sees the restore or stops it.
+        const { ownerUserId } = await found(store, id);
+        await store.lockPublisher(ownerUserId);
+        if ((await store.restriction(ownerUserId))?.restricted) {
+          throw new StorageError(
+            'invalid',
+            'This publisher is restricted. Lift the restriction before restoring their publications',
+          );
+        }
+      }
       if (!(await store.setModeratorHidden(id, hidden, expected))) {
         await found(store, id);
         throw stale('publication');
@@ -341,8 +354,9 @@ export class PublicationLibrary {
 
   /**
    * Restricting blocks publish, update and republish and takes every current
-   * publication down; private editing is untouched. Lifting it restores
-   * nothing — each publication stays hidden until a moderator restores it.
+   * publication down; private editing is untouched. While it stands nothing of
+   * theirs can be restored, and lifting it restores nothing either — each
+   * publication stays hidden until a moderator restores it.
    */
   async setRestriction(
     actorUserId: string,
@@ -403,7 +417,7 @@ export class PublicationLibrary {
   /** The publication, if the public may see it right now. */
   private async visible(store: PublicationStore, id: string): Promise<PublicationRow> {
     const row = await found(store, id);
-    if (!row.ownerVisible || row.moderatorHidden) throw notFound();
+    if (!isPublic(row)) throw notFound();
     return row;
   }
 
@@ -528,6 +542,20 @@ function withoutBytes(channels: TextureChannelPayloads): TextureChannelPayloads 
 
 function base64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('base64');
+}
+
+function isPublic(row: PublicationRow): boolean {
+  return row.ownerVisible && !row.moderatorHidden;
+}
+
+/** The publication and the snapshot that belongs to that very revision of it. */
+async function detailed(
+  store: PublicationStore,
+  id: string,
+): Promise<{ row: PublicationRow; shader: ShaderPayload }> {
+  const result = PUBLICATION_ID.test(id) ? await store.findWithSnapshot(id) : null;
+  if (!result) throw notFound();
+  return { row: result.row, shader: JSON.parse(result.snapshotJson) as ShaderPayload };
 }
 
 async function found(store: PublicationStore, id: string): Promise<PublicationRow> {
