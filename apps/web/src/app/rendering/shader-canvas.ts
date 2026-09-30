@@ -366,6 +366,7 @@ export class ShaderCanvas {
     }
 
     engine.onFps = (fps) => this.handle.fps.set(fps);
+    engine.onResize = (width, height) => this.handle.resolution.set({ width, height });
     engine.onFrameRendered = () => this.onFrameRendered();
     engine.onTextureSettled = () => this.armRevealWhenReady();
 

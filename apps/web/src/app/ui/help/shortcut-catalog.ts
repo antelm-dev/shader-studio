@@ -124,6 +124,12 @@ export const SHORTCUT_CATALOG: readonly ShortcutSection[] = [
         chord: chord(['S']),
         source: 'app',
       },
+      {
+        id: 'zen-mode',
+        labelKey: 'help.shortcuts.zenMode',
+        chord: chord(['Z']),
+        source: 'app',
+      },
     ],
   },
   {

@@ -35,7 +35,14 @@ app-titlebar {
 
 .toolbar {
   position: relative;
-  gap: 4px;
+  // Three zones. The side columns share what the document leaves, so the
+  // title sits on the window's centre line for as long as both sides fit; they
+  // never shrink below their own content, so when room runs out it is the
+  // title that gives (and truncates), not the controls that overlap it.
+  display: grid;
+  grid-template-columns: 1fr minmax(0, auto) 1fr;
+  align-items: center;
+  column-gap: 12px;
   flex: 0 0 auto;
   height: 44px;
   min-height: 44px;
@@ -77,6 +84,7 @@ app-titlebar {
 
   .save,
   .account {
+    flex: 0 0 auto;
     min-width: 0;
     height: 32px;
     padding-inline: 12px;
@@ -94,16 +102,80 @@ app-titlebar {
     margin-left: 2px;
     white-space: nowrap;
   }
+
+  // A menu's host element is empty; without this it would still take a gap.
+  mat-menu {
+    display: none;
+  }
 }
 
-// Below this, the quick actions cost more room than the toolbar has to spare
-// once the document title, ⋮, and Save are all accounted for — fold back into
-// today's overflow-only behavior instead of wrapping or crowding the title.
+.bar-start,
+.bar-center,
+.bar-end {
+  display: flex;
+  align-items: center;
+}
+
+.bar-start,
+.bar-end {
+  gap: 4px;
+}
+
+.bar-center {
+  justify-content: center;
+  min-width: 0;
+}
+
+.bar-end {
+  justify-content: flex-end;
+}
+
+// Under a mouse the bar gives four more pixels to the canvas.
+@media (pointer: fine) and (min-width: 601px) {
+  .toolbar {
+    height: 40px;
+    min-height: 40px;
+
+    button[matIconButton] {
+      width: 28px;
+      height: 28px;
+      padding: 5px;
+
+      mat-icon {
+        width: 18px;
+        height: 18px;
+        font-size: 18px;
+        line-height: 18px;
+      }
+    }
+
+    .save,
+    .account {
+      height: 28px;
+    }
+  }
+}
+
+// What gives way as the bar narrows, least-missed first: the resolution, the
+// frame rate, then the quick actions (all of which are also in "More actions"
+// or the inspector), and finally the transport itself and the account's name.
 //
 // Nested under `.toolbar` so the compiled selector matches `.quick-actions`'s
 // own `display: flex` rule in specificity — a top-level `.quick-actions`
 // selector here would lose that fight regardless of which one the container
 // query matches.
+@container toolbar (max-width: 1040px) {
+  .toolbar .transport {
+    --transport-resolution-display: none;
+  }
+}
+
+@container toolbar (max-width: 900px) {
+  .toolbar .transport {
+    --transport-fps-display: none;
+  }
+}
+
 @container toolbar (max-width: 720px) {
   .toolbar .quick-actions {
     display: none;
@@ -121,26 +193,47 @@ app-titlebar {
   }
 }
 
+@container toolbar (max-width: 440px) {
+  .toolbar .transport {
+    display: none;
+  }
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   margin-left: 4px;
-  font: var(--mat-sys-title-medium);
+  font: var(--mat-sys-title-small);
+  font-weight: 600;
+  letter-spacing: -0.005em;
   white-space: nowrap;
 }
 
-// The open document, treated as a document title rather than a chip: the name
-// reads as the heading of the thing you are working on, with its state beneath
-// it in the same way a word processor does it.
+// The mark is a swatch of what the app makes: a gradient swept round a point.
+// It starts and ends on the accent, so it follows the theme.
+.brand-mark {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: conic-gradient(
+    from 210deg,
+    var(--mat-sys-primary),
+    #7c5cff 34%,
+    #ff5c9d 60%,
+    #ffb547 80%,
+    var(--mat-sys-primary)
+  );
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%);
+}
+
+// The open document, as a document title rather than a chip: its name, then
+// its state beside it on the same line.
 .document {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1px;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
-  margin-left: 12px;
-  line-height: 1.2;
 }
 
 .doc-name {
@@ -156,6 +249,7 @@ app-titlebar {
 .doc-meta {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 8px;
 }
 
@@ -210,6 +304,104 @@ app-titlebar {
   }
 }
 
+// --- Zen mode ----------------------------------------------------------------
+// The shell fades out and stops taking part in anything: hidden from sight,
+// from the pointer and from the tab order. Nothing inside it is destroyed.
+
+.shell {
+  transition:
+    opacity 180ms ease,
+    visibility 180ms;
+}
+
+.shell.zen {
+  opacity: 0;
+  visibility: hidden;
+}
+
+// A strip along the top edge. Hovering, tapping or tabbing into it brings the
+// way out back; the rest of the window belongs to the shader.
+.zen-edge {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  height: 48px;
+}
+
+.zen-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin-top: 10px;
+  padding: 0 10px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-large);
+  background: var(--studio-glass);
+  backdrop-filter: var(--studio-glass-filter);
+  box-shadow: var(--mat-sys-level3);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-label-large);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+  // Shown once on the way in, so the first thing zen mode says is how to leave.
+  animation: zen-hint 2.8s ease both;
+
+  mat-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+  }
+
+  kbd {
+    padding: 1px 5px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 3px;
+    color: var(--mat-sys-on-surface-variant);
+    font: 10.5px / 1.4 var(--studio-font-mono);
+  }
+}
+
+.zen-edge:hover .zen-exit,
+.zen-exit:focus-visible {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+
+.zen-exit:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
+
+@keyframes zen-hint {
+  0%,
+  82% {
+    opacity: 1;
+    transform: none;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell,
+  .zen-exit {
+    transition: none;
+  }
+}
+
 // Section headings inside the overflow menu.
 ::ng-deep .menu-section {
   margin: 0;
@@ -218,10 +410,6 @@ app-titlebar {
   font: var(--mat-sys-label-small);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-}
-
-.spacer {
-  flex: 1;
 }
 
 .file-input {

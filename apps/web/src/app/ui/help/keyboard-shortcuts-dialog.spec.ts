@@ -79,6 +79,7 @@ describe('KeyboardShortcutsDialog', () => {
       'Pause / resume',
       'Show / hide controls',
       'Capture PNG',
+      'Zen mode',
       'Previous tab',
       'Next tab',
       'Activate tab 1–9',

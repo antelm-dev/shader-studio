@@ -42,6 +42,9 @@ export class RendererHandle {
   /** FPS of the active engine. */
   readonly fps = signal(0);
 
+  /** The drawing buffer the shader is rendered into, in device pixels. */
+  readonly resolution = signal<{ width: number; height: number } | null>(null);
+
   readonly contextIds = computed(() => [...this.engines().keys()]);
 
   /** The engine on a given context, or null. */
@@ -106,6 +109,7 @@ export class RendererHandle {
       const [first] = this.engines().keys();
       this.activeId.set(first ?? null);
       this.fps.set(0);
+      this.resolution.set(null);
     }
     this.syncProfiling();
   }

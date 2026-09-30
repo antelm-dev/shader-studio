@@ -20,6 +20,7 @@ const EXPECTED_DISPLAY_ORDER = [
   'pause-resume',
   'toggle-controls',
   'capture-png',
+  'zen-mode',
   'previous-tab',
   'next-tab',
   'activate-tab',

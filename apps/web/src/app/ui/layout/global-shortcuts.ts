@@ -56,6 +56,15 @@ export class GlobalShortcuts {
       case 's':
         this.commands.captureImage();
         break;
+      // Alt+Z and friends belong to the browser or the OS; only the bare key is ours.
+      case 'z':
+        if (!event.altKey && !event.ctrlKey && !event.metaKey) this.commands.zenMode.action();
+        break;
+      // The way out of zen that needs no memory: the chrome that would have
+      // told you how to leave is exactly what is hidden.
+      case 'escape':
+        this.commands.zen.set(false);
+        break;
       default:
         break;
     }

@@ -52,6 +52,7 @@ import { PreviewShell } from './ui/preview/preview-shell';
 import { PreviewStage } from './ui/preview/preview-stage';
 import { ResizeHandle } from './ui/layout/resize-handle';
 import { ShaderBrowser } from './ui/browser/shader-browser';
+import { TransportBar } from './ui/layout/transport-bar';
 import { StartupCoordinator } from './workspace/startup-coordinator';
 import { WorkspaceActions } from './ui/workspace-actions';
 import { I18n, LANGUAGE_OPTIONS, type AppLocale } from './i18n/i18n';
@@ -84,6 +85,7 @@ import { AuthDialog, type AuthDialogData } from './ui/dialogs/auth-dialog';
     ResizeHandle,
     RouterOutlet,
     ShaderBrowser,
+    TransportBar,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
@@ -178,6 +180,7 @@ export class App {
     this.toggleInspector,
     this.commands.toggleEditor,
     this.commands.togglePanel,
+    this.commands.zenMode,
     this.captureImage,
     this.commands.exportSequence,
   ];

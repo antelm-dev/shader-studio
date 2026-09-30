@@ -162,6 +162,10 @@ export class ShaderEngine {
 
   onFps: ((fps: number) => void) | null = null;
 
+  /** Fired when the on-screen drawing buffer changes size, in device pixels. */
+  onResize: ((width: number, height: number) => void) | null = null;
+  private reportedSize = '';
+
   /** Fired after a live animation frame has completely reached the canvas. */
   onFrameRendered: (() => void) | null = null;
 
@@ -639,6 +643,14 @@ export class ShaderEngine {
         (pixelWidth !== this.profilerBufferWidth || pixelHeight !== this.profilerBufferHeight);
       this.profilerBufferWidth = pixelWidth;
       this.profilerBufferHeight = pixelHeight;
+
+      // Compared against what was last *reported*, not last set: the first
+      // sizing happens inside `create`, before anyone can be listening.
+      const size = `${pixelWidth}x${pixelHeight}`;
+      if (this.onResize && size !== this.reportedSize) {
+        this.reportedSize = size;
+        this.onResize(pixelWidth, pixelHeight);
+      }
     }
 
     this.renderer.setPixelRatio(scale);

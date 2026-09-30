@@ -44,6 +44,8 @@ describe('GlobalShortcuts', () => {
   const activate = vi.fn();
   const toggleFullscreen = vi.fn();
   const patch = vi.fn();
+  const toggleZen = vi.fn();
+  const zen = signal(false);
   let desktopAvailable = true;
 
   beforeEach(() => {
@@ -58,6 +60,8 @@ describe('GlobalShortcuts', () => {
     activate.mockReset();
     toggleFullscreen.mockReset();
     patch.mockReset();
+    toggleZen.mockReset();
+    zen.set(false);
     desktopAvailable = true;
 
     TestBed.configureTestingModule({
@@ -93,7 +97,13 @@ describe('GlobalShortcuts', () => {
         },
         {
           provide: MenuCommands,
-          useValue: { toggle, toggleInspectorOpen, captureImage },
+          useValue: {
+            toggle,
+            toggleInspectorOpen,
+            captureImage,
+            zen,
+            zenMode: { action: toggleZen },
+          },
         },
         {
           provide: WorkspaceActions,
@@ -193,5 +203,20 @@ describe('GlobalShortcuts', () => {
     window.dispatchEvent(chordEvent('h'));
     expect(toggleInspectorOpen).toHaveBeenCalledOnce();
     expect(toggle).not.toHaveBeenCalled();
+  });
+
+  it('toggles zen mode on a bare Z, and leaves Ctrl+Z to undo', () => {
+    window.dispatchEvent(chordEvent('z'));
+    expect(toggleZen).toHaveBeenCalledOnce();
+
+    window.dispatchEvent(chordEvent('z', { ctrlKey: true }));
+    window.dispatchEvent(chordEvent('z', { altKey: true }));
+    expect(toggleZen).toHaveBeenCalledOnce();
+  });
+
+  it('leaves zen mode on Escape', () => {
+    zen.set(true);
+    window.dispatchEvent(chordEvent('Escape'));
+    expect(zen()).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 
 import type { ImportMode } from '@shadergrove/shared/model';
 import { DesktopPlatform } from '../desktop/desktop-platform';
@@ -190,6 +190,21 @@ export class MenuCommands {
       ),
     shortcut: 'Ctrl+J',
     action: () => this.toggle('bottomPanelOpen'),
+  };
+
+  /**
+   * Zen mode: the whole shell steps aside and the shader has the window. It is
+   * a way of looking, not a layout, so it is never persisted — a reload always
+   * comes back with the chrome.
+   */
+  readonly zen = signal(false);
+
+  readonly zenMode: MenuCommand = {
+    id: 'zen-mode',
+    icon: () => 'fit_screen',
+    label: () => this.i18n.t(this.zen() ? 'action.exitZen' : 'action.enterZen'),
+    shortcut: 'Z',
+    action: () => this.zen.update((on) => !on),
   };
 
   /** The label is the menu's own: "Import shader…" reads oddly under a File menu. */

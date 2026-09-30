@@ -153,6 +153,7 @@ describe('AppTitlebar Help and View menus', () => {
             exportWallpaper: stubCommand('wallpaper'),
             exportAll: stubCommand('export-all'),
             toggleEditor: stubCommand('toggle-editor'),
+            zenMode: stubCommand('zen-mode'),
             exportSequence: stubCommand('sequence'),
             toggle: () => undefined,
             captureImage: () => undefined,

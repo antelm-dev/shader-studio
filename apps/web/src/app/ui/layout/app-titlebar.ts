@@ -381,6 +381,7 @@ export class AppTitlebar {
       action: () => this.layout.toggleInspectorOpen(),
     },
     this.commands.toggleEditor,
+    this.commands.zenMode,
   ];
 
   protected readonly captureCommands: readonly MenuCommand[] = [
