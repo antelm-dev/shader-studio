@@ -1,13 +1,18 @@
 /**
  * The UI and icon fonts ship with the app. Load it in a fresh context (no
  * cache) where every request that leaves 127.0.0.1/localhost is aborted, and
- * check that Inter and Material Symbols still load, no font request failed,
- * and no visible icon shows its ligature text instead of a glyph.
+ * check that Inter, JetBrains Mono and Material Symbols still load, no font
+ * request failed, and no visible icon shows its ligature text instead of a
+ * glyph.
  */
 import type { Browser } from 'playwright';
 
 const LOCAL = /^(?:https?|wss?):\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//;
-const REQUIRED_FAMILIES = ['Inter Variable', 'Material Symbols Outlined'];
+const REQUIRED_FAMILIES = [
+  'Inter Variable',
+  'JetBrains Mono Variable',
+  'Material Symbols Outlined',
+];
 
 export async function checkOfflineFonts(browser: Browser, base: string): Promise<void> {
   const context = await browser.newContext();

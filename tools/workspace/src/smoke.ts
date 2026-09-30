@@ -207,7 +207,9 @@ try {
   // mounted unit tests via setProfilingEnabled(false). Smoke asserts the tab left.
 
   await checkOfflineFonts(browser, BASE);
-  log.info('offline fonts ok — Inter and Material Symbols load with the network blocked');
+  log.info(
+    'offline fonts ok — Inter, JetBrains Mono and Material Symbols load with the network blocked',
+  );
 
   await checkPluginSandbox(browser, BASE);
   log.info('plugin sandbox ok — escapes blocked, terminate destroys the Worker');
