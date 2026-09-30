@@ -345,8 +345,6 @@ export class App {
     },
   ];
 
-  private paletteOpen = false;
-
   /**
    * The command palette: the menus' own commands under the menus' own headings,
    * and the shader list.
@@ -354,10 +352,13 @@ export class App {
    * Deliberately not lazy-loaded. Ctrl+K is followed by typing at once, and
    * every key pressed while a chunk was still arriving would land on the page
    * instead — where S captures an image and H hides the inspector.
+   *
+   * Never over another dialog, itself included: a modal is a question that has
+   * to be answered first, and the export dialog in particular stays open while
+   * a capture is running — no time to switch shader from underneath it.
    */
   protected openPalette(): void {
-    if (this.paletteOpen) return;
-    this.paletteOpen = true;
+    if (this.dialog.openDialogs.length > 0) return;
 
     const data: CommandPaletteData = {
       groups: [
@@ -371,21 +372,18 @@ export class App {
       ],
     };
 
-    this.dialog
-      .open(CommandPalette, {
-        data,
-        ariaLabel: this.i18n.t('palette.title'),
-        autoFocus: 'input',
-        // Focus at once, not after the open animation: the next key pressed
-        // is the first letter of what is being searched for.
-        delayFocusTrap: false,
-        restoreFocus: true,
-        width: '560px',
-        maxWidth: 'calc(100vw - 32px)',
-        position: { top: '12vh' },
-      })
-      .afterClosed()
-      .subscribe(() => (this.paletteOpen = false));
+    this.dialog.open(CommandPalette, {
+      data,
+      ariaLabel: this.i18n.t('palette.title'),
+      autoFocus: 'input',
+      // Focus at once, not after the open animation: the next key pressed
+      // is the first letter of what is being searched for.
+      delayFocusTrap: false,
+      restoreFocus: true,
+      width: '560px',
+      maxWidth: 'calc(100vw - 32px)',
+      position: { top: '12vh' },
+    });
   }
 
   // --- Panel widths -------------------------------------------------------

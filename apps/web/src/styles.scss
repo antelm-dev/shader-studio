@@ -122,7 +122,7 @@ html {
       inverse-on-surface: light-dark(#f2f2f3, #303033),
       // Selection is a quiet tint of the accent rather than a second hue.
       secondary-container:
-        color-mix(in srgb, var(--mat-sys-primary) 20%, var(--mat-sys-surface-container)),
+        color-mix(in srgb, var(--mat-sys-primary) 14%, var(--mat-sys-surface-container)),
       on-secondary-container: var(--mat-sys-on-surface),
     )
   );
