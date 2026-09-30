@@ -25,6 +25,7 @@ import { createNestApi } from './api/bootstrap';
 import { createAuth } from './auth/auth';
 import { readAuthConfig } from './auth/auth-config';
 import { createLibrary } from './create-library';
+import { readExploreConfig } from './publication/explore-config';
 import { securityHeaders } from './security-headers';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
@@ -49,9 +50,15 @@ app.use(securityHeaders({ production: process.env['NODE_ENV'] === 'production' }
 let routerPromise: Promise<Application> | null = null;
 function ensureRouter(): Promise<Application> {
   routerPromise ??= createLibrary()
-    .then(async ({ library, authDatabase }) => {
+    .then(async ({ library, authDatabase, publications }) => {
       const auth = createAuth(authDatabase, readAuthConfig());
-      return (await createNestApi(library, auth)).handler;
+      const explore = readExploreConfig();
+      return (
+        await createNestApi(library, auth, undefined, {
+          adminUserIds: explore.adminUserIds,
+          ...(explore.enabled ? { publications } : {}),
+        })
+      ).handler;
     })
     .catch((error: unknown) => {
       logger.error(

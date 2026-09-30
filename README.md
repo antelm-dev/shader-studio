@@ -191,6 +191,11 @@ The server reads these directly; under Compose they are derived from `.env`
 | `NG_ALLOWED_HOSTS`    | `localhost,127.0.0.1,[::1]`            | Comma-separated hosts SSR may render for; set this when deploying            |
 | `DATABASE_POOL_MAX`   | `10`                                   | Maximum PostgreSQL pool connections                                          |
 
+Public Explore — publishing shader snapshots for anyone to browse and copy — is
+off unless `PUBLIC_EXPLORE_ENABLED=1`, and moderated by the account ids listed
+in `PUBLIC_EXPLORE_ADMIN_USER_IDS`. Its routes and rules are in
+[docs/public-explore-api.md](docs/public-explore-api.md).
+
 Compose-only variables (`.env`): `POSTGRES_DB`, `POSTGRES_USER`,
 `POSTGRES_PASSWORD` (build `DATABASE_URL`), plus `SHADER_PORT` (host port) and
 `SHADER_ALLOWED_HOSTS` (feeds `NG_ALLOWED_HOSTS`).

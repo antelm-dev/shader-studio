@@ -63,6 +63,9 @@ services:
       # Secure cookies and HSTS only mean anything behind TLS, which is the
       # proxy's job. Set TRUST_PROXY=1 once a proxy you control is in front.
       TRUST_PROXY: ${TRUST_PROXY:-0}
+      # Public Explore, off unless set to 1 — see .env.example.
+      PUBLIC_EXPLORE_ENABLED: ${PUBLIC_EXPLORE_ENABLED:-0}
+      PUBLIC_EXPLORE_ADMIN_USER_IDS: ${PUBLIC_EXPLORE_ADMIN_USER_IDS:-}
     # A legacy file library can be mounted read-only to import it once via the
     # `migrate` profile below. It is NOT the primary store anymore.
     # volumes:
