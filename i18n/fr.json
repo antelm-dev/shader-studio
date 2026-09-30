@@ -211,6 +211,7 @@
   "inspector.postProcessing": "Post-traitement",
   "inspector.textures": "Textures",
   "inspector.presets": "Préréglages",
+  "inspector.sections": "Sections de l'inspecteur",
   "panel.profiler": "Profileur",
   "inspector.presetWithRender": "Restaure les paramètres et les réglages de rendu. Clic droit pour supprimer",
   "inspector.presetValuesOnly": "Restaure les valeurs des paramètres. Clic droit pour supprimer",

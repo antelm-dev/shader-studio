@@ -211,6 +211,7 @@
   "inspector.postProcessing": "Post-processing",
   "inspector.textures": "Textures",
   "inspector.presets": "Presets",
+  "inspector.sections": "Inspector sections",
   "panel.profiler": "Profiler",
   "inspector.presetWithRender": "Restores the parameter values and the render settings. Right-click to delete",
   "inspector.presetValuesOnly": "Restores the parameter values. Right-click to delete",

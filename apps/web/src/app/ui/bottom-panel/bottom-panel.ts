@@ -190,8 +190,7 @@ const TABS: readonly BottomPanelTab[] = ['problems', 'output', 'profiler'];
       min-height: 0;
       overflow: hidden;
       border-top: 1px solid var(--mat-sys-outline-variant);
-      background: color-mix(in srgb, var(--mat-sys-surface-container-lowest) 94%, transparent);
-      backdrop-filter: blur(18px);
+      background: var(--mat-sys-surface-container-lowest);
       transition: height 160ms ease;
     }
 
@@ -251,7 +250,7 @@ const TABS: readonly BottomPanelTab[] = ['problems', 'output', 'profiler'];
       min-height: 34px;
       padding: 3px 5px 3px 7px;
       border-bottom: 1px solid var(--mat-sys-outline-variant);
-      background: color-mix(in srgb, var(--mat-sys-surface-container-low) 82%, transparent);
+      background: var(--mat-sys-surface-container-low);
     }
 
     .tablist {

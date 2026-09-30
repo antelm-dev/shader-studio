@@ -199,7 +199,7 @@ import { PreviewWindowControls } from './preview-window-controls';
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: #0a0c10;
+      background: #0b0b0c;
     }
 
     :host(.stage) {
@@ -210,7 +210,7 @@ import { PreviewWindowControls } from './preview-window-controls';
     :host(.floating),
     :host(.minimized) {
       border: 1px solid var(--mat-sys-outline-variant);
-      border-radius: var(--mat-sys-corner-medium, 8px);
+      border-radius: var(--mat-sys-corner-large);
       box-shadow: var(--mat-sys-level4);
     }
 
@@ -236,8 +236,8 @@ import { PreviewWindowControls } from './preview-window-controls';
       min-height: 34px;
       padding: 2px 5px 2px 8px;
       border-bottom: 1px solid var(--mat-sys-outline-variant);
-      background: color-mix(in srgb, var(--mat-sys-surface-container-high) 92%, transparent);
-      backdrop-filter: blur(18px);
+      background: var(--studio-glass);
+      backdrop-filter: var(--studio-glass-filter);
       color: var(--mat-sys-on-surface);
       font: var(--mat-sys-label-large);
       user-select: none;

@@ -72,11 +72,7 @@ import {
       min-height: 0;
       overflow: hidden;
       pointer-events: auto;
-      border-radius: var(--mat-sys-corner-small);
-      border: 1px solid var(--mat-sys-outline-variant);
-      background: color-mix(in srgb, var(--mat-sys-surface-container) 80%, transparent);
-      backdrop-filter: blur(18px);
-      box-shadow: var(--mat-sys-level2);
+      background: var(--mat-sys-surface-container-low);
     }
 
     :host(.surface-frame--animating) {
@@ -92,29 +88,34 @@ import {
       }
     }
 
+    // Docked: one of the workspace's walls, flush with the window edge and
+    // parted from the stage by a hairline rather than lifted off it.
     :host(.docked),
     :host(.minimized) {
       grid-area: inspector;
       align-self: stretch;
       min-width: 0;
-      margin: 12px;
-      // Docked panels are part of the workspace: a border, no lift.
-      box-shadow: none;
+      border-left: 1px solid var(--mat-sys-outline-variant);
     }
 
     :host(.minimized) {
       align-self: start;
       height: auto;
+      border-bottom: 1px solid var(--mat-sys-outline-variant);
     }
 
     :host(.maximized) {
       position: absolute;
       inset: 0;
-      box-shadow: var(--mat-sys-level4);
     }
 
+    // Floating: a window over the shader, so glass, with a lift.
     :host(.floating) {
       position: absolute;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: var(--mat-sys-corner-large);
+      background: var(--studio-glass);
+      backdrop-filter: var(--studio-glass-filter);
       box-shadow: var(--mat-sys-level4);
     }
   `,

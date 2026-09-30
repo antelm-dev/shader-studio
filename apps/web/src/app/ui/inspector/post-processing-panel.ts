@@ -326,30 +326,40 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
     .sliders {
       display: flex;
       flex-direction: column;
-      gap: 6px;
     }
 
+    /* One row per setting, laid out like the parameter panel's: name, track,
+       value. The label's text and its value are siblings in the markup, so the
+       label dissolves into the grid and the value is ordered after the slider. */
     .field {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
+      display: grid;
+      grid-template-columns: 38% minmax(0, 1fr) 40px;
+      align-items: center;
+      column-gap: 8px;
+      min-height: 26px;
     }
 
     .field-label {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      display: contents;
       color: var(--mat-sys-on-surface-variant);
       font: var(--mat-sys-label-medium);
     }
 
     .value {
+      order: 3;
+      color: var(--mat-sys-on-surface);
+      font: 11.5px / 1 var(--studio-font-mono);
       font-variant-numeric: tabular-nums;
-      color: var(--mat-sys-primary);
+      text-align: right;
     }
 
+    /* Material lays its thumb out against a 48px host, so the row is tightened
+       with negative margins rather than by shrinking the slider itself. */
     mat-slider {
-      width: 100%;
+      order: 2;
+      width: auto;
+      min-width: 0;
+      margin: -11px 4px;
     }
   `,
 })

@@ -214,6 +214,7 @@ export const TRANSLATION_KEYS = [
   'inspector.postProcessing',
   'inspector.textures',
   'inspector.presets',
+  'inspector.sections',
   'panel.profiler',
   'inspector.presetWithRender',
   'inspector.presetValuesOnly',

@@ -1,7 +1,14 @@
-import { Component, computed, inject, input, output } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  computed,
+  inject,
+  input,
+  output,
+  viewChildren,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { activePostProcessingCount } from '@shadergrove/shared/model';
@@ -9,12 +16,20 @@ import { INSPECTOR_TABS, type InspectorTab } from '@shadergrove/shared/panel-pre
 import { ShaderStore } from '../../workspace/shader-store';
 import { GuiPanel } from './gui-panel';
 import { InspectorWindowControls } from './inspector-window-controls';
+import type { TranslationKey } from '../../i18n/keys';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { PostProcessingPanel } from './post-processing-panel';
 import { PresetPanel } from './preset-panel';
 import { TexturePanel } from './texture-panel';
 import { SurfaceLayoutService } from '../../surfaces';
 import { WorkspaceActions } from '../workspace-actions';
+
+const TAB_META: Record<InspectorTab, { icon: string; labelKey: TranslationKey }> = {
+  controls: { icon: 'tune', labelKey: 'inspector.controls' },
+  textures: { icon: 'image', labelKey: 'inspector.textures' },
+  postProcessing: { icon: 'wand_stars', labelKey: 'inspector.postProcessing' },
+  presets: { icon: 'bookmarks', labelKey: 'inspector.presets' },
+};
 
 /**
  * The inspector: parameters, textures and presets, one at a time.
@@ -24,13 +39,19 @@ import { WorkspaceActions } from '../workspace-actions';
  * shader that used neither — and that the controls, the thing you actually came
  * to turn, started below the fold. Tabs are what buy that space back.
  *
- * `preserveContent` is load-bearing, not a nicety. Without it Material detaches
- * an inactive tab's portal and destroys the view inside it, which would tear down
- * lil-gui and re-run its build on every tab switch, losing which folders you had
- * open, and would make the texture panel re-resolve four thumbnails each time you
- * came back to it. The same "never tear it down" rule the editor shell lives by.
+ * Every panel stays mounted and an inactive one is only `hidden`. That is
+ * load-bearing, not a nicety: destroying the view would tear down lil-gui and
+ * re-run its build on every tab switch, losing which folders you had open, and
+ * would make the texture panel re-resolve four thumbnails each time you came
+ * back to it. The same "never tear it down" rule the editor shell lives by.
  *
- * The tab bar also carries the counts, so you can see there are two textures
+ * The tab strip is the WAI-ARIA tabs pattern with automatic activation: one tab
+ * is in the tab order, the arrow keys, Home and End move between them, and the
+ * panel follows focus because every panel is already built. The tabs are
+ * icons in a segmented control and the header names the open one, which is
+ * what lets four tabs and their counts fit a 260px rail in any language.
+ *
+ * The strip also carries the counts, so you can see there are two textures
  * bound without opening the tab to find out.
  */
 @Component({
@@ -40,7 +61,6 @@ import { WorkspaceActions } from '../workspace-actions';
     InspectorWindowControls,
     MatButtonModule,
     MatIconModule,
-    MatTabsModule,
     MatTooltipModule,
     PostProcessingPanel,
     PresetPanel,
@@ -64,7 +84,9 @@ import { WorkspaceActions } from '../workspace-actions';
         <mat-icon>chevron_right</mat-icon>
       </button>
 
-      <span class="spacer"></span>
+      <!-- The open tab's name. The tabs themselves are icons, so four of them
+           and their counts fit a 260px rail in any language. -->
+      <h2 class="title">{{ label() | translate }}</h2>
 
       <!-- One action slot, belonging to whichever tab is open. Keeping it here
            rather than inside each panel is what stops the inspector growing a
@@ -101,53 +123,74 @@ import { WorkspaceActions } from '../workspace-actions';
       <app-inspector-window-controls />
     </header>
 
-    <mat-tab-group
-      class="tabs"
-      [class.collapsed]="collapsed()"
-      [preserveContent]="true"
-      [selectedIndex]="index()"
-      (selectedIndexChange)="selectTab($event)"
-    >
-      <mat-tab>
-        <ng-template mat-tab-label>
-          {{ 'inspector.controls' | translate }}
-          @if (store.controls().length; as count) {
-            <span class="badge">{{ count }}</span>
-          }
-        </ng-template>
+    <div class="body" [class.collapsed]="collapsed()">
+      <div
+        class="tablist"
+        role="tablist"
+        aria-orientation="horizontal"
+        [attr.aria-label]="'inspector.sections' | translate"
+        (keydown)="onTabKeydown($event)"
+      >
+        @for (item of tabs; track item.id) {
+          @let selected = tab() === item.id;
+          <button
+            #tabButton
+            type="button"
+            role="tab"
+            class="tab"
+            [id]="'inspector-tab-' + item.id"
+            [attr.aria-selected]="selected"
+            [attr.aria-controls]="'inspector-panel-' + item.id"
+            [attr.aria-label]="item.labelKey | translate"
+            [attr.tabindex]="selected ? 0 : -1"
+            [matTooltip]="item.labelKey | translate"
+            (click)="select(item.id)"
+          >
+            <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
+            @if (badges()[item.id]; as badge) {
+              <span class="badge">{{ badge }}</span>
+            }
+          </button>
+        }
+      </div>
+
+      <div
+        class="panel"
+        role="tabpanel"
+        id="inspector-panel-controls"
+        aria-labelledby="inspector-tab-controls"
+        [hidden]="tab() !== 'controls'"
+      >
         <app-gui-panel />
-      </mat-tab>
-
-      <mat-tab>
-        <ng-template mat-tab-label>
-          {{ 'inspector.textures' | translate }}
-          @if (boundChannels(); as bound) {
-            <span class="badge">{{ bound }}/4</span>
-          }
-        </ng-template>
+      </div>
+      <div
+        class="panel"
+        role="tabpanel"
+        id="inspector-panel-textures"
+        aria-labelledby="inspector-tab-textures"
+        [hidden]="tab() !== 'textures'"
+      >
         <app-texture-panel />
-      </mat-tab>
-
-      <mat-tab>
-        <ng-template mat-tab-label>
-          {{ 'inspector.postProcessing' | translate }}
-          @if (activeEffects(); as count) {
-            <span class="badge">{{ count }}</span>
-          }
-        </ng-template>
+      </div>
+      <div
+        class="panel"
+        role="tabpanel"
+        id="inspector-panel-postProcessing"
+        aria-labelledby="inspector-tab-postProcessing"
+        [hidden]="tab() !== 'postProcessing'"
+      >
         <app-post-processing-panel />
-      </mat-tab>
-
-      <mat-tab>
-        <ng-template mat-tab-label>
-          {{ 'inspector.presets' | translate }}
-          @if (store.presets().length; as count) {
-            <span class="badge">{{ count }}</span>
-          }
-        </ng-template>
+      </div>
+      <div
+        class="panel"
+        role="tabpanel"
+        id="inspector-panel-presets"
+        aria-labelledby="inspector-tab-presets"
+        [hidden]="tab() !== 'presets'"
+      >
         <app-preset-panel />
-      </mat-tab>
-    </mat-tab-group>
+      </div>
+    </div>
   `,
   styles: `
     :host {
@@ -163,7 +206,8 @@ import { WorkspaceActions } from '../workspace-actions';
       display: flex;
       align-items: center;
       flex: 0 0 auto;
-      gap: 4px;
+      gap: 2px;
+      padding: 4px 4px 4px 2px;
       user-select: none;
     }
 
@@ -173,11 +217,18 @@ import { WorkspaceActions } from '../workspace-actions';
       cursor: move;
     }
 
-    .spacer {
+    .title {
       flex: 1;
+      min-width: 0;
+      margin: 0 4px 0 2px;
+      overflow: hidden;
+      color: var(--mat-sys-on-surface);
+      font: var(--mat-sys-title-small);
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
-    .tabs {
+    .body {
       display: flex;
       flex-direction: column;
       flex: 1;
@@ -185,54 +236,106 @@ import { WorkspaceActions } from '../workspace-actions';
     }
 
     /* Minimized: the header (and its window controls) stays visible so the
-       inspector can be expanded again; only the tab content collapses. */
-    .tabs.collapsed {
+       inspector can be expanded again; only the tabs and their content collapse. */
+    .body.collapsed {
       flex: 0 0 0;
       height: 0;
       overflow: hidden;
       visibility: hidden;
     }
 
-    /* Material sizes the body to its content by default; here it has to take the
-       height it is given and let the panel inside it scroll. */
-    .tabs ::ng-deep .mat-mdc-tab-body-wrapper {
-      flex: 1;
-      min-height: 0;
+    /* A segmented control: four equal cells in one recessed track. */
+    .tablist {
+      display: flex;
+      flex: 0 0 auto;
+      gap: 2px;
+      margin: 0 8px 8px;
+      padding: 2px;
+      border-radius: calc(var(--mat-sys-corner-small) + 2px);
+      background: color-mix(in srgb, var(--mat-sys-on-surface) 6%, transparent);
     }
 
-    .tabs ::ng-deep .mat-mdc-tab-body-content {
-      box-sizing: border-box;
-      overflow-y: auto;
-      overflow-x: hidden;
-      height: 100%;
-      padding: 12px 0 4px;
-    }
-
-    /* Keep every preserved tab panel stretched to the full body height, even
-       when its own content is short. */
-    .tabs ::ng-deep .mat-mdc-tab-body-content > app-texture-panel,
-    .tabs ::ng-deep .mat-mdc-tab-body-content > app-preset-panel {
-      box-sizing: border-box;
-      height: 100%;
-    }
-
-    /* Three tabs have to fit a 260px rail: the label is what gives, not the
-       target size. */
-    .tabs ::ng-deep .mat-mdc-tab {
-      flex-grow: 1;
+    .tab {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1 1 0;
+      gap: 5px;
       min-width: 0;
-      padding: 0 8px;
-      --mat-tab-header-label-text-size: var(--mat-sys-label-medium-size);
+      height: 26px;
+      padding: 0 4px;
+      border: 0;
+      border-radius: var(--mat-sys-corner-small);
+      background: transparent;
+      color: var(--mat-sys-on-surface-variant);
+      cursor: pointer;
+      transition:
+        background-color 140ms ease,
+        color 140ms ease;
+    }
+
+    .tab:hover {
+      color: var(--mat-sys-on-surface);
+    }
+
+    .tab:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: -2px;
+    }
+
+    /* The selected cell is raised out of the track rather than tinted: lighter
+       than the track in both schemes. */
+    .tab[aria-selected='true'] {
+      background: light-dark(
+        var(--mat-sys-surface-container-lowest),
+        var(--mat-sys-surface-container-highest)
+      );
+      box-shadow: 0 1px 2px rgb(0 0 0 / 22%);
+      color: var(--mat-sys-on-surface);
+    }
+
+    .tab mat-icon {
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
+      font-size: 18px;
     }
 
     .badge {
-      margin-left: 6px;
-      padding: 0 6px;
-      border-radius: 999px;
-      background: var(--mat-sys-surface-container-highest);
-      color: var(--mat-sys-on-surface-variant);
-      font: var(--mat-sys-label-small);
-      line-height: 18px;
+      font: 500 10.5px / 1 var(--studio-font-mono);
+    }
+
+    .tab[aria-selected='true'] .badge {
+      color: var(--mat-sys-primary);
+    }
+
+    .panel {
+      box-sizing: border-box;
+      flex: 1;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding: 8px 0 4px;
+    }
+
+    /* An author rule for the box would otherwise beat the UA's [hidden]. */
+    .panel[hidden] {
+      display: none;
+    }
+
+    /* Keep a short panel stretched to the full height, so its drop targets and
+       context menus cover the whole tab. */
+    .panel > app-texture-panel,
+    .panel > app-preset-panel {
+      display: block;
+      box-sizing: border-box;
+      min-height: 100%;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .tab {
+        transition: none;
+      }
     }
   `,
 })
@@ -248,8 +351,11 @@ export class InspectorPanel {
   readonly dragEnabled = input(false);
   readonly dragStart = output<PointerEvent>();
 
+  protected readonly tabs = INSPECTOR_TABS.map((id) => ({ id, ...TAB_META[id] }));
   protected readonly tab = computed<InspectorTab>(() => this.layout.inspectorTab());
-  protected readonly index = computed(() => INSPECTOR_TABS.indexOf(this.tab()));
+  protected readonly label = computed(() => TAB_META[this.tab()].labelKey);
+
+  private readonly tabButtons = viewChildren<ElementRef<HTMLButtonElement>>('tabButton');
 
   /** How many of the four channels have an image bound. */
   protected readonly boundChannels = computed(
@@ -262,9 +368,30 @@ export class InspectorPanel {
     return render ? activePostProcessingCount(render) : 0;
   });
 
-  protected selectTab(index: number): void {
-    const tab = INSPECTOR_TABS[index];
-    if (tab) this.layout.setInspectorTab(tab);
+  /** What each tab's count shows; `null` hides it, as an empty tab has nothing to count. */
+  protected readonly badges = computed<Record<InspectorTab, string | null>>(() => {
+    const bound = this.boundChannels();
+    return {
+      controls: count(this.store.controls().length),
+      textures: bound ? `${bound}/4` : null,
+      postProcessing: count(this.activeEffects()),
+      presets: count(this.store.presets().length),
+    };
+  });
+
+  protected select(tab: InspectorTab): void {
+    this.layout.setInspectorTab(tab);
+  }
+
+  /** Arrow keys, Home and End move between tabs; the panel follows the focus. */
+  protected onTabKeydown(event: KeyboardEvent): void {
+    const current = INSPECTOR_TABS.indexOf(this.tab());
+    const index = nextTabIndex(event.key, current, INSPECTOR_TABS.length);
+    if (index === null) return;
+
+    event.preventDefault();
+    this.select(INSPECTOR_TABS[index]);
+    this.tabButtons()[index]?.nativeElement.focus();
   }
 
   protected collapse(): void {
@@ -278,5 +405,25 @@ export class InspectorPanel {
     if (target?.closest('button, a, input, [role="menuitem"]')) return;
 
     this.dragStart.emit(event);
+  }
+}
+
+function count(value: number): string | null {
+  return value > 0 ? String(value) : null;
+}
+
+/** The tab a key moves to in a horizontal tab list, or `null` when the key is not ours. */
+export function nextTabIndex(key: string, current: number, length: number): number | null {
+  switch (key) {
+    case 'ArrowRight':
+      return (current + 1) % length;
+    case 'ArrowLeft':
+      return (current - 1 + length) % length;
+    case 'Home':
+      return 0;
+    case 'End':
+      return length - 1;
+    default:
+      return null;
   }
 }

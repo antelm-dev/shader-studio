@@ -1,7 +1,9 @@
-// The shell floats above the canvas. Every surface that is not actively being
-// read is translucent, so the shader stays visible through the chrome — that is
-// the whole premise of the app, and it is why nothing here uses an opaque
-// background by default.
+// The shell floats above the canvas. Docked panels are the workspace's walls:
+// opaque, so text and controls read the same over any shader, and unblurred,
+// so nothing is recomputed under a canvas that repaints every frame. What
+// floats over the shader — windows, the collapsed-inspector button — is glass
+// (`--studio-glass`). Zen mode takes the walls down entirely when the shader is
+// what you came to look at.
 
 :host {
   position: relative;
@@ -38,8 +40,7 @@ app-titlebar {
   height: 44px;
   min-height: 44px;
   padding-inline: 8px 12px;
-  background: color-mix(in srgb, var(--mat-sys-surface-container) 82%, transparent);
-  backdrop-filter: blur(18px);
+  background: var(--mat-sys-surface-container-low);
   border-bottom: 1px solid var(--mat-sys-outline-variant);
 
   // The toolbar's own width — not the viewport's — decides whether the quick
@@ -255,8 +256,7 @@ app-titlebar {
 .drawer {
   width: 300px;
   border-right: 1px solid var(--mat-sys-outline-variant);
-  background: color-mix(in srgb, var(--mat-sys-surface-container-low) 88%, transparent);
-  backdrop-filter: blur(18px);
+  background: var(--mat-sys-surface-container-low);
 }
 
 .workspace {
@@ -350,8 +350,8 @@ app-titlebar {
   padding: 0;
   border-radius: var(--mat-sys-corner-small);
   border: 1px solid var(--mat-sys-outline-variant);
-  background: color-mix(in srgb, var(--mat-sys-surface-container) 80%, transparent);
-  backdrop-filter: blur(18px);
+  background: var(--studio-glass);
+  backdrop-filter: var(--studio-glass-filter);
   box-shadow: var(--mat-sys-level2);
   color: var(--mat-sys-on-surface-variant);
   cursor: pointer;
@@ -400,7 +400,8 @@ app-titlebar {
   .inspector.minimized {
     width: auto !important;
     max-height: 42dvh;
-    margin: 8px !important;
+    border-left: 0;
+    border-top: 1px solid var(--mat-sys-outline-variant);
   }
 
   .browser-handle {
