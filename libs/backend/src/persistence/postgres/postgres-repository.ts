@@ -14,6 +14,11 @@ import { alias } from 'drizzle-orm/pg-core';
 import { Pool } from 'pg';
 
 import { StorageError } from '../../library/storage-error';
+import {
+  PublicationStore,
+  type PublicationRepository,
+  type SqlExecutor,
+} from '../../publication/publication-store';
 import { runMigrations } from '../migration-runner';
 import {
   type AssetKey,
@@ -56,7 +61,7 @@ export interface PostgresRepositoryOptions {
   connectionTimeoutMs?: number;
 }
 
-export class PostgresRepository implements ShaderRepository {
+export class PostgresRepository implements ShaderRepository, PublicationRepository {
   private pool: Pool | null = null;
   private db: PostgresDb | null = null;
   private authDb: object | null = null;
@@ -131,9 +136,21 @@ export class PostgresRepository implements ShaderRepository {
     await pool?.end();
   }
 
-  async transaction<T>(work: (tx: ShaderTx) => Promise<T>): Promise<T> {
+  transaction<T>(work: (tx: ShaderTx) => Promise<T>): Promise<T> {
+    return this.publicationTransaction(work);
+  }
+
+  get publications(): PublicationStore {
+    return new PublicationStore(executor(this.database()), 'pg');
+  }
+
+  async publicationTransaction<T>(
+    work: (tx: ShaderTx, publications: PublicationStore) => Promise<T>,
+  ): Promise<T> {
     try {
-      return await this.database().transaction((tx) => work(new PgOps(tx, true)));
+      return await this.database().transaction((tx) =>
+        work(new PgOps(tx, true), new PublicationStore(executor(tx), 'pg')),
+      );
     } catch (error) {
       throw asStorageError(error, 'Database transaction failed');
     }
@@ -521,6 +538,28 @@ class PgOps implements ShaderTx {
       .values({ key, value })
       .onConflictDoUpdate({ target: storageMetadata.key, set: { value } });
   }
+}
+
+/**
+ * The pool, or an open transaction, as the publication store sees it. Its SQL
+ * uses `?` placeholders and never a literal question mark, so splitting on one
+ * is a faithful way to hand Drizzle the text and the parameters separately.
+ */
+function executor(db: Pick<PostgresDb, 'execute'>): SqlExecutor {
+  const execute = (text: string, params: readonly unknown[] = []) =>
+    db.execute(
+      sql.join(
+        text
+          .split('?')
+          .flatMap((part, index) =>
+            index < params.length ? [sql.raw(part), sql.param(params[index])] : [sql.raw(part)],
+          ),
+      ),
+    );
+  return {
+    all: async (text, params) => (await execute(text, params)).rows,
+    run: async (text, params) => (await execute(text, params)).rowCount ?? 0,
+  };
 }
 
 function toAssetMeta(row: {

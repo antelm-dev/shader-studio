@@ -18,6 +18,11 @@ import { DatabaseSync, type SQLRow, type StatementSync } from 'node:sqlite';
 import { drizzle as drizzleProxy } from 'drizzle-orm/sqlite-proxy';
 
 import { StorageError } from '../../library/storage-error';
+import {
+  PublicationStore,
+  type PublicationRepository,
+  type SqlExecutor,
+} from '../../publication/publication-store';
 import { runMigrations } from '../migration-runner';
 import {
   type AssetKey,
@@ -66,7 +71,7 @@ export interface SqliteRepositoryOptions {
   busyTimeoutMs?: number;
 }
 
-export class SqliteRepository implements ShaderRepository {
+export class SqliteRepository implements ShaderRepository, PublicationRepository {
   private db: DatabaseSync | null = null;
   private authDb: object | null = null;
   private readonly mutex = new Mutex();
@@ -167,6 +172,16 @@ export class SqliteRepository implements ShaderRepository {
         throw asStorageError(error, 'SQLite transaction failed');
       }
     });
+  }
+
+  get publications(): PublicationStore {
+    return new PublicationStore(executor(this.database()), 'sqlite');
+  }
+
+  publicationTransaction<T>(
+    work: (tx: ShaderTx, publications: PublicationStore) => Promise<T>,
+  ): Promise<T> {
+    return this.transaction((tx) => work(tx, this.publications));
   }
 
   async listShaders(scope: UserScope): Promise<ShaderSummaryRow[]> {
@@ -447,6 +462,15 @@ class SqliteTx implements ShaderTx {
       throw asStorageError(error, 'SQLite write failed');
     }
   }
+}
+
+/** The one open connection as the publication store sees it; a transaction is whatever is open on it. */
+function executor(db: DatabaseSync): SqlExecutor {
+  type Bind = Parameters<StatementSync['all']>;
+  return {
+    all: async (sql, params = []) => db.prepare(sql).all(...(params as Bind)),
+    run: async (sql, params = []) => Number(db.prepare(sql).run(...(params as Bind)).changes),
+  };
 }
 
 function toShaderRow(row: SQLRow): ShaderRow {

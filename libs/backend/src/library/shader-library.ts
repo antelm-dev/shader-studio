@@ -74,6 +74,7 @@ import {
   type ShaderRepository,
   type ShaderRow,
   type ShaderTx,
+  type StoredAsset,
   type StoredShader,
 } from '../persistence/shader-repository';
 
@@ -676,6 +677,31 @@ export class ShaderLibrary {
       channels: channels as unknown as TextureChannelPayloads,
       thumbnail,
     };
+  }
+
+  /**
+   * The shader and every asset's bytes exactly as `tx` sees them — what a
+   * publication snapshot is cut from. {@link exportOne} reads the same pieces
+   * in separate statements and so can straddle a concurrent write; this holds
+   * the shader row for the whole transaction, and every child-row write takes
+   * that lock first. Only a shader the scope owns: a template or someone
+   * else's reads as `not_found`.
+   */
+  async snapshotWithin(
+    tx: ShaderTx,
+    id: string,
+  ): Promise<{ record: ShaderRecord; assets: StoredAsset[] }> {
+    const validId = this.validId(id);
+    const stored = await tx.loadShader(this.scope, validId);
+    if (!stored || stored.row.kind !== 'shader' || stored.row.ownerUserId !== this.scope.userId) {
+      throw new StorageError('not_found', `Shader "${id}" was not found`);
+    }
+    const assets: StoredAsset[] = [];
+    for (const meta of stored.assets) {
+      const asset = await tx.loadAsset(this.scope, validId, meta.key);
+      if (asset) assets.push(asset);
+    }
+    return { record: this.mapRecord(stored), assets };
   }
 
   async exportAll(): Promise<ShaderPayload[]> {

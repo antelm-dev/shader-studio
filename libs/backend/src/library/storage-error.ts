@@ -7,7 +7,14 @@ import type { Result } from '@shadergrove/shared/validate';
  */
 export class StorageError extends Error {
   constructor(
-    readonly code: 'not_found' | 'conflict' | 'invalid' | 'io' | 'unauthorized',
+    readonly code:
+      | 'not_found'
+      | 'conflict'
+      | 'invalid'
+      | 'io'
+      | 'unauthorized'
+      | 'forbidden'
+      | 'rate_limited',
     message: string,
     readonly details: string[] = [],
   ) {
@@ -22,12 +29,18 @@ export class StorageError extends Error {
       // is known there, just not entitled, and must not learn the difference.
       case 'unauthorized':
         return 401;
+      // The caller is known and the thing exists; they are simply not allowed
+      // (not a moderator, publishing restricted, a request from another site).
+      case 'forbidden':
+        return 403;
       case 'not_found':
         return 404;
       case 'conflict':
         return 409;
       case 'invalid':
         return 400;
+      case 'rate_limited':
+        return 429;
       case 'io':
         return 500;
       default:
