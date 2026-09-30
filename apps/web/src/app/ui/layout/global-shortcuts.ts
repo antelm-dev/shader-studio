@@ -102,6 +102,16 @@ export class GlobalShortcuts {
         return true;
       }
 
+      // The command palette. Not while Monaco has focus: there Ctrl+K is the
+      // first half of the editor's own chords (Ctrl+K Ctrl+C, and the rest).
+      case 'k':
+        if (event.target instanceof HTMLElement && event.target.closest('.monaco-editor')) {
+          return false;
+        }
+        event.preventDefault();
+        this.commands.openPalette();
+        return true;
+
       // The classic editor convention for a bottom panel. Handled here, ahead
       // of `isTyping`, so it also works while Monaco has focus.
       case 'j':

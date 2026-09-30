@@ -64,6 +64,12 @@ export const SHORTCUT_CATALOG: readonly ShortcutSection[] = [
         chord: chord(['Ctrl', 'Shift', 'I']),
         source: 'app',
       },
+      {
+        id: 'command-palette',
+        labelKey: 'help.shortcuts.commandPalette',
+        chord: chord(['Ctrl', 'K']),
+        source: 'app',
+      },
     ],
   },
   {

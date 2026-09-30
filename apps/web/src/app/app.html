@@ -131,6 +131,18 @@
         }
       </div>
 
+      <!-- Every command and every shader by name. It stays at any width: it is
+           what stands in for the quick actions once they no longer fit. -->
+      <button
+        matIconButton
+        type="button"
+        [matTooltip]="'palette.open' | translate"
+        [attr.aria-label]="'palette.openAria' | translate"
+        (click)="openPalette()"
+      >
+        <mat-icon>search</mat-icon>
+      </button>
+
       <button
         matIconButton
         type="button"

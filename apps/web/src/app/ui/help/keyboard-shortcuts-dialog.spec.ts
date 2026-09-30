@@ -71,6 +71,7 @@ describe('KeyboardShortcutsDialog', () => {
       'Save shader',
       'Full screen',
       'Toggle developer tools',
+      'Command palette',
       'New source file',
       'Compile now',
       'Close active document',

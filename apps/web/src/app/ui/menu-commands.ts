@@ -63,6 +63,21 @@ export class MenuCommands {
     this.filePicker = pick;
   }
 
+  private palette: (() => void) | null = null;
+
+  /**
+   * The command palette is opened from a keyboard shortcut, but what it lists
+   * is the root component's menus — so, like the file picker, the component
+   * that owns them registers how.
+   */
+  usePalette(open: () => void): void {
+    this.palette = open;
+  }
+
+  openPalette(): void {
+    this.palette?.();
+  }
+
   // --- Actions ------------------------------------------------------------
   // Shared with the keyboard shortcuts and the rail, so they are methods rather
   // than something buried inside a command.

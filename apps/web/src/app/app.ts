@@ -46,6 +46,7 @@ import { AppTitlebar } from './ui/layout/app-titlebar';
 import { DocumentStatus } from './ui/editor/document-status';
 import { GlobalShortcuts } from './ui/layout/global-shortcuts';
 import { InspectorShell } from './ui/inspector/inspector-shell';
+import type { CommandPaletteData } from './ui/command-palette/command-palette';
 import { MenuCommands, type MenuCommand } from './ui/menu-commands';
 import { isOutputWindow } from './output-mode';
 import { PreviewShell } from './ui/preview/preview-shell';
@@ -303,19 +304,84 @@ export class App {
     this.commands.exportAll,
   ];
 
+  private readonly deleteShader: MenuCommand = {
+    id: 'delete-shader',
+    icon: () => 'delete',
+    label: () => this.i18n.t('action.deleteShader'),
+    disabled: () => !this.store.record(),
+    action: () => this.commands.deleteCurrent(),
+  };
+
   /** The context menu on the document title. It only opens over a shader. */
   protected readonly documentCommands: readonly MenuCommand[] = [
     this.commands.renameShader,
     this.commands.duplicateShader,
     this.commands.exportShader,
     this.commands.exportWallpaper,
+    this.deleteShader,
+  ];
+
+  /** What the Settings section keeps behind submenus and dialogs, flattened for the palette. */
+  private readonly settingsCommands: readonly MenuCommand[] = [
+    ...COLOR_SCHEME_OPTIONS.map(
+      (option): MenuCommand => ({
+        id: `theme-${option.value}`,
+        icon: () => option.icon,
+        label: () => `${this.i18n.t('menu.theme')}: ${this.themeLabel(option.value)}`,
+        action: () => this.setColorScheme(option.value),
+      }),
+    ),
     {
-      id: 'delete-shader',
-      icon: () => 'delete',
-      label: () => this.i18n.t('action.deleteShader'),
-      action: () => this.commands.deleteCurrent(),
+      id: 'editor-appearance',
+      icon: () => 'settings',
+      label: () => this.i18n.t('menu.editorAppearance'),
+      action: () => void this.workspace.openEditorSettings(),
+    },
+    {
+      id: 'keyboard-shortcuts',
+      icon: () => 'keyboard',
+      label: () => this.i18n.t('menu.keyboardShortcuts'),
+      action: () => void this.workspace.openKeyboardShortcuts(),
     },
   ];
+
+  private paletteOpen = false;
+
+  /**
+   * The command palette: the menus' own commands under the menus' own headings,
+   * and the shader list. Loaded on first use — it is a dialog most sessions
+   * never open, and the toolbar should not pay for it.
+   */
+  protected async openPalette(): Promise<void> {
+    const { CommandPalette } = await import('./ui/command-palette/command-palette');
+    if (this.paletteOpen) return;
+    this.paletteOpen = true;
+
+    const data: CommandPaletteData = {
+      groups: [
+        { label: this.i18n.t('menu.view'), commands: this.viewCommands },
+        {
+          label: this.i18n.t('menu.shader'),
+          commands: [...this.shaderCommands, this.deleteShader],
+        },
+        { label: this.i18n.t('menu.importExport'), commands: this.importExportCommands },
+        { label: this.i18n.t('menu.settings'), commands: this.settingsCommands },
+      ],
+    };
+
+    this.dialog
+      .open(CommandPalette, {
+        data,
+        ariaLabel: this.i18n.t('palette.title'),
+        autoFocus: 'input',
+        restoreFocus: true,
+        width: '560px',
+        maxWidth: 'calc(100vw - 32px)',
+        position: { top: '12vh' },
+      })
+      .afterClosed()
+      .subscribe(() => (this.paletteOpen = false));
+  }
 
   // --- Panel widths -------------------------------------------------------
 
@@ -342,7 +408,10 @@ export class App {
     inject(StartupCoordinator);
 
     // The hidden input the browser imports go through is in this template.
-    if (!this.outputMode) this.commands.useFilePicker((mode) => this.pickFile(mode));
+    if (!this.outputMode) {
+      this.commands.useFilePicker((mode) => this.pickFile(mode));
+      this.commands.usePalette(() => void this.openPalette());
+    }
 
     // Resolving the session in the browser only. Doing it during SSR would put
     // one visitor's identity into a response that may be cached and handed to

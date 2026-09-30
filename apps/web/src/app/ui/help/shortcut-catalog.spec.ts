@@ -12,6 +12,7 @@ const EXPECTED_DISPLAY_ORDER = [
   'save-shader',
   'full-screen',
   'toggle-devtools',
+  'command-palette',
   'new-source-file',
   'compile-now',
   'close-active-document',

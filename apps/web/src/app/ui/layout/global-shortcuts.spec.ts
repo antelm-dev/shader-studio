@@ -45,6 +45,7 @@ describe('GlobalShortcuts', () => {
   const toggleFullscreen = vi.fn();
   const patch = vi.fn();
   const toggleZen = vi.fn();
+  const openPalette = vi.fn();
   const zen = signal(false);
   let desktopAvailable = true;
 
@@ -61,6 +62,7 @@ describe('GlobalShortcuts', () => {
     toggleFullscreen.mockReset();
     patch.mockReset();
     toggleZen.mockReset();
+    openPalette.mockReset();
     zen.set(false);
     desktopAvailable = true;
 
@@ -103,6 +105,7 @@ describe('GlobalShortcuts', () => {
             captureImage,
             zen,
             zenMode: { action: toggleZen },
+            openPalette,
           },
         },
         {
@@ -218,5 +221,34 @@ describe('GlobalShortcuts', () => {
     zen.set(true);
     window.dispatchEvent(chordEvent('Escape'));
     expect(zen()).toBe(false);
+  });
+
+  it('opens the command palette on Ctrl+K, even from a text field', () => {
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    try {
+      const event = chordEvent('k', { ctrlKey: true, target: input });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      expect(openPalette).toHaveBeenCalledOnce();
+    } finally {
+      input.remove();
+    }
+  });
+
+  it('leaves Ctrl+K to Monaco, where it starts the editor chords', () => {
+    const editor = document.createElement('div');
+    editor.className = 'monaco-editor';
+    const inner = document.createElement('textarea');
+    editor.appendChild(inner);
+    document.body.appendChild(editor);
+    try {
+      const event = chordEvent('k', { ctrlKey: true, target: inner });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(openPalette).not.toHaveBeenCalled();
+    } finally {
+      editor.remove();
+    }
   });
 });
