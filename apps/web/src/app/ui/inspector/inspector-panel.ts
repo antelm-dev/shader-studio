@@ -332,6 +332,13 @@ const TAB_META: Record<InspectorTab, { icon: string; labelKey: TranslationKey }>
       min-height: 100%;
     }
 
+    /* Under a finger the tabs keep the height Material's tab bar gave them. */
+    @media (pointer: coarse) {
+      .tab {
+        height: 44px;
+      }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .tab {
         transition: none;

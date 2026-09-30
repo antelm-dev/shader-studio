@@ -156,6 +156,16 @@ const SCALES = [0.5, 0.75, 1, 1.5, 2] as const;
       font-size: 10.5px;
     }
 
+    @media (pointer: coarse) {
+      .cell {
+        height: 28px;
+      }
+
+      .play {
+        width: 36px;
+      }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       button.cell {
         transition: none;

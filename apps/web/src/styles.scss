@@ -384,7 +384,9 @@ a[mat-menu-item] > mat-icon {
 // Folders: a quiet uppercase heading and a hairline between sections, rather
 // than lil-gui's boxed title bars and indented, ruled children.
 .lil-gui .lil-title {
-  height: 28px;
+  // From the widget height rather than a fixed 28px, so lil-gui's own touch
+  // sizes (a taller widget under a coarse pointer) carry through to it.
+  height: calc(var(--widget-height) + var(--spacing) * 1.5);
   border-radius: var(--mat-sys-corner-extra-small);
   font-size: 11px;
   font-weight: 600;
