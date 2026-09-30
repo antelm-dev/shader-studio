@@ -53,81 +53,127 @@ const FORMAT_VALUES = ['webm', 'png'] as const;
           <p class="hint">{{ 'export.runningHint' | translate }}</p>
         </div>
       } @else {
-        <div class="grid">
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'export.format' | translate }}</mat-label>
-            <mat-select [formField]="form.format">
-              @for (option of formats(); track option.value) {
-                <mat-option [value]="option.value">{{ option.label }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
+        <!-- A settings sheet, laid out like the inspector: a name on the left, its
+             control on the right, in three short sections. A wrapping label
+             names a text field; a select is not labelable, so it points at its
+             name instead. -->
+        <div class="sheet">
+          <h3 class="section">{{ 'export.sectionOutput' | translate }}</h3>
 
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'export.resolution' | translate }}</mat-label>
-            <mat-select [value]="sizeKey()" (selectionChange)="setSize($event.value)">
-              @for (option of resolutions; track option.label) {
-                <mat-option [value]="option.label">{{ option.label }}</mat-option>
-              }
-              <mat-option value="custom">{{ 'export.custom' | translate }}</mat-option>
-            </mat-select>
-          </mat-form-field>
+          <div class="row">
+            <span class="name" id="export-format">{{ 'export.format' | translate }}</span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-select [formField]="form.format" aria-labelledby="export-format">
+                @for (option of formats(); track option.value) {
+                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <div class="row">
+            <span class="name" id="export-resolution">{{ 'export.resolution' | translate }}</span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-select
+                aria-labelledby="export-resolution"
+                [value]="sizeKey()"
+                (selectionChange)="setSize($event.value)"
+              >
+                @for (option of resolutions; track option.label) {
+                  <mat-option [value]="option.label">{{ option.label }}</mat-option>
+                }
+                <mat-option value="custom">{{ 'export.custom' | translate }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
 
           @if (sizeKey() === 'custom') {
-            <mat-form-field appearance="outline">
-              <mat-label>{{ 'export.width' | translate }}</mat-label>
-              <input matInput type="number" [formField]="form.width" />
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>{{ 'export.height' | translate }}</mat-label>
-              <input matInput type="number" [formField]="form.height" />
-            </mat-form-field>
+            <label class="row">
+              <span class="name">{{ 'export.width' | translate }}</span>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <input matInput type="number" [formField]="form.width" />
+                <span matTextSuffix>px</span>
+              </mat-form-field>
+            </label>
+            <label class="row">
+              <span class="name">{{ 'export.height' | translate }}</span>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <input matInput type="number" [formField]="form.height" />
+                <span matTextSuffix>px</span>
+              </mat-form-field>
+            </label>
           }
 
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'export.fps' | translate }}</mat-label>
-            <input matInput type="number" [formField]="form.fps" />
-          </mat-form-field>
+          <label class="row">
+            <span class="name">{{ 'export.fps' | translate }}</span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <input matInput type="number" [formField]="form.fps" />
+            </mat-form-field>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'export.duration' | translate }}</mat-label>
-            <input matInput type="number" step="0.5" [formField]="form.duration" />
-            <span matTextSuffix>s</span>
-            <mat-hint>{{ 'export.durationHint' | translate }}</mat-hint>
-          </mat-form-field>
+          <h3 class="section">{{ 'export.sectionTime' | translate }}</h3>
 
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'export.startAt' | translate }}</mat-label>
-            <input matInput type="number" step="0.5" [formField]="form.startTime" />
-            <span matTextSuffix>s</span>
-            <mat-hint>{{ 'export.startAtHint' | translate }}</mat-hint>
-          </mat-form-field>
+          <label class="row">
+            <span class="name">
+              {{ 'export.duration' | translate }}
+              <small>{{ 'export.durationHint' | translate }}</small>
+            </span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <input matInput type="number" step="0.5" [formField]="form.duration" />
+              <span matTextSuffix>s</span>
+            </mat-form-field>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'export.loops' | translate }}</mat-label>
-            <input matInput type="number" [formField]="form.loops" />
-            <mat-hint>{{ 'export.loopsHint' | translate }}</mat-hint>
-          </mat-form-field>
+          <label class="row">
+            <span class="name">
+              {{ 'export.startAt' | translate }}
+              <small>{{ 'export.startAtHint' | translate }}</small>
+            </span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <input matInput type="number" step="0.5" [formField]="form.startTime" />
+              <span matTextSuffix>s</span>
+            </mat-form-field>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'export.motionBlur' | translate }}</mat-label>
-            <mat-select [formField]="form.subframes">
-              @for (option of subframes(); track option.value) {
-                <mat-option [value]="option.value">{{ option.label }}</mat-option>
-              }
-            </mat-select>
-            <mat-hint>{{ 'export.motionBlurHint' | translate }}</mat-hint>
-          </mat-form-field>
+          <label class="row">
+            <span class="name">
+              {{ 'export.loops' | translate }}
+              <small>{{ 'export.loopsHint' | translate }}</small>
+            </span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <input matInput type="number" [formField]="form.loops" />
+            </mat-form-field>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'export.supersampling' | translate }}</mat-label>
-            <mat-select [formField]="form.supersample">
-              @for (option of supersample(); track option.value) {
-                <mat-option [value]="option.value">{{ option.label }}</mat-option>
-              }
-            </mat-select>
-            <mat-hint>{{ 'export.supersamplingHint' | translate }}</mat-hint>
-          </mat-form-field>
+          <h3 class="section">{{ 'export.sectionQuality' | translate }}</h3>
+
+          <div class="row">
+            <span class="name" id="export-motion-blur">
+              {{ 'export.motionBlur' | translate }}
+              <small>{{ 'export.motionBlurHint' | translate }}</small>
+            </span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-select [formField]="form.subframes" aria-labelledby="export-motion-blur">
+                @for (option of subframes(); track option.value) {
+                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <div class="row">
+            <span class="name" id="export-supersampling">
+              {{ 'export.supersampling' | translate }}
+              <small>{{ 'export.supersamplingHint' | translate }}</small>
+            </span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-select [formField]="form.supersample" aria-labelledby="export-supersampling">
+                @for (option of supersample(); track option.value) {
+                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          </div>
         </div>
 
         <!-- What was actually asked for, after the numbers were clamped and the
@@ -161,26 +207,86 @@ const FORMAT_VALUES = ['webm', 'png'] as const;
   `,
   styles: `
     mat-dialog-content {
-      width: min(560px, 80vw);
+      width: min(420px, 80vw);
     }
 
-    .grid {
+    /* The fields inside the sheet are the height of a row and carry no label of
+       their own, so they take their sizes from the public form-field tokens
+       rather than from the global density. */
+    .sheet {
+      --mat-form-field-container-height: 32px;
+      --mat-form-field-container-vertical-padding: 4px;
+      --mat-form-field-container-text-size: 13px;
+      --mat-form-field-container-text-line-height: 24px;
+      --mat-select-trigger-text-size: 13px;
+      --mat-select-trigger-text-line-height: 24px;
+
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 4px 12px;
+      row-gap: 4px;
+    }
+
+    .section {
+      margin: 10px 0 2px;
+      padding-top: 10px;
+      border-top: 1px solid var(--mat-sys-outline-variant);
+      color: var(--mat-sys-on-surface-variant);
+      font: var(--mat-sys-label-small);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .section:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 176px;
+      align-items: center;
+      column-gap: 12px;
+      min-height: 36px;
+    }
+
+    .name {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      color: var(--mat-sys-on-surface);
+      font: var(--mat-sys-body-medium);
+    }
+
+    .name small {
+      color: var(--mat-sys-on-surface-variant);
+      font: var(--mat-sys-label-small);
+    }
+
+    /* Numbers are values: the mono face, aligned on the right like the inspector's. */
+    .row input {
+      font-family: var(--studio-font-mono);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
     }
 
     .summary {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin: 4px 0 12px;
+      margin: 14px 0 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--mat-sys-outline-variant);
       color: var(--mat-sys-on-surface);
-      font: var(--mat-sys-body-medium);
+      font: 12px / 1.5 var(--studio-font-mono);
     }
 
     .summary mat-icon {
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
       color: var(--mat-sys-primary);
+      font-size: 18px;
     }
 
     .ffmpeg {
@@ -188,10 +294,9 @@ const FORMAT_VALUES = ['webm', 'png'] as const;
       overflow-x: auto;
       padding: 10px 12px;
       border-radius: var(--mat-sys-corner-small, 4px);
-      background: var(--mat-sys-surface-container-high);
+      background: var(--mat-sys-surface-container-highest);
       color: var(--mat-sys-on-surface-variant);
-      font-family: ui-monospace, monospace;
-      font-size: 12px;
+      font: 11.5px / 1.5 var(--studio-font-mono);
       white-space: pre;
     }
 

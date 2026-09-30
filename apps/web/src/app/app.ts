@@ -46,7 +46,7 @@ import { AppTitlebar } from './ui/layout/app-titlebar';
 import { DocumentStatus } from './ui/editor/document-status';
 import { GlobalShortcuts } from './ui/layout/global-shortcuts';
 import { InspectorShell } from './ui/inspector/inspector-shell';
-import type { CommandPaletteData } from './ui/command-palette/command-palette';
+import { CommandPalette, type CommandPaletteData } from './ui/command-palette/command-palette';
 import { MenuCommands, type MenuCommand } from './ui/menu-commands';
 import { isOutputWindow } from './output-mode';
 import { PreviewShell } from './ui/preview/preview-shell';
@@ -349,11 +349,13 @@ export class App {
 
   /**
    * The command palette: the menus' own commands under the menus' own headings,
-   * and the shader list. Loaded on first use — it is a dialog most sessions
-   * never open, and the toolbar should not pay for it.
+   * and the shader list.
+   *
+   * Deliberately not lazy-loaded. Ctrl+K is followed by typing at once, and
+   * every key pressed while a chunk was still arriving would land on the page
+   * instead — where S captures an image and H hides the inspector.
    */
-  protected async openPalette(): Promise<void> {
-    const { CommandPalette } = await import('./ui/command-palette/command-palette');
+  protected openPalette(): void {
     if (this.paletteOpen) return;
     this.paletteOpen = true;
 
@@ -410,7 +412,7 @@ export class App {
     // The hidden input the browser imports go through is in this template.
     if (!this.outputMode) {
       this.commands.useFilePicker((mode) => this.pickFile(mode));
-      this.commands.usePalette(() => void this.openPalette());
+      this.commands.usePalette(() => this.openPalette());
     }
 
     // Resolving the session in the browser only. Doing it during SSR would put

@@ -104,10 +104,21 @@ html {
       container-elevation-shadow: var(--mat-sys-level2),
     )
   );
+  // A dialog is a panel that happens to be modal: a title the size of a panel
+  // heading and the same 13px body, not Material's 24px headline over a form.
   @include mat.dialog-overrides(
     (
       container-shape: var(--mat-sys-corner-large),
       container-elevation-shadow: var(--mat-sys-level3),
+      subhead-size: 16px,
+      subhead-line-height: 24px,
+      subhead-weight: 600,
+      supporting-text-size: 13px,
+      supporting-text-line-height: 20px,
+      headline-padding: 0 20px 4px,
+      content-padding: 12px 20px,
+      with-actions-content-padding: 12px 20px 0,
+      actions-padding: 12px 16px 14px,
     )
   );
 
@@ -147,15 +158,29 @@ html {
       $corners
     );
 
-    // Density -2 hides a filled field's label (the browser's "Filter"), so form
-    // fields stop at -1, the most compact size that still shows it.
+    // Form fields go further than the rest: Material's density -4 (40px), in
+    // the 14px the chrome is set in. Every field in the app is outlined, where
+    // the label floats onto the border and needs no room inside the box.
     @include mat.form-field-overrides(
       (
-        container-height: 52px,
-        filled-label-display: block,
-        container-vertical-padding: 14px,
-        filled-with-label-container-padding-top: 22px,
-        filled-with-label-container-padding-bottom: 6px,
+        container-height: 40px,
+        container-vertical-padding: 8px,
+        container-text-size: 14px,
+        container-text-line-height: 24px,
+        outlined-label-text-size: 14px,
+        subscript-text-size: 11px,
+      )
+    );
+    @include mat.select-overrides(
+      (
+        trigger-text-size: 14px,
+        trigger-text-line-height: 24px,
+      )
+    );
+    @include mat.option-overrides(
+      (
+        label-text-size: 13px,
+        label-text-line-height: 20px,
       )
     );
 
@@ -236,12 +261,24 @@ body {
   scrollbar-width: thin;
 }
 
-// Menus have no density tokens, so their row height is set on our own
-// `mat-menu-item` elements: 32px rows under a mouse, Material's 48px on touch.
-// The element prefix outranks Material's single-class rule.
+// Material zeroes a dialog content's top padding when it follows a title, and
+// the content clips because it scrolls — so an outlined field that comes first
+// loses the top half of its floating label. A spacer inside the scroll box
+// gives it the room without fighting Material's rule or each dialog's own.
+mat-dialog-content::before {
+  content: '';
+  display: block;
+  height: 8px;
+}
+
+// Menus and select options have no density tokens, so their row height is set
+// on our own `mat-menu-item` and `mat-option` elements: 32px rows under a
+// mouse, Material's 48px on touch. The element (and role) prefix outranks
+// Material's single-class rule.
 @media (pointer: fine) and (min-width: 601px) {
   button[mat-menu-item],
-  a[mat-menu-item] {
+  a[mat-menu-item],
+  mat-option[role='option'] {
     min-height: 32px;
   }
 }
