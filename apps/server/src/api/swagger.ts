@@ -33,8 +33,10 @@ export const ERROR_SCHEMA: SchemaObject = {
 
 const ERROR_DESCRIPTIONS: Record<number, string> = {
   400: 'The request body or a parameter was rejected (`invalid`).',
-  404: 'No such shader, preset or texture (`not_found`).',
+  403: 'The caller is signed in but not allowed to do this (`forbidden`).',
+  404: 'No such shader, preset, texture or publication (`not_found`).',
   409: 'A concurrent write happened — `expectedRevision` is stale (`conflict`).',
+  429: 'Too many requests from this account (`rate_limited`).',
   500: 'Unexpected server or storage failure (`internal`, `io`).',
   503: 'API initialization or database readiness failed (`internal`).',
 };
@@ -87,6 +89,8 @@ export function setupSwagger(app: INestApplication): void {
     .addTag('textures', 'Channel images and thumbnails')
     .addTag('transfer', 'Bundle import and export, including Shadertoy')
     .addTag('i18n', 'UI translation catalogs')
+    .addTag('explore', 'Public shader snapshots: browse, publish, copy and report')
+    .addTag('moderation', 'Administration of publications, reports and publishers')
     .build();
 
   SwaggerModule.setup('docs', app, () => SwaggerModule.createDocument(app, config), {

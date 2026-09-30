@@ -278,6 +278,15 @@ export class WorkspaceActions {
     );
   }
 
+  /** Publish, update or unpublish a shader's public snapshot. Web only. */
+  async openPublish(shaderId: string, name: string): Promise<void> {
+    const { PublishDialog } = await import('../publications/publish-dialog');
+    this.dialog.open(PublishDialog, {
+      data: { shaderId, name },
+      maxWidth: 'calc(100vw - 32px)',
+    });
+  }
+
   // --- Files and passes ---------------------------------------------------
 
   async createFile(): Promise<void> {

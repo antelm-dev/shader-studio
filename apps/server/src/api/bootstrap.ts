@@ -11,6 +11,7 @@ import type { Auth } from '../auth/auth';
 import { ApiExceptionFilter } from './api-exception.filter';
 import { BODY_LIMIT, TEXTURE_BODY_LIMIT, THUMBNAIL_BODY_LIMIT } from './api.constants';
 import { ApiModule } from './api.module';
+import type { Explore } from '../publication/publications.controller';
 import { logLevels } from './logger';
 import { setupSwagger } from './swagger';
 
@@ -23,6 +24,7 @@ export async function createNestApi(
   library: ShaderLibrary,
   auth: Auth,
   auditor?: Auditor,
+  explore?: Explore,
 ): Promise<NestApi> {
   const logger = new Logger('api');
   const handler = express();
@@ -54,7 +56,7 @@ export async function createNestApi(
   );
 
   const app = await NestFactory.create<NestExpressApplication>(
-    ApiModule.forLibrary(library, auth, auditor),
+    ApiModule.forLibrary(library, auth, auditor, explore),
     new ExpressAdapter(handler),
     { bodyParser: false, logger: logLevels() },
   );

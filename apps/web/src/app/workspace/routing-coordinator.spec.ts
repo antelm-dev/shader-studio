@@ -67,4 +67,21 @@ describe('RoutingCoordinator', () => {
     await settle();
     expect(router.url).toBe(url);
   });
+
+  it('leaves the Explore and moderation pages alone while the selection changes under them', async () => {
+    for (const url of ['/explore', '/explore/0123456789abcdef0123', '/admin/publications']) {
+      const { router, selectedId } = await setup(url);
+      expect(router.url).toBe(url);
+
+      selectedId.set('waves');
+      await settle();
+      expect(router.url).toBe(url);
+
+      // Leaving is an ordinary navigation: the editor's URL follows the selection again.
+      await router.navigateByUrl('/');
+      await settle();
+      expect(router.url).toBe('/shaders/waves');
+      TestBed.resetTestingModule();
+    }
+  });
 });

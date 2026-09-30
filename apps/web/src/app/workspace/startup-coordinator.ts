@@ -78,6 +78,8 @@ export class StartupCoordinator {
 
   private hintContextMenus(): void {
     if (this.isServer) return;
+    // A tip about the editor, kept for a load that actually lands in it.
+    if (/^\/(?:explore|admin)(?:\/|$)/.test(location.pathname)) return;
     const key = 'shader-studio.hinted-context-menus';
     try {
       if (localStorage.getItem(key)) return;

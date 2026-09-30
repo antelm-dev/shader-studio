@@ -14,6 +14,10 @@
       "types": "./src/library/index.ts",
       "default": "./src/library/index.ts"
     },
+    "./publication": {
+      "types": "./src/publication/index.ts",
+      "default": "./src/publication/index.ts"
+    },
     "./persistence": {
       "types": "./src/persistence/index.ts",
       "default": "./src/persistence/index.ts"

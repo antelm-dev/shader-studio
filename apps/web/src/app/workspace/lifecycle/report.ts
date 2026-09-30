@@ -17,6 +17,12 @@ export function reportWorkspaceError(
   documentState: DocumentState,
   outputLog: OutputLog,
 ): void {
+  // No session is not a failure to report. In the editor the sign-in dialog
+  // the interceptor opens is the message; on the public Explore pages, laid
+  // over an editor whose library an anonymous visitor cannot load, there is
+  // nothing to say at all.
+  if (error instanceof ApiError && error.status === 401) return;
+
   const message = error instanceof ApiError ? error.summary : String(error);
   console.error('[shader-store]', error);
   documentState.notify(message, true);

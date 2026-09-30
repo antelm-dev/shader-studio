@@ -1,3 +1,4 @@
+import { publicationSchemaSql } from '../../publication/publication-store';
 import type { Migration } from '../migration-runner';
 
 /**
@@ -140,6 +141,13 @@ export const POSTGRES_MIGRATIONS: readonly Migration[] = [
           ADD CONSTRAINT fk_shaders_owner
           FOREIGN KEY (owner_user_id) REFERENCES users(id);
       `);
+    },
+  },
+  {
+    version: 4,
+    name: 'publications',
+    async up(exec) {
+      await exec(publicationSchemaSql('bytea'));
     },
   },
 ];

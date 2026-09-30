@@ -221,7 +221,7 @@ function parseGrant(value: string): Grant | null {
  * rolls over, so it never holds more than one window's callers.
  */
 // ponytail: per-process; a multi-instance deployment needs a shared store here.
-function windowLimiter(windowMs: number, max: number): (key: string) => boolean {
+export function windowLimiter(windowMs: number, max: number): (key: string) => boolean {
   const hits = new Map<string, number>();
   let resetAt = 0;
   return (key) => {

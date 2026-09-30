@@ -1,3 +1,4 @@
+import { publicationSchemaSql } from '../../publication/publication-store';
 import type { Migration } from '../migration-runner';
 
 /**
@@ -140,6 +141,15 @@ export const SQLITE_MIGRATIONS: readonly Migration[] = [
         CREATE INDEX idx_accounts_user ON accounts(user_id);
         CREATE INDEX idx_verifications_identifier ON verifications(identifier);
       `);
+    },
+  },
+  {
+    version: 4,
+    name: 'publications',
+    up(exec) {
+      // Additive, and inert on the desktop: its store gets the empty tables and
+      // nothing there ever writes to them.
+      exec(publicationSchemaSql('BLOB'));
     },
   },
 ];

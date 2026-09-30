@@ -62,6 +62,15 @@
         <span class="brand-mark" aria-hidden="true"></span>
         <span class="brand-title">Shadergrove</span>
       </span>
+      } @if (explore().publicExplore) {
+      <a
+        matIconButton
+        routerLink="/explore"
+        [matTooltip]="'explore.title' | translate"
+        [attr.aria-label]="'explore.title' | translate"
+      >
+        <mat-icon>explore</mat-icon>
+      </a>
       }
     </div>
 
@@ -296,6 +305,12 @@
       <mat-icon>devices</mat-icon>
       <span>{{ 'auth.sessionsTitle' | translate }}</span>
     </button>
+    @if (explore().admin) {
+    <a mat-menu-item routerLink="/admin/publications">
+      <mat-icon>shield_person</mat-icon>
+      <span>{{ 'admin.title' | translate }}</span>
+    </a>
+    }
     <button mat-menu-item type="button" (click)="signOut()">
       <mat-icon>logout</mat-icon>
       <span>{{ 'auth.signOut' | translate }}</span>

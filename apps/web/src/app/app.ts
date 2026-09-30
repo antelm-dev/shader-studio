@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { RouterOutlet } from '@angular/router';
+import { RouterLink, RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
@@ -37,6 +37,7 @@ import {
 import { DesktopAccount } from './desktop/desktop-account';
 import { DesktopPlatform } from './desktop/desktop-platform';
 import { DesktopSync } from './desktop/desktop-sync';
+import { ExploreAccess } from './publications/explore-access';
 import { ShaderStore } from './workspace/shader-store';
 import { SurfaceLayoutService } from './surfaces/surface-layout';
 import { SurfaceRegistry } from './surfaces/surface-registry';
@@ -87,6 +88,7 @@ const ZEN_EDGE_PX = 48;
     PreviewShell,
     PreviewStage,
     ResizeHandle,
+    RouterLink,
     RouterOutlet,
     ShaderBrowser,
     TransportBar,
@@ -109,6 +111,8 @@ export class App {
 
   protected readonly auth = inject(AuthService);
   private readonly authPrompt = inject(AuthPrompt);
+  /** What the server offers: no Explore button, and no Moderation entry, unless it says so. */
+  protected readonly explore = inject(ExploreAccess).capabilities;
 
   /**
    * Cloud accounts exist on the web and nowhere else. The desktop app stores

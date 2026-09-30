@@ -134,11 +134,14 @@ export class RoutingCoordinator {
   }
 
   /**
-   * `/desktop/connect` is a page of its own, not a view of the selection: the
-   * desktop's sign-in handoff runs there, so it must not be normalized to `/`.
+   * Pages of their own, not views of the selection, so they must not be
+   * normalized to `/`: `/desktop/connect`, where the desktop's sign-in handoff
+   * runs, and the public Explore and moderation pages. The selection carries
+   * on underneath them untouched — which is what keeps an unsaved shader safe
+   * while its author is off browsing.
    */
   private onStandalonePage(): boolean {
-    return /^\/desktop\/connect(?:[/?#]|$)/.test(this.router.url);
+    return /^\/(?:desktop\/connect|explore|admin)(?:[/?#]|$)/.test(this.router.url);
   }
 
   private canonicalUrl(): string {

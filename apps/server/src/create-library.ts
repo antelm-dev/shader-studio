@@ -19,6 +19,7 @@ import {
 } from '@shadergrove/backend/library';
 import { createLegacyReader } from '@shadergrove/backend/persistence/legacy';
 import type { AuthDatabase, ShaderRepository } from '@shadergrove/backend/persistence';
+import { PublicationLibrary, type PublicationRepository } from '@shadergrove/backend/publication';
 
 const logger = new Logger('library');
 
@@ -31,6 +32,8 @@ export interface ServerStore {
   library: ShaderLibrary;
   /** The same connection, for Better Auth — one database, one migration ledger. */
   authDatabase: AuthDatabase;
+  /** Public snapshots of that library. Only reachable when the server enables Explore. */
+  publications: PublicationLibrary;
 }
 
 export async function createLibrary(): Promise<ServerStore> {
@@ -48,11 +51,15 @@ export async function createLibrary(): Promise<ServerStore> {
   await library
     .as(SYSTEM_SCOPE)
     .installExamples(createLegacyReader(examplesDir()), seed, 'template');
-  return { library, authDatabase: repo.authDatabase() };
+  return {
+    library,
+    authDatabase: repo.authDatabase(),
+    publications: new PublicationLibrary(repo, library),
+  };
 }
 
 async function createRepository(): Promise<{
-  repo: ShaderRepository;
+  repo: ShaderRepository & PublicationRepository;
   bootstrapScope: UserScope;
 }> {
   const url = process.env['DATABASE_URL'];
