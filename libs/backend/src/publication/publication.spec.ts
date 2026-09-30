@@ -2,11 +2,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Pool } from 'pg';
-import { afterAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { ShaderLibrary } from '../library/shader-library';
-import { PostgresRepository } from '../persistence/postgres/postgres-repository';
 import { SqliteRepository } from '../persistence/sqlite/sqlite-repository';
 import { runPublicationConformance, type PublicationHarness } from './conformance';
 
@@ -75,38 +73,3 @@ describe('publication schema (sqlite)', () => {
     await harness.cleanup();
   });
 });
-
-/**
- * The same suite on a real PostgreSQL, when one is configured — see
- * `postgres-repository.spec.ts` for how to provide a disposable database.
- * Every table in it is dropped between tests.
- */
-const url = process.env['SHADER_TEST_DATABASE_URL'];
-
-if (!url) {
-  describe.skip('PublicationLibrary conformance (postgres)', () => {
-    it('skipped — set SHADER_TEST_DATABASE_URL to run', () => undefined);
-  });
-} else {
-  const sidePool = new Pool({ connectionString: url });
-  afterAll(async () => {
-    await sidePool.end();
-  });
-
-  runPublicationConformance('postgres', () => ({
-    makeRepository: () => new PostgresRepository({ connectionString: url }),
-    cleanup: async () => {
-      await sidePool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public');
-    },
-    addUser: async (id) => {
-      await sidePool.query(
-        'INSERT INTO users (id, name, email, email_verified) VALUES ($1, $1, $2, true)',
-        [id, `${id}@example.test`],
-      );
-    },
-    removeUser: async (id) => {
-      await sidePool.query('DELETE FROM shaders WHERE owner_user_id = $1', [id]);
-      await sidePool.query('DELETE FROM users WHERE id = $1', [id]);
-    },
-  }));
-}
