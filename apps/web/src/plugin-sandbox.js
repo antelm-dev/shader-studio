@@ -4,12 +4,30 @@
 (() => {
   // Prepended to the plugin bundle. Exposes `shaderStudio.handle` for requests
   // and `shaderStudio.notify` for one-way events, both over the host's port.
+  // Everything sent is JSON text; a result's ArrayBuffers travel beside it as
+  // { "$buffer": i } and are transferred, not copied (see plugin-sandbox.ts).
+  // So that marker is unambiguous, the plugin's own keys starting with "$" go
+  // out with a second "$", which the host strips.
   const PRELUDE = `(() => {
   const handlers = new Map();
   let port;
+  const encode = (value) => {
+    const buffers = [];
+    const json = JSON.stringify(value ?? null, (key, item) => {
+      if (item instanceof ArrayBuffer) {
+        if (!buffers.includes(item)) buffers.push(item);
+        return { $buffer: buffers.indexOf(item) };
+      }
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+      const keys = Object.keys(item);
+      if (!keys.some((k) => k[0] === '$')) return item;
+      return Object.fromEntries(keys.map((k) => [k[0] === '$' ? '$' + k : k, item[k]]));
+    });
+    return { json, buffers };
+  };
   self.shaderStudio = Object.freeze({
     handle(method, fn) { handlers.set(method, fn); },
-    notify(data) { port?.postMessage({ type: 'event', data }); },
+    notify(data) { port?.postMessage({ type: 'event', data: JSON.stringify(data ?? null) }); },
   });
   self.onmessage = (event) => {
     self.onmessage = null;
@@ -19,7 +37,8 @@
       try {
         const fn = handlers.get(data?.method);
         if (!fn) throw new Error('Unknown method: ' + data?.method);
-        port.postMessage({ type: 'result', id, result: await fn(data.params) });
+        const result = encode(await fn(data.params));
+        port.postMessage({ type: 'result', id, result }, result.buffers);
       } catch (error) {
         port.postMessage({ type: 'result', id, error: String(error?.message ?? error) });
       }

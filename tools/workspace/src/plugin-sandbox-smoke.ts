@@ -55,6 +55,8 @@ export async function checkPluginSandbox(browser: Browser, base: string): Promis
     problems.push(`negative control went undetected: Worker without terminate was ${control.fate}`);
   }
 
+  problems.push(...(await runHostProbe(browser, base)));
+
   if (problems.length) {
     throw new Error(`plugin sandbox checks failed:\n  - ${problems.join('\n  - ')}`);
   }
@@ -105,5 +107,45 @@ async function applyVariant(context: BrowserContext, variant: Variant): Promise<
       if (disabled === body) throw new Error('negative control: worker.terminate() call not found');
       await route.fulfill({ body: disabled, contentType: 'text/javascript' });
     });
+  }
+}
+
+/**
+ * The real `PluginHost` against real Workers: transfer, quotas, no answer and an
+ * event flood. Every Worker it started must be closed once the probe is done —
+ * a rejected call that leaves its Worker running is a failure.
+ */
+async function runHostProbe(browser: Browser, base: string): Promise<string[]> {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    const workers: { worker: Worker; closed: boolean }[] = [];
+    page.on('worker', (worker) => {
+      if (!worker.url().startsWith('blob:null/')) return;
+      const entry = { worker, closed: false };
+      worker.on('close', () => (entry.closed = true));
+      workers.push(entry);
+    });
+
+    await page.goto(base, { waitUntil: 'networkidle', timeout: 60_000 });
+    await page.waitForFunction('typeof globalThis.pluginHostProbe === "function"', null, {
+      timeout: 30_000,
+    });
+    const checks = (await page.evaluate('globalThis.pluginHostProbe()')) as ProbeReport['checks'];
+
+    const problems = Object.entries(checks)
+      .filter(([, { ok }]) => !ok)
+      .map(([name, { detail }]) => `host ${name}: ${JSON.stringify(detail)}`);
+    const deadline = Date.now() + WORKER_CLOSE_TIMEOUT_MS;
+    while (workers.some((entry) => !entry.closed) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    // import, export, bloat, flood, silent: one Worker per call.
+    if (workers.length !== 5) problems.push(`host probe started ${workers.length} Workers, not 5`);
+    const alive = workers.filter((entry) => !entry.closed).length;
+    if (alive) problems.push(`host probe left ${alive} Worker(s) running`);
+    return problems;
+  } finally {
+    await context.close();
   }
 }

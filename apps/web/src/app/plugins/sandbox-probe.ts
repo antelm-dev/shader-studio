@@ -8,6 +8,9 @@
  * left the browser, and whether the Worker was actually destroyed on
  * terminate — silence on a closed port proves neither.
  */
+import { validatePluginPackage } from '@shadergrove/shared';
+
+import { PluginCallError, PluginHost } from './plugin-host';
 import { PluginSandbox } from './plugin-sandbox';
 
 const HOSTILE_PLUGIN = String.raw`
@@ -30,6 +33,7 @@ const socket = (url) => new Promise((resolve, reject) => {
   ws.onopen = () => { ws.close(); resolve(); };
   ws.onerror = () => reject(new Error('error'));
 });
+shaderStudio.handle('echo', ({ bytes }) => ({ length: bytes.byteLength, bytes }));
 shaderStudio.handle('ping', () => ({ pong: true, origin: self.origin }));
 shaderStudio.handle('violations', () => violations);
 // no-cors: a CORS failure must not pass for a block — the request itself must not leave.
@@ -116,6 +120,18 @@ export async function runSandboxProbe(): Promise<SandboxProbeReport> {
   }
   const violations = (await sandbox.call('violations')) as SandboxProbeReport['violations'];
 
+  // Buffers move both ways: detached here once sent, and detached in the Worker once returned.
+  const sent = new ArrayBuffer(1024);
+  const echoed = (await sandbox.call('echo', { bytes: sent }, { transfer: [sent] })) as {
+    length: number;
+    bytes: ArrayBuffer;
+  };
+  checks['sent buffer transferred'] = { ok: sent.byteLength === 0, detail: sent.byteLength };
+  checks['returned buffer arrives'] = {
+    ok: echoed.length === 1024 && echoed.bytes.byteLength === 1024,
+    detail: echoed.length,
+  };
+
   // A second 'start' must not spawn another worker on a port someone else holds.
   const forged = new MessageChannel();
   let forgedReady = false;
@@ -127,7 +143,9 @@ export async function runSandboxProbe(): Promise<SandboxProbeReport> {
   );
 
   // Leave the plugin spinning; the harness checks that terminate destroys its Worker.
-  const spinning = sandbox.call('spin', undefined, 60_000).catch((error: Error) => error.message);
+  const spinning = sandbox
+    .call('spin', undefined, { timeoutMs: 60_000 })
+    .catch((error: Error) => error.message);
   await wait(1_000);
   checks['forged start ignored'] = {
     ok: !forgedReady,
@@ -149,4 +167,89 @@ export async function runSandboxProbe(): Promise<SandboxProbeReport> {
   );
   checks['call after stop rejected'] = { ok: late === 'probe stop', detail: late };
   return { checks, attempted, violations };
+}
+
+const HOST_PLUGIN = String.raw`
+shaderStudio.handle('importer:echo', ({ bytes, params }) =>
+  ({ candidate: { length: bytes.byteLength, gain: params.gain } }));
+shaderStudio.handle('importer:bloat', () => ({ candidate: 'x'.repeat(5000) }));
+shaderStudio.handle('importer:silent', () => new Promise(() => {}));
+shaderStudio.handle('importer:flood', () => { for (;;) shaderStudio.notify('x'.repeat(70000)); });
+shaderStudio.handle('exporter:text', () =>
+  ({ bytes: new ArrayBuffer(4), mime: 'text/plain', fileName: 'effect.fs' }));
+`;
+
+const hostPackage = validatePluginPackage({
+  manifest: {
+    id: 'probe.host',
+    version: '1.0.0',
+    protocolVersion: 1,
+    appVersionRange: '>=0.0.0',
+    name: 'Probe',
+    publisher: 'Shadergrove',
+    license: 'Apache-2.0',
+    contributions: [
+      ...['echo', 'bloat', 'silent', 'flood'].map((id) => ({
+        kind: 'importer',
+        id,
+        name: id,
+        mime: [],
+        extensions: ['.fs'],
+        maxInputBytes: 4096,
+        maxOutputBytes: 4096,
+        params: [{ key: 'gain', type: 'number', default: 1, min: 0, max: 2 }],
+      })),
+      {
+        kind: 'exporter',
+        id: 'text',
+        name: 'text',
+        mime: 'text/plain',
+        extension: '.fs',
+        maxInputBytes: 4096,
+        maxOutputBytes: 4096,
+        params: [],
+      },
+    ],
+  },
+  code: HOST_PLUGIN,
+});
+
+/**
+ * Drives the real `PluginHost` against real Workers. The harness then checks
+ * that every Worker it started is gone, including the ones the host had to
+ * kill (no answer, event flood).
+ */
+export async function runHostProbe(): Promise<Record<string, { ok: boolean; detail: unknown }>> {
+  if (!hostPackage.ok) throw new Error(hostPackage.errors.join('; '));
+  const host = new PluginHost(hostPackage.value, { timeoutMs: 1_500 });
+  const checks: Record<string, { ok: boolean; detail: unknown }> = {};
+  const code = (promise: Promise<unknown>) =>
+    promise.then(
+      () => 'resolved',
+      (error: unknown) => (error instanceof PluginCallError ? error.code : String(error)),
+    );
+
+  const bytes = new ArrayBuffer(64);
+  const imported = await host.importFile('echo', bytes, { gain: 9 });
+  checks['import round trip'] = {
+    ok: JSON.stringify(imported) === '{"candidate":{"length":64,"gain":2}}',
+    detail: imported,
+  };
+  checks['import buffer transferred'] = { ok: bytes.byteLength === 0, detail: bytes.byteLength };
+
+  const exported = await host.exportEffect('text', { name: 'e' });
+  checks['export result valid'] = {
+    ok: exported.bytes.byteLength === 4 && exported.fileName === 'effect.fs',
+    detail: exported.fileName,
+  };
+
+  for (const [id, expected] of [
+    ['bloat', 'output-too-large'],
+    ['flood', 'events-exceeded'],
+    ['silent', 'Error: Plugin did not answer importer:silent in time'],
+  ] as const) {
+    const outcome = await code(host.importFile(id, new ArrayBuffer(1)));
+    checks[`${id} rejected`] = { ok: outcome === expected, detail: outcome };
+  }
+  return checks;
 }

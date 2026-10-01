@@ -1,0 +1,149 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  PLUGIN_LIMITS,
+  isPluginCompatible,
+  parsePluginPackage,
+  validatePluginPackage,
+} from './package';
+
+const importer = {
+  kind: 'importer',
+  id: 'isf-import',
+  name: 'ISF',
+  mime: [],
+  extensions: ['.fs'],
+  maxInputBytes: 1000,
+  maxOutputBytes: 1000,
+  params: [{ key: 'gain', type: 'number', default: 1, min: 0, max: 2 }],
+};
+const effect = {
+  kind: 'effect',
+  id: 'tint',
+  name: 'Tint',
+  controls: [{ key: 'amount', type: 'number', default: 0.5, min: 0, max: 1 }],
+};
+
+function pkg(overrides: Record<string, unknown> = {}, manifest: Record<string, unknown> = {}) {
+  return {
+    manifest: {
+      id: 'dev.example.pack',
+      version: '1.0.0',
+      protocolVersion: 1,
+      appVersionRange: '>=1.4.0 <2.0.0',
+      name: 'Pack',
+      publisher: 'Example',
+      license: 'MIT',
+      contributions: [effect, importer],
+      ...manifest,
+    },
+    code: 'shaderStudio.handle("importer:isf-import", () => ({ candidate: {} }));',
+    glsl: { tint: 'vec4 effect(vec4 c, vec2 uv) { return c; }' },
+    ...overrides,
+  };
+}
+
+const errors = (input: unknown) => {
+  const result = validatePluginPackage(input);
+  return result.ok ? [] : result.errors;
+};
+
+describe('validatePluginPackage', () => {
+  it('accepts a valid package', () => {
+    const result = validatePluginPackage(pkg());
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.glsl['tint']).toContain('effect');
+  });
+
+  it('accepts a declarative effect without code', () => {
+    const { code: _code, ...noCode } = pkg({}, { contributions: [effect] });
+    expect(validatePluginPackage(noCode).ok).toBe(true);
+  });
+
+  it('rejects an unknown kind, protocol version and field before activation', () => {
+    expect(errors(pkg({}, { contributions: [{ ...effect, kind: 'analyzer' }] }))[0]).toMatch(
+      /kind "analyzer"/,
+    );
+    expect(errors(pkg({}, { protocolVersion: 2 }))[0]).toMatch(/protocolVersion 2/);
+    expect(errors(pkg({}, { scripts: { postinstall: 'x' } }))[0]).toMatch(/scripts/);
+    expect(errors(pkg({ assets: [] }))[0]).toMatch(/assets/);
+    expect(errors(pkg({}, { contributions: [{ ...importer, url: 'https://x' }] }))[0]).toMatch(
+      /url/,
+    );
+  });
+
+  it('rejects duplicate ids, bad MIME/extension and missing or surplus code and GLSL', () => {
+    expect(errors(pkg({}, { contributions: [effect, effect] }))[0]).toMatch(/duplicated/);
+    expect(
+      errors(
+        pkg({}, { contributions: [{ ...importer, mime: ['Text/Plain'], extensions: [] }] }),
+      )[0],
+    ).toMatch(/mime/);
+    expect(errors(pkg({}, { contributions: [{ ...importer, extensions: ['fs'] }] }))[0]).toMatch(
+      /extensions/,
+    );
+    expect(errors(pkg({}, { contributions: [{ ...importer, extensions: [] }] }))[0]).toMatch(
+      /at least one/,
+    );
+    expect(errors(pkg({ code: undefined }))[0]).toMatch(/code is required/);
+    expect(errors(pkg({ glsl: {} }))[0]).toMatch(/glsl\["tint"\]/);
+    expect(errors(pkg({ glsl: { tint: 'x', other: 'y' } }))[0]).toMatch(/other/);
+  });
+
+  it('rejects invalid params, too many controls and out-of-range bounds', () => {
+    const bad = { ...importer, params: [{ key: 'a', type: 'number', default: 5, min: 0, max: 1 }] };
+    expect(errors(pkg({}, { contributions: [bad] }))[0]).toMatch(/params/);
+    const many = Array.from({ length: PLUGIN_LIMITS.effectControls + 1 }, (_, i) => ({
+      key: `c${i}`,
+      type: 'boolean',
+      default: false,
+    }));
+    expect(errors(pkg({}, { contributions: [{ ...effect, controls: many }] }))[0]).toMatch(
+      /at most 16/,
+    );
+    const huge = { ...importer, maxInputBytes: PLUGIN_LIMITS.fileBytes + 1 };
+    expect(errors(pkg({}, { contributions: [huge] }))[0]).toMatch(/maxInputBytes/);
+  });
+
+  it('rejects oversize manifest, code and GLSL', () => {
+    expect(errors(pkg({}, { name: 'x'.repeat(PLUGIN_LIMITS.manifestBytes) }))[0]).toMatch(
+      /manifest/,
+    );
+    expect(errors(pkg({ code: 'x'.repeat(PLUGIN_LIMITS.codeBytes + 1) }))[0]).toMatch(/code/);
+    expect(errors(pkg({ glsl: { tint: 'x'.repeat(PLUGIN_LIMITS.glslBytes + 1) } }))[0]).toMatch(
+      /glsl/,
+    );
+  });
+});
+
+describe('parsePluginPackage', () => {
+  it('refuses an oversize file before parsing it', () => {
+    const big = new Uint8Array(PLUGIN_LIMITS.packageBytes + 1);
+    expect(parsePluginPackage(big)).toEqual({
+      ok: false,
+      errors: [expect.stringMatching(/at most/)],
+    });
+  });
+
+  it('refuses non-JSON and invalid UTF-8', () => {
+    expect(parsePluginPackage('{nope').ok).toBe(false);
+    expect(parsePluginPackage(new Uint8Array([0xff, 0xfe])).ok).toBe(false);
+  });
+
+  it('reads UTF-8 bytes', () => {
+    const bytes = new TextEncoder().encode(JSON.stringify(pkg()));
+    expect(parsePluginPackage(bytes).ok).toBe(true);
+  });
+});
+
+describe('isPluginCompatible', () => {
+  const manifest = (range: string) => ({ ...pkg().manifest, appVersionRange: range }) as never;
+
+  it('checks every comparator, independent of the protocol version', () => {
+    expect(isPluginCompatible(manifest('>=1.4.0 <2.0.0'), '1.4.0')).toBe(true);
+    expect(isPluginCompatible(manifest('>=1.4.0 <2.0.0'), '2.0.0')).toBe(false);
+    expect(isPluginCompatible(manifest('>=1.5.0'), '1.4.9')).toBe(false);
+    expect(isPluginCompatible(manifest('1.4.0'), '1.4.0')).toBe(true);
+    expect(isPluginCompatible(manifest('>=1.4.0'), 'garbage')).toBe(false);
+  });
+});
