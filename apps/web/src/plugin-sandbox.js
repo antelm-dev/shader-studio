@@ -7,6 +7,14 @@
   const PRELUDE = `(() => {
   const handlers = new Map();
   let port;
+  // The ArrayBuffers in a result move to the host rather than being copied.
+  const buffersIn = (value, found = new Set(), depth = 0) => {
+    if (value instanceof ArrayBuffer) found.add(value);
+    else if (value && typeof value === 'object' && depth < 8 && found.size < 64) {
+      for (const item of Object.values(value)) buffersIn(item, found, depth + 1);
+    }
+    return depth ? found : [...found];
+  };
   self.shaderStudio = Object.freeze({
     handle(method, fn) { handlers.set(method, fn); },
     notify(data) { port?.postMessage({ type: 'event', data }); },
@@ -19,7 +27,8 @@
       try {
         const fn = handlers.get(data?.method);
         if (!fn) throw new Error('Unknown method: ' + data?.method);
-        port.postMessage({ type: 'result', id, result: await fn(data.params) });
+        const result = await fn(data.params);
+        port.postMessage({ type: 'result', id, result }, buffersIn(result));
       } catch (error) {
         port.postMessage({ type: 'result', id, error: String(error?.message ?? error) });
       }

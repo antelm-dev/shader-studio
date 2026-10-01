@@ -27,6 +27,11 @@ export interface PluginSandboxOptions {
   onEvent?: (data: unknown) => void;
 }
 
+export interface SandboxCallOptions {
+  timeoutMs?: number;
+  transfer?: Transferable[];
+}
+
 interface Pending {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -86,8 +91,18 @@ export class PluginSandbox {
     });
   }
 
-  /** Call a plugin method; the plugin is terminated if it does not answer in time. */
-  call(method: string, params?: unknown, timeoutMs = 10_000): Promise<unknown> {
+  /**
+   * Call a plugin method; the plugin is terminated if it does not answer in
+   * time. Buffers in `transfer` move to the Worker instead of being cloned and
+   * are detached here — the port runs straight from host to Worker, so nothing
+   * in between copies them. The Worker's reply moves its `ArrayBuffer`s back
+   * the same way.
+   */
+  call(
+    method: string,
+    params?: unknown,
+    { timeoutMs = 10_000, transfer = [] }: SandboxCallOptions = {},
+  ): Promise<unknown> {
     if (this.terminated) return Promise.reject(this.terminated);
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
@@ -96,7 +111,7 @@ export class PluginSandbox {
         timeoutMs,
       );
       this.pending.set(id, { resolve, reject, timer });
-      this.port.postMessage({ id, method, params });
+      this.port.postMessage({ id, method, params }, transfer);
     });
   }
 

@@ -12,5 +12,6 @@ if (isDevMode()) {
   Object.assign(globalThis, {
     pluginSandboxProbe: () =>
       import('./app/plugins/sandbox-probe').then((m) => m.runSandboxProbe()),
+    pluginHostProbe: () => import('./app/plugins/sandbox-probe').then((m) => m.runHostProbe()),
   });
 }
