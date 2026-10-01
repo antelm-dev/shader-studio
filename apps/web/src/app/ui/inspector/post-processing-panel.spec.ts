@@ -3,19 +3,27 @@ import { resolve } from 'node:path';
 
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { MatDialog } from '@angular/material/dialog';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import {
   DEFAULT_RENDER,
+  createBloomEffect,
+  createCustomEffect,
   createVignetteEffect,
+  findPostProcessingEffect,
   getBloomEffect,
-  getVignetteEffect,
+  type CustomEffect,
+  type PostProcessingEffect,
   type RenderSettings,
+  type VignetteEffect,
 } from '@shadergrove/shared/model';
 import { I18nCatalog, type I18nCatalogMap } from '../../i18n/catalog';
 import { I18n } from '../../i18n/i18n';
 import { Preferences, createDefaultWorkspacePreferences } from '../../prefs/preferences';
 import { ShaderStore } from '../../workspace/shader-store';
+import { CustomEffectEditor } from './custom-effect-editor';
 import { PostProcessingPanel } from './post-processing-panel';
 
 class FileCatalog extends I18nCatalog {
@@ -41,11 +49,28 @@ function clickToggle(host: Element): void {
   host.querySelector<HTMLButtonElement>('button[role="switch"]')!.click();
 }
 
+function chain(...effects: PostProcessingEffect[]): { render: RenderSettings } {
+  return { render: { postProcessing: { enabled: true, effects } } };
+}
+
+const gain = (instanceId: string, value: number): CustomEffect =>
+  createCustomEffect({
+    instanceId,
+    enabled: true,
+    name: `Gain ${instanceId}`,
+    controls: [{ key: 'gain', type: 'number', default: 1, min: 0, max: 2 }],
+    values: { gain: value },
+  });
+
 describe('PostProcessingPanel', () => {
   const draft = signal<{ render: RenderSettings } | null>({ render: DEFAULT_RENDER });
+  const diagnostics = signal<readonly CompileDiagnostic[]>([]);
+  const dialog = { open: vi.fn() };
 
   beforeEach(async () => {
     draft.set({ render: DEFAULT_RENDER });
+    diagnostics.set([]);
+    dialog.open.mockReset();
 
     await TestBed.configureTestingModule({
       imports: [PostProcessingPanel],
@@ -64,9 +89,11 @@ describe('PostProcessingPanel', () => {
           provide: ShaderStore,
           useValue: {
             draft: draft.asReadonly(),
+            allDiagnostics: diagnostics.asReadonly(),
             setRender: (render: RenderSettings) => draft.set({ render }),
           },
         },
+        { provide: MatDialog, useValue: dialog },
       ],
     }).compileComponents();
 
@@ -84,151 +111,214 @@ describe('PostProcessingPanel', () => {
     return fixture;
   }
 
-  it('renders the default chain: Bloom present, Vignette absent', async () => {
+  const effects = () => draft()!.render.postProcessing.effects;
+  const ids = () => effects().map((effect) => effect.instanceId);
+  const rowIds = (root: HTMLElement) =>
+    [...root.querySelectorAll('.effect')].map((row) => row.getAttribute('data-testid'));
+  const button = (root: HTMLElement, id: string) =>
+    root.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)!;
+
+  function addFromMenu(root: HTMLElement, fixture: { detectChanges(): void }, type: string): void {
+    // mat-menu content renders into the CDK overlay container (document.body).
+    button(root, 'pp-add').click();
+    fixture.detectChanges();
+    document.querySelector<HTMLButtonElement>(`[data-testid="pp-add-${type}"]`)!.click();
+    fixture.detectChanges();
+  }
+
+  it('renders one row per instance, keyed by its id', async () => {
+    const fixture = await create();
+    expect(rowIds(fixture.nativeElement)).toEqual(['pp-effect-bloom']);
+  });
+
+  it('adds a second instance of a type already in the chain, and removes just that one', async () => {
     const fixture = await create();
     const root = fixture.nativeElement as HTMLElement;
 
-    expect(root.querySelector('[data-testid="pp-effect-bloom"]')).not.toBeNull();
-    expect(root.querySelector('[data-testid="pp-effect-vignette"]')).toBeNull();
+    addFromMenu(root, fixture, 'bloom');
+
+    expect(effects().map((e) => e.type)).toEqual(['bloom', 'bloom']);
+    const added = ids()[1]!;
+    expect(added).not.toBe('bloom');
+    expect(effects()[1]!.enabled).toBe(true);
+    // Two of a type are told apart by name too, for screen readers.
+    expect(button(root, `pp-remove-${added}`).getAttribute('aria-label')).toBe('Remove Bloom 2');
+
+    button(root, `pp-remove-${added}`).click();
+    fixture.detectChanges();
+
+    expect(ids()).toEqual(['bloom']);
+    expect(rowIds(root)).toEqual(['pp-effect-bloom']);
   });
 
-  it('the Add menu disables a type already in the chain', async () => {
+  it('duplicates an instance right after itself, with its settings and a new id', async () => {
+    draft.set(chain(createVignetteEffect({ enabled: true, intensity: 0.8 }), createBloomEffect()));
     const fixture = await create();
-    const component = fixture.componentInstance;
 
-    expect(component['canAdd']('bloom')).toBe(false);
-    expect(component['canAdd']('vignette')).toBe(true);
+    button(fixture.nativeElement, 'pp-duplicate-vignette').click();
+    fixture.detectChanges();
+
+    expect(effects().map((e) => e.type)).toEqual(['vignette', 'vignette', 'bloom']);
+    expect((effects()[1] as VignetteEffect).settings.intensity).toBe(0.8);
+    expect(new Set(ids()).size).toBe(3);
   });
 
-  it('add appends a fresh enabled Vignette; remove drops it entirely', async () => {
-    const fixture = await create();
-    const root = fixture.nativeElement as HTMLElement;
-
-    // mat-menu content renders into the CDK overlay container (document.body),
-    // not under the component's own element — it has to be opened first.
-    root.querySelector<HTMLButtonElement>('[data-testid="pp-add"]')!.click();
-    fixture.detectChanges();
-    document.querySelector<HTMLButtonElement>('[data-testid="pp-add-vignette"]')!.click();
-    fixture.detectChanges();
-
-    expect(draft()!.render.postProcessing.effects.map((e) => e.type)).toEqual([
-      'bloom',
-      'vignette',
-    ]);
-    expect(getVignetteEffect(draft()!.render).enabled).toBe(true);
-    expect(root.querySelector('[data-testid="pp-effect-vignette"]')).not.toBeNull();
-
-    root.querySelector<HTMLButtonElement>('[data-testid="pp-remove-vignette"]')!.click();
-    fixture.detectChanges();
-
-    expect(draft()!.render.postProcessing.effects.map((e) => e.type)).toEqual(['bloom']);
-    expect(root.querySelector('[data-testid="pp-effect-vignette"]')).toBeNull();
-  });
-
-  it('move up/down swaps chain order, and the DOM order follows it', async () => {
-    draft.set({
-      render: {
-        postProcessing: {
-          enabled: true,
-          effects: [getBloomEffect(DEFAULT_RENDER), createVignetteEffect({ enabled: true })],
-        },
-      },
-    });
-    const fixture = await create();
-    const root = fixture.nativeElement as HTMLElement;
-
-    root.querySelector<HTMLButtonElement>('[data-testid="pp-move-up-vignette"]')!.click();
-    fixture.detectChanges();
-
-    expect(draft()!.render.postProcessing.effects.map((e) => e.type)).toEqual([
-      'vignette',
-      'bloom',
-    ]);
-    const rows = [...root.querySelectorAll('.effect')].map((row) =>
-      row.getAttribute('data-testid'),
+  it('moves one of two same-type instances, and the DOM order follows it', async () => {
+    draft.set(
+      chain(
+        createVignetteEffect({ instanceId: 'v1' }),
+        createBloomEffect(),
+        createVignetteEffect({ instanceId: 'v2' }),
+      ),
     );
-    expect(rows).toEqual(['pp-effect-vignette', 'pp-effect-bloom']);
+    const fixture = await create();
+    const root = fixture.nativeElement as HTMLElement;
+
+    button(root, 'pp-move-up-v2').click();
+    fixture.detectChanges();
+
+    expect(ids()).toEqual(['v1', 'v2', 'bloom']);
+    expect(rowIds(root)).toEqual(['pp-effect-v1', 'pp-effect-v2', 'pp-effect-bloom']);
+  });
+
+  it('drops a dragged row where the target row is, even several rows away', async () => {
+    draft.set(chain(gain('a', 1), gain('b', 1), gain('c', 1)));
+    const fixture = await create();
+    const root = fixture.nativeElement as HTMLElement;
+    const row = (id: string) => root.querySelector(`[data-testid="pp-effect-${id}"]`)!;
+    const drag = (from: string, to: string) => {
+      row(from).dispatchEvent(new Event('dragstart'));
+      row(to).dispatchEvent(new Event('drop'));
+      fixture.detectChanges();
+    };
+
+    drag('a', 'c');
+    expect(ids()).toEqual(['b', 'c', 'a']);
+    drag('a', 'b');
+    expect(ids()).toEqual(['a', 'b', 'c']);
   });
 
   it('master toggle flips only postProcessing.enabled, leaving effects untouched', async () => {
     const fixture = await create();
     const root = fixture.nativeElement as HTMLElement;
-    const before = draft()!.render.postProcessing.effects;
-    expect(draft()!.render.postProcessing.enabled).toBe(true); // DEFAULT_RENDER starts enabled
+    const before = effects();
 
     clickToggle(root.querySelector('[data-testid="pp-master-toggle"]')!);
     fixture.detectChanges();
 
     expect(draft()!.render.postProcessing.enabled).toBe(false);
-    expect(draft()!.render.postProcessing.effects).toEqual(before);
+    expect(effects()).toEqual(before);
   });
 
-  it('per-effect enable toggles only that effect', async () => {
+  it('per-effect enable toggles only that instance', async () => {
+    draft.set(
+      chain(createBloomEffect({ instanceId: 'b1' }), createBloomEffect({ instanceId: 'b2' })),
+    );
     const fixture = await create();
-    const root = fixture.nativeElement as HTMLElement;
-    expect(getBloomEffect(draft()!.render).enabled).toBe(false); // DEFAULT_RENDER's Bloom starts disabled
 
-    clickToggle(root.querySelector('[data-testid="pp-enable-bloom"]')!);
+    clickToggle(fixture.nativeElement.querySelector('[data-testid="pp-enable-b2"]')!);
     fixture.detectChanges();
 
-    expect(getBloomEffect(draft()!.render).enabled).toBe(true);
-    expect(draft()!.render.postProcessing.enabled).toBe(true); // master switch untouched
+    expect(effects().map((e) => e.enabled)).toEqual([false, true]);
   });
 
-  it('reset restores an effect to its type defaults, keeping enabled state and position', async () => {
-    draft.set({
-      render: {
-        postProcessing: {
-          enabled: true,
-          effects: [
-            {
-              type: 'bloom',
-              enabled: false,
-              settings: { strength: 1.9, radius: 0.9, threshold: 0.1 },
-            },
-          ],
-        },
-      },
-    });
+  it('reset restores an instance to its type defaults, keeping enabled state and position', async () => {
+    draft.set(
+      chain(createBloomEffect({ enabled: false, strength: 1.9, radius: 0.9, threshold: 0.1 })),
+    );
     const fixture = await create();
-    const root = fixture.nativeElement as HTMLElement;
 
-    root.querySelector<HTMLButtonElement>('[data-testid="pp-reset-bloom"]')!.click();
+    button(fixture.nativeElement, 'pp-reset-bloom').click();
     fixture.detectChanges();
 
     const bloom = getBloomEffect(draft()!.render);
-    expect(bloom.enabled).toBe(false); // untouched
-    expect(bloom.settings).toEqual({ strength: 0.3, radius: 0.5, threshold: 0.85 }); // back to defaults
+    expect(bloom.enabled).toBe(false);
+    expect(bloom.settings).toEqual({ strength: 0.3, radius: 0.5, threshold: 0.85 });
   });
 
   it('two rapid settings edits on the same effect both survive — neither clobbers the other', async () => {
-    draft.set({
-      render: {
-        postProcessing: {
-          enabled: true,
-          effects: [getBloomEffect(DEFAULT_RENDER), createVignetteEffect({ enabled: true })],
-        },
-      },
-    });
+    draft.set(chain(createBloomEffect(), createVignetteEffect({ enabled: true })));
+    const fixture = await create();
+    const root = fixture.nativeElement as HTMLElement;
+    const row = root.querySelector('[data-testid="pp-effect-vignette"]')!;
+    const [intensity, softness] = [
+      ...row.querySelectorAll<HTMLInputElement>('input[type="range"]'),
+    ];
+
+    setInputValue(intensity!, 0.9);
+    setInputValue(softness!, 0.15);
+    fixture.detectChanges();
+
+    const vignette = findPostProcessingEffect(draft()!.render, 'vignette') as VignetteEffect;
+    expect(vignette.settings).toEqual({ intensity: 0.9, softness: 0.15, roundness: 1 });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Custom effects
+  // ---------------------------------------------------------------------------
+
+  it("sets each custom instance's own values, with its own name", async () => {
+    draft.set(chain(gain('a', 0.5), gain('b', 1.5)));
+    const fixture = await create();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[data-testid="pp-effect-a"]')!.getAttribute('aria-label')).toBe(
+      'Gain a',
+    );
+
+    setInputValue(root.querySelector<HTMLInputElement>('[data-testid="pp-value-b-gain"]')!, 0.25);
+    fixture.detectChanges();
+
+    expect(effects().map((e) => (e as CustomEffect).values['gain'])).toEqual([0.5, 0.25]);
+  });
+
+  it('adding a custom effect opens its editor; the code button reopens it', async () => {
     const fixture = await create();
     const root = fixture.nativeElement as HTMLElement;
 
-    const vignetteRow = root.querySelector('[data-testid="pp-effect-vignette"]')!;
-    const [intensityInput, softnessInput] = [
-      ...vignetteRow.querySelectorAll<HTMLInputElement>('input[type="range"]'),
-    ];
+    addFromMenu(root, fixture, 'custom');
 
-    // Both edits fire before Angular gets a chance to re-render in between —
-    // exactly the case a template closure over a stale `effect` object would
-    // get wrong, since the second edit's handler would still see the first
-    // edit's pre-update settings.
-    setInputValue(intensityInput, 0.9);
-    setInputValue(softnessInput, 0.15);
+    const added = effects()[1] as CustomEffect;
+    expect(added.type).toBe('custom');
+    expect(dialog.open).toHaveBeenCalledWith(
+      CustomEffectEditor,
+      expect.objectContaining({
+        data: { instanceId: added.instanceId },
+      }),
+    );
+
     fixture.detectChanges();
+    button(root, `pp-edit-${added.instanceId}`).click();
+    expect(dialog.open).toHaveBeenCalledTimes(2);
+  });
 
-    const vignette = getVignetteEffect(draft()!.render);
-    expect(vignette.settings.intensity).toBe(0.9);
-    expect(vignette.settings.softness).toBe(0.15);
-    expect(vignette.settings.roundness).toBe(1); // default, untouched by either edit
+  it("shows a custom effect's compile error with its line, and only on that effect", async () => {
+    draft.set(chain(gain('a', 1), gain('b', 1)));
+    diagnostics.set([
+      {
+        severity: 'error',
+        line: 3,
+        message: "'x' : undeclared identifier",
+        source: 'fragment',
+        docId: '@effect/b',
+      },
+    ]);
+    const fixture = await create();
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelector('[data-testid="pp-error-a"]')).toBeNull();
+    expect(root.querySelector('[data-testid="pp-error-b"]')!.textContent!.trim()).toBe(
+      "Line 3: 'x' : undeclared identifier",
+    );
+  });
+
+  it('explains a custom effect from a newer API instead of hiding it', async () => {
+    const future = gain('f', 1);
+    future.definition.apiVersion = 3;
+    draft.set(chain(future));
+    const fixture = await create();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="pp-unsupported-f"]')!.textContent,
+    ).toContain('v3');
   });
 });

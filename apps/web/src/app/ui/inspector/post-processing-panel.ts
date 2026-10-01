@@ -1,55 +1,71 @@
+import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSliderModule } from '@angular/material/slider';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
+import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import {
   POST_PROCESSING_EFFECT_TYPES,
   addPostProcessingEffect,
-  getBloomEffect,
-  getVignetteEffect,
+  duplicatePostProcessingEffect,
+  isCustomEffectRunnable,
   movePostProcessingEffect,
   removePostProcessingEffect,
+  reorderPostProcessingEffect,
   resetPostProcessingEffect,
   setPostProcessingEffectEnabled,
-  withBloomEffect,
+  updatePostProcessingEffect,
   withPostProcessingEnabled,
-  withVignetteEffect,
   type BloomEffect,
+  type BloomSettings,
+  type CustomEffect,
+  type NumberControl,
+  type ParamValue,
   type PostProcessingEffect,
   type PostProcessingEffectType,
   type RenderSettings,
+  type SelectControl,
   type VignetteEffect,
+  type VignetteSettings,
 } from '@shadergrove/shared/model';
 import { I18n } from '../../i18n/i18n';
 import type { TranslationKey } from '../../i18n/keys';
 import { TranslatePipe } from '../../i18n/translate.pipe';
+import { effectDocId } from '../../rendering/engine/custom-effect-pass';
 import { ShaderStore } from '../../workspace/shader-store';
+import { CustomEffectEditor, type CustomEffectEditorData } from './custom-effect-editor';
 
 const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
   bloom: 'rack.bloom',
   vignette: 'rack.vignette',
+  custom: 'rack.custom',
 };
 
 /**
  * The Effects Rack: the post-processing chain's only UI. It lives above the
- * shader's own parameter controls in the Controls tab rather than a tab of
- * its own — a chain of at most one Bloom and one Vignette does not earn a
- * cramped fourth tab, and it belongs next to the params it renders alongside.
+ * shader's own parameter controls, next to the params it renders alongside.
+ *
+ * Every row is one instance, addressed by its `instanceId` — two Vignettes, or
+ * two custom effects, are two rows set, moved, toggled and removed on their
+ * own. A custom effect's values are set here; its code, name and controls in
+ * `CustomEffectEditor`.
  *
  * Every mutation reads the draft's `render`, runs it through one of the pure
- * chain helpers from `@shadergrove/shared/model`, and writes the whole
- * result back through `ShaderStore.setRender` — exactly like a parameter
- * edit: one immutable value, the draft marked dirty, surviving save/reload
- * and recovery the same way.
+ * chain helpers from `@shadergrove/shared/model`, and writes the whole result
+ * back through `ShaderStore.setRender` — exactly like a parameter edit: one
+ * immutable value, the draft marked dirty, surviving save/reload and recovery
+ * the same way.
  */
 @Component({
   selector: 'app-post-processing-panel',
   imports: [
+    DecimalPipe,
     FormsModule,
     MatButtonModule,
     MatIconModule,
@@ -89,11 +105,9 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
             mat-menu-item
             type="button"
             [attr.data-testid]="'pp-add-' + type"
-            [disabled]="!canAdd(type)"
-            [matTooltip]="canAdd(type) ? '' : ('rack.addTypeDisabledHint' | translate)"
             (click)="add(type)"
           >
-            <span>{{ label(type) }}</span>
+            <span>{{ typeLabel(type) }}</span>
           </button>
         }
       </mat-menu>
@@ -102,159 +116,265 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
         <p class="empty">{{ 'rack.empty' | translate }}</p>
       }
 
-      @for (effect of effects(); track effect.type; let first = $first; let last = $last) {
+      @for (effect of effects(); track effect.instanceId; let first = $first; let last = $last) {
         <section
           class="effect"
           [class.effect-disabled]="!effect.enabled"
-          [attr.data-testid]="'pp-effect-' + effect.type"
+          [attr.data-testid]="'pp-effect-' + effect.instanceId"
+          [attr.aria-label]="name(effect)"
           draggable="true"
-          (dragstart)="onDragStart($event, effect.type)"
-          (dragover)="onDragOver($event, effect.type)"
-          (drop)="onDrop($event, effect.type)"
+          (dragstart)="onDragStart($event, effect.instanceId)"
+          (dragover)="onDragOver($event, effect.instanceId)"
+          (drop)="onDrop($event, effect.instanceId)"
           (dragend)="onDragEnd()"
         >
           <header class="effect-header">
             <mat-icon class="drag-handle" aria-hidden="true">drag_indicator</mat-icon>
 
             <mat-slide-toggle
-              [attr.data-testid]="'pp-enable-' + effect.type"
-              [attr.aria-label]="ariaFor('rack.enabledAria', effect.type)"
+              class="effect-toggle"
+              [attr.data-testid]="'pp-enable-' + effect.instanceId"
+              [attr.aria-label]="ariaFor('rack.enabledAria', effect)"
               [ngModel]="effect.enabled"
-              (ngModelChange)="setEnabled(effect.type, $event)"
+              (ngModelChange)="setEnabled(effect.instanceId, $event)"
             >
-              {{ label(effect.type) }}
+              {{ name(effect) }}
             </mat-slide-toggle>
 
             <span class="spacer"></span>
 
+            @if (effect.type === 'custom') {
+              <button
+                matIconButton
+                type="button"
+                [attr.data-testid]="'pp-edit-' + effect.instanceId"
+                [matTooltip]="ariaFor('rack.editAria', effect)"
+                [attr.aria-label]="ariaFor('rack.editAria', effect)"
+                (click)="edit(effect.instanceId)"
+              >
+                <mat-icon>code</mat-icon>
+              </button>
+            }
             <button
               matIconButton
               type="button"
-              [attr.data-testid]="'pp-move-up-' + effect.type"
+              [attr.data-testid]="'pp-move-up-' + effect.instanceId"
               [disabled]="first"
-              [matTooltip]="ariaFor('rack.moveUpAria', effect.type)"
-              [attr.aria-label]="ariaFor('rack.moveUpAria', effect.type)"
-              (click)="move(effect.type, 'up')"
+              [matTooltip]="ariaFor('rack.moveUpAria', effect)"
+              [attr.aria-label]="ariaFor('rack.moveUpAria', effect)"
+              (click)="move(effect.instanceId, 'up')"
             >
               <mat-icon>arrow_upward</mat-icon>
             </button>
             <button
               matIconButton
               type="button"
-              [attr.data-testid]="'pp-move-down-' + effect.type"
+              [attr.data-testid]="'pp-move-down-' + effect.instanceId"
               [disabled]="last"
-              [matTooltip]="ariaFor('rack.moveDownAria', effect.type)"
-              [attr.aria-label]="ariaFor('rack.moveDownAria', effect.type)"
-              (click)="move(effect.type, 'down')"
+              [matTooltip]="ariaFor('rack.moveDownAria', effect)"
+              [attr.aria-label]="ariaFor('rack.moveDownAria', effect)"
+              (click)="move(effect.instanceId, 'down')"
             >
               <mat-icon>arrow_downward</mat-icon>
             </button>
             <button
               matIconButton
               type="button"
-              [attr.data-testid]="'pp-reset-' + effect.type"
-              [matTooltip]="ariaFor('rack.resetAria', effect.type)"
-              [attr.aria-label]="ariaFor('rack.resetAria', effect.type)"
-              (click)="reset(effect.type)"
+              [attr.data-testid]="'pp-duplicate-' + effect.instanceId"
+              [matTooltip]="ariaFor('rack.duplicateAria', effect)"
+              [attr.aria-label]="ariaFor('rack.duplicateAria', effect)"
+              (click)="duplicate(effect.instanceId)"
+            >
+              <mat-icon>content_copy</mat-icon>
+            </button>
+            <button
+              matIconButton
+              type="button"
+              [attr.data-testid]="'pp-reset-' + effect.instanceId"
+              [matTooltip]="ariaFor('rack.resetAria', effect)"
+              [attr.aria-label]="ariaFor('rack.resetAria', effect)"
+              (click)="reset(effect.instanceId)"
             >
               <mat-icon>restart_alt</mat-icon>
             </button>
             <button
               matIconButton
               type="button"
-              [attr.data-testid]="'pp-remove-' + effect.type"
-              [matTooltip]="ariaFor('rack.removeAria', effect.type)"
-              [attr.aria-label]="ariaFor('rack.removeAria', effect.type)"
-              (click)="remove(effect.type)"
+              [attr.data-testid]="'pp-remove-' + effect.instanceId"
+              [matTooltip]="ariaFor('rack.removeAria', effect)"
+              [attr.aria-label]="ariaFor('rack.removeAria', effect)"
+              (click)="remove(effect.instanceId)"
             >
               <mat-icon>close</mat-icon>
             </button>
           </header>
 
-          @if (effect.type === 'bloom') {
-            <div class="sliders">
-              <label class="field">
-                <span class="field-label">
-                  {{ 'rack.strength' | translate }}
-                  <span class="value">{{ effect.settings.strength.toFixed(2) }}</span>
-                </span>
-                <mat-slider [min]="0" [max]="2" [step]="0.01">
-                  <input
-                    matSliderThumb
-                    [ngModel]="effect.settings.strength"
-                    (ngModelChange)="setBloomSetting({ strength: $event })"
-                  />
-                </mat-slider>
-              </label>
-              <label class="field">
-                <span class="field-label">
-                  {{ 'rack.radius' | translate }}
-                  <span class="value">{{ effect.settings.radius.toFixed(2) }}</span>
-                </span>
-                <mat-slider [min]="0" [max]="1" [step]="0.01">
-                  <input
-                    matSliderThumb
-                    [ngModel]="effect.settings.radius"
-                    (ngModelChange)="setBloomSetting({ radius: $event })"
-                  />
-                </mat-slider>
-              </label>
-              <label class="field">
-                <span class="field-label">
-                  {{ 'rack.threshold' | translate }}
-                  <span class="value">{{ effect.settings.threshold.toFixed(2) }}</span>
-                </span>
-                <mat-slider [min]="0" [max]="1" [step]="0.01">
-                  <input
-                    matSliderThumb
-                    [ngModel]="effect.settings.threshold"
-                    (ngModelChange)="setBloomSetting({ threshold: $event })"
-                  />
-                </mat-slider>
-              </label>
-            </div>
-          } @else {
-            <div class="sliders">
-              <label class="field">
-                <span class="field-label">
-                  {{ 'rack.intensity' | translate }}
-                  <span class="value">{{ effect.settings.intensity.toFixed(2) }}</span>
-                </span>
-                <mat-slider [min]="0" [max]="1" [step]="0.01">
-                  <input
-                    matSliderThumb
-                    [ngModel]="effect.settings.intensity"
-                    (ngModelChange)="setVignetteSetting({ intensity: $event })"
-                  />
-                </mat-slider>
-              </label>
-              <label class="field">
-                <span class="field-label">
-                  {{ 'rack.softness' | translate }}
-                  <span class="value">{{ effect.settings.softness.toFixed(2) }}</span>
-                </span>
-                <mat-slider [min]="0" [max]="1" [step]="0.01">
-                  <input
-                    matSliderThumb
-                    [ngModel]="effect.settings.softness"
-                    (ngModelChange)="setVignetteSetting({ softness: $event })"
-                  />
-                </mat-slider>
-              </label>
-              <label class="field">
-                <span class="field-label">
-                  {{ 'rack.roundness' | translate }}
-                  <span class="value">{{ effect.settings.roundness.toFixed(2) }}</span>
-                </span>
-                <mat-slider [min]="0" [max]="1" [step]="0.01">
-                  <input
-                    matSliderThumb
-                    [ngModel]="effect.settings.roundness"
-                    (ngModelChange)="setVignetteSetting({ roundness: $event })"
-                  />
-                </mat-slider>
-              </label>
-            </div>
+          @switch (effect.type) {
+            @case ('bloom') {
+              <div class="sliders">
+                <label class="field">
+                  <span class="field-label">
+                    {{ 'rack.strength' | translate }}
+                    <span class="value">{{ effect.settings.strength.toFixed(2) }}</span>
+                  </span>
+                  <mat-slider [min]="0" [max]="2" [step]="0.01">
+                    <input
+                      matSliderThumb
+                      [ngModel]="effect.settings.strength"
+                      (ngModelChange)="setBloomSetting(effect.instanceId, { strength: $event })"
+                    />
+                  </mat-slider>
+                </label>
+                <label class="field">
+                  <span class="field-label">
+                    {{ 'rack.radius' | translate }}
+                    <span class="value">{{ effect.settings.radius.toFixed(2) }}</span>
+                  </span>
+                  <mat-slider [min]="0" [max]="1" [step]="0.01">
+                    <input
+                      matSliderThumb
+                      [ngModel]="effect.settings.radius"
+                      (ngModelChange)="setBloomSetting(effect.instanceId, { radius: $event })"
+                    />
+                  </mat-slider>
+                </label>
+                <label class="field">
+                  <span class="field-label">
+                    {{ 'rack.threshold' | translate }}
+                    <span class="value">{{ effect.settings.threshold.toFixed(2) }}</span>
+                  </span>
+                  <mat-slider [min]="0" [max]="1" [step]="0.01">
+                    <input
+                      matSliderThumb
+                      [ngModel]="effect.settings.threshold"
+                      (ngModelChange)="setBloomSetting(effect.instanceId, { threshold: $event })"
+                    />
+                  </mat-slider>
+                </label>
+              </div>
+            }
+            @case ('vignette') {
+              <div class="sliders">
+                <label class="field">
+                  <span class="field-label">
+                    {{ 'rack.intensity' | translate }}
+                    <span class="value">{{ effect.settings.intensity.toFixed(2) }}</span>
+                  </span>
+                  <mat-slider [min]="0" [max]="1" [step]="0.01">
+                    <input
+                      matSliderThumb
+                      [ngModel]="effect.settings.intensity"
+                      (ngModelChange)="setVignetteSetting(effect.instanceId, { intensity: $event })"
+                    />
+                  </mat-slider>
+                </label>
+                <label class="field">
+                  <span class="field-label">
+                    {{ 'rack.softness' | translate }}
+                    <span class="value">{{ effect.settings.softness.toFixed(2) }}</span>
+                  </span>
+                  <mat-slider [min]="0" [max]="1" [step]="0.01">
+                    <input
+                      matSliderThumb
+                      [ngModel]="effect.settings.softness"
+                      (ngModelChange)="setVignetteSetting(effect.instanceId, { softness: $event })"
+                    />
+                  </mat-slider>
+                </label>
+                <label class="field">
+                  <span class="field-label">
+                    {{ 'rack.roundness' | translate }}
+                    <span class="value">{{ effect.settings.roundness.toFixed(2) }}</span>
+                  </span>
+                  <mat-slider [min]="0" [max]="1" [step]="0.01">
+                    <input
+                      matSliderThumb
+                      [ngModel]="effect.settings.roundness"
+                      (ngModelChange)="setVignetteSetting(effect.instanceId, { roundness: $event })"
+                    />
+                  </mat-slider>
+                </label>
+              </div>
+            }
+            @case ('custom') {
+              @if (!runnable(effect)) {
+                <p class="status" [attr.data-testid]="'pp-unsupported-' + effect.instanceId">
+                  {{ 'rack.unsupported' | translate: { version: effect.definition.apiVersion } }}
+                </p>
+              }
+              @for (diagnostic of diagnosticsFor(effect); track $index) {
+                @if (diagnostic.severity === 'error') {
+                  <p class="status error" role="status" [attr.data-testid]="'pp-error-' + effect.instanceId">
+                    @if (diagnostic.line > 0) {
+                      {{ 'rack.errorLine' | translate: { line: diagnostic.line, message: diagnostic.message } }}
+                    } @else {
+                      {{ diagnostic.message }}
+                    }
+                  </p>
+                } @else if (runnable(effect)) {
+                  <p class="status">{{ diagnostic.message }}</p>
+                }
+              }
+              <div class="sliders">
+                @for (control of effect.definition.controls; track control.key) {
+                  @switch (control.type) {
+                    @case ('number') {
+                      <label class="field">
+                        <span class="field-label">
+                          {{ control.label ?? control.key }}
+                          <span class="value">{{ +effect.values[control.key] | number: '1.0-2' }}</span>
+                        </span>
+                        <mat-slider [min]="control.min" [max]="control.max" [step]="step(control)">
+                          <input
+                            matSliderThumb
+                            [attr.data-testid]="'pp-value-' + effect.instanceId + '-' + control.key"
+                            [ngModel]="effect.values[control.key]"
+                            (ngModelChange)="setValue(effect.instanceId, control.key, $event)"
+                          />
+                        </mat-slider>
+                      </label>
+                    }
+                    @case ('boolean') {
+                      <mat-slide-toggle
+                        class="field-toggle"
+                        [attr.data-testid]="'pp-value-' + effect.instanceId + '-' + control.key"
+                        [ngModel]="effect.values[control.key]"
+                        (ngModelChange)="setValue(effect.instanceId, control.key, $event)"
+                      >
+                        {{ control.label ?? control.key }}
+                      </mat-slide-toggle>
+                    }
+                    @case ('color') {
+                      <label class="field">
+                        <span class="field-label">{{ control.label ?? control.key }}</span>
+                        <input
+                          class="native"
+                          type="color"
+                          [attr.data-testid]="'pp-value-' + effect.instanceId + '-' + control.key"
+                          [ngModel]="effect.values[control.key]"
+                          (ngModelChange)="setValue(effect.instanceId, control.key, $event)"
+                        />
+                      </label>
+                    }
+                    @case ('select') {
+                      <label class="field">
+                        <span class="field-label">{{ control.label ?? control.key }}</span>
+                        <select
+                          class="native"
+                          [attr.data-testid]="'pp-value-' + effect.instanceId + '-' + control.key"
+                          [ngModel]="effect.values[control.key]"
+                          (ngModelChange)="setValue(effect.instanceId, control.key, +$event)"
+                        >
+                          @for (option of options(control); track option[0]) {
+                            <option [ngValue]="option[1]">{{ option[0] }}</option>
+                          }
+                        </select>
+                      </label>
+                    }
+                  }
+                }
+              </div>
+            }
           }
         </section>
       }
@@ -313,6 +433,10 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
       gap: 2px;
     }
 
+    .effect-toggle {
+      min-width: 0;
+    }
+
     .drag-handle {
       flex: 0 0 auto;
       color: var(--mat-sys-on-surface-variant);
@@ -326,6 +450,16 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
     .sliders {
       display: flex;
       flex-direction: column;
+    }
+
+    .status {
+      margin: 0;
+      font: var(--mat-sys-body-small);
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .status.error {
+      color: var(--mat-sys-error);
     }
 
     /* One row per setting, laid out like the parameter panel's: name, track,
@@ -353,6 +487,15 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
       text-align: right;
     }
 
+    .native {
+      order: 2;
+      min-width: 0;
+    }
+
+    .field-toggle {
+      min-height: 26px;
+    }
+
     /* Material lays its thumb out against a 48px host, so the row is tightened
        with negative margins rather than by shrinking the slider itself. */
     mat-slider {
@@ -366,6 +509,7 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
 export class PostProcessingPanel {
   protected readonly store = inject(ShaderStore);
   private readonly i18n = inject(I18n);
+  private readonly dialog = inject(MatDialog);
 
   protected readonly types = POST_PROCESSING_EFFECT_TYPES;
 
@@ -377,18 +521,58 @@ export class PostProcessingPanel {
   );
   protected readonly chainEnabled = computed(() => this.render()?.postProcessing.enabled ?? true);
 
-  private dragging: PostProcessingEffectType | null = null;
+  /** Each instance's display name: a custom effect's own, or its type's — numbered when there are several. */
+  private readonly names = computed(() => {
+    const names = new Map<string, string>();
+    const seen = new Map<PostProcessingEffectType, number>();
+    const effects = this.effects();
+    for (const effect of effects) {
+      if (effect.type === 'custom') {
+        names.set(effect.instanceId, effect.definition.name);
+        continue;
+      }
+      const n = (seen.get(effect.type) ?? 0) + 1;
+      seen.set(effect.type, n);
+      const several = effects.filter((other) => other.type === effect.type).length > 1;
+      const label = this.typeLabel(effect.type);
+      names.set(
+        effect.instanceId,
+        several ? this.i18n.t('rack.instanceName', { name: label, n }) : label,
+      );
+    }
+    return names;
+  });
 
-  protected label(type: PostProcessingEffectType): string {
+  private dragging: string | null = null;
+
+  protected typeLabel(type: PostProcessingEffectType): string {
     return this.i18n.t(EFFECT_LABEL_KEY[type]);
   }
 
-  protected ariaFor(key: TranslationKey, type: PostProcessingEffectType): string {
-    return this.i18n.t(key, { name: this.label(type) });
+  protected name(effect: PostProcessingEffect): string {
+    return this.names().get(effect.instanceId) ?? this.typeLabel(effect.type);
   }
 
-  protected canAdd(type: PostProcessingEffectType): boolean {
-    return !this.effects().some((effect) => effect.type === type);
+  protected ariaFor(key: TranslationKey, effect: PostProcessingEffect): string {
+    return this.i18n.t(key, { name: this.name(effect) });
+  }
+
+  protected runnable(effect: CustomEffect): boolean {
+    return isCustomEffectRunnable(effect);
+  }
+
+  /** The renderer's diagnostics for one custom effect: compile errors, a skipped API, a suspension. */
+  protected diagnosticsFor(effect: PostProcessingEffect): CompileDiagnostic[] {
+    const docId = effectDocId(effect.instanceId);
+    return this.store.allDiagnostics().filter((diagnostic) => diagnostic.docId === docId);
+  }
+
+  protected step(control: NumberControl): number {
+    return control.step ?? (control.max - control.min) / 100;
+  }
+
+  protected options(control: SelectControl): [string, number][] {
+    return Object.entries(control.options);
   }
 
   protected setChainEnabled(enabled: boolean): void {
@@ -396,73 +580,102 @@ export class PostProcessingPanel {
   }
 
   protected add(type: PostProcessingEffectType): void {
-    if (!this.canAdd(type)) return;
+    const before = new Set(this.effects().map((effect) => effect.instanceId));
     this.mutate((render) => addPostProcessingEffect(render, type));
+    if (type !== 'custom') return;
+    const added = this.effects().find((effect) => !before.has(effect.instanceId));
+    if (added) this.edit(added.instanceId);
   }
 
-  protected remove(type: PostProcessingEffectType): void {
-    this.mutate((render) => removePostProcessingEffect(render, type));
+  protected duplicate(instanceId: string): void {
+    this.mutate((render) => duplicatePostProcessingEffect(render, instanceId));
   }
 
-  protected reset(type: PostProcessingEffectType): void {
-    this.mutate((render) => resetPostProcessingEffect(render, type));
+  protected remove(instanceId: string): void {
+    this.mutate((render) => removePostProcessingEffect(render, instanceId));
   }
 
-  protected setEnabled(type: PostProcessingEffectType, enabled: boolean): void {
-    this.mutate((render) => setPostProcessingEffectEnabled(render, type, enabled));
+  protected reset(instanceId: string): void {
+    this.mutate((render) => resetPostProcessingEffect(render, instanceId));
   }
 
-  protected move(type: PostProcessingEffectType, direction: 'up' | 'down'): void {
-    this.mutate((render) => movePostProcessingEffect(render, type, direction));
+  protected setEnabled(instanceId: string, enabled: boolean): void {
+    this.mutate((render) => setPostProcessingEffectEnabled(render, instanceId, enabled));
+  }
+
+  protected move(instanceId: string, direction: 'up' | 'down'): void {
+    this.mutate((render) => movePostProcessingEffect(render, instanceId, direction));
+  }
+
+  protected edit(instanceId: string): void {
+    this.dialog.open<CustomEffectEditor, CustomEffectEditorData>(CustomEffectEditor, {
+      data: { instanceId },
+      autoFocus: 'dialog',
+    });
   }
 
   /**
-   * Re-reads the effect from the render passed into `mutate` — never from a
-   * template-bound closure — so a rapid string of edits (or a change made
-   * elsewhere in the chain between renders) is never clobbered by a stale
-   * snapshot of the effect's other fields.
+   * Each setter re-reads the instance from the render passed into `mutate` —
+   * never from a template-bound closure — so a rapid string of edits (or a
+   * change made elsewhere in the chain between renders) is never clobbered by
+   * a stale snapshot of the effect's other fields.
    */
-  protected setBloomSetting(patch: Partial<BloomEffect['settings']>): void {
+  protected setBloomSetting(instanceId: string, patch: Partial<BloomSettings>): void {
     this.mutate((render) =>
-      withBloomEffect(render, { enabled: getBloomEffect(render).enabled, ...patch }),
+      updatePostProcessingEffect<BloomEffect>(render, instanceId, (effect) => ({
+        ...effect,
+        settings: { ...effect.settings, ...patch },
+      })),
     );
   }
 
-  protected setVignetteSetting(patch: Partial<VignetteEffect['settings']>): void {
+  protected setVignetteSetting(instanceId: string, patch: Partial<VignetteSettings>): void {
     this.mutate((render) =>
-      withVignetteEffect(render, { enabled: getVignetteEffect(render).enabled, ...patch }),
+      updatePostProcessingEffect<VignetteEffect>(render, instanceId, (effect) => ({
+        ...effect,
+        settings: { ...effect.settings, ...patch },
+      })),
+    );
+  }
+
+  protected setValue(instanceId: string, key: string, value: ParamValue): void {
+    this.mutate((render) =>
+      updatePostProcessingEffect<CustomEffect>(render, instanceId, (effect) => ({
+        ...effect,
+        values: { ...effect.values, [key]: value },
+      })),
     );
   }
 
   // --- Drag reorder ---------------------------------------------------------
-  // Mouse convenience only — the move-up/down buttons above are the
-  // keyboard-operable path required for accessibility. With at most one
-  // instance per type (Phase 1), dropping A onto B is always a swap, so this
-  // rides on the same adjacent-swap helper the buttons use.
+  // Mouse convenience only — the move-up/down buttons are the keyboard-operable
+  // path required for accessibility. Dropping onto a row puts the dragged
+  // effect where that row is: after it when moving down, before it when moving up.
 
-  protected onDragStart(event: DragEvent, type: PostProcessingEffectType): void {
-    this.dragging = type;
-    event.dataTransfer?.setData('text/plain', type);
+  protected onDragStart(event: DragEvent, instanceId: string): void {
+    this.dragging = instanceId;
+    event.dataTransfer?.setData('text/plain', instanceId);
     if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
   }
 
-  protected onDragOver(event: DragEvent, type: PostProcessingEffectType): void {
-    if (!this.dragging || this.dragging === type) return;
+  protected onDragOver(event: DragEvent, instanceId: string): void {
+    if (!this.dragging || this.dragging === instanceId) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
   }
 
-  protected onDrop(event: DragEvent, type: PostProcessingEffectType): void {
+  protected onDrop(event: DragEvent, instanceId: string): void {
     event.preventDefault();
     const source = this.dragging;
     this.dragging = null;
-    if (!source || source === type) return;
+    if (!source || source === instanceId) return;
 
-    const effects = this.effects();
-    const from = effects.findIndex((effect) => effect.type === source);
-    const to = effects.findIndex((effect) => effect.type === type);
+    const ids = this.effects().map((effect) => effect.instanceId);
+    const from = ids.indexOf(source);
+    const to = ids.indexOf(instanceId);
     if (from < 0 || to < 0) return;
-    this.move(source, from < to ? 'down' : 'up');
+    const before = from < to ? (ids[to + 1] ?? null) : instanceId;
+    this.mutate((render) => reorderPostProcessingEffect(render, source, before));
   }
 
   protected onDragEnd(): void {
