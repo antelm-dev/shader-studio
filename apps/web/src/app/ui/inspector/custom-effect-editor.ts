@@ -49,6 +49,7 @@ const SOURCE_DEBOUNCE_MS = 300;
             [maxLength]="nameLength"
             [ngModel]="current.definition.name"
             (ngModelChange)="setName($event)"
+            (blur)="setName(current.definition.name.trim())"
           />
         </label>
 
@@ -206,9 +207,9 @@ export class CustomEffectEditor {
     inject(DestroyRef).onDestroy(() => this.flushSource());
   }
 
+  /** Kept as typed — trimming every keystroke would eat the space before the next word. */
   protected setName(name: string): void {
-    const trimmed = name.trim();
-    if (trimmed) this.updateDefinition((definition) => ({ ...definition, name: trimmed }));
+    if (name.trim()) this.updateDefinition((definition) => ({ ...definition, name }));
   }
 
   protected setSource(source: string): void {

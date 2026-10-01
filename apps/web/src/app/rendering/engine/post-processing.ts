@@ -8,10 +8,12 @@ import {
   CUSTOM_EFFECT_API_VERSION,
   DEFAULT_RENDER,
   isCustomEffectRunnable,
+  sanitizeParams,
   type CustomEffect,
   type PostProcessingEffect,
   type PostProcessingEffectType,
   type RenderSettings,
+  type ShaderControl,
 } from '@shadergrove/shared';
 import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import type { GlContext } from '../gl-context';
@@ -96,6 +98,8 @@ interface BuiltPass {
   key: string;
   pass: EffectPass;
   type: PostProcessingEffectType;
+  /** A custom pass's controls as compiled: the only shape its uniforms can take values in. */
+  controls: readonly ShaderControl[];
 }
 
 /**
@@ -360,6 +364,7 @@ export class PostProcessing {
         new this.modules!.ShaderPass(result.material),
         'custom',
         built,
+        effect.definition.controls,
       );
     }
 
@@ -369,10 +374,12 @@ export class PostProcessing {
   /** While new code fails, the last pass that compiled keeps running, with what values still fit it. */
   private keepLastValid(effect: CustomEffect, built: BuiltPass | undefined): EffectPass | null {
     if (!built) return null;
+    // The values are read against the controls the pass was compiled with: an edit that
+    // renamed a control or changed its type must not write, say, a colour into a float.
     applyCustomValues(
       (built.pass as ShaderPass).uniforms,
-      effect.definition.controls,
-      effect.values,
+      built.controls,
+      sanitizeParams(built.controls, effect.values),
     );
     return built.pass;
   }
@@ -383,9 +390,10 @@ export class PostProcessing {
     pass: EffectPass,
     type: PostProcessingEffectType,
     previous: BuiltPass | undefined,
+    controls: readonly ShaderControl[] = [],
   ): EffectPass {
     previous?.pass.dispose();
-    const built = { key, pass, type };
+    const built = { key, pass, type, controls };
     this.built.set(instanceId, built);
     this.sizePass(built);
     return pass;

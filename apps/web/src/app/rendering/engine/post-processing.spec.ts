@@ -781,6 +781,26 @@ describe('Custom effects', () => {
     expect(valid!.disposed).toBe(true);
   });
 
+  it('keeps the last valid program when a control changes type and the new code fails', async () => {
+    post.setSettings(chain(customEffect('a', { gain: 0.5 })));
+    await loader.flush();
+    const [valid] = installed();
+
+    // `gain` becomes a colour while the code still uses it as a float — rejected.
+    const recoloured = createCustomEffect({
+      instanceId: 'a',
+      enabled: true,
+      source: 'vec4 effect(vec4 color, vec2 uv) { return BROKEN * u_gain; }',
+      controls: [{ key: 'gain', type: 'color', default: '#ff0000' }],
+      values: { gain: '#00ff00' },
+    });
+    expect(() => post.setSettings(chain(recoloured))).not.toThrow();
+
+    expect(installed()).toEqual([valid]);
+    // The old float uniform keeps a number: the colour is not written into it.
+    expect(valid!.uniforms['u_gain']!.value).toBe(1);
+  });
+
   it('leaves out an instance that has never compiled, with its diagnostic, and the rest runs', async () => {
     post.setSettings(
       chain(
