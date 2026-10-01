@@ -9,6 +9,7 @@ import {
   type CustomEffect,
   type CustomEffectDefinition,
   type RenderSettings,
+  type ShaderParams,
 } from '@shadergrove/shared/model';
 import { LIMITS, sanitizeParams, validateControls } from '@shadergrove/shared/validate';
 import { CodeEditor, type EditorDoc } from '../../editor/code-editor';
@@ -223,9 +224,11 @@ export class CustomEffectEditor {
 
   private readonly pendingSource = signal<string | null>(null);
   private sourceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** What Revert puts back: the definition, and the values, the dialog opened with. */
   private readonly original: CustomEffectDefinition | null = structuredClone(
     this.effect()?.definition ?? null,
   );
+  private readonly originalValues: ShaderParams = structuredClone(this.effect()?.values ?? {});
 
   constructor() {
     effect(() => (this.dialogRef.disableClose = this.unapplied()));
@@ -289,7 +292,8 @@ export class CustomEffectEditor {
     this.mutate((effect) => ({
       ...effect,
       definition: structuredClone(original),
-      values: sanitizeParams(original.controls, effect.values),
+      // From the values it opened with: an edit that dropped a control already pruned its value.
+      values: sanitizeParams(original.controls, this.originalValues),
     }));
   }
 

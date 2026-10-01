@@ -187,6 +187,35 @@ describe('CustomEffectEditor', () => {
     expect(effect().definition.name).toBe('Soft Glow');
   });
 
+  it('reverts a dropped control to the value it opened with, not its default', () => {
+    draft.set({
+      render: {
+        postProcessing: {
+          enabled: true,
+          effects: [
+            createCustomEffect({
+              instanceId: 'c',
+              enabled: true,
+              controls: [{ key: 'gain', type: 'number', default: 1, min: 0, max: 2 }],
+              values: { gain: 1.75 },
+            }),
+          ],
+        },
+      },
+    });
+    const { fixture, root } = create();
+
+    // A valid schema without `gain` prunes its value from the draft...
+    type(root.querySelector<HTMLTextAreaElement>('[data-testid="effect-controls"]')!, '[]');
+    fixture.detectChanges();
+    expect(effect().values).toEqual({});
+
+    // ...and Revert brings back 1.75, not the default 1.
+    root.querySelector<HTMLButtonElement>('[data-testid="effect-revert"]')!.click();
+    fixture.detectChanges();
+    expect(effect().values).toEqual({ gain: 1.75 });
+  });
+
   it('reverts to the definition it opened with, clearing what was not applied', () => {
     const { fixture, root, editor } = create();
     const original = structuredClone(effect().definition);
