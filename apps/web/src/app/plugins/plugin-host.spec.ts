@@ -153,6 +153,22 @@ describe('PluginHost.importFile', () => {
     }
   });
 
+  it('charges a view for its whole backing buffer and a BigInt for its size', async () => {
+    const view = new Uint8Array(new ArrayBuffer(PLUGIN_LIMITS.eventBytes * 2), 0, 1);
+    const big = 1n << BigInt(PLUGIN_LIMITS.eventBytes * 8 + 8);
+    for (const event of [view, big]) {
+      const { host: h } = host(() => ({ candidate: 1 }), [event]);
+      expect(await code(h.importFile('imp', buffer(1)))).toBe('events-exceeded');
+    }
+    const result = await code(
+      host(() => ({ candidate: new Uint8Array(new ArrayBuffer(500), 0, 1) })).host.importFile(
+        'imp',
+        buffer(1),
+      ),
+    );
+    expect(result).toBe('output-too-large');
+  });
+
   it('counts deeply nested buffers, and refuses types it cannot measure', async () => {
     let nested: unknown = buffer(500);
     for (let i = 0; i < 40; i++) nested = { n: nested };

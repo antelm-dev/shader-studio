@@ -265,8 +265,13 @@ function measure(value: unknown, max: number): number | null {
   const walk = (item: unknown, depth: number): boolean => {
     if (bytes > max) return true;
     if (++nodes > MAX_NODES) return false;
-    if (item instanceof ArrayBuffer || ArrayBuffer.isView(item)) {
+    if (item instanceof ArrayBuffer) {
       bytes += item.byteLength;
+    } else if (ArrayBuffer.isView(item)) {
+      // Cloning a view copies its whole backing buffer, not just the window it shows.
+      bytes += item.buffer.byteLength;
+    } else if (typeof item === 'bigint') {
+      bytes += Math.ceil(item.toString(16).length / 2);
     } else if (typeof item === 'string') {
       bytes += utf8Bytes(item);
     } else if (typeof item === 'object' && item !== null) {
