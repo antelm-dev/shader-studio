@@ -180,7 +180,9 @@ export class PluginHost {
     let sandbox: SandboxHandle | undefined;
     const onEvent = (data: unknown) => {
       if (overrun) return;
-      const size = serializedBytes(data);
+      // Measured by walking, not by JSON.stringify: that would expand shared references
+      // and skip binary, before any quota could apply.
+      const size = measure(data, PLUGIN_LIMITS.eventBytes);
       // An empty event still costs the host a message, so it is charged a floor.
       eventBytes += Math.max(size ?? 0, MIN_EVENT_COST);
       if (
@@ -246,29 +248,52 @@ function jsonCopy(
 
 const MIN_EVENT_COST = 64;
 
-/** More nodes than any bounded result needs; stops cyclic or heavily shared structures. */
-const MAX_RESULT_NODES = 100_000;
+/** More values than any bounded message needs; stops cyclic or heavily shared structures. */
+const MAX_NODES = 100_000;
+const MAX_DEPTH = 32;
+
+/**
+ * Bytes a message from the Worker carries — strings, keys and binary — or `null`
+ * if it is not plain, bounded data: a cycle, shared references fanning out,
+ * nesting past `MAX_DEPTH`, or a type (Map, Set, Date, ...) that holds content this
+ * walk cannot see. Counts every reference, as JSON would, so a result this
+ * accepts is cheap to serialize afterwards. Stops as soon as `max` is passed.
+ */
+function measure(value: unknown, max: number): number | null {
+  let bytes = 0;
+  let nodes = 0;
+  const walk = (item: unknown, depth: number): boolean => {
+    if (bytes > max) return true;
+    if (++nodes > MAX_NODES) return false;
+    if (item instanceof ArrayBuffer || ArrayBuffer.isView(item)) {
+      bytes += item.byteLength;
+    } else if (typeof item === 'string') {
+      bytes += utf8Bytes(item);
+    } else if (typeof item === 'object' && item !== null) {
+      const proto = Object.getPrototypeOf(item);
+      if (
+        depth >= MAX_DEPTH ||
+        !(Array.isArray(item) || proto === Object.prototype || proto === null)
+      ) {
+        return false;
+      }
+      for (const [key, child] of Object.entries(item)) {
+        bytes += utf8Bytes(key);
+        if (!walk(child, depth + 1)) return false;
+      }
+    }
+    return true;
+  };
+  return walk(value, 0) ? bytes : null;
+}
 
 /** Total bytes of buffers and JSON in a result, checked before the host reads any of it. */
 function checkOutputSize(result: unknown, max: number): void {
-  let bytes = 0;
-  let nodes = 0;
-  const walk = (value: unknown, depth: number): void => {
-    if (++nodes > MAX_RESULT_NODES) {
-      throw new PluginCallError(
-        'output-invalid',
-        'Result has too many values, or loops back on itself',
-      );
-    }
-    if (value instanceof ArrayBuffer) bytes += value.byteLength;
-    else if (ArrayBuffer.isView(value)) bytes += value.byteLength;
-    else if (typeof value === 'string') bytes += utf8Bytes(value);
-    else if (value && typeof value === 'object' && depth < 32) {
-      for (const item of Object.values(value)) walk(item, depth + 1);
-    }
-    if (bytes > max) throw new PluginCallError('output-too-large', `Result exceeds ${max} bytes`);
-  };
-  walk(result, 0);
+  const bytes = measure(result, max);
+  if (bytes === null) {
+    throw new PluginCallError('output-invalid', 'Result is not plain, bounded data');
+  }
+  if (bytes > max) throw new PluginCallError('output-too-large', `Result exceeds ${max} bytes`);
 }
 
 function validateExport(result: unknown, contribution: ExporterContribution): ExporterResult {

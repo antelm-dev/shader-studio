@@ -127,7 +127,10 @@ describe('PluginHost.importFile', () => {
     expect(await run(() => ({ candidate: buffer(500) }))).toBe('output-too-large');
     const cyclic: Record<string, unknown> = {};
     cyclic['self'] = cyclic;
-    expect(await run(() => ({ candidate: cyclic }))).toBe('output-invalid');
+    // Either bound may trip first on a loop; what matters is that it is refused.
+    expect(['output-invalid', 'output-too-large']).toContain(
+      await run(() => ({ candidate: cyclic })),
+    );
   });
 
   it('rejects a result that loops back on itself without walking it forever', async () => {
@@ -136,8 +139,35 @@ describe('PluginHost.importFile', () => {
     loop['right'] = loop;
     const started = performance.now();
     const outcome = await code(host(() => ({ candidate: loop })).host.importFile('imp', buffer(1)));
-    expect(outcome).toBe('output-invalid');
+    expect(['output-invalid', 'output-too-large']).toContain(outcome);
     expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
+  it('stops a shared-reference event and a binary event before they pass the quota', async () => {
+    let shared: Record<string, unknown> = { leaf: 1 };
+    for (let i = 0; i < 30; i++) shared = { a: shared, b: shared };
+    for (const event of [shared, new ArrayBuffer(PLUGIN_LIMITS.eventBytes + 1)]) {
+      const { host: h, sandboxes } = host(() => ({ candidate: 1 }), [event]);
+      expect(await code(h.importFile('imp', buffer(1)))).toBe('events-exceeded');
+      expect(sandboxes[0]!.terminate).toHaveBeenCalled();
+    }
+  });
+
+  it('counts deeply nested buffers, and refuses types it cannot measure', async () => {
+    let nested: unknown = buffer(500);
+    for (let i = 0; i < 40; i++) nested = { n: nested };
+    const run = (reply: () => unknown) => code(host(reply).host.importFile('imp', buffer(1)));
+    expect(await run(() => ({ candidate: nested }))).toBe('output-invalid');
+    expect(await run(() => ({ candidate: new Map([['k', 'x'.repeat(500)]]) }))).toBe(
+      'output-invalid',
+    );
+    const exported = host(() => ({
+      bytes: buffer(4),
+      mime: 'text/plain',
+      fileName: 'a.fs',
+      extra: nested,
+    }));
+    expect(await code(exported.host.exportEffect('exp', {}))).toBe('output-invalid');
   });
 
   it('charges empty events so they cannot flood the host', async () => {
