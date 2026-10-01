@@ -21,7 +21,7 @@
         "exec",
         "tsx",
         "--inspect-brk",
-        "server/index.ts"
+        "src/server/index.ts"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
