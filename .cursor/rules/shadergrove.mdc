@@ -9,12 +9,13 @@ A self-hosted WebGL shader viewer/editor. pnpm monorepo (`pnpm@10`, Node `^22.22
 
 ## Layout
 
-- `apps/web` — the deployed app (`@shadergrove/web`): Angular 22 editor/viewer UI in `src/`, Express/Nest API and SSR entry in `server/` (also the CLI, `server/cli.ts`). `src/` never imports `server/`.
+- `apps/web` — the deployed app (`@shadergrove/web`): Angular 22 editor/viewer UI in `src/`, Express/Nest API and SSR entry in `server/`. `src/` never imports `server/`.
 - `apps/desktop` — Electron shell (`@shadergrove/desktop`), wraps the web app for desktop distribution.
 - `libs/backend` — shared backend logic (file storage, project model) used by web/server/desktop.
 - `libs/desktop-api` — typed IPC surface between web and Electron main (`gen:ipc` generates the bridge).
 - `tools/mcp` — MCP server exposing Shadergrove to AI tools (bridges to the running app via `SHADER_STUDIO_MCP_PORT`/`SHADER_STUDIO_MCP_TOKEN`, default port 4310).
 - `libs/shared` — types/utilities shared across all packages.
+- `tools/maintenance` — one-shot CLI for the PostgreSQL deployment (`migrate-files`, `claim-shaders`), bundled to `dist/shadergrove/cli.mjs` (`@shadergrove/maintenance`).
 - `tools/workspace` — repository checks, generators, smoke tests, and automation.
 - `examples/shaders/*` — example GLSL shaders (`fragment.glsl` / `vertex.glsl` pairs), not app code.
 

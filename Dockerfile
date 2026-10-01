@@ -17,6 +17,7 @@ COPY apps/desktop/package.json ./apps/desktop/
 COPY libs/backend/package.json ./libs/backend/
 COPY libs/desktop-api/package.json ./libs/desktop-api/
 COPY libs/shared/package.json ./libs/shared/
+COPY tools/maintenance/package.json ./tools/maintenance/
 COPY tools/mcp/package.json ./tools/mcp/
 COPY tools/workspace/package.json ./tools/workspace/
 
@@ -28,10 +29,10 @@ COPY . .
 # The web declarations consume the generated, typed Electron IPC contract even
 # though the runtime image does not contain Electron. Generate it in the build
 # stage, then produce the SSR bundle (which keeps `pg` and Swagger external; see
-# apps/web/angular.json) and the standalone migrate-files CLI.
+# apps/web/angular.json) and the standalone maintenance CLI (tools/maintenance).
 RUN pnpm gen:ipc \
     && pnpm build \
-    && pnpm --filter @shadergrove/web build:cli
+    && pnpm --filter @shadergrove/maintenance build:cli
 
 # The SSR output keeps PostgreSQL and Swagger external. Install their runtime
 # dependencies into an isolated tree; Swagger must remain external because its
