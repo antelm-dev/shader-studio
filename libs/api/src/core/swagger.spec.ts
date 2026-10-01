@@ -10,7 +10,7 @@ import { SqliteRepository } from '@shadergrove/backend/persistence/sqlite';
 import { silentAuditor } from '../auth/audit';
 import { createAuth } from '../auth/auth';
 import { readAuthConfig } from '../auth/auth-config';
-import { createNestApi, type NestApi } from './bootstrap';
+import { createNestApi, type NestApi } from '../bootstrap';
 
 let library: ShaderLibrary;
 let server: Server;

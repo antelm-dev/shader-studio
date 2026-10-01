@@ -19,7 +19,7 @@ import { SqliteRepository } from '@shadergrove/backend/persistence/sqlite';
 import { PublicationLibrary } from '@shadergrove/backend/publication';
 import { parseBundle } from '@shadergrove/shared/validate';
 
-import { createNestApi, type NestApi } from '../api/bootstrap';
+import { createNestApi, type NestApi } from '../bootstrap';
 import { silentAuditor } from '../auth/audit';
 import { createAuth } from '../auth/auth';
 import { readAuthConfig } from '../auth/auth-config';

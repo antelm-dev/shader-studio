@@ -6,14 +6,14 @@ import express, { type Application, type NextFunction, type Request, type Respon
 
 import type { ShaderLibrary } from '@shadergrove/backend/library';
 
-import type { Auditor } from '../auth/audit';
-import type { Auth } from '../auth/auth';
-import { ApiExceptionFilter } from './api-exception.filter';
-import { BODY_LIMIT, TEXTURE_BODY_LIMIT, THUMBNAIL_BODY_LIMIT } from './api.constants';
 import { ApiModule } from './api.module';
-import type { Explore } from '../publication/publications.controller';
-import { logLevels } from './logger';
-import { setupSwagger } from './swagger';
+import type { Auditor } from './auth/audit';
+import type { Auth } from './auth/auth';
+import { ApiExceptionFilter } from './core/api-exception.filter';
+import { BODY_LIMIT, TEXTURE_BODY_LIMIT, THUMBNAIL_BODY_LIMIT } from './core/api.constants';
+import { logLevels } from './core/logger';
+import { setupSwagger } from './core/swagger';
+import type { Explore } from './publications/explore';
 
 export interface NestApi {
   handler: Application;

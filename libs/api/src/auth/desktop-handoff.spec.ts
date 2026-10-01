@@ -16,7 +16,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { LOCAL_SCOPE, ShaderLibrary } from '@shadergrove/backend/library';
 import { SqliteRepository } from '@shadergrove/backend/persistence/sqlite';
 
-import { createNestApi, type NestApi } from '../api/bootstrap';
+import { createNestApi, type NestApi } from '../bootstrap';
 import type { AuditDetails, AuditEvent, Auditor } from './audit';
 import { createAuth } from './auth';
 import { readAuthConfig } from './auth-config';
