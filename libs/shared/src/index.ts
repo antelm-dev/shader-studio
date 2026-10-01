@@ -16,3 +16,4 @@ export * from './prefs/panel';
 export * from './surfaces';
 export * from './session';
 export { TEMPLATE_CONTROLS, TEMPLATE_FRAGMENT } from './templates';
+export * from './plugin/package';
