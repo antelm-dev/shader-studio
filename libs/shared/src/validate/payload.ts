@@ -2,7 +2,7 @@ import type { ImportMode, Preset, ShaderPayload } from '../model';
 import { sanitizeProject } from '../project/sanitize';
 import { LIMITS } from './limits';
 import { validateChannelPayloads, validateThumbnailPayload } from './assets';
-import { validateControls, validatePreset, validateRender } from './controls';
+import { customEffectErrors, validateControls, validatePreset, validateRender } from './controls';
 import {
   isRecord,
   isValidId,
@@ -38,6 +38,15 @@ export function validateShaderPayload(input: unknown, label = 'shader'): Result<
   const fragmentResult = validateSource(input['fragment'], `${label}.fragment`);
   const vertexResult = validateSource(input['vertex'], `${label}.vertex`);
   const controlsResult = validateControls(input['controls'] ?? []);
+  // `validateRender` normalizes; a save or an import refuses an unusable custom effect instead.
+  errors.push(...customEffectErrors(input['render'], `${label}.render`));
+  if (Array.isArray(input['presets'])) {
+    input['presets'].slice(0, LIMITS.presetCount).forEach((preset, index) => {
+      if (isRecord(preset)) {
+        errors.push(...customEffectErrors(preset['render'], `${label}.presets[${index}].render`));
+      }
+    });
+  }
 
   let id: string | undefined = idResult.ok ? idResult.value : undefined;
   if (!idResult.ok && nameResult.ok) {

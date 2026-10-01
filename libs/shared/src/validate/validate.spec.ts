@@ -7,6 +7,9 @@ import {
   DEFAULT_RENDER,
   LEGACY_BUNDLE_FORMAT,
   LEGACY_BUNDLE_FORMAT_V2,
+  LEGACY_BUNDLE_FORMAT_V3,
+  DEFAULT_VIGNETTE,
+  createBloomEffect,
   type ShaderControl,
   type ShaderPayload,
 } from '../model';
@@ -305,7 +308,12 @@ describe('validatePreset', () => {
       postProcessing: {
         enabled: true,
         effects: [
-          { type: 'bloom', enabled: true, settings: { strength: 3, radius: 0.4, threshold: 0.7 } },
+          {
+            type: 'bloom',
+            instanceId: 'bloom',
+            enabled: true,
+            settings: { strength: 3, radius: 0.4, threshold: 0.7 },
+          },
         ],
       },
     });
@@ -321,45 +329,30 @@ describe('validatePreset', () => {
 });
 
 describe('validateRender', () => {
-  it('round-trips the canonical postProcessing chain', () => {
+  const bloom = (instanceId: string, strength = 1.2) => ({
+    type: 'bloom',
+    instanceId,
+    enabled: true,
+    settings: { strength, radius: 0.4, threshold: 0.6 },
+  });
+
+  it('round-trips a canonical chain with ids, keeping order', () => {
     const render = {
       postProcessing: {
         enabled: false,
         effects: [
           {
-            type: 'bloom',
-            enabled: true,
-            settings: { strength: 1.2, radius: 0.4, threshold: 0.6 },
-          },
-        ],
-      },
-    };
-
-    expect(validateRender(render)).toEqual(render);
-  });
-
-  it('round-trips a two-effect chain, preserving order', () => {
-    const render = {
-      postProcessing: {
-        enabled: true,
-        effects: [
-          {
             type: 'vignette',
+            instanceId: 'vignette-x',
             enabled: true,
             settings: { intensity: 0.2, softness: 0.6, roundness: 0 },
           },
-          {
-            type: 'bloom',
-            enabled: false,
-            settings: { strength: 0.9, radius: 0.3, threshold: 0.7 },
-          },
+          bloom('bloom-a'),
         ],
       },
     };
 
     expect(validateRender(render)).toEqual(render);
-    // Order is the effect's identity — Vignette stays first.
-    expect(validateRender(render).postProcessing.effects[0]?.type).toBe('vignette');
   });
 
   it('migrates a legacy `{ bloom }` record (a v1/v2 bundle, or an old preset) into a single-effect chain', () => {
@@ -371,6 +364,7 @@ describe('validateRender', () => {
         effects: [
           {
             type: 'bloom',
+            instanceId: 'bloom',
             enabled: true,
             settings: { strength: 1.5, radius: 0.4, threshold: 0.6 },
           },
@@ -384,6 +378,7 @@ describe('validateRender', () => {
 
     expect(validateRender(legacy).postProcessing.effects[0]).toEqual({
       type: 'bloom',
+      instanceId: 'bloom',
       enabled: true,
       settings: { strength: 3, radius: 0, threshold: 1 },
     });
@@ -430,34 +425,110 @@ describe('validateRender', () => {
     };
 
     expect(validateRender(render).postProcessing.effects).toEqual([
-      { type: 'vignette', enabled: true, settings: { intensity: 1, softness: 0, roundness: 1 } },
+      {
+        type: 'vignette',
+        instanceId: 'vignette',
+        enabled: true,
+        settings: { intensity: 1, softness: 0, roundness: 1 },
+      },
     ]);
   });
 
-  it('keeps only the first instance of a duplicated effect type', () => {
+  it('keeps every instance of a type, making clashing or missing ids unique deterministically', () => {
     const render = {
       postProcessing: {
         enabled: true,
         effects: [
-          { type: 'bloom', enabled: true, settings: { strength: 1, radius: 0.1, threshold: 0.1 } },
-          { type: 'bloom', enabled: false, settings: { strength: 2, radius: 0.2, threshold: 0.2 } },
+          bloom('glow', 1),
+          bloom('glow', 2),
+          { ...bloom('x', 3), instanceId: undefined },
+          { ...bloom('x', 2.5), instanceId: 'bad id!' },
+          bloom('glow-2', 0.5),
         ],
       },
     };
 
-    const effects = validateRender(render).postProcessing.effects;
-    expect(effects).toHaveLength(1);
-    expect(effects[0]).toEqual({
-      type: 'bloom',
+    const first = validateRender(render).postProcessing.effects;
+    expect(first.map((effect) => effect.instanceId)).toEqual([
+      'glow',
+      'glow-2',
+      'bloom',
+      'bloom-2',
+      'glow-2-2',
+    ]);
+    expect(validateRender(render)).toEqual(validateRender(render));
+  });
+
+  it('keeps a custom effect with its definition and sanitized values', () => {
+    const controls = [{ key: 'gain', type: 'number', default: 1, min: 0, max: 2 }];
+    const render = {
+      postProcessing: {
+        enabled: true,
+        effects: [
+          {
+            type: 'custom',
+            instanceId: 'c',
+            enabled: true,
+            definition: { apiVersion: 1, name: '  Gain  ', source: 'vec4 effect() {}', controls },
+            values: { gain: 9, rogue: true },
+          },
+        ],
+      },
+    };
+
+    expect(validateRender(render).postProcessing.effects[0]).toEqual({
+      type: 'custom',
+      instanceId: 'c',
       enabled: true,
-      settings: { strength: 1, radius: 0.1, threshold: 0.1 },
+      definition: { apiVersion: 1, name: 'Gain', source: 'vec4 effect() {}', controls },
+      values: { gain: 2 },
     });
+  });
+
+  it('keeps the name and code of a custom effect from a newer API, which will not run', () => {
+    const render = {
+      postProcessing: {
+        enabled: true,
+        effects: [
+          {
+            type: 'custom',
+            enabled: true,
+            definition: {
+              apiVersion: 7,
+              name: 'Future',
+              source: 'future code',
+              controls: [{ key: 'x', type: 'vector3' }],
+            },
+          },
+        ],
+      },
+    };
+
+    const [effect] = validateRender(render).postProcessing.effects;
+    expect(effect).toEqual({
+      type: 'custom',
+      instanceId: 'custom',
+      enabled: true,
+      definition: { apiVersion: 7, name: 'Future', source: 'future code', controls: [] },
+      values: {},
+    });
+  });
+
+  it('drops a custom effect whose code it cannot keep safely', () => {
+    for (const source of [undefined, 42, 'x'.repeat(LIMITS.customEffectSourceLength + 1)]) {
+      const render = {
+        postProcessing: {
+          enabled: true,
+          effects: [{ type: 'custom', enabled: true, definition: { apiVersion: 1, source } }],
+        },
+      };
+      expect(validateRender(render).postProcessing.effects).toEqual([]);
+    }
   });
 
   it('caps the number of effects considered, not just accepted', () => {
     // Every entry is `unknown` except the very last one, past the cap — a
-    // valid effect that far in must not be reached at all, not merely dropped
-    // for being a duplicate.
+    // valid effect that far in must not be reached at all.
     const oversized = {
       postProcessing: {
         enabled: true,
@@ -475,7 +546,7 @@ describe('validateRender', () => {
     expect(validateRender(oversized).postProcessing.effects).toEqual([]);
   });
 
-  it('accepts up to the effect-count cap', () => {
+  it('fills in default settings', () => {
     const atCap = {
       postProcessing: {
         enabled: true,
@@ -484,7 +555,7 @@ describe('validateRender', () => {
     };
 
     expect(validateRender(atCap).postProcessing.effects).toEqual([
-      { type: 'bloom', enabled: true, settings: DEFAULT_BLOOM },
+      { type: 'bloom', instanceId: 'bloom', enabled: true, settings: DEFAULT_BLOOM },
     ]);
   });
 });
@@ -661,11 +732,108 @@ describe('parseBundle', () => {
         effects: [
           {
             type: 'bloom',
+            instanceId: 'bloom',
             enabled: true,
             settings: { strength: 1.4, radius: 0.3, threshold: 0.6 },
           },
         ],
       },
     });
+  });
+
+  it('accepts a shader-studio/v3 bundle, giving each effect the id of its type', () => {
+    const v3Render = {
+      postProcessing: {
+        enabled: true,
+        effects: [
+          { type: 'vignette', enabled: true, settings: DEFAULT_VIGNETTE },
+          { type: 'bloom', enabled: false, settings: DEFAULT_BLOOM },
+        ],
+      },
+    };
+    const bundle = {
+      format: LEGACY_BUNDLE_FORMAT_V3,
+      kind: 'shader',
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      shader: { ...payload(), render: v3Render },
+    };
+
+    // Twice, to show the ids are the same on every load.
+    for (let i = 0; i < 2; i++) {
+      const parsed = parseBundle(bundle);
+      expect(parsed.ok === true && parsed.value[0].render.postProcessing.effects).toEqual([
+        { type: 'vignette', instanceId: 'vignette', enabled: true, settings: DEFAULT_VIGNETTE },
+        { type: 'bloom', instanceId: 'bloom', enabled: false, settings: DEFAULT_BLOOM },
+      ]);
+    }
+  });
+
+  it('round-trips a v4 bundle with two custom instances: ids, code, controls, values and order', () => {
+    const controls: ShaderControl[] = [
+      { key: 'gain', type: 'number', default: 1, min: 0, max: 2 },
+      { key: 'tint', type: 'color', default: '#ff0000' },
+    ];
+    const effect = (instanceId: string, gain: number) => ({
+      type: 'custom' as const,
+      instanceId,
+      enabled: true,
+      definition: {
+        apiVersion: 1,
+        name: 'Gain',
+        source: 'vec4 effect(vec4 color, vec2 uv) { return color * u_gain; }',
+        controls,
+      },
+      values: { gain, tint: '#00ff00' },
+    });
+    const render = {
+      postProcessing: {
+        enabled: true,
+        effects: [effect('custom-b', 0.5), createBloomEffect(), effect('custom-a', 1.5)],
+      },
+    };
+    const bundle = buildShaderBundle(payload({ render }));
+
+    expect(bundle.format).toBe('shader-studio/v4');
+    const parsed = parseBundle(JSON.parse(JSON.stringify(bundle)));
+    expect(parsed.ok === true && parsed.value[0].render).toEqual(render);
+  });
+
+  it('refuses a bundle whose custom effect is unusable instead of dropping it silently', () => {
+    const custom = (definition: Record<string, unknown>) =>
+      payload({
+        render: {
+          postProcessing: {
+            enabled: true,
+            effects: [{ type: 'custom', instanceId: 'c', enabled: true, definition, values: {} }],
+          },
+        } as never,
+      });
+    const cases: [Record<string, unknown>, RegExp][] = [
+      [
+        {
+          apiVersion: 1,
+          name: 'x',
+          source: 'x'.repeat(LIMITS.customEffectSourceLength + 1),
+          controls: [],
+        },
+        /source must be at most/,
+      ],
+      [{ apiVersion: 1, name: 'x', source: 42, controls: [] }, /source must be a string/],
+      [{ apiVersion: 0, name: 'x', source: '', controls: [] }, /apiVersion/],
+      [
+        {
+          apiVersion: 1,
+          name: 'x',
+          source: '',
+          controls: [{ key: 'time', type: 'boolean', default: true }],
+        },
+        /reserved/,
+      ],
+    ];
+    for (const [definition, message] of cases) {
+      const parsed = parseBundle(buildShaderBundle(custom(definition)));
+      expect(parsed.ok).toBe(false);
+      expect(parsed.ok === false && parsed.errors.join('\n')).toMatch(message);
+    }
   });
 });

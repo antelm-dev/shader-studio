@@ -255,6 +255,46 @@ export function runShaderLibraryConformance(
       expect(glow.render && getBloomEffect(glow.render).settings.strength).toBe(3);
     });
 
+    it('round-trips two custom effect instances: ids, code, controls, values and order', async () => {
+      const { id } = await lib.create({ name: 'Effects' });
+      const custom = (instanceId: string, gain: number) => ({
+        type: 'custom' as const,
+        instanceId,
+        enabled: true,
+        definition: {
+          apiVersion: 1,
+          name: 'Gain',
+          source: 'vec4 effect(vec4 color, vec2 uv) { return color * u_gain; }',
+          controls: [{ key: 'gain', type: 'number' as const, default: 1, min: 0, max: 2 }],
+        },
+        values: { gain },
+      });
+      const render = {
+        postProcessing: {
+          enabled: true,
+          effects: [
+            custom('custom-b', 0.5),
+            { ...DEFAULT_RENDER.postProcessing.effects[0]! },
+            custom('custom-a', 1.5),
+          ],
+        },
+      };
+
+      await lib.update(id, { render });
+      expect((await lib.read(id)).render).toEqual(render);
+      const preset = await lib.savePreset(id, { name: 'Look', values: {}, render });
+      expect(preset.render).toEqual(render);
+      expect((await lib.read(id)).presets[0]?.render).toEqual(render);
+
+      // An unusable custom effect is refused, and nothing is written.
+      const tooLong = {
+        postProcessing: { enabled: true, effects: [custom('custom-c', 1)] },
+      };
+      tooLong.postProcessing.effects[0]!.definition.source = 'x'.repeat(70_000);
+      await expect(lib.update(id, { render: tooLong })).rejects.toMatchObject({ code: 'invalid' });
+      expect((await lib.read(id)).render).toEqual(render);
+    });
+
     // 9 & 10 — textures across all four channels, replace and clear
     it('stores, replaces and clears textures on every channel', async () => {
       const { id } = await lib.create({ name: 'Textured' });

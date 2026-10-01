@@ -4,16 +4,22 @@ import {
   activePostProcessingCount,
   addPostProcessingEffect,
   createBloomEffect,
+  createCustomEffect,
   createVignetteEffect,
-  getVignetteEffect,
+  duplicatePostProcessingEffect,
+  findPostProcessingEffect,
   hasActivePostProcessing,
+  isCustomEffectRunnable,
   movePostProcessingEffect,
   removePostProcessingEffect,
+  reorderPostProcessingEffect,
   resetPostProcessingEffect,
   setPostProcessingEffectEnabled,
+  updatePostProcessingEffect,
   withPostProcessingEnabled,
-  withVignetteEffect,
+  type CustomEffect,
   type RenderSettings,
+  type VignetteEffect,
 } from './render';
 
 function render(
@@ -23,104 +29,49 @@ function render(
   return { postProcessing: { enabled, effects } };
 }
 
-describe('Vignette effect helpers', () => {
-  it('defaults to disabled with the standard settings', () => {
+const ids = (r: RenderSettings) => r.postProcessing.effects.map((effect) => effect.instanceId);
+
+/** Two Vignettes — what Phase 1 could not express — plus a Bloom. */
+function twoVignettes(): RenderSettings {
+  return render([
+    createVignetteEffect({ enabled: true, instanceId: 'v1', intensity: 0.1 }),
+    createBloomEffect({ enabled: true, instanceId: 'b' }),
+    createVignetteEffect({ enabled: false, instanceId: 'v2', intensity: 0.9 }),
+  ]);
+}
+
+describe('effect factories', () => {
+  it('give a legacy chain the type as its id, and a custom effect a pass-through v1 definition', () => {
     expect(createVignetteEffect()).toEqual({
       type: 'vignette',
+      instanceId: 'vignette',
       enabled: false,
       settings: { intensity: 0.4, softness: 0.5, roundness: 1 },
     });
-  });
-
-  it('getVignetteEffect returns a disabled default when the chain has none', () => {
-    const r = render([createBloomEffect({ enabled: true })]);
-    expect(getVignetteEffect(r).enabled).toBe(false);
-  });
-
-  it('withVignetteEffect appends when absent, preserving the rest of the chain and the master switch', () => {
-    const r = render([createBloomEffect({ enabled: true })], false);
-    const next = withVignetteEffect(r, {
-      enabled: true,
-      intensity: 0.7,
-      softness: 0.2,
-      roundness: 0.1,
+    const custom = createCustomEffect({
+      controls: [{ key: 'amount', type: 'number', default: 0.5, min: 0, max: 1 }],
     });
-
-    expect(next.postProcessing.enabled).toBe(false);
-    expect(next.postProcessing.effects).toHaveLength(2);
-    expect(next.postProcessing.effects[0]?.type).toBe('bloom');
-    expect(next.postProcessing.effects[1]).toEqual({
-      type: 'vignette',
-      enabled: true,
-      settings: { intensity: 0.7, softness: 0.2, roundness: 0.1 },
-    });
-  });
-
-  it('withVignetteEffect replaces in place, keeping position', () => {
-    const r = render([
-      createVignetteEffect({ enabled: true, intensity: 0.1 }),
-      createBloomEffect({ enabled: true }),
-    ]);
-    const next = withVignetteEffect(r, {
-      enabled: false,
-      intensity: 0.9,
-      softness: 0.5,
-      roundness: 1,
-    });
-
-    expect(next.postProcessing.effects[0]?.type).toBe('vignette');
-    expect(next.postProcessing.effects[0]).toEqual({
-      type: 'vignette',
-      enabled: false,
-      settings: { intensity: 0.9, softness: 0.5, roundness: 1 },
-    });
-    expect(next.postProcessing.effects[1]?.type).toBe('bloom');
-  });
-
-  it('never mutates the render it is given', () => {
-    const r = render([createBloomEffect({ enabled: true })]);
-    const clone = structuredClone(r);
-    withVignetteEffect(r, { enabled: true, intensity: 1, softness: 1, roundness: 1 });
-    expect(r).toEqual(clone);
-  });
-});
-
-describe('hasActivePostProcessing', () => {
-  it('is false with an empty chain, master off, or every effect disabled', () => {
-    expect(hasActivePostProcessing(render([]))).toBe(false);
-    expect(hasActivePostProcessing(render([createBloomEffect({ enabled: true })], false))).toBe(
-      false,
-    );
-    expect(hasActivePostProcessing(render([createBloomEffect({ enabled: false })]))).toBe(false);
-  });
-
-  it('is true when the master switch is on and at least one effect is enabled', () => {
+    expect(custom.definition.apiVersion).toBe(1);
+    expect(custom.definition.source).toContain('vec4 effect(vec4 color, vec2 uv)');
+    expect(custom.values).toEqual({ amount: 0.5 });
+    expect(isCustomEffectRunnable(custom)).toBe(true);
     expect(
-      hasActivePostProcessing(
-        render([createBloomEffect({ enabled: false }), createVignetteEffect({ enabled: true })]),
-      ),
-    ).toBe(true);
+      isCustomEffectRunnable({ ...custom, definition: { ...custom.definition, apiVersion: 2 } }),
+    ).toBe(false);
   });
 });
 
-describe('activePostProcessingCount', () => {
-  it('counts only enabled effects, and none while the master switch is off', () => {
-    const effects = [
-      createBloomEffect({ enabled: true }),
-      createVignetteEffect({ enabled: false }),
-    ];
-    expect(activePostProcessingCount(render(effects))).toBe(1);
-    expect(activePostProcessingCount(render(effects, false))).toBe(0);
-    expect(activePostProcessingCount(render([]))).toBe(0);
+describe('hasActivePostProcessing / activePostProcessingCount', () => {
+  it('count only enabled effects, and none while the master switch is off', () => {
+    expect(hasActivePostProcessing(render([]))).toBe(false);
+    expect(activePostProcessingCount(twoVignettes())).toBe(2);
+    expect(activePostProcessingCount(withPostProcessingEnabled(twoVignettes(), false))).toBe(0);
   });
 });
 
 describe('withPostProcessingEnabled', () => {
   it('flips only the master switch, touching neither effects nor their order', () => {
-    const r = render([
-      createBloomEffect({ enabled: true }),
-      createVignetteEffect({ enabled: true }),
-    ]);
+    const r = twoVignettes();
     const next = withPostProcessingEnabled(r, false);
     expect(next.postProcessing.enabled).toBe(false);
     expect(next.postProcessing.effects).toBe(r.postProcessing.effects);
@@ -128,91 +79,124 @@ describe('withPostProcessingEnabled', () => {
 });
 
 describe('addPostProcessingEffect', () => {
-  it('appends a fresh, enabled default instance', () => {
-    const next = addPostProcessingEffect(render([]), 'vignette');
-    expect(next.postProcessing.effects).toEqual([createVignetteEffect({ enabled: true })]);
+  it('appends a fresh enabled instance with a new id, even when the type is present', () => {
+    const next = addPostProcessingEffect(twoVignettes(), 'vignette');
+    const added = next.postProcessing.effects[3] as VignetteEffect;
+    expect(added).toMatchObject({ type: 'vignette', enabled: true });
+    expect(added.instanceId).toMatch(/^vignette-[a-z0-9]+$/);
+    expect(new Set(ids(next)).size).toBe(4);
   });
 
-  it('is a no-op if the chain already has that type', () => {
-    const r = render([createVignetteEffect({ enabled: false, intensity: 0.9 })]);
-    expect(addPostProcessingEffect(r, 'vignette')).toBe(r);
-  });
-});
-
-describe('removePostProcessingEffect', () => {
-  it('drops the effect entirely rather than disabling it', () => {
-    const r = render([
-      createBloomEffect({ enabled: true }),
-      createVignetteEffect({ enabled: true }),
-    ]);
-    const next = removePostProcessingEffect(r, 'bloom');
-    expect(next.postProcessing.effects).toEqual([createVignetteEffect({ enabled: true })]);
-  });
-
-  it('is a no-op if the type is absent', () => {
-    const r = render([createVignetteEffect({ enabled: true })]);
-    expect(removePostProcessingEffect(r, 'bloom').postProcessing.effects).toEqual(
-      r.postProcessing.effects,
-    );
+  it('re-ids an effect it is given, so a copied effect never clashes', () => {
+    const custom = createCustomEffect({ instanceId: 'v1', name: 'Grain' });
+    const next = addPostProcessingEffect(twoVignettes(), custom);
+    const added = next.postProcessing.effects[3] as CustomEffect;
+    expect(added.definition.name).toBe('Grain');
+    expect(added.instanceId).not.toBe('v1');
   });
 });
 
-describe('setPostProcessingEffectEnabled', () => {
-  it('toggles one effect without touching its settings or position', () => {
-    const r = render([
-      createBloomEffect({ enabled: true, strength: 1.5 }),
-      createVignetteEffect({ enabled: false }),
-    ]);
-    const next = setPostProcessingEffectEnabled(r, 'vignette', true);
-    expect(next.postProcessing.effects[1]).toEqual(createVignetteEffect({ enabled: true }));
-    expect(next.postProcessing.effects[0]).toEqual(
-      createBloomEffect({ enabled: true, strength: 1.5 }),
-    );
+describe('duplicatePostProcessingEffect', () => {
+  it('inserts a deep copy right after the original, under a new id', () => {
+    const custom = createCustomEffect({
+      instanceId: 'c',
+      controls: [{ key: 'k', type: 'boolean', default: false }],
+    });
+    const r = render([custom, createBloomEffect({ instanceId: 'b' })]);
+    const next = duplicatePostProcessingEffect(r, 'c');
+    const [first, copy, last] = next.postProcessing.effects as [
+      CustomEffect,
+      CustomEffect,
+      unknown,
+    ];
+    expect(copy.instanceId).not.toBe('c');
+    expect(copy.definition).toEqual(first.definition);
+    expect(copy.definition).not.toBe(first.definition);
+    expect(last).toMatchObject({ instanceId: 'b' });
+  });
+
+  it('is a no-op for an unknown id', () => {
+    const r = twoVignettes();
+    expect(duplicatePostProcessingEffect(r, 'nope')).toBe(r);
   });
 });
 
-describe('resetPostProcessingEffect', () => {
-  it('resets settings to type defaults, keeping enabled state and position', () => {
-    const r = render([
-      createVignetteEffect({ enabled: true, intensity: 0.9, softness: 0.1, roundness: 0 }),
-      createBloomEffect({ enabled: true }),
-    ]);
-    const next = resetPostProcessingEffect(r, 'vignette');
-    expect(next.postProcessing.effects[0]).toEqual(createVignetteEffect({ enabled: true }));
-    expect(next.postProcessing.effects[1]?.type).toBe('bloom');
+describe('instance-targeted helpers', () => {
+  it('update, toggle, reset and remove only the instance named', () => {
+    let r = updatePostProcessingEffect<VignetteEffect>(twoVignettes(), 'v2', (effect) => ({
+      ...effect,
+      settings: { ...effect.settings, softness: 0.1 },
+    }));
+    expect((findPostProcessingEffect(r, 'v2') as VignetteEffect).settings.softness).toBe(0.1);
+    expect((findPostProcessingEffect(r, 'v1') as VignetteEffect).settings.softness).toBe(0.5);
+
+    r = setPostProcessingEffectEnabled(r, 'v2', true);
+    expect(findPostProcessingEffect(r, 'v2')?.enabled).toBe(true);
+    expect(findPostProcessingEffect(r, 'v1')?.enabled).toBe(true);
+
+    r = resetPostProcessingEffect(r, 'v1');
+    expect((findPostProcessingEffect(r, 'v1') as VignetteEffect).settings.intensity).toBe(0.4);
+    expect((findPostProcessingEffect(r, 'v2') as VignetteEffect).settings.intensity).toBe(0.9);
+
+    r = removePostProcessingEffect(r, 'v1');
+    expect(ids(r)).toEqual(['b', 'v2']);
+  });
+
+  it('cannot change an instance id or type through an update', () => {
+    const r = updatePostProcessingEffect(twoVignettes(), 'v1', (effect) => ({
+      ...effect,
+      instanceId: 'b',
+    }));
+    expect(ids(r)).toEqual(['v1', 'b', 'v2']);
+  });
+
+  it('resets a custom effect to its control defaults without touching its code', () => {
+    const custom = createCustomEffect({
+      instanceId: 'c',
+      source: 'vec4 effect(vec4 c, vec2 uv) { return c * u_gain; }',
+      controls: [{ key: 'gain', type: 'number', default: 1, min: 0, max: 2 }],
+      values: { gain: 2 },
+    });
+    const next = resetPostProcessingEffect(render([custom]), 'c');
+    const reset = next.postProcessing.effects[0] as CustomEffect;
+    expect(reset.values).toEqual({ gain: 1 });
+    expect(reset.definition.source).toBe(custom.definition.source);
+  });
+
+  it('never mutates the render it is given', () => {
+    const r = twoVignettes();
+    const clone = structuredClone(r);
+    setPostProcessingEffectEnabled(r, 'v1', false);
+    resetPostProcessingEffect(r, 'v2');
+    movePostProcessingEffect(r, 'v1', 'down');
+    expect(r).toEqual(clone);
   });
 });
 
 describe('movePostProcessingEffect', () => {
-  it('swaps with the previous neighbor on "up"', () => {
-    const r = render([
-      createBloomEffect({ enabled: true }),
-      createVignetteEffect({ enabled: true }),
-    ]);
-    const next = movePostProcessingEffect(r, 'vignette', 'up');
-    expect(next.postProcessing.effects.map((e) => e.type)).toEqual(['vignette', 'bloom']);
+  it('swaps one instance with its neighbor, telling duplicates apart', () => {
+    expect(ids(movePostProcessingEffect(twoVignettes(), 'v2', 'up'))).toEqual(['v1', 'v2', 'b']);
+    expect(ids(movePostProcessingEffect(twoVignettes(), 'v1', 'down'))).toEqual(['b', 'v1', 'v2']);
   });
 
-  it('swaps with the next neighbor on "down"', () => {
-    const r = render([
-      createVignetteEffect({ enabled: true }),
-      createBloomEffect({ enabled: true }),
-    ]);
-    const next = movePostProcessingEffect(r, 'vignette', 'down');
-    expect(next.postProcessing.effects.map((e) => e.type)).toEqual(['bloom', 'vignette']);
+  it('is a no-op at either end, or for an unknown id', () => {
+    const r = twoVignettes();
+    expect(movePostProcessingEffect(r, 'v1', 'up')).toBe(r);
+    expect(movePostProcessingEffect(r, 'v2', 'down')).toBe(r);
+    expect(movePostProcessingEffect(r, 'nope', 'up')).toBe(r);
+  });
+});
+
+describe('reorderPostProcessingEffect', () => {
+  it('moves one instance before another, or to the end', () => {
+    expect(ids(reorderPostProcessingEffect(twoVignettes(), 'v2', 'v1'))).toEqual(['v2', 'v1', 'b']);
+    expect(ids(reorderPostProcessingEffect(twoVignettes(), 'v1', null))).toEqual(['b', 'v2', 'v1']);
   });
 
-  it('is a no-op at either end of the chain', () => {
-    const r = render([
-      createBloomEffect({ enabled: true }),
-      createVignetteEffect({ enabled: true }),
-    ]);
-    expect(movePostProcessingEffect(r, 'bloom', 'up')).toBe(r);
-    expect(movePostProcessingEffect(r, 'vignette', 'down')).toBe(r);
-  });
-
-  it('is a no-op if the type is absent from the chain', () => {
-    const r = render([createBloomEffect({ enabled: true })]);
-    expect(movePostProcessingEffect(r, 'vignette', 'up')).toBe(r);
+  it('is a no-op onto itself or with an unknown id', () => {
+    const r = twoVignettes();
+    expect(reorderPostProcessingEffect(r, 'v1', 'v1')).toBe(r);
+    expect(reorderPostProcessingEffect(r, 'v1', 'nope')).toBe(r);
+    expect(reorderPostProcessingEffect(r, 'nope', 'v1')).toBe(r);
   });
 });

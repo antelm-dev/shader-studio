@@ -54,6 +54,7 @@ import {
   validateName,
   validatePreset,
   validateRender,
+  validateRenderStrict,
   validateSource,
   validateThumbnailMeta,
 } from '@shadergrove/shared/validate';
@@ -197,7 +198,9 @@ export class ShaderLibrary {
         ? migrateLegacyProject(fragment, vertex)
         : sanitizeProject(input.project, fragment, vertex);
     const render =
-      input.render === undefined ? { ...DEFAULT_RENDER } : validateRender(input.render);
+      input.render === undefined
+        ? { ...DEFAULT_RENDER }
+        : expect(validateRenderStrict(input.render), 'Invalid render settings');
 
     const now = new Date().toISOString();
     const row: Omit<ShaderRow, 'id'> = {
@@ -260,7 +263,10 @@ export class ShaderLibrary {
       patch.vertex === undefined
         ? undefined
         : expect(validateSource(patch.vertex, 'vertex'), 'Invalid vertex shader');
-    const render = patch.render === undefined ? undefined : validateRender(patch.render);
+    const render =
+      patch.render === undefined
+        ? undefined
+        : expect(validateRenderStrict(patch.render), 'Invalid render settings');
     const channelsPatch =
       patch.channels === undefined ? undefined : validateChannelSettingsPatch(patch.channels);
 
@@ -609,7 +615,7 @@ export class ShaderLibrary {
         values: sanitizeParams(shader.controls, input.values as ShaderParams),
         ...(input.render === undefined || input.render === null
           ? {}
-          : { render: validateRender(input.render) }),
+          : { render: expect(validateRenderStrict(input.render), 'Invalid preset render') }),
       };
 
       const presets = existing

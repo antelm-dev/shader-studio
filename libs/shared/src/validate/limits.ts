@@ -11,8 +11,12 @@ export const LIMITS = {
   selectOptionCount: 64,
   presetCount: 200,
   bundleShaderCount: 200,
-  /** Cap on `RenderSettings.postProcessing.effects`. Generous: Phase 1 has one effect type and one instance of it. */
+  /** Cap on `RenderSettings.postProcessing.effects`, every type and instance together. */
   postProcessingEffectCount: 16,
+  instanceIdLength: 64,
+  /** A custom effect's GLSL, in characters — the same order as a plugin effect's 64 KiB. */
+  customEffectSourceLength: 65_536,
+  customEffectControlCount: 16,
   textureBytes: 4 * 1024 * 1024,
   thumbnailBytes: 512 * 1024,
   textureDimension: 4096,
