@@ -13,6 +13,7 @@ import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import {
   POST_PROCESSING_EFFECT_TYPES,
   addPostProcessingEffect,
+  canAddPostProcessingEffect,
   duplicatePostProcessingEffect,
   isCustomEffectRunnable,
   movePostProcessingEffect,
@@ -34,6 +35,7 @@ import {
   type VignetteEffect,
   type VignetteSettings,
 } from '@shadergrove/shared/model';
+import { LIMITS } from '@shadergrove/shared/validate';
 import { I18n } from '../../i18n/i18n';
 import type { TranslationKey } from '../../i18n/keys';
 import { TranslatePipe } from '../../i18n/translate.pipe';
@@ -91,6 +93,7 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
           matIconButton
           type="button"
           data-testid="pp-add"
+          [disabled]="!canAdd()"
           [matTooltip]="'rack.addAria' | translate"
           [attr.aria-label]="'rack.addAria' | translate"
           [matMenuTriggerFor]="addMenu"
@@ -111,6 +114,12 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
           </button>
         }
       </mat-menu>
+
+      @if (!canAdd()) {
+        <p class="empty" data-testid="pp-full">
+          {{ 'rack.full' | translate: { max: maxEffects } }}
+        </p>
+      }
 
       @if (effects().length === 0) {
         <p class="empty">{{ 'rack.empty' | translate }}</p>
@@ -192,6 +201,7 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
                 mat-menu-item
                 type="button"
                 [attr.data-testid]="'pp-duplicate-' + effect.instanceId"
+                [disabled]="!canAdd()"
                 (click)="duplicate(effect.instanceId)"
               >
                 <mat-icon>content_copy</mat-icon>
@@ -537,6 +547,11 @@ export class PostProcessingPanel {
     () => this.render()?.postProcessing.effects ?? [],
   );
   protected readonly chainEnabled = computed(() => this.render()?.postProcessing.enabled ?? true);
+  protected readonly maxEffects = LIMITS.postProcessingEffectCount;
+  protected readonly canAdd = computed(() => {
+    const render = this.render();
+    return !!render && canAddPostProcessingEffect(render);
+  });
 
   /** Each instance's display name: a custom effect's own, or its type's — numbered when there are several. */
   private readonly names = computed(() => {

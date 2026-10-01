@@ -64,6 +64,12 @@ const SOURCE_DEBOUNCE_MS = 300;
           (valueChange)="setSource($event.value)"
         />
 
+        @if (sourceError()) {
+          <p class="errors" role="alert" data-testid="effect-source-too-long">
+            {{ 'effectEditor.sourceTooLong' | translate: { max: sourceLength } }}
+          </p>
+        }
+
         @if (diagnostics().length) {
           <ul class="errors" data-testid="effect-errors">
             @for (diagnostic of diagnostics(); track $index) {
@@ -196,6 +202,8 @@ export class CustomEffectEditor {
     () => this.controlsDraft() ?? JSON.stringify(this.effect()?.definition.controls ?? [], null, 2),
   );
   protected readonly controlsError = signal<string | null>(null);
+  protected readonly sourceError = signal(false);
+  protected readonly sourceLength = LIMITS.customEffectSourceLength;
 
   private readonly pendingSource = signal<string | null>(null);
   private sourceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -251,6 +259,7 @@ export class CustomEffectEditor {
     this.cancelPendingSource();
     this.controlsDraft.set(null);
     this.controlsError.set(null);
+    this.sourceError.set(false);
     this.mutate((effect) => ({
       ...effect,
       definition: structuredClone(original),
@@ -263,10 +272,20 @@ export class CustomEffectEditor {
     this.dialogRef.close();
   }
 
+  /**
+   * Moves the typed code into the draft — unless it is over the limit storage
+   * keeps: then it stays in the editor, flagged, so the draft stays saveable and
+   * nothing typed is thrown away.
+   */
   private flushSource(): void {
+    if (this.sourceTimer) clearTimeout(this.sourceTimer);
+    this.sourceTimer = null;
     const source = this.pendingSource();
-    this.cancelPendingSource();
-    if (source !== null) this.updateDefinition((definition) => ({ ...definition, source }));
+    if (source === null) return;
+    this.sourceError.set(source.length > LIMITS.customEffectSourceLength);
+    if (this.sourceError()) return;
+    this.pendingSource.set(null);
+    this.updateDefinition((definition) => ({ ...definition, source }));
   }
 
   private cancelPendingSource(): void {

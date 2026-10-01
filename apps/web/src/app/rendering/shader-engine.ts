@@ -178,6 +178,11 @@ export class ShaderEngine {
   /** Custom post-processing effects' problems, whenever that list changes. See `PostProcessing.onDiagnostics`. */
   onEffectDiagnostics: ((diagnostics: CompileDiagnostic[]) => void) | null = null;
 
+  /** The custom post-processing effects' problems for the render settings in force now. */
+  get effectDiagnostics(): CompileDiagnostic[] {
+    return this.post.diagnostics;
+  }
+
   private readonly three: ThreeModule;
   private readonly canvas: HTMLCanvasElement;
   private readonly renderer: THREE.WebGLRenderer;

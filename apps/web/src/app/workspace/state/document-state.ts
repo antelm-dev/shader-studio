@@ -390,6 +390,7 @@ export class DocumentState {
     this.params.set(defaultParams(record.controls));
     this.activePresetId.set(null);
     this.diagnostics.set([]);
+    this.effectDiagnostics.set([]);
     this.activeDocId.set(imagePass(project).id);
   }
 

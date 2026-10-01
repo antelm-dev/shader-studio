@@ -858,6 +858,20 @@ describe('ShaderStore: revisions and compile completion', () => {
     expect(store.draftRevision()).toBe(0);
   });
 
+  it("forgets the previous shader's effect errors when another shader opens", async () => {
+    const { store } = setup(makeRecord(), makeRecord({ id: 'plasma', name: 'Plasma' }));
+    await store.initialize();
+    store.setEffectDiagnostics([
+      { severity: 'error', line: 1, message: 'broken', source: 'fragment', docId: '@effect/c' },
+    ]);
+    expect(store.hasErrors()).toBe(true);
+
+    await store.select('plasma');
+
+    expect(store.allDiagnostics()).toEqual([]);
+    expect(store.hasErrors()).toBe(false);
+  });
+
   it('waitForCompile resolves once recordCompileResult reports that revision', async () => {
     const { store } = setup(makeRecord());
     await store.initialize();

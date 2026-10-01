@@ -11,6 +11,7 @@
  * own values. It is a copy, never a reference to a library entry or a plugin,
  * so a shader keeps rendering whatever happens to where the effect came from.
  */
+import { LIMITS } from '../validate/limits';
 import type { ShaderControl, ShaderParams } from './controls';
 
 export interface BloomSettings {
@@ -248,11 +249,24 @@ export function createPostProcessingEffect(
   }
 }
 
-/** Appends `effect`, or a fresh default instance of a type — what the rack's Add menu inserts. */
+/**
+ * Whether the chain has room for one more effect. Storage keeps at most
+ * `LIMITS.postProcessingEffectCount`; one past it would preview, then vanish
+ * on reload.
+ */
+export function canAddPostProcessingEffect(render: RenderSettings): boolean {
+  return render.postProcessing.effects.length < LIMITS.postProcessingEffectCount;
+}
+
+/**
+ * Appends `effect`, or a fresh default instance of a type — what the rack's Add
+ * menu inserts. A no-op on a full chain.
+ */
 export function addPostProcessingEffect(
   render: RenderSettings,
   effect: PostProcessingEffectType | PostProcessingEffect,
 ): RenderSettings {
+  if (!canAddPostProcessingEffect(render)) return render;
   const { effects } = render.postProcessing;
   const added =
     typeof effect === 'string'
@@ -261,11 +275,12 @@ export function addPostProcessingEffect(
   return withEffects(render, [...effects, added]);
 }
 
-/** Inserts a copy of one instance right after it, under a new id. A no-op if it is absent. */
+/** Inserts a copy of one instance right after it, under a new id. A no-op if it is absent or the chain is full. */
 export function duplicatePostProcessingEffect(
   render: RenderSettings,
   instanceId: string,
 ): RenderSettings {
+  if (!canAddPostProcessingEffect(render)) return render;
   const { effects } = render.postProcessing;
   const index = effects.findIndex((effect) => effect.instanceId === instanceId);
   if (index < 0) return render;

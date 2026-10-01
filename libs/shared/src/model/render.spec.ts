@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   activePostProcessingCount,
   addPostProcessingEffect,
+  canAddPostProcessingEffect,
   createBloomEffect,
   createCustomEffect,
   createVignetteEffect,
@@ -21,6 +22,7 @@ import {
   type RenderSettings,
   type VignetteEffect,
 } from './render';
+import { LIMITS } from '../validate/limits';
 
 function render(
   effects: RenderSettings['postProcessing']['effects'],
@@ -93,6 +95,20 @@ describe('addPostProcessingEffect', () => {
     const added = next.postProcessing.effects[3] as CustomEffect;
     expect(added.definition.name).toBe('Grain');
     expect(added.instanceId).not.toBe('v1');
+  });
+});
+
+describe('the chain limit', () => {
+  it('adds and duplicates nothing once the chain holds LIMITS.postProcessingEffectCount effects', () => {
+    const full = render(
+      Array.from({ length: LIMITS.postProcessingEffectCount }, (_, i) =>
+        createBloomEffect({ instanceId: `b${i}` }),
+      ),
+    );
+    expect(canAddPostProcessingEffect(full)).toBe(false);
+    expect(addPostProcessingEffect(full, 'vignette')).toBe(full);
+    expect(duplicatePostProcessingEffect(full, 'b0')).toBe(full);
+    expect(canAddPostProcessingEffect(removePostProcessingEffect(full, 'b0'))).toBe(true);
   });
 });
 

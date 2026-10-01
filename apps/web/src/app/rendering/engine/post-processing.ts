@@ -141,6 +141,7 @@ export class PostProcessing {
   private lastLossWithCustom = -Infinity;
 
   private reported = '[]';
+  private reportedList: CompileDiagnostic[] = [];
   private disposed = false;
 
   /**
@@ -482,7 +483,13 @@ export class PostProcessing {
     const serialized = JSON.stringify(diagnostics);
     if (serialized === this.reported) return;
     this.reported = serialized;
+    this.reportedList = diagnostics;
     this.onDiagnostics?.(diagnostics);
+  }
+
+  /** The custom-effect problems for the settings in force, as last reported. */
+  get diagnostics(): CompileDiagnostic[] {
+    return this.reportedList;
   }
 
   private disposeComposer(): void {

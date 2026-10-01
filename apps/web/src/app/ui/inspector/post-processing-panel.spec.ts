@@ -167,6 +167,22 @@ describe('PostProcessingPanel', () => {
     expect(rowIds(root)).toEqual(['pp-effect-bloom']);
   });
 
+  it('stops offering to add or duplicate once the chain is full', async () => {
+    draft.set(
+      chain(...Array.from({ length: 16 }, (_, i) => createBloomEffect({ instanceId: `b${i}` }))),
+    );
+    const fixture = await create();
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(button(root, 'pp-add').disabled).toBe(true);
+    expect(root.querySelector('[data-testid="pp-full"]')).not.toBeNull();
+    button(root, 'pp-more-b0').click();
+    fixture.detectChanges();
+    expect(
+      document.querySelector<HTMLButtonElement>('[data-testid="pp-duplicate-b0"]')!.disabled,
+    ).toBe(true);
+  });
+
   it('duplicates an instance right after itself, with its settings and a new id', async () => {
     draft.set(chain(createVignetteEffect({ enabled: true, intensity: 0.8 }), createBloomEffect()));
     const fixture = await create();

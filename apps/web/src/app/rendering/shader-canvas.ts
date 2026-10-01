@@ -267,6 +267,9 @@ export class ShaderCanvas {
 
         this.renderedShaderId = shaderId;
         this.compiledShaderId.set(shaderId);
+        // Stated, not only reported on change: the renderer may already hold this
+        // list from before the shader was switched, and would not repeat it.
+        this.store.setEffectDiagnostics(engine.effectDiagnostics);
         this.store.recordCompileResult(revision, [...this.compositionErrors(), ...diagnostics]);
         this.store.compiling.set(new Set());
         this.armRevealWhenReady();
