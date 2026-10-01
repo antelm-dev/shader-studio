@@ -520,7 +520,17 @@ export type AppResponse<T extends ControllerCommandType = ControllerCommandType>
 // Handshake
 // ---------------------------------------------------------------------------
 
-export const MCP_BRIDGE_PROTOCOL_VERSION = 2;
+/**
+ * Bump whenever a schema above changes what either side sends, so a mismatched
+ * app and server refuse each other at the handshake with a clear "update
+ * whichever side is behind" instead of failing command by command.
+ *
+ * - 3: post-processing effects carry an `instanceId`, and a `custom` effect
+ *   (embedded GLSL, controls, values) joins the effect union. A v2 server
+ *   rejects any shader holding a custom effect; a v3 server rejects every
+ *   render from a v2 app, which has no ids.
+ */
+export const MCP_BRIDGE_PROTOCOL_VERSION = 3;
 
 /**
  * Only the browser tab ("app") connects to the bridge — the MCP server *is*
