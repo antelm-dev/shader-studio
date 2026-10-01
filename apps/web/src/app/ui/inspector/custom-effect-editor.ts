@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -49,7 +49,7 @@ const SOURCE_DEBOUNCE_MS = 300;
             [maxLength]="nameLength"
             [ngModel]="current.definition.name"
             (ngModelChange)="setName($event)"
-            (blur)="setName(current.definition.name.trim())"
+            (blur)="trimName()"
           />
         </label>
 
@@ -116,7 +116,7 @@ const SOURCE_DEBOUNCE_MS = 300;
         type="button"
         cdkFocusInitial
         data-testid="effect-done"
-        [disabled]="sourceError()"
+        [disabled]="unapplied()"
         (click)="close()"
       >
         {{ 'effectEditor.done' | translate }}
@@ -212,6 +212,15 @@ export class CustomEffectEditor {
   protected readonly sourceError = signal(false);
   protected readonly sourceLength = LIMITS.customEffectSourceLength;
 
+  /**
+   * Something typed here is not in the draft: code over the size limit, or
+   * controls that do not validate. Closing would throw it away, so while this
+   * holds Done is disabled and so are Escape and the backdrop.
+   */
+  protected readonly unapplied = computed(
+    () => this.sourceError() || this.controlsError() !== null,
+  );
+
   private readonly pendingSource = signal<string | null>(null);
   private sourceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly original: CustomEffectDefinition | null = structuredClone(
@@ -219,7 +228,14 @@ export class CustomEffectEditor {
   );
 
   constructor() {
+    effect(() => (this.dialogRef.disableClose = this.unapplied()));
     inject(DestroyRef).onDestroy(() => this.flushSource());
+  }
+
+  /** On blur. Reads the name from the draft, never from a template snapshot a keystroke may have outrun. */
+  protected trimName(): void {
+    const name = this.effect()?.definition.name;
+    if (name && name !== name.trim()) this.setName(name.trim());
   }
 
   /** Kept as typed — trimming every keystroke would eat the space before the next word. */
@@ -229,6 +245,9 @@ export class CustomEffectEditor {
 
   protected setSource(source: string): void {
     this.pendingSource.set(source);
+    // Judged on every keystroke, not when the debounce fires: the dialog must
+    // refuse to close the moment there is code it could not keep.
+    this.sourceError.set(source.length > LIMITS.customEffectSourceLength);
     if (this.sourceTimer) clearTimeout(this.sourceTimer);
     this.sourceTimer = setTimeout(() => this.flushSource(), SOURCE_DEBOUNCE_MS);
   }
@@ -267,7 +286,6 @@ export class CustomEffectEditor {
     this.controlsDraft.set(null);
     this.controlsError.set(null);
     this.sourceError.set(false);
-    this.dialogRef.disableClose = false;
     this.mutate((effect) => ({
       ...effect,
       definition: structuredClone(original),
@@ -277,7 +295,7 @@ export class CustomEffectEditor {
 
   protected close(): void {
     this.flushSource();
-    if (!this.sourceError()) this.dialogRef.close();
+    if (!this.unapplied()) this.dialogRef.close();
   }
 
   /**
@@ -291,9 +309,6 @@ export class CustomEffectEditor {
     const source = this.pendingSource();
     if (source === null) return;
     this.sourceError.set(source.length > LIMITS.customEffectSourceLength);
-    // Code that only exists in the editor must not be closed away: Done is
-    // disabled, and so are Escape and the backdrop, until it fits or is reverted.
-    this.dialogRef.disableClose = this.sourceError();
     if (this.sourceError()) return;
     this.pendingSource.set(null);
     this.updateDefinition((definition) => ({ ...definition, source }));
