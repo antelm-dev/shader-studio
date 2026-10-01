@@ -1,8 +1,11 @@
 import {
+  CUSTOM_EFFECT_API_VERSION,
   DEFAULT_BLOOM,
   DEFAULT_VIGNETTE,
   createBloomEffect,
+  legacyInstanceId,
   type BloomEffect,
+  type CustomEffectDefinition,
   type BloomSettings,
   type ParamValue,
   type PostProcessingEffect,
@@ -13,8 +16,16 @@ import {
   type VignetteSettings,
 } from '../model';
 import { LIMITS } from './limits';
-import { isFiniteNumber, isRecord, validateName, validateOptionalText } from './primitives';
+import {
+  isCleanString,
+  isFiniteNumber,
+  isRecord,
+  validateName,
+  validateOptionalText,
+} from './primitives';
 import { fail, ok, type Result } from './result';
+
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 const KEY_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/;
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
@@ -255,39 +266,134 @@ function clampVignetteSettings(input: unknown): VignetteSettings {
   };
 }
 
-/** One entry of a canonical `postProcessing.effects` array. Unknown `type`s are discarded. */
-function validateEffect(input: unknown): PostProcessingEffect | null {
+const INSTANCE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+/** Room left for a `-n` suffix when a kept id has to be made unique. */
+const MAX_KEPT_ID = LIMITS.instanceIdLength - 8;
+
+/**
+ * A custom effect's definition, or `null` if nothing of it can be kept safely:
+ * a source that is not a string or is over `LIMITS.customEffectSourceLength`
+ * never reaches the GPU or storage. Name and code always survive otherwise.
+ * Controls that do not validate under the v1 rules are dropped — for a newer
+ * `apiVersion` that is expected, since the effect will not run here anyway.
+ * `customEffectErrors` reports the same cases as errors where a save or an
+ * import must refuse instead of normalizing.
+ */
+function validateCustomDefinition(input: unknown): CustomEffectDefinition | null {
+  if (!isRecord(input)) return null;
+  const { apiVersion, name, source } = input;
+  if (typeof source !== 'string' || source.length > LIMITS.customEffectSourceLength) return null;
+  const controls = customControls(input['controls']);
+  return {
+    apiVersion:
+      Number.isInteger(apiVersion) && (apiVersion as number) > 0 ? (apiVersion as number) : 0,
+    name:
+      isCleanString(name) && name.trim() !== ''
+        ? name.trim().slice(0, LIMITS.nameLength)
+        : 'Custom effect',
+    source,
+    controls: controls.ok ? controls.value : [],
+  };
+}
+
+function customControls(input: unknown): Result<ShaderControl[]> {
+  if (Array.isArray(input) && input.length > LIMITS.customEffectControlCount) {
+    return fail(`must have at most ${LIMITS.customEffectControlCount} controls`);
+  }
+  return validateControls(input ?? []);
+}
+
+/** One entry of a canonical `postProcessing.effects` array, without its id. Unknown `type`s are discarded. */
+function validateEffect(
+  input: unknown,
+): DistributiveOmit<PostProcessingEffect, 'instanceId'> | null {
   if (!isRecord(input)) return null;
   const enabled = typeof input['enabled'] === 'boolean' ? input['enabled'] : false;
-  if (input['type'] === 'bloom') {
-    return { type: 'bloom', enabled, settings: clampBloomSettings(input['settings']) };
+  switch (input['type']) {
+    case 'bloom':
+      return { type: 'bloom', enabled, settings: clampBloomSettings(input['settings']) };
+    case 'vignette':
+      return { type: 'vignette', enabled, settings: clampVignetteSettings(input['settings']) };
+    case 'custom': {
+      const definition = validateCustomDefinition(input['definition']);
+      if (!definition) return null;
+      const values = sanitizeParams(definition.controls, input['values']);
+      return { type: 'custom', enabled, definition, values };
+    }
+    default:
+      return null;
   }
-  if (input['type'] === 'vignette') {
-    return { type: 'vignette', enabled, settings: clampVignetteSettings(input['settings']) };
-  }
-  return null;
 }
 
 /**
  * A whole `postProcessing.effects` array: considers at most
  * `LIMITS.postProcessingEffectCount` entries (an oversized array is truncated
- * rather than scanned in full), drops anything of an unrecognized shape, and
- * keeps at most one instance per `type` — the first one seen wins, so a
- * duplicate is discarded deterministically rather than by whichever happened
- * to parse last.
+ * rather than scanned in full) and drops anything of an unrecognized shape.
+ *
+ * Ids are made unique deterministically, so the same input always yields the
+ * same chain: an entry keeps a valid id unless an earlier entry already took
+ * it; one without (a chain from before ids existed held at most one effect per
+ * type) gets `legacyInstanceId(type)`; a clash gets `-2`, `-3`, ... appended.
  */
 function validateEffects(input: unknown): PostProcessingEffect[] {
   if (!Array.isArray(input)) return [];
 
-  const seen = new Set<string>();
+  const used = new Set<string>();
   const effects: PostProcessingEffect[] = [];
   for (const entry of input.slice(0, LIMITS.postProcessingEffectCount)) {
     const effect = validateEffect(entry);
-    if (!effect || seen.has(effect.type)) continue;
-    seen.add(effect.type);
-    effects.push(effect);
+    if (!effect) continue;
+    const raw = (entry as Record<string, unknown>)['instanceId'];
+    const base =
+      typeof raw === 'string' && INSTANCE_ID_PATTERN.test(raw) && raw.length <= MAX_KEPT_ID
+        ? raw
+        : legacyInstanceId(effect.type);
+    let instanceId = base;
+    for (let n = 2; used.has(instanceId); n++) instanceId = `${base}-${n}`;
+    used.add(instanceId);
+    effects.push({ ...effect, instanceId } as PostProcessingEffect);
   }
   return effects;
+}
+
+/**
+ * What `validateRender` would silently normalize in a custom effect but a save
+ * or an import must refuse: code over the limit or of the wrong type, an
+ * `apiVersion` that is not a positive integer, or v1 controls that do not
+ * validate. Lists one message per problem, or none.
+ */
+export function customEffectErrors(input: unknown, label = 'render'): string[] {
+  if (!isRecord(input) || !isRecord(input['postProcessing'])) return [];
+  const effects = input['postProcessing']['effects'];
+  if (!Array.isArray(effects)) return [];
+  const errors: string[] = [];
+  effects.slice(0, LIMITS.postProcessingEffectCount).forEach((entry, index) => {
+    if (!isRecord(entry) || entry['type'] !== 'custom') return;
+    const at = `${label}.postProcessing.effects[${index}].definition`;
+    const definition = entry['definition'];
+    if (!isRecord(definition)) {
+      errors.push(`${at} must be an object`);
+      return;
+    }
+    const { apiVersion, source } = definition;
+    if (typeof source !== 'string') errors.push(`${at}.source must be a string`);
+    else if (source.length > LIMITS.customEffectSourceLength) {
+      errors.push(`${at}.source must be at most ${LIMITS.customEffectSourceLength} characters`);
+    }
+    if (!Number.isInteger(apiVersion) || (apiVersion as number) < 1) {
+      errors.push(`${at}.apiVersion must be a positive integer`);
+    } else if (apiVersion === CUSTOM_EFFECT_API_VERSION) {
+      const controls = customControls(definition['controls']);
+      if (!controls.ok) errors.push(...controls.errors.map((error) => `${at}.controls: ${error}`));
+    }
+  });
+  return errors;
+}
+
+/** `validateRender` for a write: fails on what `customEffectErrors` reports instead of normalizing it. */
+export function validateRenderStrict(input: unknown, label = 'render'): Result<RenderSettings> {
+  const errors = customEffectErrors(input, label);
+  return errors.length ? fail(...errors) : ok(validateRender(input));
 }
 
 /** A pre-chain `{ enabled, strength, radius, threshold }` bloom record — a v1/v2 bundle or an old preset snapshot. */
@@ -295,6 +401,7 @@ function legacyBloomEffect(input: unknown): BloomEffect | null {
   if (!isRecord(input)) return null;
   return {
     type: 'bloom',
+    instanceId: legacyInstanceId('bloom'),
     enabled: typeof input['enabled'] === 'boolean' ? input['enabled'] : false,
     settings: clampBloomSettings(input),
   };

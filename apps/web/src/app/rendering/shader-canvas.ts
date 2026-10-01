@@ -253,6 +253,7 @@ export class ShaderCanvas {
 
         const draft = this.store.draft();
         const channelState = this.channelState();
+        engine.setEffectScope(this.store.record()?.id ?? null);
         const diagnostics = engine.setPasses(
           {
             vertex: this.store.vertex(),
@@ -267,6 +268,9 @@ export class ShaderCanvas {
 
         this.renderedShaderId = shaderId;
         this.compiledShaderId.set(shaderId);
+        // Stated, not only reported on change: the renderer may already hold this
+        // list from before the shader was switched, and would not repeat it.
+        this.store.setEffectDiagnostics(engine.effectDiagnostics);
         this.store.recordCompileResult(revision, [...this.compositionErrors(), ...diagnostics]);
         this.store.compiling.set(new Set());
         this.armRevealWhenReady();
@@ -333,7 +337,11 @@ export class ShaderCanvas {
     effect(() => {
       const engine = this.engine();
       const render = this.store.draft()?.render;
-      if (engine && render) engine.setRenderSettings(render);
+      // The record and the draft are adopted together, so this id is the draft's own.
+      const shaderId = this.store.record()?.id ?? null;
+      if (!engine || !render) return;
+      engine.setEffectScope(shaderId);
+      engine.setRenderSettings(render);
     });
 
     effect(() => {
@@ -369,6 +377,7 @@ export class ShaderCanvas {
     engine.onResize = (width, height) => this.handle.resolution.set({ width, height });
     engine.onFrameRendered = () => this.onFrameRendered();
     engine.onTextureSettled = () => this.armRevealWhenReady();
+    engine.onEffectDiagnostics = (diagnostics) => this.store.setEffectDiagnostics(diagnostics);
 
     // A lost context is recoverable and usually brief (a driver reset, a GPU
     // switch), so say so rather than reporting a failure: the shader, the

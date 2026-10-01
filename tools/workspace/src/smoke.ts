@@ -122,8 +122,13 @@ try {
 
   await rack.locator('[data-testid="pp-add"]').click();
   await page.locator('[data-testid="pp-add-vignette"]').click();
-  const vignetteRow = rack.locator('[data-testid="pp-effect-vignette"]');
+  // A new instance gets a fresh id (`vignette-<random>`), so the row is found by
+  // its prefix and every control below is addressed through that id.
+  const vignetteRow = rack.locator('[data-testid^="pp-effect-vignette"]').last();
   await vignetteRow.waitFor({ state: 'visible', timeout: 10_000 });
+  const vignetteRowId = await vignetteRow.getAttribute('data-testid');
+  const vignetteId = vignetteRowId?.replace('pp-effect-', '') ?? '';
+  if (!vignetteId) throw new Error('The added Vignette row has no instance id');
 
   // Vignette is appended after Bloom — move it up so it now precedes Bloom,
   // then confirm the DOM order (which mirrors the composer's build order)
@@ -132,19 +137,19 @@ try {
   // reading it synchronously right after the click. Locator.getAttribute
   // (rather than page.waitForFunction) keeps this tool-script context free of
   // the DOM lib the browser-side callback would otherwise need.
-  await vignetteRow.locator('[data-testid="pp-move-up-vignette"]').click();
+  await vignetteRow.locator(`[data-testid="pp-move-up-${vignetteId}"]`).click();
   const firstEffect = rack.locator('.effect').first();
   const deadline = Date.now() + 10_000;
   let firstEffectTestId: string | null = null;
   while (Date.now() < deadline) {
     firstEffectTestId = await firstEffect.getAttribute('data-testid');
-    if (firstEffectTestId === 'pp-effect-vignette') break;
+    if (firstEffectTestId === vignetteRowId) break;
     await delay(50);
   }
   const rowTypes = await rack
     .locator('.effect')
     .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-testid')));
-  if (rowTypes[0] !== 'pp-effect-vignette') {
+  if (rowTypes[0] !== vignetteRowId) {
     throw new Error(`Expected Vignette first after reordering, got: ${rowTypes.join(', ')}`);
   }
 
@@ -152,12 +157,17 @@ try {
   // interactive with no reload. Rendering-path correctness (direct vs.
   // composer) is asserted by the deterministic PostProcessing unit tests;
   // smoke only proves the controls survive real DOM interaction.
-  await vignetteRow.locator('[data-testid="pp-enable-vignette"]').click();
+  const vignetteToggle = rack.locator(`[data-testid="pp-enable-${vignetteId}"]`);
+  await vignetteToggle.click();
   await rack.locator('[data-testid="pp-master-toggle"]').click();
   await rack.locator('[data-testid="pp-master-toggle"]').click();
-  await vignetteRow.locator('[data-testid="pp-enable-vignette"]').click();
-  await vignetteRow.locator('[data-testid="pp-remove-vignette"]').click();
-  await vignetteRow.waitFor({ state: 'detached', timeout: 10_000 });
+  await vignetteToggle.click();
+  // Remove lives in the row's "more actions" menu, rendered in the overlay.
+  await rack.locator(`[data-testid="pp-more-${vignetteId}"]`).click();
+  await page.locator(`[data-testid="pp-remove-${vignetteId}"]`).click();
+  await rack
+    .locator(`[data-testid="${vignetteRowId}"]`)
+    .waitFor({ state: 'detached', timeout: 10_000 });
 
   await page.locator('button[aria-label="More actions"]').click();
   await page.getByRole('menuitem', { name: 'Show editor' }).click();

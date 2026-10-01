@@ -99,6 +99,7 @@ const shaderControlSchema = z.discriminatedUnion('type', [
 
 const bloomEffectSchema = z.object({
   type: z.literal('bloom'),
+  instanceId: z.string(),
   enabled: z.boolean(),
   settings: z.object({
     strength: z.number(),
@@ -108,6 +109,7 @@ const bloomEffectSchema = z.object({
 });
 const vignetteEffectSchema = z.object({
   type: z.literal('vignette'),
+  instanceId: z.string(),
   enabled: z.boolean(),
   settings: z.object({
     intensity: z.number(),
@@ -115,10 +117,22 @@ const vignetteEffectSchema = z.object({
     roundness: z.number(),
   }),
 });
-/** Phase 2 has two effect types; extend this union for the next one. */
+const customEffectSchema = z.object({
+  type: z.literal('custom'),
+  instanceId: z.string(),
+  enabled: z.boolean(),
+  definition: z.object({
+    apiVersion: z.number(),
+    name: z.string(),
+    source: z.string(),
+    controls: z.array(shaderControlSchema),
+  }),
+  values: shaderParamsSchema,
+});
 const postProcessingEffectSchema = z.discriminatedUnion('type', [
   bloomEffectSchema,
   vignetteEffectSchema,
+  customEffectSchema,
 ]);
 const renderSettingsSchema = z.object({
   postProcessing: z.object({

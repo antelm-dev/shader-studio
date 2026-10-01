@@ -11,13 +11,19 @@ import type { ShaderProject } from '../project/types';
 /**
  * Format tag written into every exported bundle. Bump on a breaking change.
  *
- * Bumped from v2 to v3 because the canonical render shape changed:
- * `RenderSettings` is now an ordered `postProcessing` chain rather than a bare
- * `bloom` object. v1 and v2 are still accepted on import — `validateRender`
- * normalizes a v1/v2 shader's or preset's `{ bloom }` into a single-effect
- * chain the same way it fills in one that is missing entirely.
+ * Bumped from v3 to v4 because effects gained an `instanceId` and a `custom`
+ * type that embeds GLSL: an app that only knows v3 must refuse such a bundle
+ * rather than silently drop its custom effects. v1–v3 are still accepted on
+ * import — `validateRender` gives their effects the ids they would always
+ * have had (see `legacyInstanceId`).
  */
-export const BUNDLE_FORMAT = 'shader-studio/v3';
+export const BUNDLE_FORMAT = 'shader-studio/v4';
+
+/**
+ * Effects as an ordered chain, without instance ids or custom effects. Still
+ * accepted on import.
+ */
+export const LEGACY_BUNDLE_FORMAT_V3 = 'shader-studio/v3';
 
 /**
  * The format between v1 and v3: has a `project` field, but `render` is still

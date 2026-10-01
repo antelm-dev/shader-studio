@@ -166,6 +166,13 @@ export class DocumentState {
   /** Compile + config diagnostics for the current draft. */
   readonly diagnostics = signal<readonly CompileDiagnostic[]>([]);
 
+  /**
+   * Custom post-processing effects' problems, kept apart because they arrive on
+   * their own schedule — the renderer builds effects after an async import —
+   * and a pass compile must not wipe them, nor they a pass compile's.
+   */
+  readonly effectDiagnostics = signal<readonly CompileDiagnostic[]>([]);
+
   /** Passes that are currently being recompiled, so their tabs can say so. */
   readonly compiling = signal<ReadonlySet<string>>(new Set());
 
@@ -340,7 +347,7 @@ export class DocumentState {
       };
     });
 
-    return dedupe([...graph, ...this.diagnostics()]);
+    return dedupe([...graph, ...this.diagnostics(), ...this.effectDiagnostics()]);
   });
 
   readonly hasErrors = computed(() =>
@@ -383,6 +390,7 @@ export class DocumentState {
     this.params.set(defaultParams(record.controls));
     this.activePresetId.set(null);
     this.diagnostics.set([]);
+    this.effectDiagnostics.set([]);
     this.activeDocId.set(imagePass(project).id);
   }
 

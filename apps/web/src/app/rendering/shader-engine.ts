@@ -175,6 +175,13 @@ export class ShaderEngine {
   /** Fired when this engine's context is lost or comes back. Never fired for a sibling's. */
   onContextLost: (() => void) | null = null;
   onContextRestored: (() => void) | null = null;
+  /** Custom post-processing effects' problems, whenever that list changes. See `PostProcessing.onDiagnostics`. */
+  onEffectDiagnostics: ((diagnostics: CompileDiagnostic[]) => void) | null = null;
+
+  /** The custom post-processing effects' problems for the render settings in force now. */
+  get effectDiagnostics(): CompileDiagnostic[] {
+    return this.post.diagnostics;
+  }
 
   private readonly three: ThreeModule;
   private readonly canvas: HTMLCanvasElement;
@@ -238,6 +245,7 @@ export class ShaderEngine {
     // A composer arrives long after the resize that would have sized it.
     this.post.onComposerCreated = () => this.resize();
     this.post.onRenderPathChanged = () => this.resetProfilerForWorkloadChange();
+    this.post.onDiagnostics = (diagnostics) => this.onEffectDiagnostics?.(diagnostics);
 
     this.unsubscribe.push(
       context.onLost(() => this.handleContextLost()),
@@ -356,7 +364,7 @@ export class ShaderEngine {
     for (const pass of this.compiler.passes) this.binder.bind(pass.uniforms, pass.channels);
     this.updateProfilerWorkload();
 
-    this.setRenderSettings(spec.render);
+    this.post.setSettings(spec.render, force);
 
     return diagnostics;
   }
@@ -577,6 +585,11 @@ export class ShaderEngine {
 
   setRenderSettings(render: RenderSettings): void {
     this.post.setSettings(render);
+  }
+
+  /** Which shader the next render settings belong to. See `PostProcessing.setScope`. */
+  setEffectScope(shaderId: string | null): void {
+    this.post.setScope(shaderId);
   }
 
   /**
@@ -1033,6 +1046,7 @@ export class ShaderEngine {
    * pass regardless of where its owner sits in the order.
    */
   private drawFrame(): void {
+    this.post.setTime(this.time);
     this.drawBuffers();
     const image = this.compiler.imagePass;
     if (image) this.binder.bind(image.uniforms, image.channels);
@@ -1040,6 +1054,7 @@ export class ShaderEngine {
   }
 
   private drawFrameWithPassSample(samplePassId: string | null, usesComposer: boolean): void {
+    this.post.setTime(this.time);
     this.drawBuffers(samplePassId);
     const image = this.compiler.imagePass;
     if (image) this.binder.bind(image.uniforms, image.channels);

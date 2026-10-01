@@ -14,13 +14,13 @@ import {
   type TextureWrapMode,
 } from '@shadergrove/shared';
 import { VERTEX_DOC, type CompileDiagnostic } from '@shadergrove/shared/diagnostic';
-import { parseInfoLog, prefixLineCount } from '@shadergrove/shared/glsl-diagnostics';
 import { expandMacros } from '@shadergrove/shared/glsl-export';
 
 import type { EngineOutputLevel, EngineOutputSource } from '../engine-output-sink';
 import type { GlContext } from '../gl-context';
 import { CHANNEL_UNIFORMS, type ChannelBinder } from './channel-binder';
 import { CHANNEL_COUNT, type ChannelSource } from './texture-manager';
+import { probeProgram } from './shader-probe';
 import type { UniformMap, UniformRegistry } from './uniform-registry';
 
 /**
@@ -447,60 +447,19 @@ export class PassCompiler {
     fragment: string,
     vertex: string,
   ): CompileDiagnostic[] {
-    const renderer = this.context.renderer;
-
-    const diagnostics: CompileDiagnostic[] = [];
-    const previousHandler = renderer.debug.onShaderError;
-    const previousTarget = renderer.getRenderTarget();
-
-    renderer.debug.onShaderError = (gl, program, glVertexShader, glFragmentShader) => {
-      const fragmentSource = gl.getShaderSource(glFragmentShader) ?? '';
-      const vertexSource = gl.getShaderSource(glVertexShader) ?? '';
-
-      diagnostics.push(
-        ...parseInfoLog(
-          gl.getShaderInfoLog(glFragmentShader) ?? '',
-          'fragment',
-          prefixLineCount(fragmentSource, fragment),
-        ),
-        ...parseInfoLog(
-          gl.getShaderInfoLog(glVertexShader) ?? '',
-          'vertex',
-          prefixLineCount(vertexSource, vertex),
-        ),
-      );
-
-      // A program can link-fail with both shaders clean — mismatched varyings,
-      // too many uniforms. Without this the user would see a silent failure.
-      if (diagnostics.length === 0) {
-        const log = (gl.getProgramInfoLog(program) ?? '').trim();
-        diagnostics.push({
-          severity: 'error',
-          line: 0,
-          message: log || 'The shader program failed to link',
-          source: 'fragment',
-        });
-      }
-    };
-
     this.probeMesh.material = material;
     try {
-      renderer.setRenderTarget(this.probeTarget);
-      renderer.render(this.probeScene, this.camera);
-    } catch (error) {
-      diagnostics.push({
-        severity: 'error',
-        line: 0,
-        message: `Renderer rejected the shader: ${String(error)}`,
-        source: 'fragment',
-      });
+      return probeProgram(
+        this.context.renderer,
+        this.probeScene,
+        this.camera,
+        this.probeTarget,
+        fragment,
+        vertex,
+      );
     } finally {
-      renderer.setRenderTarget(previousTarget);
-      renderer.debug.onShaderError = previousHandler;
       this.probeMesh.material = this.current;
     }
-
-    return diagnostics;
   }
 
   private buildUniforms(

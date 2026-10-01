@@ -438,7 +438,12 @@ describe('presets', () => {
       postProcessing: {
         enabled: true,
         effects: [
-          { type: 'bloom', enabled: true, settings: { strength: 3, radius: 0.4, threshold: 0.7 } },
+          {
+            type: 'bloom',
+            instanceId: 'bloom',
+            enabled: true,
+            settings: { strength: 3, radius: 0.4, threshold: 0.7 },
+          },
         ],
       },
     });

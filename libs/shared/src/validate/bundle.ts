@@ -2,6 +2,7 @@ import {
   BUNDLE_FORMAT,
   LEGACY_BUNDLE_FORMAT,
   LEGACY_BUNDLE_FORMAT_V2,
+  LEGACY_BUNDLE_FORMAT_V3,
   type Bundle,
   type ShaderPayload,
 } from '../model';
@@ -22,6 +23,7 @@ export function parseBundle(input: unknown): Result<ShaderPayload[]> {
   const format = input['format'];
   if (
     format !== BUNDLE_FORMAT &&
+    format !== LEGACY_BUNDLE_FORMAT_V3 &&
     format !== LEGACY_BUNDLE_FORMAT_V2 &&
     format !== LEGACY_BUNDLE_FORMAT
   ) {
