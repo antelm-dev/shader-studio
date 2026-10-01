@@ -141,7 +141,6 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
               {{ name(effect) }}
             </mat-slide-toggle>
 
-            <span class="spacer"></span>
 
             @if (effect.type === 'custom') {
               <button
@@ -177,36 +176,46 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
             >
               <mat-icon>arrow_downward</mat-icon>
             </button>
+            <!-- The rarer actions, so the effect's name keeps the room it needs. -->
             <button
               matIconButton
               type="button"
-              [attr.data-testid]="'pp-duplicate-' + effect.instanceId"
-              [matTooltip]="ariaFor('rack.duplicateAria', effect)"
-              [attr.aria-label]="ariaFor('rack.duplicateAria', effect)"
-              (click)="duplicate(effect.instanceId)"
+              [attr.data-testid]="'pp-more-' + effect.instanceId"
+              [matTooltip]="ariaFor('rack.moreAria', effect)"
+              [attr.aria-label]="ariaFor('rack.moreAria', effect)"
+              [matMenuTriggerFor]="moreMenu"
             >
-              <mat-icon>content_copy</mat-icon>
+              <mat-icon>more_vert</mat-icon>
             </button>
-            <button
-              matIconButton
-              type="button"
-              [attr.data-testid]="'pp-reset-' + effect.instanceId"
-              [matTooltip]="ariaFor('rack.resetAria', effect)"
-              [attr.aria-label]="ariaFor('rack.resetAria', effect)"
-              (click)="reset(effect.instanceId)"
-            >
-              <mat-icon>restart_alt</mat-icon>
-            </button>
-            <button
-              matIconButton
-              type="button"
-              [attr.data-testid]="'pp-remove-' + effect.instanceId"
-              [matTooltip]="ariaFor('rack.removeAria', effect)"
-              [attr.aria-label]="ariaFor('rack.removeAria', effect)"
-              (click)="remove(effect.instanceId)"
-            >
-              <mat-icon>close</mat-icon>
-            </button>
+            <mat-menu #moreMenu="matMenu">
+              <button
+                mat-menu-item
+                type="button"
+                [attr.data-testid]="'pp-duplicate-' + effect.instanceId"
+                (click)="duplicate(effect.instanceId)"
+              >
+                <mat-icon>content_copy</mat-icon>
+                <span>{{ ariaFor('rack.duplicateAria', effect) }}</span>
+              </button>
+              <button
+                mat-menu-item
+                type="button"
+                [attr.data-testid]="'pp-reset-' + effect.instanceId"
+                (click)="reset(effect.instanceId)"
+              >
+                <mat-icon>restart_alt</mat-icon>
+                <span>{{ ariaFor('rack.resetAria', effect) }}</span>
+              </button>
+              <button
+                mat-menu-item
+                type="button"
+                [attr.data-testid]="'pp-remove-' + effect.instanceId"
+                (click)="remove(effect.instanceId)"
+              >
+                <mat-icon>close</mat-icon>
+                <span>{{ ariaFor('rack.removeAria', effect) }}</span>
+              </button>
+            </mat-menu>
           </header>
 
           @switch (effect.type) {
@@ -434,7 +443,15 @@ const EFFECT_LABEL_KEY: Record<PostProcessingEffectType, TranslationKey> = {
     }
 
     .effect-toggle {
+      flex: 1;
       min-width: 0;
+    }
+
+    /* A long name is cut rather than wrapped into the buttons beside it. */
+    .effect-toggle ::ng-deep label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .drag-handle {
@@ -611,6 +628,9 @@ export class PostProcessingPanel {
     this.dialog.open<CustomEffectEditor, CustomEffectEditorData>(CustomEffectEditor, {
       data: { instanceId },
       autoFocus: 'dialog',
+      // Wide enough for GLSL; Material's default panel width would clip it.
+      width: '800px',
+      maxWidth: '94vw',
     });
   }
 

@@ -261,6 +261,7 @@
   "rack.custom": "Custom effect",
   "rack.instanceName": "{name} {n}",
   "rack.duplicateAria": "Duplicate {name}",
+  "rack.moreAria": "More actions for {name}",
   "rack.editAria": "Edit the code of {name}",
   "rack.unsupported": "Written for effect API v{version}. This app runs v1, so it is kept but skipped.",
   "rack.errorLine": "Line {line}: {message}",

@@ -118,6 +118,21 @@ describe('PostProcessingPanel', () => {
   const button = (root: HTMLElement, id: string) =>
     root.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)!;
 
+  /** Duplicate, reset and remove live in each row's "more actions" menu, rendered in the overlay. */
+  function fromRowMenu(
+    root: HTMLElement,
+    fixture: { detectChanges(): void },
+    action: 'duplicate' | 'reset' | 'remove',
+    instanceId: string,
+  ): void {
+    button(root, `pp-more-${instanceId}`).click();
+    fixture.detectChanges();
+    document
+      .querySelector<HTMLButtonElement>(`[data-testid="pp-${action}-${instanceId}"]`)!
+      .click();
+    fixture.detectChanges();
+  }
+
   function addFromMenu(root: HTMLElement, fixture: { detectChanges(): void }, type: string): void {
     // mat-menu content renders into the CDK overlay container (document.body).
     button(root, 'pp-add').click();
@@ -142,10 +157,11 @@ describe('PostProcessingPanel', () => {
     expect(added).not.toBe('bloom');
     expect(effects()[1]!.enabled).toBe(true);
     // Two of a type are told apart by name too, for screen readers.
-    expect(button(root, `pp-remove-${added}`).getAttribute('aria-label')).toBe('Remove Bloom 2');
+    expect(button(root, `pp-more-${added}`).getAttribute('aria-label')).toBe(
+      'More actions for Bloom 2',
+    );
 
-    button(root, `pp-remove-${added}`).click();
-    fixture.detectChanges();
+    fromRowMenu(root, fixture, 'remove', added);
 
     expect(ids()).toEqual(['bloom']);
     expect(rowIds(root)).toEqual(['pp-effect-bloom']);
@@ -155,8 +171,7 @@ describe('PostProcessingPanel', () => {
     draft.set(chain(createVignetteEffect({ enabled: true, intensity: 0.8 }), createBloomEffect()));
     const fixture = await create();
 
-    button(fixture.nativeElement, 'pp-duplicate-vignette').click();
-    fixture.detectChanges();
+    fromRowMenu(fixture.nativeElement, fixture, 'duplicate', 'vignette');
 
     expect(effects().map((e) => e.type)).toEqual(['vignette', 'vignette', 'bloom']);
     expect((effects()[1] as VignetteEffect).settings.intensity).toBe(0.8);
@@ -228,8 +243,7 @@ describe('PostProcessingPanel', () => {
     );
     const fixture = await create();
 
-    button(fixture.nativeElement, 'pp-reset-bloom').click();
-    fixture.detectChanges();
+    fromRowMenu(fixture.nativeElement, fixture, 'reset', 'bloom');
 
     const bloom = getBloomEffect(draft()!.render);
     expect(bloom.enabled).toBe(false);

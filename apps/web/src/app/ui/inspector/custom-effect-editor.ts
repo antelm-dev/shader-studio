@@ -114,7 +114,6 @@ const SOURCE_DEBOUNCE_MS = 300;
       display: flex;
       flex-direction: column;
       gap: 10px;
-      width: min(760px, 92vw);
     }
 
     .field {

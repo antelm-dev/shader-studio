@@ -264,6 +264,7 @@ export const TRANSLATION_KEYS = [
   'rack.custom',
   'rack.instanceName',
   'rack.duplicateAria',
+  'rack.moreAria',
   'rack.editAria',
   'rack.unsupported',
   'rack.errorLine',

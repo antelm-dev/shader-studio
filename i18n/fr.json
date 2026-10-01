@@ -261,6 +261,7 @@
   "rack.custom": "Effet personnalisé",
   "rack.instanceName": "{name} {n}",
   "rack.duplicateAria": "Dupliquer {name}",
+  "rack.moreAria": "Autres actions pour {name}",
   "rack.editAria": "Modifier le code de {name}",
   "rack.unsupported": "Écrit pour l’API d’effets v{version}. Cette application exécute la v1 : il est conservé mais ignoré.",
   "rack.errorLine": "Ligne {line} : {message}",
