@@ -140,6 +140,15 @@ describe('mcp bridge', () => {
     expect(message.reason).toContain(String(MCP_BRIDGE_PROTOCOL_VERSION));
   });
 
+  it('rejects an app still on protocol 2, whose renders lack effect instance ids', async () => {
+    const socket = await open(port);
+    socket.send(JSON.stringify(handshake({ protocolVersion: 2, appVersion: '1.4.0' })));
+
+    const message = (await onceMessage(socket)) as { kind: string; reason: string };
+    expect(message.kind).toBe('hello-rejected');
+    expect(message.reason).toContain('1.4.0');
+  });
+
   it('rejects a second connection instead of silently replacing the active session', async () => {
     const first = await connectedApp(port);
 
