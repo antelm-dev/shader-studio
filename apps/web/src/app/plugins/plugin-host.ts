@@ -131,6 +131,10 @@ export class PluginHost {
       effect: jsonCopy(effect, contribution.maxInputBytes, 'input-invalid', 'input-too-large'),
       params: sanitizeParams(contribution.params, params),
     };
+    // The params travel with the effect, so the whole input counts against the limit.
+    if (serializedBytes(input)! > contribution.maxInputBytes) {
+      throw new PluginCallError('input-too-large', 'Input exceeds the exporter limit');
+    }
     const result = await this.run(
       exporterMethod(contributionId),
       input,
@@ -177,7 +181,8 @@ export class PluginHost {
     const onEvent = (data: unknown) => {
       if (overrun) return;
       const size = serializedBytes(data);
-      eventBytes += size ?? 0;
+      // An empty event still costs the host a message, so it is charged a floor.
+      eventBytes += Math.max(size ?? 0, MIN_EVENT_COST);
       if (
         size === null ||
         size > PLUGIN_LIMITS.eventBytes ||
@@ -239,10 +244,22 @@ function jsonCopy(
   return JSON.parse(JSON.stringify(value));
 }
 
+const MIN_EVENT_COST = 64;
+
+/** More nodes than any bounded result needs; stops cyclic or heavily shared structures. */
+const MAX_RESULT_NODES = 100_000;
+
 /** Total bytes of buffers and JSON in a result, checked before the host reads any of it. */
 function checkOutputSize(result: unknown, max: number): void {
   let bytes = 0;
+  let nodes = 0;
   const walk = (value: unknown, depth: number): void => {
+    if (++nodes > MAX_RESULT_NODES) {
+      throw new PluginCallError(
+        'output-invalid',
+        'Result has too many values, or loops back on itself',
+      );
+    }
     if (value instanceof ArrayBuffer) bytes += value.byteLength;
     else if (ArrayBuffer.isView(value)) bytes += value.byteLength;
     else if (typeof value === 'string') bytes += utf8Bytes(value);

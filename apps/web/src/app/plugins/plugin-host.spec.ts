@@ -130,6 +130,23 @@ describe('PluginHost.importFile', () => {
     expect(await run(() => ({ candidate: cyclic }))).toBe('output-invalid');
   });
 
+  it('rejects a result that loops back on itself without walking it forever', async () => {
+    const loop: Record<string, unknown> = {};
+    loop['left'] = loop;
+    loop['right'] = loop;
+    const started = performance.now();
+    const outcome = await code(host(() => ({ candidate: loop })).host.importFile('imp', buffer(1)));
+    expect(outcome).toBe('output-invalid');
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
+  it('charges empty events so they cannot flood the host', async () => {
+    const flood = Array.from({ length: PLUGIN_LIMITS.callEventBytes / 64 + 1 }, () => undefined);
+    const { host: h, sandboxes } = host(() => ({ candidate: 1 }), flood);
+    expect(await code(h.importFile('imp', buffer(1)))).toBe('events-exceeded');
+    expect(sandboxes[0]!.terminate).toHaveBeenCalled();
+  });
+
   it('terminates the plugin and rejects when it sends an oversize event', async () => {
     const big = 'x'.repeat(PLUGIN_LIMITS.eventBytes + 1);
     const { host: h, sandboxes } = host(() => ({ candidate: 1 }), [big]);
@@ -179,6 +196,28 @@ describe('PluginHost.exportEffect', () => {
   it('refuses an oversize effect before starting a Worker', async () => {
     const { host: h, sandboxes } = host(() => ok);
     expect(await code(h.exportEffect('exp', { source: 'x'.repeat(200) }))).toBe('input-too-large');
+    expect(sandboxes).toHaveLength(0);
+  });
+
+  it('counts params against the exporter input limit', async () => {
+    const tight = validatePluginPackage({
+      ...raw,
+      manifest: {
+        ...raw.manifest,
+        contributions: [
+          {
+            ...raw.manifest.contributions[1],
+            maxInputBytes: 20,
+            params: [{ key: 'gain', type: 'number', default: 1, min: 0, max: 2 }],
+          },
+        ],
+      },
+    });
+    if (!tight.ok) throw new Error(tight.errors.join());
+    const sandboxes: unknown[] = [];
+    const h = new PluginHost(tight.value, { start: async () => (sandboxes.push(1), {} as never) });
+    // '{"effect":1,"params":{"gain":1}}' is over 20 bytes although the effect alone is 1.
+    expect(await code(h.exportEffect('exp', 1))).toBe('input-too-large');
     expect(sandboxes).toHaveLength(0);
   });
 
