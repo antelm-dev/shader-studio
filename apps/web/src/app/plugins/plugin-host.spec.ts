@@ -169,6 +169,15 @@ describe('PluginHost.importFile', () => {
     expect(result).toBe('output-too-large');
   });
 
+  it('charges a sparse array for its length, not its entries', async () => {
+    const huge = await code(
+      host(() => ({ candidate: new Array(100_000_000) })).host.importFile('imp', buffer(1)),
+    );
+    expect(['output-invalid', 'output-too-large']).toContain(huge);
+    const flood = host(() => ({ candidate: 1 }), [new Array(PLUGIN_LIMITS.eventBytes + 1)]);
+    expect(await code(flood.host.importFile('imp', buffer(1)))).toBe('events-exceeded');
+  });
+
   it('counts deeply nested buffers, and refuses types it cannot measure', async () => {
     let nested: unknown = buffer(500);
     for (let i = 0; i < 40; i++) nested = { n: nested };

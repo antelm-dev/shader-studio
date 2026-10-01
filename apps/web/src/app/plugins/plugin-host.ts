@@ -282,6 +282,12 @@ function measure(value: unknown, max: number): number | null {
       ) {
         return false;
       }
+      // Holes in a sparse array have no entries but still serialize, as `null,`.
+      if (Array.isArray(item)) {
+        nodes += item.length;
+        bytes += item.length;
+        if (nodes > MAX_NODES) return false;
+      }
       for (const [key, child] of Object.entries(item)) {
         bytes += utf8Bytes(key);
         if (!walk(child, depth + 1)) return false;
