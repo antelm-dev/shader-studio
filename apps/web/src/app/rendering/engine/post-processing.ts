@@ -48,7 +48,9 @@ type EffectPass = UnrealBloomPass | ShaderPass;
  * - an order, enable or add/remove change re-lists the composer's passes in
  *   place, reusing every pass that is still wanted — no recompile, no frame
  *   without effects;
- * - new code for a custom effect compiles one candidate on a 1×1 probe. The
+ * - new code for a custom effect compiles one candidate on a 1×1 probe — at
+ *   once when it is first seen, after `EFFECT_COMPILE_DEBOUNCE_MS` without
+ *   change when it is an edit, at once again on a forced recompile. The
  *   driver rejecting it leaves that instance's last accepted pass running and
  *   reports why; a code that has never compiled leaves the instance out of the
  *   chain, with its diagnostic, and the document is never changed for it.
@@ -111,6 +113,13 @@ interface BuiltPass {
  */
 const REPEATED_LOSS_WINDOW_MS = 30_000;
 
+/**
+ * How long edited custom code has to stand still before it is compiled. The
+ * draft takes every keystroke — so a save always has the latest text — and the
+ * running program stays on screen until the typing pauses.
+ */
+export const EFFECT_COMPILE_DEBOUNCE_MS = 300;
+
 function effectKey(effect: PostProcessingEffect): string {
   return effect.type === 'custom' ? `custom:${customEffectKey(effect.definition)}` : effect.type;
 }
@@ -131,6 +140,16 @@ export class PostProcessing {
    */
   private readonly rejected = new Map<string, { key: string; diagnostics: CompileDiagnostic[] }>();
   private compiler: CustomEffectCompiler | null = null;
+
+  /** Edited custom code waiting for the typing to pause, by instance. */
+  private readonly pendingCompiles = new Map<
+    string,
+    { key: string; timer: ReturnType<typeof setTimeout> }
+  >();
+  /** Code whose wait is over: compiled on the next sync if it is still what the chain holds. */
+  private readonly dueCompiles = new Map<string, string>();
+  /** Set for the duration of a forced sync (Ctrl+Enter): nothing waits. */
+  private compileNow = false;
 
   private current: RenderSettings = DEFAULT_RENDER;
   private size = { width: 1, height: 1, scale: 1 };
@@ -213,7 +232,12 @@ export class PostProcessing {
     } else if (!this.modules) {
       void this.ensureModules();
     } else if (this.context.status() !== 'lost') {
-      this.sync();
+      this.compileNow = force;
+      try {
+        this.sync();
+      } finally {
+        this.compileNow = false;
+      }
     }
     this.report();
     if (before !== this.usesComposer()) this.onRenderPathChanged?.();
@@ -365,6 +389,14 @@ export class PostProcessing {
     if (effect.type === 'custom') {
       const failed = this.rejected.get(effect.instanceId);
       if (failed?.key === key) return this.keepLastValid(effect, built);
+      // An edit to code that already ran (or already failed) waits for the typing
+      // to pause; code seen for the first time — a load, a new effect — compiles now.
+      const editing = built !== undefined || failed !== undefined;
+      if (editing && !this.compileNow && this.dueCompiles.get(effect.instanceId) !== key) {
+        this.scheduleCompile(effect.instanceId, key);
+        return this.keepLastValid(effect, built);
+      }
+      this.cancelCompile(effect.instanceId);
       const result = this.customCompiler().build(effect, this.time, {
         x: this.size.width * this.size.scale,
         y: this.size.height * this.size.scale,
@@ -507,7 +539,30 @@ export class PostProcessing {
     return this.reportedList;
   }
 
+  /** (Re)starts the wait for one instance's edited code; the same code does not restart it. */
+  private scheduleCompile(instanceId: string, key: string): void {
+    const pending = this.pendingCompiles.get(instanceId);
+    if (pending?.key === key) return;
+    if (pending) clearTimeout(pending.timer);
+    const timer = setTimeout(() => {
+      this.pendingCompiles.delete(instanceId);
+      this.dueCompiles.set(instanceId, key);
+      this.setSettings(this.current);
+    }, EFFECT_COMPILE_DEBOUNCE_MS);
+    this.pendingCompiles.set(instanceId, { key, timer });
+  }
+
+  private cancelCompile(instanceId: string): void {
+    const pending = this.pendingCompiles.get(instanceId);
+    if (pending) clearTimeout(pending.timer);
+    this.pendingCompiles.delete(instanceId);
+    this.dueCompiles.delete(instanceId);
+  }
+
   private disposeComposer(): void {
+    for (const pending of this.pendingCompiles.values()) clearTimeout(pending.timer);
+    this.pendingCompiles.clear();
+    this.dueCompiles.clear();
     for (const built of this.built.values()) built.pass.dispose();
     this.built.clear();
     this.installed = [];

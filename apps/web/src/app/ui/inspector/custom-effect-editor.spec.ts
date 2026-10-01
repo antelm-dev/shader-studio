@@ -116,15 +116,14 @@ describe('CustomEffectEditor', () => {
     element.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
-  it('debounces code into the draft and closes on Done', () => {
+  it('writes every keystroke into the draft, so a save never misses one, and closes on Done', () => {
     const { fixture, editor, done } = create();
 
     editor.valueChange.emit({
       id: '@effect/c',
       value: 'vec4 effect(vec4 c, vec2 uv) { return c; }',
     });
-    expect(effect().definition.source).not.toContain('return c;');
-    vi.advanceTimersByTime(300);
+    // No timer: Ctrl+S right now saves this code.
     expect(effect().definition.source).toContain('return c;');
 
     fixture.detectChanges();

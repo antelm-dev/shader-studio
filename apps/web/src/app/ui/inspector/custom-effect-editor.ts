@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -22,9 +22,6 @@ import { ShaderStore } from '../../workspace/shader-store';
 export interface CustomEffectEditorData {
   instanceId: string;
 }
-
-/** Long enough to type through, short enough to see the picture follow. */
-const SOURCE_DEBOUNCE_MS = 300;
 
 /**
  * Edits one custom effect of the open shader: its name, its GLSL and its
@@ -222,8 +219,8 @@ export class CustomEffectEditor {
     () => this.sourceError() || this.controlsError() !== null,
   );
 
+  /** Code over the size limit, kept in the editor only; `null` when the draft has what was typed. */
   private readonly pendingSource = signal<string | null>(null);
-  private sourceTimer: ReturnType<typeof setTimeout> | null = null;
   /** What Revert puts back: the definition, and the values, the dialog opened with. */
   private readonly original: CustomEffectDefinition | null = structuredClone(
     this.effect()?.definition ?? null,
@@ -232,7 +229,6 @@ export class CustomEffectEditor {
 
   constructor() {
     effect(() => (this.dialogRef.disableClose = this.unapplied()));
-    inject(DestroyRef).onDestroy(() => this.flushSource());
   }
 
   /** On blur. Reads the name from the draft, never from a template snapshot a keystroke may have outrun. */
@@ -246,13 +242,21 @@ export class CustomEffectEditor {
     if (name.trim()) this.updateDefinition((definition) => ({ ...definition, name }));
   }
 
+  /**
+   * Every keystroke goes into the draft at once, so a save (Ctrl+S works inside
+   * the dialog) always has the latest code; the renderer is what waits for the
+   * typing to pause before compiling. Code over the size limit stays only in
+   * the editor, flagged, and the dialog refuses to close over it.
+   */
   protected setSource(source: string): void {
-    this.pendingSource.set(source);
-    // Judged on every keystroke, not when the debounce fires: the dialog must
-    // refuse to close the moment there is code it could not keep.
-    this.sourceError.set(source.length > LIMITS.customEffectSourceLength);
-    if (this.sourceTimer) clearTimeout(this.sourceTimer);
-    this.sourceTimer = setTimeout(() => this.flushSource(), SOURCE_DEBOUNCE_MS);
+    const tooLong = source.length > LIMITS.customEffectSourceLength;
+    this.sourceError.set(tooLong);
+    if (tooLong) {
+      this.pendingSource.set(source);
+      return;
+    }
+    this.pendingSource.set(null);
+    this.updateDefinition((definition) => ({ ...definition, source }));
   }
 
   /** Applies controls only once the text is a valid set of them; until then it says why not. */
@@ -285,7 +289,7 @@ export class CustomEffectEditor {
   protected revert(): void {
     const original = this.original;
     if (!original) return;
-    this.cancelPendingSource();
+    this.pendingSource.set(null);
     this.controlsDraft.set(null);
     this.controlsError.set(null);
     this.sourceError.set(false);
@@ -298,30 +302,7 @@ export class CustomEffectEditor {
   }
 
   protected close(): void {
-    this.flushSource();
     if (!this.unapplied()) this.dialogRef.close();
-  }
-
-  /**
-   * Moves the typed code into the draft — unless it is over the limit storage
-   * keeps: then it stays in the editor, flagged, so the draft stays saveable and
-   * nothing typed is thrown away.
-   */
-  private flushSource(): void {
-    if (this.sourceTimer) clearTimeout(this.sourceTimer);
-    this.sourceTimer = null;
-    const source = this.pendingSource();
-    if (source === null) return;
-    this.sourceError.set(source.length > LIMITS.customEffectSourceLength);
-    if (this.sourceError()) return;
-    this.pendingSource.set(null);
-    this.updateDefinition((definition) => ({ ...definition, source }));
-  }
-
-  private cancelPendingSource(): void {
-    if (this.sourceTimer) clearTimeout(this.sourceTimer);
-    this.sourceTimer = null;
-    this.pendingSource.set(null);
   }
 
   private updateDefinition(

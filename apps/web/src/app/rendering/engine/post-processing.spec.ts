@@ -13,7 +13,11 @@ import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import { GlContext } from '../gl-context';
 import { FakeMaterial, FakeRenderer, FakeScene, fakeBackend } from '../testing/fake-gl';
 import { composeCustomEffect } from './custom-effect-pass';
-import { PostProcessing, type PostProcessingModules } from './post-processing';
+import {
+  EFFECT_COMPILE_DEBOUNCE_MS,
+  PostProcessing,
+  type PostProcessingModules,
+} from './post-processing';
 
 /**
  * The post-processing chain, and the decision the rest of the engine is not
@@ -652,12 +656,17 @@ describe('Custom effects', () => {
     reports = [];
     post.onDiagnostics = (diagnostics) => reports.push(diagnostics);
     breakCompilesOf('BROKEN');
+    // Edited code compiles once the typing pauses: the tests decide when that is.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   });
 
   afterEach(() => {
     post.dispose();
     context.dispose();
+    vi.useRealTimers();
   });
+
+  const pause = () => vi.advanceTimersByTime(EFFECT_COMPILE_DEBOUNCE_MS);
 
   const installed = () => FakeComposer.last().passes.slice(1) as FakeShaderPass[];
   const programOf = (pass: FakeShaderPass) => pass.shader as unknown as FakeMaterial;
@@ -734,6 +743,7 @@ describe('Custom effects', () => {
 
     const newCode = 'vec4 effect(vec4 color, vec2 uv) { return color.bgra * u_gain; }';
     post.setSettings(chain(customEffect('a'), customEffect('b', { source: newCode })));
+    pause();
 
     expect(probes()).toBe(probed + 1);
     expect(installed()[0]).toBe(a);
@@ -749,6 +759,7 @@ describe('Custom effects', () => {
 
     const broken = 'vec4 effect(vec4 color, vec2 uv) {\n  return BROKEN;\n}';
     post.setSettings(chain(customEffect('a', { name: 'Grain', source: broken, gain: 2 })));
+    pause();
 
     expect(installed()).toEqual([valid]);
     expect(valid!.disposed).toBe(false);
@@ -777,6 +788,7 @@ describe('Custom effects', () => {
     // ...and new code that compiles takes over.
     const fixed = 'vec4 effect(vec4 color, vec2 uv) { return color.gbra; }';
     post.setSettings(chain(customEffect('a', { name: 'Grain', source: fixed })));
+    pause();
     expect(installed()[0]).not.toBe(valid);
     expect(valid!.disposed).toBe(true);
   });
@@ -795,10 +807,62 @@ describe('Custom effects', () => {
       values: { gain: '#00ff00' },
     });
     expect(() => post.setSettings(chain(recoloured))).not.toThrow();
+    expect(() => pause()).not.toThrow();
 
     expect(installed()).toEqual([valid]);
     // The old float uniform keeps a number: the colour is not written into it.
     expect(valid!.uniforms['u_gain']!.value).toBe(1);
+  });
+
+  it('compiles edited code once the typing pauses, keeping the running program until then', async () => {
+    post.setSettings(chain(customEffect('a')));
+    await loader.flush();
+    const [running] = installed();
+    const probed = probes();
+    const typed = (n: number) =>
+      customEffect('a', { source: `vec4 effect(vec4 c, vec2 uv) { return c * ${n}.0; }` });
+
+    // Three keystrokes in a row: nothing compiles, the running program stays.
+    for (const n of [1, 2, 3]) {
+      post.setSettings(chain(typed(n)));
+      vi.advanceTimersByTime(EFFECT_COMPILE_DEBOUNCE_MS - 1);
+    }
+    expect(probes()).toBe(probed);
+    expect(installed()).toEqual([running]);
+
+    // The pause: the last version, and only it, is compiled.
+    vi.advanceTimersByTime(1);
+    expect(probes()).toBe(probed + 1);
+    expect(programOf(installed()[0]!).fragmentShader).toContain('c * 3.0');
+  });
+
+  it('compiles an edit at once on a forced recompile (Ctrl+Enter)', async () => {
+    post.setSettings(chain(customEffect('a')));
+    await loader.flush();
+    const probed = probes();
+
+    const edited = customEffect('a', { source: 'vec4 effect(vec4 c, vec2 uv) { return c.bgra; }' });
+    post.setSettings(chain(edited), true);
+
+    expect(probes()).toBe(probed + 1);
+    expect(programOf(installed()[0]!).fragmentShader).toContain('c.bgra');
+    // Nothing is left waiting to compile it a second time.
+    pause();
+    expect(probes()).toBe(probed + 1);
+  });
+
+  it('drops a pending compile when the effect leaves the chain', async () => {
+    post.setSettings(chain(customEffect('a')));
+    await loader.flush();
+    post.setSettings(
+      chain(customEffect('a', { source: 'vec4 effect(vec4 c, vec2 uv) { return c; }' })),
+    );
+    const probed = probes();
+
+    post.setSettings(chain());
+    pause();
+
+    expect(probes()).toBe(probed);
   });
 
   it("never falls back on another shader's program for the same instance id", async () => {
