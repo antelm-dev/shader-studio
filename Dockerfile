@@ -13,7 +13,6 @@ RUN npm install --global pnpm@10.28.2
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/
-COPY apps/server/package.json ./apps/server/
 COPY apps/desktop/package.json ./apps/desktop/
 COPY libs/backend/package.json ./libs/backend/
 COPY libs/desktop-api/package.json ./libs/desktop-api/
@@ -32,7 +31,7 @@ COPY . .
 # apps/web/angular.json) and the standalone migrate-files CLI.
 RUN pnpm gen:ipc \
     && pnpm build \
-    && pnpm --filter @shadergrove/server build:cli
+    && pnpm --filter @shadergrove/web build:cli
 
 # The SSR output keeps PostgreSQL and Swagger external. Install their runtime
 # dependencies into an isolated tree; Swagger must remain external because its

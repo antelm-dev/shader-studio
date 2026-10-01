@@ -9,9 +9,8 @@ A self-hosted WebGL shader viewer/editor. pnpm monorepo (`pnpm@10`, Node `^22.22
 
 ## Layout
 
-- `apps/web` — Angular 22 app (`@shadergrove/web`), the editor/viewer UI.
+- `apps/web` — the deployed app (`@shadergrove/web`): Angular 22 editor/viewer UI in `src/`, Express/Nest API and SSR entry in `server/` (also the CLI, `server/cli.ts`). `src/` never imports `server/`.
 - `apps/desktop` — Electron shell (`@shadergrove/desktop`), wraps the web app for desktop distribution.
-- `apps/server` — Express/Angular SSR server (`@shadergrove/server`).
 - `libs/backend` — shared backend logic (file storage, project model) used by web/server/desktop.
 - `libs/desktop-api` — typed IPC surface between web and Electron main (`gen:ipc` generates the bridge).
 - `tools/mcp` — MCP server exposing Shadergrove to AI tools (bridges to the running app via `SHADER_STUDIO_MCP_PORT`/`SHADER_STUDIO_MCP_TOKEN`, default port 4310).
@@ -25,7 +24,7 @@ Never edit generated output directly: `dist/`, `dist-main/`, `dist-web/`, `relea
 
 - `pnpm dev` — web app dev server (`ng serve`, port 4200).
 - `pnpm dev:desktop` — Electron app against the web app (port 4201).
-- `pnpm dev:server` / `pnpm dev:mcp` — run the server / MCP server via `tsx`.
+- `pnpm dev:server` / `pnpm dev:mcp` — run the web server (`apps/web/server`) / MCP server via `tsx`.
 - `pnpm build`, `pnpm build:desktop`, `pnpm build:mcp` — production builds.
 - `pnpm test` — vitest across all packages; `pnpm test:mcp` builds mcp first.
 - `pnpm typecheck` — regenerates IPC types then typechecks every package.

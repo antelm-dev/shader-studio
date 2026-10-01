@@ -14,10 +14,10 @@
   },
   "include": [
     "src/**/*.ts",
-    "../server/src/**/*.ts",
+    "server/**/*.ts",
     "../../libs/backend/src/**/*.ts",
     "../../libs/desktop-api/src/**/*.ts",
     "../../libs/shared/src/**/*.ts"
   ],
-  "exclude": ["src/**/*.spec.ts"]
+  "exclude": ["src/**/*.spec.ts", "server/**/*.spec.ts"]
 }

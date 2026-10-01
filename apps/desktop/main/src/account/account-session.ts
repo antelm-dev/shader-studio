@@ -1,6 +1,6 @@
 /**
  * The desktop's account session (contract C4). It signs in through the system
- * browser with PKCE (RFC 8252, see `apps/server/src/auth/desktop-handoff.ts`)
+ * browser with PKCE (RFC 8252, see `apps/web/server/auth/desktop-handoff.ts`)
  * and keeps the bearer token here, in the main process, encrypted at rest with
  * `safeStorage`. Nothing else ever sees the token: the rest of the app goes
  * through `fetch()`, and the renderer only receives `AccountState`.

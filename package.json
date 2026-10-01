@@ -10,11 +10,11 @@
   "main": "dist-main/main.cjs",
   "scripts": {
     "dev": "nx run @shadergrove/web:dev",
-    "dev:server": "nx run @shadergrove/server:dev",
+    "dev:server": "nx run @shadergrove/web:dev:server",
     "dev:desktop": "nx run @shadergrove/desktop:dev",
     "dev:mcp": "nx run @shader-studio/mcp:dev",
     "build": "nx run @shadergrove/web:build",
-    "build:all": "nx run-many -t build --projects \"@shadergrove/web,@shader-studio/mcp\" && nx run @shadergrove/server:build:cli",
+    "build:all": "nx run-many -t build --projects \"@shadergrove/web,@shader-studio/mcp\" && nx run @shadergrove/web:build:cli",
     "build:desktop": "nx run @shadergrove/desktop:build",
     "build:mcp": "nx run @shader-studio/mcp:build",
     "serve:ssr": "node dist/shadergrove/server/server.mjs",

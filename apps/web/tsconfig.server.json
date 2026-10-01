@@ -1,0 +1,14 @@
+/*
+ * The Express/Nest server under server/: Node only, no DOM. It is bundled by the
+ * Angular SSR build (angular.json "ssr.entry") but checked and tested on its own,
+ * so a browser API cannot slip into it and src/ never has to import it.
+ */
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "emitDecoratorMetadata": true,
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["server/**/*.ts"]
+}

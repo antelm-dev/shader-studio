@@ -17,11 +17,11 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
         "--filter",
-        "@shadergrove/server",
+        "@shadergrove/web",
         "exec",
         "tsx",
         "--inspect-brk",
-        "src/index.ts"
+        "server/index.ts"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
