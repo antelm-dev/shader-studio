@@ -9,6 +9,12 @@
  *
  * In development the Angular CLI imports `reqHandler` below and drives this
  * same app, so `ng serve` gets the real API rather than a mock.
+ *
+ * The API itself lives in @shadergrove/api (libs/api); this file only composes.
+ * apps/web/package.json still declares the API's runtime packages (Nest,
+ * drizzle-orm, nodemailer…) because the dev server's Vite SSR runner resolves
+ * bare imports from apps/web, not from libs/api: drop them and `ng serve` fails
+ * with "Cannot find module '@nestjs/core'".
  */
 
 import {
@@ -18,15 +24,17 @@ import {
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
 import { Logger } from '@nestjs/common';
+import {
+  createAuth,
+  createNestApi,
+  readAuthConfig,
+  readExploreConfig,
+  securityHeaders,
+} from '@shadergrove/api';
 import express, { type Application } from 'express';
 import { join } from 'node:path';
 
-import { createNestApi } from './api/bootstrap';
-import { createAuth } from './auth/auth';
-import { readAuthConfig } from './auth/auth-config';
 import { createLibrary } from './create-library';
-import { readExploreConfig } from './publication/explore-config';
-import { securityHeaders } from './security-headers';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 

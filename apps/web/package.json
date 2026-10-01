@@ -9,8 +9,7 @@
     "dev": "ng serve",
     "dev:desktop": "ng run shadergrove:desktop-serve:development",
     "dev:server": "tsx server/index.ts",
-    "test": "ng test && vitest run --dir server",
-    "test:server": "vitest run --dir server",
+    "test": "ng test",
     "test:watch": "ng test --watch",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit && tsc -p tsconfig.server.json --noEmit"
   },
@@ -32,6 +31,7 @@
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
     "@nestjs/swagger": "^11.4.6",
+    "@shadergrove/api": "workspace:*",
     "@shadergrove/backend": "workspace:*",
     "@shadergrove/desktop-api": "workspace:*",
     "@shadergrove/shared": "workspace:*",
