@@ -16,5 +16,34 @@
   "rules": {
     "typescript/no-explicit-any": "error",
     "no-unused-vars": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "apps/web/src/app/**",
+        "apps/web/src/main.ts",
+        "apps/web/src/main.desktop.ts",
+        "apps/web/src/main.server.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@shadergrove/api",
+                "message": "The Angular app must not import the server: src/server and @shadergrove/api run in Node only, beside the app, and are mounted by src/server/index.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/server", "**/server/**"],
+                "message": "The Angular app must not import the server: src/server and @shadergrove/api run in Node only, beside the app, and are mounted by src/server/index.ts."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

@@ -383,21 +383,25 @@ Five concerns, kept apart on purpose. Nothing below the line knows about Angular
 
 ```
 apps/
-  web/
+  web/                   the deployed app: one process for pages, files and /api
     src/                 Angular browser, SSR, and desktop entry points
       app/               workspace state, rendering, editor, and UI
-  server/
-    src/                 Express SSR host, NestJS REST API, and accounts
-      api/               controllers, authentication guard, and HTTP error mapping
-      auth/              sessions, transactional mail, and desktop sign-in handoff
-      create-library.ts  picks PostgreSQL (DATABASE_URL) or SQLite, then seeds
-      cli.ts             legacy import and pre-account shader ownership claims
+      server/            Express host: security headers, /api mount, static, SSR
+        create-library.ts  picks PostgreSQL (DATABASE_URL) or SQLite, then seeds
   desktop/
     main/src/            Electron lifecycle, windows, updates, and IPC handlers
     preload/src/         sandboxed context bridge
     package.json         desktop build, development, packaging, and type checks
 
 libs/
+  api/                   the HTTP API (NestJS), mounted by apps/web; the desktop
+                         signs in and syncs through it too
+    src/core/            tokens, global auth guard, origin guard, Swagger, errors
+    src/system/          health and translations
+    src/shaders/         the private library: shaders, presets, textures, bundles
+    src/auth/            Better Auth, transactional mail, desktop sign-in handoff
+    src/publications/    public Explore and publishing
+    src/admin/           moderation (only while Explore is on)
   shared/                model, validation, GLSL, capture, and MCP contracts
   backend/               Node-only storage and i18n shared by server and desktop
     src/library/         ShaderLibrary — engine-agnostic shader domain logic
@@ -406,6 +410,7 @@ libs/
   desktop-api/           generated, typed IPC bridge contract
 
 tools/
+  maintenance/           CLI: legacy import and pre-account shader ownership claims
   mcp/                   standalone `@shader-studio/mcp` server
   workspace/             checks, generators, smoke tests, and repo automation
 ```
@@ -869,7 +874,7 @@ pnpm test
   import/export (v1 and v2, rename/overwrite), multipass projects, idempotent
   seeding, transaction rollback, revision conflicts, legacy migration, corrupt
   JSON and missing assets, and persistence across a restart.
-- **`server/api/router.spec.ts`** — the REST layer over a real SQLite-backed
+- **`libs/api/test/router.spec.ts`** — the REST layer over a real SQLite-backed
   library: status codes, the `{ error: { code, message } }` envelope, a `409` on
   a stale `expectedRevision`, and texture upload/serve/clear.
 

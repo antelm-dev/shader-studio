@@ -9,9 +9,9 @@ A self-hosted WebGL shader viewer/editor. pnpm monorepo (`pnpm@10`, Node `^22.22
 
 ## Layout
 
-- `apps/web` — the deployed app (`@shadergrove/web`): Angular 22 editor/viewer UI in `src/app/`, and in `src/server/` the Express composition (SSR, static files, `/api` mount). `src/app/` never imports `src/server/` or `@shadergrove/api`.
+- `apps/web` — the deployed app (`@shadergrove/web`): Angular 22 editor/viewer UI in `src/app/`, and in `src/server/` the Express composition (SSR, static files, `/api` mount). `src/app/` never imports `src/server/` or `@shadergrove/api` (oxlint `no-restricted-imports`, see `.oxlintrc.json`).
 - `apps/desktop` — Electron shell (`@shadergrove/desktop`), wraps the web app for desktop distribution.
-- `libs/api` — the HTTP API (`@shadergrove/api`): NestJS routes, auth (better-auth), publications, admin. Mounted by `apps/web/src/server`; also the contract the desktop app signs in and syncs through.
+- `libs/api` — the HTTP API (`@shadergrove/api`): one Nest module per feature (`system`, `shaders`, `auth`, `publications`, `admin`) over `core/`. Mounted by `apps/web/src/server`; also the contract the desktop app signs in and syncs through.
 - `libs/backend` — shared backend logic (file storage, project model) used by web/server/desktop.
 - `libs/desktop-api` — typed IPC surface between web and Electron main (`gen:ipc` generates the bridge).
 - `tools/mcp` — MCP server exposing Shadergrove to AI tools (bridges to the running app via `SHADER_STUDIO_MCP_PORT`/`SHADER_STUDIO_MCP_TOKEN`, default port 4310).
