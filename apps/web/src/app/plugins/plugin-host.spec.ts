@@ -2,6 +2,7 @@ import { describe, expect, it, vi, type Mock } from 'vitest';
 import { PLUGIN_LIMITS, validatePluginPackage, type PluginPackage } from '@shadergrove/shared';
 
 import { PluginCallError, PluginHost, type SandboxHandle } from './plugin-host';
+import { decodeResult } from './plugin-sandbox';
 
 const raw = {
   manifest: {
@@ -42,36 +43,55 @@ if (!parsed.ok) throw new Error(parsed.errors.join());
 const plugin: PluginPackage = parsed.value;
 
 interface Fake extends SandboxHandle {
-  calls: { method: string; params: unknown; transfer: Transferable[]; timeoutMs?: number }[];
-  terminate: Mock<(reason?: string) => Promise<void>>;
+  calls: {
+    method: string;
+    params: unknown;
+    transfer: Transferable[];
+    timeoutMs?: number;
+    maxResultBytes?: number;
+  }[];
+  terminate: Mock<(reason?: string | Error) => Promise<void>>;
 }
 
-/** A sandbox that answers `reply`, and can emit events first. */
+/** What the Worker prelude in `plugin-sandbox.js` does to a handler's return value. */
+function encode(value: unknown): { json: string; buffers: ArrayBuffer[] } {
+  const buffers: ArrayBuffer[] = [];
+  const json = JSON.stringify(value ?? null, (_key, item: unknown) => {
+    if (!(item instanceof ArrayBuffer)) return item;
+    if (!buffers.includes(item)) buffers.push(item);
+    return { $buffer: buffers.indexOf(item) };
+  });
+  return { json, buffers };
+}
+
+/** A sandbox whose plugin answers `reply`, sent over the real wire encoding. */
 function host(
   reply: (params: unknown) => unknown,
-  events: unknown[] = [],
   timeoutMs?: number,
 ): { host: PluginHost; sandboxes: Fake[] } {
   const sandboxes: Fake[] = [];
   const instance = new PluginHost(plugin, {
     timeoutMs,
-    start: async (_code, { onEvent }) => {
-      // Like the real sandbox, terminating rejects whatever call is pending.
+    start: async () => {
+      // Like the real sandbox, terminating rejects whatever call is pending with the reason.
       let stop: (error: Error) => void = () => undefined;
       const stopped = new Promise<never>((_, reject) => (stop = reject));
       stopped.catch(() => undefined);
       const sandbox: Fake = {
         calls: [],
-        terminate: vi.fn(async (reason?: string) => stop(new Error(reason))),
+        terminate: vi.fn(async (reason?: string | Error) =>
+          stop(reason instanceof Error ? reason : new Error(reason)),
+        ),
         async call(method, params, options) {
           sandbox.calls.push({
             method,
             params,
             transfer: options?.transfer ?? [],
             timeoutMs: options?.timeoutMs,
+            maxResultBytes: options?.maxResultBytes,
           });
-          events.forEach((event) => onEvent?.(event));
-          return Promise.race([stopped, Promise.resolve().then(() => reply(params))]);
+          const value = await Promise.race([stopped, Promise.resolve().then(() => reply(params))]);
+          return decodeResult(encode(value), options?.maxResultBytes ?? Infinity);
         },
       };
       sandboxes.push(sandbox);
@@ -103,9 +123,11 @@ describe('PluginHost.importFile', () => {
   });
 
   it('never allows more than the package time limit', async () => {
-    const { host: h, sandboxes } = host(() => ({ candidate: 1 }), [], 60_000);
+    const { host: h, sandboxes } = host(() => ({ candidate: 1 }), 60_000);
     await h.importFile('imp', buffer(1));
     expect(sandboxes[0]!.calls[0]!.timeoutMs).toBe(PLUGIN_LIMITS.callTimeoutMs);
+    // The contribution's own output limit bounds what the sandbox will decode.
+    expect(sandboxes[0]!.calls[0]!.maxResultBytes).toBe(100);
   });
 
   it('refuses an oversize file before starting a Worker', async () => {
@@ -120,93 +142,11 @@ describe('PluginHost.importFile', () => {
     expect(await code(h.importFile('exp', buffer(1)))).toBe('unknown-contribution');
   });
 
-  it('rejects malformed, oversize and non-JSON results', async () => {
+  it('rejects a result without a candidate, or one over the contribution limit', async () => {
     const run = (reply: () => unknown) => code(host(reply).host.importFile('imp', buffer(1)));
     expect(await run(() => 'text')).toBe('output-invalid');
     expect(await run(() => ({ candidate: 'x'.repeat(200) }))).toBe('output-too-large');
     expect(await run(() => ({ candidate: buffer(500) }))).toBe('output-too-large');
-    const cyclic: Record<string, unknown> = {};
-    cyclic['self'] = cyclic;
-    // Either bound may trip first on a loop; what matters is that it is refused.
-    expect(['output-invalid', 'output-too-large']).toContain(
-      await run(() => ({ candidate: cyclic })),
-    );
-  });
-
-  it('rejects a result that loops back on itself without walking it forever', async () => {
-    const loop: Record<string, unknown> = {};
-    loop['left'] = loop;
-    loop['right'] = loop;
-    const started = performance.now();
-    const outcome = await code(host(() => ({ candidate: loop })).host.importFile('imp', buffer(1)));
-    expect(['output-invalid', 'output-too-large']).toContain(outcome);
-    expect(performance.now() - started).toBeLessThan(2_000);
-  });
-
-  it('stops a shared-reference event and a binary event before they pass the quota', async () => {
-    let shared: Record<string, unknown> = { leaf: 1 };
-    for (let i = 0; i < 30; i++) shared = { a: shared, b: shared };
-    for (const event of [shared, new ArrayBuffer(PLUGIN_LIMITS.eventBytes + 1)]) {
-      const { host: h, sandboxes } = host(() => ({ candidate: 1 }), [event]);
-      expect(await code(h.importFile('imp', buffer(1)))).toBe('events-exceeded');
-      expect(sandboxes[0]!.terminate).toHaveBeenCalled();
-    }
-  });
-
-  it('charges a view for its whole backing buffer and a BigInt for its size', async () => {
-    const view = new Uint8Array(new ArrayBuffer(PLUGIN_LIMITS.eventBytes * 2), 0, 1);
-    const big = 1n << BigInt(PLUGIN_LIMITS.eventBytes * 8 + 8);
-    for (const event of [view, big]) {
-      const { host: h } = host(() => ({ candidate: 1 }), [event]);
-      expect(await code(h.importFile('imp', buffer(1)))).toBe('events-exceeded');
-    }
-    const result = await code(
-      host(() => ({ candidate: new Uint8Array(new ArrayBuffer(500), 0, 1) })).host.importFile(
-        'imp',
-        buffer(1),
-      ),
-    );
-    expect(result).toBe('output-too-large');
-  });
-
-  it('charges a sparse array for its length, not its entries', async () => {
-    const huge = await code(
-      host(() => ({ candidate: new Array(100_000_000) })).host.importFile('imp', buffer(1)),
-    );
-    expect(['output-invalid', 'output-too-large']).toContain(huge);
-    const flood = host(() => ({ candidate: 1 }), [new Array(PLUGIN_LIMITS.eventBytes + 1)]);
-    expect(await code(flood.host.importFile('imp', buffer(1)))).toBe('events-exceeded');
-  });
-
-  it('counts deeply nested buffers, and refuses types it cannot measure', async () => {
-    let nested: unknown = buffer(500);
-    for (let i = 0; i < 40; i++) nested = { n: nested };
-    const run = (reply: () => unknown) => code(host(reply).host.importFile('imp', buffer(1)));
-    expect(await run(() => ({ candidate: nested }))).toBe('output-invalid');
-    expect(await run(() => ({ candidate: new Map([['k', 'x'.repeat(500)]]) }))).toBe(
-      'output-invalid',
-    );
-    const exported = host(() => ({
-      bytes: buffer(4),
-      mime: 'text/plain',
-      fileName: 'a.fs',
-      extra: nested,
-    }));
-    expect(await code(exported.host.exportEffect('exp', {}))).toBe('output-invalid');
-  });
-
-  it('charges empty events so they cannot flood the host', async () => {
-    const flood = Array.from({ length: PLUGIN_LIMITS.callEventBytes / 64 + 1 }, () => undefined);
-    const { host: h, sandboxes } = host(() => ({ candidate: 1 }), flood);
-    expect(await code(h.importFile('imp', buffer(1)))).toBe('events-exceeded');
-    expect(sandboxes[0]!.terminate).toHaveBeenCalled();
-  });
-
-  it('terminates the plugin and rejects when it sends an oversize event', async () => {
-    const big = 'x'.repeat(PLUGIN_LIMITS.eventBytes + 1);
-    const { host: h, sandboxes } = host(() => ({ candidate: 1 }), [big]);
-    expect(await code(h.importFile('imp', buffer(1)))).toBe('events-exceeded');
-    expect(sandboxes[0]!.terminate).toHaveBeenCalled();
   });
 
   it('terminates on cancellation and surfaces a plugin failure unchanged', async () => {

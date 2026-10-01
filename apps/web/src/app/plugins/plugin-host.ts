@@ -28,34 +28,22 @@ import {
 } from '@shadergrove/shared';
 
 import {
+  PluginCallError,
   PluginSandbox,
+  type PluginCallErrorCode,
   type PluginSandboxOptions,
   type SandboxCallOptions,
 } from './plugin-sandbox';
 
-export type PluginCallErrorCode =
-  | 'unknown-contribution'
-  | 'input-invalid'
-  | 'input-too-large'
-  | 'output-invalid'
-  | 'output-too-large'
-  | 'events-exceeded'
-  | 'cancelled';
+export { PluginCallError, type PluginCallErrorCode };
 
-export class PluginCallError extends Error {
-  constructor(
-    readonly code: PluginCallErrorCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'PluginCallError';
-  }
-}
-
-/** The part of `PluginSandbox` the host uses; a test can stand in for it. */
+/**
+ * The part of `PluginSandbox` the host uses; a test can stand in for it. The
+ * sandbox owns the wire format, so it is what bounds reply and event sizes.
+ */
 export interface SandboxHandle {
   call(method: string, params?: unknown, options?: SandboxCallOptions): Promise<unknown>;
-  terminate(reason?: string): Promise<void>;
+  terminate(reason?: string | Error): Promise<void>;
 }
 
 export interface PluginHostOptions {
@@ -116,7 +104,7 @@ export class PluginHost {
     if (!isObject(result) || !('candidate' in result)) {
       throw new PluginCallError('output-invalid', 'Importer must return { candidate }');
     }
-    return { candidate: jsonCopy(result['candidate'], contribution.maxOutputBytes) };
+    return { candidate: result['candidate'] };
   }
 
   /** Run an exporter on the one effect definition chosen; nothing else of the project goes in. */
@@ -128,7 +116,7 @@ export class PluginHost {
   ): Promise<ExporterResult> {
     const contribution = this.contribution(contributionId, 'exporter');
     const input: ExporterInput = {
-      effect: jsonCopy(effect, contribution.maxInputBytes, 'input-invalid', 'input-too-large'),
+      effect: jsonCopy(effect, contribution.maxInputBytes),
       params: sanitizeParams(contribution.params, params),
     };
     // The params travel with the effect, so the whole input counts against the limit.
@@ -174,45 +162,19 @@ export class PluginHost {
     maxOutputBytes: number,
     signal: AbortSignal | undefined,
   ): Promise<unknown> {
-    if (signal?.aborted) throw new PluginCallError('cancelled', 'Call was cancelled');
-    let eventBytes = 0;
-    let overrun: PluginCallError | null = null;
+    const cancelled = () => new PluginCallError('cancelled', 'Call was cancelled');
+    if (signal?.aborted) throw cancelled();
     let sandbox: SandboxHandle | undefined;
-    const onEvent = (data: unknown) => {
-      if (overrun) return;
-      // Measured by walking, not by JSON.stringify: that would expand shared references
-      // and skip binary, before any quota could apply.
-      const size = measure(data, PLUGIN_LIMITS.eventBytes);
-      // An empty event still costs the host a message, so it is charged a floor.
-      eventBytes += Math.max(size ?? 0, MIN_EVENT_COST);
-      if (
-        size === null ||
-        size > PLUGIN_LIMITS.eventBytes ||
-        eventBytes > PLUGIN_LIMITS.callEventBytes
-      ) {
-        overrun = new PluginCallError(
-          'events-exceeded',
-          'Plugin sent too many or too large events',
-        );
-        void sandbox?.terminate(overrun.message);
-      }
-    };
-    const cancel = () => void sandbox?.terminate('Call was cancelled');
+    const cancel = () => void sandbox?.terminate(cancelled());
     try {
-      sandbox = await this.start(this.plugin.code!, { onEvent });
+      sandbox = await this.start(this.plugin.code!, {});
       signal?.addEventListener('abort', cancel, { once: true });
       if (signal?.aborted) cancel();
-      const result = await sandbox.call(method, params, {
+      return await sandbox.call(method, params, {
         timeoutMs: this.timeoutMs,
         transfer,
+        maxResultBytes: maxOutputBytes,
       });
-      if (overrun) throw overrun;
-      checkOutputSize(result, maxOutputBytes);
-      return result;
-    } catch (error) {
-      if (overrun) throw overrun;
-      if (signal?.aborted) throw new PluginCallError('cancelled', 'Call was cancelled');
-      throw error;
     } finally {
       signal?.removeEventListener('abort', cancel);
       await sandbox?.terminate('Call finished');
@@ -233,78 +195,14 @@ function serializedBytes(value: unknown): number | null {
   }
 }
 
-/** A plain-data copy, so nothing the Worker built (getters, prototypes) reaches the host. */
-function jsonCopy(
-  value: unknown,
-  max: number,
-  invalid: PluginCallErrorCode = 'output-invalid',
-  large: PluginCallErrorCode = 'output-too-large',
-): unknown {
+/** A plain-data copy of what the app hands a plugin, bounded before it is sent. */
+function jsonCopy(value: unknown, max: number): unknown {
   const size = serializedBytes(value);
-  if (size === null) throw new PluginCallError(invalid, 'Value is not plain JSON data');
-  if (size > max) throw new PluginCallError(large, `Value is ${size} bytes; the limit is ${max}`);
-  return JSON.parse(JSON.stringify(value));
-}
-
-const MIN_EVENT_COST = 64;
-
-/** More values than any bounded message needs; stops cyclic or heavily shared structures. */
-const MAX_NODES = 100_000;
-const MAX_DEPTH = 32;
-
-/**
- * Bytes a message from the Worker carries — strings, keys and binary — or `null`
- * if it is not plain, bounded data: a cycle, shared references fanning out,
- * nesting past `MAX_DEPTH`, or a type (Map, Set, Date, ...) that holds content this
- * walk cannot see. Counts every reference, as JSON would, so a result this
- * accepts is cheap to serialize afterwards. Stops as soon as `max` is passed.
- */
-function measure(value: unknown, max: number): number | null {
-  let bytes = 0;
-  let nodes = 0;
-  const walk = (item: unknown, depth: number): boolean => {
-    if (bytes > max) return true;
-    if (++nodes > MAX_NODES) return false;
-    if (item instanceof ArrayBuffer) {
-      bytes += item.byteLength;
-    } else if (ArrayBuffer.isView(item)) {
-      // Cloning a view copies its whole backing buffer, not just the window it shows.
-      bytes += item.buffer.byteLength;
-    } else if (typeof item === 'bigint') {
-      bytes += Math.ceil(item.toString(16).length / 2);
-    } else if (typeof item === 'string') {
-      bytes += utf8Bytes(item);
-    } else if (typeof item === 'object' && item !== null) {
-      const proto = Object.getPrototypeOf(item);
-      if (
-        depth >= MAX_DEPTH ||
-        !(Array.isArray(item) || proto === Object.prototype || proto === null)
-      ) {
-        return false;
-      }
-      // Holes in a sparse array have no entries but still serialize, as `null,`.
-      if (Array.isArray(item)) {
-        nodes += item.length;
-        bytes += item.length;
-        if (nodes > MAX_NODES) return false;
-      }
-      for (const [key, child] of Object.entries(item)) {
-        bytes += utf8Bytes(key);
-        if (!walk(child, depth + 1)) return false;
-      }
-    }
-    return true;
-  };
-  return walk(value, 0) ? bytes : null;
-}
-
-/** Total bytes of buffers and JSON in a result, checked before the host reads any of it. */
-function checkOutputSize(result: unknown, max: number): void {
-  const bytes = measure(result, max);
-  if (bytes === null) {
-    throw new PluginCallError('output-invalid', 'Result is not plain, bounded data');
+  if (size === null) throw new PluginCallError('input-invalid', 'Value is not plain JSON data');
+  if (size > max) {
+    throw new PluginCallError('input-too-large', `Value is ${size} bytes; the limit is ${max}`);
   }
-  if (bytes > max) throw new PluginCallError('output-too-large', `Result exceeds ${max} bytes`);
+  return JSON.parse(JSON.stringify(value));
 }
 
 function validateExport(result: unknown, contribution: ExporterContribution): ExporterResult {

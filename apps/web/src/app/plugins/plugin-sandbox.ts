@@ -12,7 +12,16 @@
  *
  * Termination asks the frame's bootstrap to call `worker.terminate()`, which
  * aborts a plugin stuck in a loop, and removes the frame once it confirms.
+ *
+ * On the wire, everything the Worker sends is a JSON string plus a list of
+ * `ArrayBuffer`s (see the prelude in `plugin-sandbox.js`). Measuring that is a
+ * string length and a few `byteLength`s, done before anything is parsed — the
+ * host never walks a graph a plugin built, so cycles, shared references, sparse
+ * arrays and exotic types have nothing to hide in. A plugin that skips the
+ * prelude and posts something else is refused. What cannot be bounded is the
+ * browser deserializing a hostile message before the host sees it.
  */
+import { PLUGIN_LIMITS, utf8Bytes } from '@shadergrove/shared';
 
 const BOOTSTRAP_PATH = 'plugin-sandbox.js';
 /** A frame that does not confirm has no running bootstrap, so no Worker to stop. */
@@ -30,12 +39,94 @@ export interface PluginSandboxOptions {
 export interface SandboxCallOptions {
   timeoutMs?: number;
   transfer?: Transferable[];
+  /** Bytes of JSON and buffers the reply may carry. */
+  maxResultBytes?: number;
+}
+
+export type PluginCallErrorCode =
+  | 'unknown-contribution'
+  | 'input-invalid'
+  | 'input-too-large'
+  | 'output-invalid'
+  | 'output-too-large'
+  | 'events-exceeded'
+  | 'cancelled';
+
+export class PluginCallError extends Error {
+  constructor(
+    readonly code: PluginCallErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'PluginCallError';
+  }
+}
+
+const MAX_BUFFERS = 16;
+/** An empty event still costs the host a message, so each one is charged at least this. */
+const MIN_EVENT_COST = 64;
+
+/**
+ * Turn a reply envelope `{ json, buffers }` into a value, checking its size
+ * before parsing. `{ "$buffer": i }` in the JSON stands for `buffers[i]`.
+ */
+export function decodeResult(envelope: unknown, maxBytes: number): unknown {
+  const invalid = () => new PluginCallError('output-invalid', 'Plugin reply is malformed');
+  if (typeof envelope !== 'object' || envelope === null) throw invalid();
+  const { json, buffers } = envelope as { json?: unknown; buffers?: unknown };
+  if (typeof json !== 'string' || !Array.isArray(buffers) || buffers.length > MAX_BUFFERS) {
+    throw invalid();
+  }
+  let bytes = textBytes(json, maxBytes);
+  for (const buffer of buffers) {
+    if (!(buffer instanceof ArrayBuffer)) throw invalid();
+    bytes += buffer.byteLength;
+  }
+  if (bytes > maxBytes) {
+    throw new PluginCallError('output-too-large', `Plugin reply exceeds ${maxBytes} bytes`);
+  }
+  try {
+    return JSON.parse(json, (_key, value: unknown) => {
+      const index = (value as { $buffer?: unknown } | null)?.$buffer;
+      return Number.isInteger(index) && Object.keys(value as object).length === 1
+        ? (buffers[index as number] ?? value)
+        : value;
+    });
+  } catch {
+    throw invalid();
+  }
+}
+
+/** The events one sandbox may send; `charge` returns the decoded event or throws. */
+export class EventBudget {
+  private spent = 0;
+
+  charge(event: unknown): unknown {
+    const malformed = () => new PluginCallError('output-invalid', 'Plugin sent a malformed event');
+    if (typeof event !== 'string') throw malformed();
+    const size = textBytes(event, PLUGIN_LIMITS.eventBytes);
+    this.spent += Math.max(size, MIN_EVENT_COST);
+    if (size > PLUGIN_LIMITS.eventBytes || this.spent > PLUGIN_LIMITS.callEventBytes) {
+      throw new PluginCallError('events-exceeded', 'Plugin sent too many or too large events');
+    }
+    try {
+      return JSON.parse(event);
+    } catch {
+      throw malformed();
+    }
+  }
+}
+
+/** UTF-8 size of `text`, or `Infinity` once its length alone (never above its UTF-8 size) passes `max`. */
+function textBytes(text: string, max: number): number {
+  return text.length > max ? Infinity : utf8Bytes(text);
 }
 
 interface Pending {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
+  maxResultBytes: number;
 }
 
 export class PluginSandbox {
@@ -63,6 +154,7 @@ export class PluginSandbox {
 
     const channel = new MessageChannel();
     const sandbox = new PluginSandbox(frame, channel.port1);
+    const events = new EventBudget();
     return new Promise<PluginSandbox>((resolve, reject) => {
       sandbox.failStart = reject;
       const timer = setTimeout(() => {
@@ -76,7 +168,14 @@ export class PluginSandbox {
           sandbox.failStart = null;
           resolve(sandbox);
         } else if (data?.type === 'event') {
-          options.onEvent?.(data.data);
+          let event: unknown;
+          try {
+            event = events.charge(data.data);
+          } catch (error) {
+            void sandbox.terminate(error as PluginCallError);
+            return;
+          }
+          options.onEvent?.(event);
         } else if (data?.type === 'result') {
           sandbox.settle(data);
         }
@@ -101,7 +200,11 @@ export class PluginSandbox {
   call(
     method: string,
     params?: unknown,
-    { timeoutMs = 10_000, transfer = [] }: SandboxCallOptions = {},
+    {
+      timeoutMs = 10_000,
+      transfer = [],
+      maxResultBytes = PLUGIN_LIMITS.callOutputBytes,
+    }: SandboxCallOptions = {},
   ): Promise<unknown> {
     if (this.terminated) return Promise.reject(this.terminated);
     const id = this.nextId++;
@@ -110,7 +213,7 @@ export class PluginSandbox {
         () => void this.terminate(`Plugin did not answer ${method} in time`),
         timeoutMs,
       );
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, maxResultBytes });
       this.port.postMessage({ id, method, params }, transfer);
     });
   }
@@ -118,11 +221,12 @@ export class PluginSandbox {
   /**
    * Stop the plugin and reject everything it still owes. Calls are refused
    * immediately; the returned promise settles once the Worker has been
-   * terminated and the frame removed. Safe to call twice.
+   * terminated and the frame removed. Safe to call twice. Pending calls reject
+   * with `reason` itself when it is an error, so callers keep its code.
    */
-  terminate(reason = 'Plugin was stopped'): Promise<void> {
+  terminate(reason: string | Error = 'Plugin was stopped'): Promise<void> {
     if (this.terminated) return this.stopped;
-    this.terminated = new Error(reason);
+    this.terminated = typeof reason === 'string' ? new Error(reason) : reason;
     this.port.close();
     for (const { reject, timer } of this.pending.values()) {
       clearTimeout(timer);
@@ -168,8 +272,16 @@ export class PluginSandbox {
     if (!call) return;
     this.pending.delete(data.id as number);
     clearTimeout(call.timer);
-    if (data.error === undefined) call.resolve(data.result);
-    else call.reject(new Error(String(data.error)));
+    if (data.error !== undefined) {
+      const message = typeof data.error === 'string' ? data.error.slice(0, 500) : 'Plugin failed';
+      call.reject(new Error(message));
+      return;
+    }
+    try {
+      call.resolve(decodeResult(data.result, call.maxResultBytes));
+    } catch (error) {
+      call.reject(error as Error);
+    }
   }
 }
 
