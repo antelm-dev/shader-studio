@@ -1,6 +1,6 @@
 {
   "name": "@shader-studio/mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server that lets Codex, Claude Code, Cursor, and other MCP clients drive a locally-open Shadergrove tab.",
   "keywords": [
     "glsl",
