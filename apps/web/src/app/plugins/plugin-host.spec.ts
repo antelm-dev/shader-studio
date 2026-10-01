@@ -53,13 +53,23 @@ interface Fake extends SandboxHandle {
   terminate: Mock<(reason?: string | Error) => Promise<void>>;
 }
 
-/** What the Worker prelude in `plugin-sandbox.js` does to a handler's return value. */
+/**
+ * What the Worker prelude in `plugin-sandbox.js` does to a handler's return
+ * value. A copy: the prelude only exists as text, so the smoke test is what
+ * exercises the real one.
+ */
 function encode(value: unknown): { json: string; buffers: ArrayBuffer[] } {
   const buffers: ArrayBuffer[] = [];
   const json = JSON.stringify(value ?? null, (_key, item: unknown) => {
-    if (!(item instanceof ArrayBuffer)) return item;
-    if (!buffers.includes(item)) buffers.push(item);
-    return { $buffer: buffers.indexOf(item) };
+    if (item instanceof ArrayBuffer) {
+      if (!buffers.includes(item)) buffers.push(item);
+      return { $buffer: buffers.indexOf(item) };
+    }
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+    const record = item as Record<string, unknown>;
+    const keys = Object.keys(record);
+    if (!keys.some((k) => k.startsWith('$'))) return item;
+    return Object.fromEntries(keys.map((k) => [k.startsWith('$') ? '$' + k : k, record[k]]));
   });
   return { json, buffers };
 }
@@ -140,6 +150,12 @@ describe('PluginHost.importFile', () => {
     const { host: h } = host(() => ({ candidate: 1 }));
     expect(await code(h.importFile('nope', buffer(1)))).toBe('unknown-contribution');
     expect(await code(h.importFile('exp', buffer(1)))).toBe('unknown-contribution');
+  });
+
+  it('returns a candidate exactly as the plugin built it, "$" keys included', async () => {
+    const candidate = { $buffer: 0, $$x: { $: 'y' }, list: [{ $buffer: 1 }] };
+    const { host: h } = host(() => ({ candidate, bytes: buffer(2) }));
+    expect((await h.importFile('imp', buffer(1))).candidate).toEqual(candidate);
   });
 
   it('rejects a result without a candidate, or one over the contribution limit', async () => {

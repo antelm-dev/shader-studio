@@ -68,7 +68,8 @@ const MIN_EVENT_COST = 64;
 
 /**
  * Turn a reply envelope `{ json, buffers }` into a value, checking its size
- * before parsing. `{ "$buffer": i }` in the JSON stands for `buffers[i]`.
+ * before parsing. An object whose only key is `$buffer` stands for
+ * `buffers[i]`; any other key starting with `$` was escaped with a second `$`.
  */
 export function decodeResult(envelope: unknown, maxBytes: number): unknown {
   const invalid = () => new PluginCallError('output-invalid', 'Plugin reply is malformed');
@@ -87,10 +88,20 @@ export function decodeResult(envelope: unknown, maxBytes: number): unknown {
   }
   try {
     return JSON.parse(json, (_key, value: unknown) => {
-      const index = (value as { $buffer?: unknown } | null)?.$buffer;
-      return Number.isInteger(index) && Object.keys(value as object).length === 1
-        ? (buffers[index as number] ?? value)
-        : value;
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
+      const record = value as Record<string, unknown>;
+      const keys = Object.keys(record);
+      if (keys.length === 1 && keys[0] === '$buffer') {
+        const index = record['$buffer'];
+        const buffer = Number.isInteger(index) ? buffers[index as number] : undefined;
+        if (!(buffer instanceof ArrayBuffer)) throw invalid();
+        return buffer;
+      }
+      // The plugin's own "$" keys arrive with an extra "$"; see the prelude.
+      if (!keys.some((key) => key.startsWith('$'))) return value;
+      return Object.fromEntries(
+        keys.map((key) => [key.startsWith('$') ? key.slice(1) : key, record[key]]),
+      );
     });
   } catch {
     throw invalid();

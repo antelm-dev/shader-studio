@@ -36,17 +36,25 @@ function hostileValues(): unknown[] {
 }
 
 describe('decodeResult', () => {
-  it('parses the JSON and puts the buffers back in place', () => {
+  it('puts the buffers back in place and unescapes the plugin\'s own "$" keys', () => {
     const bytes = new ArrayBuffer(4);
     const value = decodeResult(
       {
-        json: '{"candidate":{"a":1},"bytes":{"$buffer":0},"other":{"$buffer":0,"x":1}}',
+        json: '{"bytes":{"$buffer":0},"literal":{"$$buffer":0},"price":{"$$":1,"a":2}}',
         buffers: [bytes],
       },
       100,
     );
-    expect(value).toEqual({ candidate: { a: 1 }, bytes, other: { $buffer: 0, x: 1 } });
+    expect(value).toEqual({ bytes, literal: { $buffer: 0 }, price: { $: 1, a: 2 } });
     expect((value as { bytes: unknown }).bytes).toBe(bytes);
+  });
+
+  it('refuses a buffer reference with no buffer behind it', () => {
+    for (const ref of ['{"$buffer":1}', '{"$buffer":-1}', '{"$buffer":"0"}']) {
+      expect(codeOf(() => decodeResult({ json: ref, buffers: [new ArrayBuffer(1)] }, 100))).toBe(
+        'output-invalid',
+      );
+    }
   });
 
   it('counts the JSON and the buffers against the limit before parsing', () => {
