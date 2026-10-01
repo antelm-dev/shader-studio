@@ -369,6 +369,7 @@ export class ShaderCanvas {
     engine.onResize = (width, height) => this.handle.resolution.set({ width, height });
     engine.onFrameRendered = () => this.onFrameRendered();
     engine.onTextureSettled = () => this.armRevealWhenReady();
+    engine.onEffectDiagnostics = (diagnostics) => this.store.setEffectDiagnostics(diagnostics);
 
     // A lost context is recoverable and usually brief (a driver reset, a GPU
     // switch), so say so rather than reporting a failure: the shader, the

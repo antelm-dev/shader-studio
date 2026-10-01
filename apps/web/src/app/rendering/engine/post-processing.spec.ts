@@ -1,23 +1,30 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type {
-  BloomSettings,
-  PostProcessingEffect,
-  RenderSettings,
-  VignetteSettings,
+import {
+  createCustomEffect,
+  type BloomSettings,
+  type CustomEffect,
+  type PostProcessingEffect,
+  type RenderSettings,
+  type ShaderControl,
+  type VignetteSettings,
 } from '@shadergrove/shared';
+import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import { GlContext } from '../gl-context';
-import { FakeRenderer, FakeScene, fakeBackend } from '../testing/fake-gl';
+import { FakeMaterial, FakeRenderer, FakeScene, fakeBackend } from '../testing/fake-gl';
+import { composeCustomEffect } from './custom-effect-pass';
 import { PostProcessing, type PostProcessingModules } from './post-processing';
 
 /**
- * Bloom, and the decision the rest of the engine is not allowed to see.
+ * The post-processing chain, and the decision the rest of the engine is not
+ * allowed to see.
  *
  * The real `EffectComposer` allocates render targets in its constructor, which
  * needs a GPU jsdom does not have — so the post-processing classes come in
  * through the loader seam as fakes, the same way three itself comes in through
- * `GlBackend`. What is under test is not what bloom looks like; it is *when* the
- * chain is built, when it is torn down, and which of the two paths a frame took.
+ * `GlBackend`. What is under test is not what an effect looks like; it is *when*
+ * the chain and its passes are built, reused or torn down, which program each
+ * instance runs, and which of the two paths a frame took.
  */
 
 class FakeComposer {
@@ -55,6 +62,10 @@ class FakeComposer {
 
   addPass(pass: unknown): void {
     this.passes.push(pass);
+  }
+  removePass(pass: unknown): void {
+    const index = this.passes.indexOf(pass);
+    if (index >= 0) this.passes.splice(index, 1);
   }
   render(): void {
     this.renders++;
@@ -100,12 +111,12 @@ class FakeBloomPass {
   }
 }
 
-/** Stands in for `ShaderPass` — the real one is what Vignette rides on. */
+/** Stands in for `ShaderPass`, which Vignette and custom effects ride on. */
 class FakeShaderPass {
   disposed = false;
   readonly uniforms: Record<string, { value: unknown }>;
 
-  constructor(shader: { uniforms: Record<string, { value: unknown }> }) {
+  constructor(readonly shader: { uniforms: Record<string, { value: unknown }> }) {
     this.uniforms = Object.fromEntries(
       Object.entries(shader.uniforms).map(([key, uniform]) => [key, { value: uniform.value }]),
     );
@@ -123,7 +134,7 @@ const fakeModules = {
   ShaderPass: FakeShaderPass,
 } as unknown as PostProcessingModules;
 
-/** A loader whose promise the test resolves, so "the import is in flight" is a state. */
+/** A loader whose promise resolves at once; `flush` lets its continuation run. */
 function controllableLoader(): {
   load: () => Promise<PostProcessingModules>;
   calls: number;
@@ -135,52 +146,38 @@ function controllableLoader(): {
       state.calls++;
       return Promise.resolve(fakeModules);
     },
-    // Two turns: one for the loader's promise, one for the `.then` that pushes
-    // the bloom settings through after it.
     flush: async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+      for (let i = 0; i < 4; i++) await Promise.resolve();
     },
   };
   return state;
 }
 
-/**
- * A loader that suspends each call until the corresponding `resolve(n)` is
- * invoked, letting the test precisely control when each dynamic import
- * completes. Resolvers are stored in a FIFO queue keyed by call index.
- */
+/** A loader the test settles by hand, so "the import is in flight" is a state. */
 function deferredLoader(): {
   load: () => Promise<PostProcessingModules>;
   calls: number;
-  /** Settle the n-th load call (0-based). Defaults to 0. */
-  resolve: (index?: number) => Promise<void>;
+  resolve: () => Promise<void>;
 } {
-  const resolvers: Array<() => void> = [];
+  let settle: (() => void) | null = null;
   const state = {
     calls: 0,
     load: () => {
       state.calls++;
-      return new Promise<PostProcessingModules>((res) => {
-        resolvers.push(() => res(fakeModules));
-      });
+      return new Promise<PostProcessingModules>((res) => (settle = () => res(fakeModules)));
     },
-    resolve: async (index = 0) => {
-      resolvers[index]?.();
-      // Two microtask turns: one to settle the loader promise, one for the
-      // .then continuation inside ensureComposer / setSettings.
-      await Promise.resolve();
-      await Promise.resolve();
+    resolve: async () => {
+      settle?.();
+      for (let i = 0; i < 4; i++) await Promise.resolve();
     },
   };
   return state;
 }
 
 /**
- * Builds a `RenderSettings` whose chain has one Bloom effect. `enabled`
- * toggles the effect itself; `masterEnabled` toggles the chain's master
- * switch — the two are deliberately independent knobs, since either one off
- * takes the direct-render path.
+ * A chain with one Bloom effect. `enabled` toggles the effect itself;
+ * `masterEnabled` the chain's master switch — independent knobs, since either
+ * one off takes the direct-render path.
  */
 function settings(
   overrides: Partial<BloomSettings> & { enabled?: boolean; masterEnabled?: boolean } = {},
@@ -189,57 +186,64 @@ function settings(
   return {
     postProcessing: {
       enabled: masterEnabled,
-      effects: [
-        {
-          type: 'bloom',
-          enabled,
-          settings: { strength: 0.3, radius: 0.5, threshold: 0.85, ...bloomOverrides },
-        },
-      ],
+      effects: [{ ...bloomEffect(bloomOverrides), enabled }],
     },
   };
 }
 
 const OFF = settings({ enabled: false });
 
-/** A `RenderSettings` whose chain has one enabled Vignette effect. */
-function vignetteSettings(
-  overrides: Partial<VignetteSettings> & { enabled?: boolean } = {},
-): RenderSettings {
-  const { enabled = true, ...vignetteOverrides } = overrides;
-  return {
-    postProcessing: {
-      enabled: true,
-      effects: [
-        {
-          type: 'vignette',
-          enabled,
-          settings: { intensity: 0.4, softness: 0.5, roundness: 1, ...vignetteOverrides },
-        },
-      ],
-    },
-  };
-}
-
-/** A chain in the exact effect order given, every entry enabled. */
+/** A chain in the exact effect order given. */
 function chain(...effects: PostProcessingEffect[]): RenderSettings {
   return { postProcessing: { enabled: true, effects } };
 }
 
-function bloomEffect(overrides: Partial<BloomSettings> = {}): PostProcessingEffect {
+function bloomEffect(
+  overrides: Partial<BloomSettings> = {},
+  instanceId = 'bloom',
+): PostProcessingEffect {
   return {
     type: 'bloom',
+    instanceId,
     enabled: true,
     settings: { strength: 0.3, radius: 0.5, threshold: 0.85, ...overrides },
   };
 }
 
-function vignetteEffect(overrides: Partial<VignetteSettings> = {}): PostProcessingEffect {
+function vignetteEffect(
+  overrides: Partial<VignetteSettings> = {},
+  instanceId = 'vignette',
+): PostProcessingEffect {
   return {
     type: 'vignette',
+    instanceId,
     enabled: true,
     settings: { intensity: 0.4, softness: 0.5, roundness: 1, ...overrides },
   };
+}
+
+const GAIN: ShaderControl[] = [{ key: 'gain', type: 'number', default: 1, min: 0, max: 4 }];
+
+function customEffect(
+  instanceId: string,
+  options: { source?: string; gain?: number; apiVersion?: number; name?: string } = {},
+): CustomEffect {
+  return createCustomEffect({
+    instanceId,
+    enabled: true,
+    name: options.name ?? `Effect ${instanceId}`,
+    source: options.source ?? 'vec4 effect(vec4 color, vec2 uv) { return color * u_gain; }',
+    controls: GAIN,
+    values: { gain: options.gain ?? 1 },
+    ...(options.apiVersion === undefined ? {} : { apiVersion: options.apiVersion }),
+  });
+}
+
+async function setup(id: string) {
+  FakeComposer.reset();
+  const { backend, renderers } = fakeBackend();
+  const context = await GlContext.create(document.createElement('canvas'), { id, backend });
+  return { context, renderer: renderers[0]!, scene: new FakeScene(), camera: {} };
 }
 
 describe('PostProcessing', () => {
@@ -250,26 +254,11 @@ describe('PostProcessing', () => {
   let loader: ReturnType<typeof controllableLoader>;
   let post: PostProcessing;
 
-  const create = (): PostProcessing =>
-    new PostProcessing(
-      context,
-      scene as never,
-      camera as never,
-      loader.load as unknown as () => Promise<PostProcessingModules>,
-    );
+  const create = (load: () => Promise<PostProcessingModules> = loader.load): PostProcessing =>
+    new PostProcessing(context, scene as never, camera as never, load);
 
   beforeEach(async () => {
-    FakeComposer.reset();
-
-    const { backend, renderers } = fakeBackend();
-    context = await GlContext.create(document.createElement('canvas'), {
-      id: 'post',
-      backend,
-    });
-    renderer = renderers[0];
-
-    scene = new FakeScene();
-    camera = {};
+    ({ context, renderer, scene, camera } = await setup('post'));
     loader = controllableLoader();
     post = create();
   });
@@ -279,11 +268,20 @@ describe('PostProcessing', () => {
     context.dispose();
   });
 
+  const loseContext = () => {
+    context.canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    post.invalidate();
+  };
+  const restoreContext = () => {
+    context.canvas.dispatchEvent(new Event('webglcontextrestored'));
+    post.restore();
+  };
+
   // ---------------------------------------------------------------------------
   // The path a frame takes
   // ---------------------------------------------------------------------------
 
-  it('draws straight at the canvas, and downloads nothing, while bloom is off', async () => {
+  it('draws straight at the canvas, and downloads nothing, while every effect is off', async () => {
     post.setSettings(OFF);
     await loader.flush();
 
@@ -292,7 +290,7 @@ describe('PostProcessing', () => {
     expect(loader.calls).toBe(0);
     expect(FakeComposer.created).toBe(0);
     expect(renderer.draws).toBe(1);
-    expect(renderer.drawLog[0].scene).toBe(scene);
+    expect(renderer.drawLog[0]!.scene).toBe(scene);
   });
 
   it('takes the direct path when the master switch is off, even with bloom individually enabled', async () => {
@@ -306,16 +304,14 @@ describe('PostProcessing', () => {
     expect(renderer.draws).toBe(1);
   });
 
-  it('builds the chain on the first settings that ask for bloom, then renders through it', async () => {
+  it('builds the chain on the first settings that ask for an effect, then renders through it', async () => {
     post.setSettings(settings());
 
-    // The import is in flight: there is nothing to render through yet, so the
-    // frame still reaches the canvas directly rather than being dropped.
+    // The import is in flight: the frame still reaches the canvas directly.
     post.render(scene as never, camera as never);
     expect(renderer.draws).toBe(1);
 
     await loader.flush();
-
     expect(loader.calls).toBe(1);
     expect(FakeComposer.created).toBe(1);
 
@@ -358,7 +354,6 @@ describe('PostProcessing', () => {
     expect(changed).toHaveBeenCalledTimes(1);
 
     post.setSettings(settings({ strength: 1.2 }));
-    await loader.flush();
     expect(changed).toHaveBeenCalledTimes(1);
 
     post.setSettings(OFF);
@@ -375,38 +370,31 @@ describe('PostProcessing', () => {
   it('pushes new bloom values through without rebuilding anything', async () => {
     post.setSettings(settings());
     await loader.flush();
-
     const composer = FakeComposer.last();
+    const bloom = composer.passes[1] as FakeBloomPass;
 
     post.setSettings(settings({ strength: 1.4, radius: 0.9, threshold: 0.2 }));
-    await loader.flush();
 
-    const bloom = composer.passes[1] as FakeBloomPass;
+    expect(composer.passes[1]).toBe(bloom);
     expect(bloom.strength).toBe(1.4);
     expect(bloom.radius).toBe(0.9);
     expect(bloom.threshold).toBe(0.2);
-
-    // A slider drag is a uniform change, not an allocation.
     expect(FakeComposer.created).toBe(1);
-    expect(loader.calls).toBe(1);
     expect(composer.disposed).toBe(false);
   });
 
-  it('sizes the composer in buffer units and bloom in real pixels', async () => {
-    post.setSettings(settings());
+  it('sizes the composer in buffer units and every bloom in real pixels', async () => {
+    post.setSettings(chain(bloomEffect({}, 'a'), bloomEffect({}, 'b')));
     await loader.flush();
-
     const composer = FakeComposer.last();
 
     post.setSize(800, 600, 2);
 
     expect(composer.pixelRatio).toBe(2);
-    expect(composer.width).toBe(800);
-    expect(composer.height).toBe(600);
-
-    const bloom = composer.passes[1] as FakeBloomPass;
-    expect(bloom.width).toBe(1600);
-    expect(bloom.height).toBe(1200);
+    expect([composer.width, composer.height]).toEqual([800, 600]);
+    for (const pass of composer.passes.slice(1) as FakeBloomPass[]) {
+      expect([pass.width, pass.height]).toEqual([1600, 1200]);
+    }
   });
 
   it('accepts a size with no composer at all', () => {
@@ -414,24 +402,25 @@ describe('PostProcessing', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Teardown
+  // Teardown and context loss
   // ---------------------------------------------------------------------------
 
-  it('frees the chain when bloom is switched off, rather than leaving it bypassed', async () => {
+  it('frees the chain when every effect is switched off, rather than leaving it bypassed', async () => {
     post.setSettings(settings());
     await loader.flush();
     const composer = FakeComposer.last();
+    const bloom = composer.passes[1] as FakeBloomPass;
 
     post.setSettings(OFF);
 
     expect(composer.disposed).toBe(true);
-
+    expect(bloom.disposed).toBe(true);
     const draws = renderer.draws;
     post.render(scene as never, camera as never);
     expect(renderer.draws).toBe(draws + 1);
   });
 
-  it('switches bloom off and on again, building a second chain', async () => {
+  it('switches off and on again, building a second chain without a second download', async () => {
     post.setSettings(settings());
     await loader.flush();
     post.setSettings(OFF);
@@ -440,8 +429,8 @@ describe('PostProcessing', () => {
     await loader.flush();
 
     expect(FakeComposer.created).toBe(2);
-    const bloom = FakeComposer.last().passes[1] as FakeBloomPass;
-    expect(bloom.strength).toBe(0.8);
+    expect(loader.calls).toBe(1);
+    expect((FakeComposer.last().passes[1] as FakeBloomPass).strength).toBe(0.8);
   });
 
   it('drops the chain on a lost context and rebuilds it on restore', async () => {
@@ -449,44 +438,38 @@ describe('PostProcessing', () => {
     await loader.flush();
     const first = FakeComposer.last();
 
-    post.invalidate();
+    loseContext();
 
     expect(first.disposed).toBe(true);
-    // The husk is gone, so a frame drawn between loss and restore goes direct.
     const draws = renderer.draws;
     post.render(scene as never, camera as never);
     expect(renderer.draws).toBe(draws + 1);
 
-    post.restore();
-    await loader.flush();
+    restoreContext();
 
     const second = FakeComposer.last();
     expect(second).not.toBe(first);
-    // Restored to the settings in force, not to the defaults.
     expect((second.passes[1] as FakeBloomPass).strength).toBe(1.1);
   });
 
-  it('restores to direct rendering when bloom was off when the context died', async () => {
+  it('restores to direct rendering when every effect was off when the context died', async () => {
     post.setSettings(OFF);
-    post.invalidate();
-    post.restore();
+    loseContext();
+    restoreContext();
     await loader.flush();
 
     expect(FakeComposer.created).toBe(0);
   });
 
-  it('disposes repeatedly without complaint, and never after that', async () => {
+  it('disposes repeatedly without complaint, and builds nothing after that', async () => {
     post.setSettings(settings());
     await loader.flush();
     const composer = FakeComposer.last();
 
     post.dispose();
     post.dispose();
-
     expect(composer.disposed).toBe(true);
 
-    // An engine torn down while bloom is being switched on must not leave a
-    // composer — and its render targets — behind it.
     post.setSettings(settings());
     await loader.flush();
     expect(FakeComposer.created).toBe(1);
@@ -501,166 +484,57 @@ describe('PostProcessing', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Race: disable-before-resolution
+  // Races around the import
   // ---------------------------------------------------------------------------
 
-  it('creates no composer when bloom is disabled before the loader resolves', async () => {
+  it('creates no composer when the effect is disabled before the import lands', async () => {
     const deferred = deferredLoader();
-    const p = new PostProcessing(
-      context,
-      scene as never,
-      camera as never,
-      deferred.load as unknown as () => Promise<PostProcessingModules>,
-    );
+    const p = create(deferred.load);
 
-    p.setSettings(settings()); // triggers load — loader is now pending
-    p.setSettings(OFF); // disable before import resolves
-
-    await deferred.resolve(); // let the import land
+    p.setSettings(settings());
+    p.setSettings(OFF);
+    await deferred.resolve();
 
     expect(FakeComposer.created).toBe(0);
-
     p.dispose();
   });
 
-  // ---------------------------------------------------------------------------
-  // Race: invalidate-before-resolution
-  // ---------------------------------------------------------------------------
-
-  it('creates no stale composer when the context is invalidated before the loader resolves', async () => {
+  it('creates no composer on a context lost before the import lands, and exactly one on restore', async () => {
     const deferred = deferredLoader();
-    const p = new PostProcessing(
-      context,
-      scene as never,
-      camera as never,
-      deferred.load as unknown as () => Promise<PostProcessingModules>,
-    );
+    const p = create(deferred.load);
 
-    p.setSettings(settings()); // triggers load — loader is now pending
-    p.invalidate(); // context lost before import resolves
-
-    await deferred.resolve(); // late arrival — must be discarded
-
+    p.setSettings(settings({ strength: 1.5 }));
+    context.canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    p.invalidate();
+    await deferred.resolve();
     expect(FakeComposer.created).toBe(0);
 
-    p.dispose();
-  });
-
-  it('builds exactly one fresh composer on restore after an invalidated-in-flight load', async () => {
-    const deferred = deferredLoader();
-    const p = new PostProcessing(
-      context,
-      scene as never,
-      camera as never,
-      deferred.load as unknown as () => Promise<PostProcessingModules>,
-    );
-
-    p.setSettings(settings({ strength: 1.5 })); // triggers load (index 0)
-    p.invalidate(); // stale — bumps generation
-    await deferred.resolve(0); // discarded: generation mismatch
-
-    p.restore(); // starts a fresh load (index 1)
-    await deferred.resolve(1); // this one is valid
+    context.canvas.dispatchEvent(new Event('webglcontextrestored'));
+    p.restore();
 
     expect(FakeComposer.created).toBe(1);
     expect((FakeComposer.last().passes[1] as FakeBloomPass).strength).toBe(1.5);
-
+    expect(deferred.calls).toBe(1);
     p.dispose();
   });
 
-  // ---------------------------------------------------------------------------
-  // Race: rapid settings updates
-  // ---------------------------------------------------------------------------
+  it('builds the chain in force when the import lands, not the one that asked for it', async () => {
+    const deferred = deferredLoader();
+    const p = create(deferred.load);
 
-  it('rapid enable/disable cycles cannot let an older completion overwrite the current state', async () => {
-    const d1 = deferredLoader();
-    const p = new PostProcessing(
-      context,
-      scene as never,
-      camera as never,
-      d1.load as unknown as () => Promise<PostProcessingModules>,
-    );
+    p.setSettings(settings({ strength: 0.1 }));
+    p.setSettings(OFF);
+    p.setSettings(settings({ strength: 0.9 }));
+    await deferred.resolve();
 
-    p.setSettings(settings({ strength: 0.1 })); // load #1 starts (index 0)
-    p.setSettings(OFF); // invalidates load #1 generation
-    p.setSettings(settings({ strength: 0.9 })); // load #2 starts (index 1)
-
-    // Resolve in call order: old one first, then the current.
-    await d1.resolve(0); // first call resolves — must be silently dropped
-    await d1.resolve(1); // second call resolves — should install
-
-    // Only the second (valid) call should have produced a composer.
+    expect(deferred.calls).toBe(1);
     expect(FakeComposer.created).toBe(1);
     expect((FakeComposer.last().passes[1] as FakeBloomPass).strength).toBe(0.9);
-
-    p.dispose();
-  });
-
-  // ---------------------------------------------------------------------------
-  // Race: out-of-order resolution — newer settles first
-  // ---------------------------------------------------------------------------
-
-  it('newer enable request settles first and installs settings B; older settling after cannot overwrite', async () => {
-    const deferred = deferredLoader();
-    const p = new PostProcessing(
-      context,
-      scene as never,
-      camera as never,
-      deferred.load as unknown as () => Promise<PostProcessingModules>,
-    );
-
-    // Load A (index 0) starts, then load B (index 1) starts.
-    p.setSettings(settings({ strength: 0.2 })); // A
-    p.setSettings(settings({ strength: 0.8 })); // B — ensureComposer returns early (composer already pending)
-
-    // Resolve B first (index 1).
-    await deferred.resolve(1);
-
-    expect(FakeComposer.created).toBe(1);
-    const bloom = FakeComposer.last().passes[1] as FakeBloomPass;
-    // The composer was just created; the B continuation ran and wrote 0.8.
-    expect(bloom.strength).toBe(0.8);
-
-    // Now resolve A (index 0) — its continuation must not overwrite B's values.
-    await deferred.resolve(0);
-
-    expect(FakeComposer.created).toBe(1); // still only one composer
-    expect(bloom.strength).toBe(0.8); // not 0.2
-
-    p.dispose();
-  });
-
-  it('two enabled-setting updates resolving out of order converge on the latest values', async () => {
-    const deferred = deferredLoader();
-    const p = new PostProcessing(
-      context,
-      scene as never,
-      camera as never,
-      deferred.load as unknown as () => Promise<PostProcessingModules>,
-    );
-
-    // Composer already exists from a prior enable.
-    p.setSettings(settings({ strength: 0.3 }));
-    await deferred.resolve(0); // load #1 resolves — composer created
-    expect(FakeComposer.created).toBe(1);
-
-    // Two successive updates — both re-use the existing composer.
-    p.setSettings(settings({ strength: 0.5 })); // update A (no new load needed)
-    p.setSettings(settings({ strength: 0.9 })); // update B (no new load needed)
-
-    // Both continuations resolve synchronously since ensureComposer returns early.
-    await Promise.resolve();
-    await Promise.resolve();
-
-    const bloom = FakeComposer.last().passes[1] as FakeBloomPass;
-    expect(bloom.strength).toBe(0.9);
-    expect(FakeComposer.created).toBe(1);
-
     p.dispose();
   });
 });
 
-describe('Vignette and multi-effect ordering', () => {
+describe('Chains of several instances', () => {
   let context: GlContext;
   let renderer: FakeRenderer;
   let scene: FakeScene;
@@ -668,28 +542,10 @@ describe('Vignette and multi-effect ordering', () => {
   let loader: ReturnType<typeof controllableLoader>;
   let post: PostProcessing;
 
-  const create = (): PostProcessing =>
-    new PostProcessing(
-      context,
-      scene as never,
-      camera as never,
-      loader.load as unknown as () => Promise<PostProcessingModules>,
-    );
-
   beforeEach(async () => {
-    FakeComposer.reset();
-
-    const { backend, renderers } = fakeBackend();
-    context = await GlContext.create(document.createElement('canvas'), {
-      id: 'post-vignette',
-      backend,
-    });
-    renderer = renderers[0];
-
-    scene = new FakeScene();
-    camera = {};
+    ({ context, renderer, scene, camera } = await setup('post-chain'));
     loader = controllableLoader();
-    post = create();
+    post = new PostProcessing(context, scene as never, camera as never, loader.load);
   });
 
   afterEach(() => {
@@ -697,116 +553,315 @@ describe('Vignette and multi-effect ordering', () => {
     context.dispose();
   });
 
-  it('builds a Vignette-only composer with alpha-preserving, resolution-independent uniforms', async () => {
-    post.setSettings(vignetteSettings({ intensity: 0.6, softness: 0.2, roundness: 0.8 }));
+  const installed = () => FakeComposer.last().passes.slice(1);
+
+  it('builds a Vignette-only composer with its uniforms set', async () => {
+    post.setSettings(chain(vignetteEffect({ intensity: 0.6, softness: 0.2, roundness: 0.8 })));
     await loader.flush();
 
-    const composer = FakeComposer.last();
-    const [render, vignette] = composer.passes as [FakeRenderPass, FakeShaderPass];
-
-    expect(render.scene).toBe(scene);
-    expect(vignette.uniforms['uIntensity'].value).toBe(0.6);
-    expect(vignette.uniforms['uSoftness'].value).toBe(0.2);
-    expect(vignette.uniforms['uRoundness'].value).toBe(0.8);
+    const [vignette] = installed() as [FakeShaderPass];
+    expect(vignette.uniforms['uIntensity']!.value).toBe(0.6);
+    expect(vignette.uniforms['uSoftness']!.value).toBe(0.2);
+    expect(vignette.uniforms['uRoundness']!.value).toBe(0.8);
 
     post.render(scene as never, camera as never);
-    expect(renderer.draws).toBe(0); // drew through the composer, not the direct path
+    expect(renderer.draws).toBe(0);
   });
 
-  it('builds the composer with passes in the chain order given: Vignette before Bloom', async () => {
-    post.setSettings(chain(vignetteEffect(), bloomEffect()));
+  it('runs two instances of one type with their own settings', async () => {
+    post.setSettings(
+      chain(vignetteEffect({ intensity: 0.1 }, 'v1'), vignetteEffect({ intensity: 0.9 }, 'v2')),
+    );
     await loader.flush();
 
-    const [, vignette, bloom] = FakeComposer.last().passes as [
-      FakeRenderPass,
-      FakeShaderPass,
-      FakeBloomPass,
-    ];
-    expect(vignette).toBeInstanceOf(FakeShaderPass);
-    expect(bloom).toBeInstanceOf(FakeBloomPass);
+    const [first, second] = installed() as [FakeShaderPass, FakeShaderPass];
+    expect(first).not.toBe(second);
+    expect(first.uniforms['uIntensity']!.value).toBe(0.1);
+    expect(second.uniforms['uIntensity']!.value).toBe(0.9);
+
+    post.setSettings(
+      chain(vignetteEffect({ intensity: 0.1 }, 'v1'), vignetteEffect({ intensity: 0.5 }, 'v2')),
+    );
+    expect(first.uniforms['uIntensity']!.value).toBe(0.1);
+    expect(second.uniforms['uIntensity']!.value).toBe(0.5);
   });
 
-  it('rebuilds with the new order when the chain is reordered', async () => {
+  it('reorders in place: same composer, same passes, new order', async () => {
     post.setSettings(chain(bloomEffect(), vignetteEffect()));
     await loader.flush();
-    const first = FakeComposer.last();
-    expect(first.passes[1]).toBeInstanceOf(FakeBloomPass);
-    expect(first.passes[2]).toBeInstanceOf(FakeShaderPass);
+    const composer = FakeComposer.last();
+    const [bloom, vignette] = installed();
 
     post.setSettings(chain(vignetteEffect(), bloomEffect()));
-    await loader.flush();
 
-    expect(FakeComposer.created).toBe(2);
-    expect(first.disposed).toBe(true); // the stale order was freed, not left bypassed
-    const second = FakeComposer.last();
-    expect(second.passes[1]).toBeInstanceOf(FakeShaderPass);
-    expect(second.passes[2]).toBeInstanceOf(FakeBloomPass);
-  });
-
-  it('pushes Vignette values through without rebuilding when only settings change', async () => {
-    post.setSettings(vignetteSettings({ intensity: 0.2 }));
-    await loader.flush();
-    const composer = FakeComposer.last();
-
-    post.setSettings(vignetteSettings({ intensity: 0.9, softness: 0.7, roundness: 0.1 }));
-
-    const vignette = composer.passes[1] as FakeShaderPass;
-    expect(vignette.uniforms['uIntensity'].value).toBe(0.9);
-    expect(vignette.uniforms['uSoftness'].value).toBe(0.7);
-    expect(vignette.uniforms['uRoundness'].value).toBe(0.1);
     expect(FakeComposer.created).toBe(1);
     expect(composer.disposed).toBe(false);
+    expect(installed()).toEqual([vignette, bloom]);
+    expect(installed()[0]).toBe(vignette);
   });
 
-  it('rebuilds — rather than leaving a mismatched composer bypassed — when a second effect is enabled', async () => {
+  it('adds, disables and removes an instance without touching the others', async () => {
     post.setSettings(chain(bloomEffect()));
     await loader.flush();
-    const first = FakeComposer.last();
+    const [bloom] = installed() as [FakeBloomPass];
 
     post.setSettings(chain(bloomEffect(), vignetteEffect()));
-    await loader.flush();
+    const [, vignette] = installed() as [FakeBloomPass, FakeShaderPass];
+    expect(installed()).toHaveLength(2);
+    expect(installed()[0]).toBe(bloom);
 
-    expect(first.disposed).toBe(true);
-    expect(FakeComposer.created).toBe(2);
-    expect(FakeComposer.last().passes).toHaveLength(3); // render + bloom + vignette
-  });
-
-  it('rebuilds down to the remaining effect when one is disabled from a two-effect chain', async () => {
-    post.setSettings(chain(bloomEffect(), vignetteEffect()));
-    await loader.flush();
-
+    // Disabled, it leaves the chain but its pass is kept for when it comes back.
     post.setSettings(chain(bloomEffect(), { ...vignetteEffect(), enabled: false }));
-    await loader.flush();
+    expect(installed()).toEqual([bloom]);
+    expect(vignette.disposed).toBe(false);
+    post.setSettings(chain(bloomEffect(), vignetteEffect()));
+    expect(installed()[1]).toBe(vignette);
 
-    const composer = FakeComposer.last();
-    expect(composer.passes).toHaveLength(2); // render + bloom only
-    expect(composer.passes[1]).toBeInstanceOf(FakeBloomPass);
-  });
-
-  it('takes the direct path when the master switch is off, even with a full two-effect chain', async () => {
-    post.setSettings({
-      postProcessing: { enabled: false, effects: [bloomEffect(), vignetteEffect()] },
-    });
-    await loader.flush();
-
-    post.render(scene as never, camera as never);
-
-    expect(FakeComposer.created).toBe(0);
-    expect(renderer.draws).toBe(1);
+    // Removed, it is freed.
+    post.setSettings(chain(bloomEffect()));
+    expect(vignette.disposed).toBe(true);
+    expect(bloom.disposed).toBe(false);
+    expect(FakeComposer.created).toBe(1);
   });
 
   it('disposes every built pass, not just the composer, on teardown', async () => {
     post.setSettings(chain(bloomEffect(), vignetteEffect()));
     await loader.flush();
+    const [bloom, vignette] = installed() as [FakeBloomPass, FakeShaderPass];
 
-    const [, bloom, vignette] = FakeComposer.last().passes as [
-      FakeRenderPass,
-      FakeBloomPass,
-      FakeShaderPass,
-    ];
     post.dispose();
 
     expect(bloom.disposed).toBe(true);
     expect(vignette.disposed).toBe(true);
+  });
+});
+
+describe('Custom effects', () => {
+  let context: GlContext;
+  let renderer: FakeRenderer;
+  let scene: FakeScene;
+  let camera: object;
+  let loader: ReturnType<typeof controllableLoader>;
+  let post: PostProcessing;
+  let reports: CompileDiagnostic[][];
+
+  beforeEach(async () => {
+    ({ context, renderer, scene, camera } = await setup('post-custom'));
+    loader = controllableLoader();
+    post = new PostProcessing(context, scene as never, camera as never, loader.load);
+    reports = [];
+    post.onDiagnostics = (diagnostics) => reports.push(diagnostics);
+    breakCompilesOf('BROKEN');
+  });
+
+  afterEach(() => {
+    post.dispose();
+    context.dispose();
+  });
+
+  const installed = () => FakeComposer.last().passes.slice(1) as FakeShaderPass[];
+  const programOf = (pass: FakeShaderPass) => pass.shader as unknown as FakeMaterial;
+  const probes = () => renderer.drawLog.filter((draw) => draw.scene !== scene).length;
+
+  /**
+   * Make the driver reject any program whose fragment contains `marker`, the
+   * way three reports it: through `debug.onShaderError`, set only while probing.
+   */
+  function breakCompilesOf(marker: string): void {
+    const original = renderer.render.bind(renderer);
+    renderer.render = ((target?: unknown) => {
+      const handler = renderer.debug.onShaderError as
+        | ((gl: unknown, program: unknown, vertex: unknown, fragment: unknown) => void)
+        | null;
+      const material = (target as FakeScene | undefined)?.children?.[0] as
+        | { material?: FakeMaterial }
+        | undefined;
+      const fragment = material?.material?.fragmentShader ?? '';
+      if (handler && fragment.includes(marker)) {
+        const line = fragment.split('\n').findIndex((text) => text.includes(marker)) + 1;
+        handler(
+          {
+            getShaderSource: () => '',
+            getShaderInfoLog: (shader: unknown) =>
+              shader === 'fragment' ? `ERROR: 0:${line}: '${marker}' : undeclared identifier` : '',
+            getProgramInfoLog: () => '',
+          },
+          {},
+          'vertex',
+          'fragment',
+        );
+      }
+      original(target);
+    }) as typeof renderer.render;
+  }
+
+  it("wraps the author's effect() in the v1 contract", () => {
+    const { fragment, headerLines } = composeCustomEffect(customEffect('c').definition);
+    const lines = fragment.split('\n');
+    expect(lines.slice(0, headerLines)).toEqual([
+      'uniform sampler2D tDiffuse;',
+      'uniform vec2 u_resolution;',
+      'uniform float u_time;',
+      'uniform float u_gain;',
+      'varying vec2 vUv;',
+    ]);
+    expect(lines[headerLines]).toContain('vec4 effect(vec4 color, vec2 uv)');
+    expect(lines.at(-1)).toBe(
+      'void main() { gl_FragColor = effect(texture2D(tDiffuse, vUv), vUv); }',
+    );
+  });
+
+  it('runs two instances with their own values, which change without a recompile', async () => {
+    post.setSettings(chain(customEffect('a', { gain: 0.5 }), customEffect('b', { gain: 2 })));
+    await loader.flush();
+    const [a, b] = installed();
+    expect(a!.uniforms['u_gain']!.value).toBe(0.5);
+    expect(b!.uniforms['u_gain']!.value).toBe(2);
+    const probed = probes();
+
+    post.setSettings(chain(customEffect('a', { gain: 3 }), customEffect('b', { gain: 2 })));
+
+    expect(installed()).toEqual([a, b]);
+    expect(a!.uniforms['u_gain']!.value).toBe(3);
+    expect(probes()).toBe(probed);
+  });
+
+  it('probes only the instance whose code changed', async () => {
+    post.setSettings(chain(customEffect('a'), customEffect('b')));
+    await loader.flush();
+    const [a, b] = installed();
+    const probed = probes();
+
+    const newCode = 'vec4 effect(vec4 color, vec2 uv) { return color.bgra * u_gain; }';
+    post.setSettings(chain(customEffect('a'), customEffect('b', { source: newCode })));
+
+    expect(probes()).toBe(probed + 1);
+    expect(installed()[0]).toBe(a);
+    expect(installed()[1]).not.toBe(b);
+    expect(b!.disposed).toBe(true);
+    expect(programOf(installed()[1]!).fragmentShader).toContain('color.bgra');
+  });
+
+  it("keeps the last valid program on a bad edit, and reports the author's line", async () => {
+    post.setSettings(chain(customEffect('a', { name: 'Grain' })));
+    await loader.flush();
+    const [valid] = installed();
+
+    const broken = 'vec4 effect(vec4 color, vec2 uv) {\n  return BROKEN;\n}';
+    post.setSettings(chain(customEffect('a', { name: 'Grain', source: broken, gain: 2 })));
+
+    expect(installed()).toEqual([valid]);
+    expect(valid!.disposed).toBe(false);
+    // Values still reach the last valid program.
+    expect(valid!.uniforms['u_gain']!.value).toBe(2);
+    expect(reports.at(-1)).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        line: 2,
+        docId: '@effect/a',
+        docName: 'Grain',
+      }),
+    ]);
+
+    // The same broken code is not probed again on every unrelated update...
+    const probed = probes();
+    post.setSettings(chain(customEffect('a', { name: 'Grain', source: broken, gain: 3 })));
+    expect(probes()).toBe(probed);
+
+    // ...going back to the code that runs clears the report without a recompile...
+    post.setSettings(chain(customEffect('a', { name: 'Grain' })));
+    expect(installed()[0]).toBe(valid);
+    expect(probes()).toBe(probed);
+    expect(reports.at(-1)).toEqual([]);
+
+    // ...and new code that compiles takes over.
+    const fixed = 'vec4 effect(vec4 color, vec2 uv) { return color.gbra; }';
+    post.setSettings(chain(customEffect('a', { name: 'Grain', source: fixed })));
+    expect(installed()[0]).not.toBe(valid);
+    expect(valid!.disposed).toBe(true);
+  });
+
+  it('leaves out an instance that has never compiled, with its diagnostic, and the rest runs', async () => {
+    post.setSettings(
+      chain(
+        customEffect('bad', { source: 'vec4 effect(vec4 c, vec2 uv) { return BROKEN; }' }),
+        bloomEffect(),
+      ),
+    );
+    await loader.flush();
+
+    expect(installed()).toHaveLength(1);
+    expect(installed()[0]).toBeInstanceOf(FakeBloomPass);
+    expect(reports.at(-1)).toEqual([expect.objectContaining({ docId: '@effect/bad', line: 1 })]);
+  });
+
+  it('draws directly when its only effect has never compiled', async () => {
+    post.setSettings(chain(customEffect('bad', { source: 'BROKEN' })));
+    await loader.flush();
+    const draws = renderer.draws;
+
+    post.render(scene as never, camera as never);
+
+    expect(renderer.draws).toBe(draws + 1);
+    expect(post.usesComposer()).toBe(false);
+  });
+
+  it('skips an effect from a newer API with a warning, and never compiles it', async () => {
+    post.setSettings(chain(customEffect('future', { apiVersion: 2 }), bloomEffect()));
+    await loader.flush();
+
+    expect(installed()).toHaveLength(1);
+    expect(probes()).toBe(0);
+    expect(reports.at(-1)).toEqual([
+      expect.objectContaining({ severity: 'warning', docId: '@effect/future' }),
+    ]);
+  });
+
+  it('feeds u_time and u_resolution in real pixels', async () => {
+    post.setSize(400, 300, 2);
+    post.setSettings(chain(customEffect('a')));
+    await loader.flush();
+    const [pass] = installed();
+    expect(pass!.uniforms['u_resolution']!.value).toMatchObject({ x: 800, y: 600 });
+
+    post.setTime(12.5);
+    post.setSize(100, 50, 1);
+
+    expect(pass!.uniforms['u_time']!.value).toBe(12.5);
+    expect(pass!.uniforms['u_resolution']!.value).toMatchObject({ x: 100, y: 50 });
+  });
+
+  it('suspends custom effects after two context losses in a row, until a forced recompile', async () => {
+    const effects = chain(customEffect('a'), bloomEffect());
+    post.setSettings(effects);
+    await loader.flush();
+
+    for (let i = 0; i < 2; i++) {
+      context.canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+      post.invalidate();
+      context.canvas.dispatchEvent(new Event('webglcontextrestored'));
+      post.restore();
+    }
+
+    expect(installed()).toHaveLength(1);
+    expect(installed()[0]).toBeInstanceOf(FakeBloomPass);
+    expect(reports.at(-1)).toEqual([
+      expect.objectContaining({ severity: 'warning', docId: '@effect/a' }),
+    ]);
+
+    post.setSettings(effects, true);
+    expect(installed()).toHaveLength(2);
+    expect(reports.at(-1)).toEqual([]);
+  });
+
+  it('forgets what it built for an instance that left the chain', async () => {
+    post.setSettings(chain(customEffect('a'), customEffect('b')));
+    await loader.flush();
+    const [a, b] = installed();
+
+    post.setSettings(chain(customEffect('b')));
+
+    expect(a!.disposed).toBe(true);
+    expect(installed()).toEqual([b]);
   });
 });

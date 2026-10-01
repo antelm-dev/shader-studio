@@ -332,6 +332,11 @@ export class ShaderStore {
     this.documentState.setCompileDiagnostics(diagnostics);
   }
 
+  /** Replace the custom post-processing effects' diagnostics; the renderer owns this list. */
+  setEffectDiagnostics(diagnostics: readonly CompileDiagnostic[]): void {
+    this.documentState.effectDiagnostics.set(diagnostics);
+  }
+
   // --- Compile completion & revisions --------------------------------------
 
   /**

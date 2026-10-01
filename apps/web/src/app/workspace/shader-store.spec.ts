@@ -8,7 +8,9 @@ import {
   DEFAULT_RENDER,
   getBloomEffect,
   toSummary,
-  withBloomEffect,
+  updatePostProcessingEffect,
+  type BloomEffect,
+  type BloomSettings,
   type ImportResult,
   type Preset,
   type RenderSettings,
@@ -220,6 +222,19 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
 
+/** `render` with its first Bloom's switch and settings patched. */
+function withBloom(
+  render: RenderSettings,
+  patch: Partial<BloomSettings> & { enabled: boolean },
+): RenderSettings {
+  const { enabled, ...settings } = patch;
+  return updatePostProcessingEffect<BloomEffect>(
+    render,
+    getBloomEffect(render).instanceId,
+    (bloom) => ({ ...bloom, enabled, settings: { ...bloom.settings, ...settings } }),
+  );
+}
+
 describe('ShaderStore: loading', () => {
   it('opens the first shader and mirrors it into the draft', async () => {
     const { store } = setup(makeRecord());
@@ -306,7 +321,7 @@ describe('ShaderStore: dirty', () => {
 
     store.setVertex(record.vertex);
     store.setRender(
-      withBloomEffect(record.render, { ...getBloomEffect(record.render).settings, enabled: true }),
+      withBloom(record.render, { ...getBloomEffect(record.render).settings, enabled: true }),
     );
     expect(store.dirty()).toBe(true);
 
@@ -608,7 +623,7 @@ describe('ShaderStore: presets', () => {
     await store.initialize();
 
     store.setRender(
-      withBloomEffect(DEFAULT_RENDER, { enabled: true, strength: 1, radius: 0.5, threshold: 0.8 }),
+      withBloom(DEFAULT_RENDER, { enabled: true, strength: 1, radius: 0.5, threshold: 0.8 }),
     );
     await store.savePreset('Values only');
     await store.savePreset('With bloom', true);
@@ -624,7 +639,7 @@ describe('ShaderStore: presets', () => {
       name: 'Glow',
       createdAt: '2024-01-01T00:00:00.000Z',
       values: { speed: 2, glow: true },
-      render: withBloomEffect(DEFAULT_RENDER, {
+      render: withBloom(DEFAULT_RENDER, {
         enabled: true,
         strength: 1.2,
         radius: 0.4,
@@ -639,6 +654,7 @@ describe('ShaderStore: presets', () => {
     const draftRender = store.draft()?.render;
     expect(draftRender && getBloomEffect(draftRender)).toEqual({
       type: 'bloom',
+      instanceId: 'bloom',
       enabled: true,
       settings: { strength: 1.2, radius: 0.4, threshold: 0.7 },
     });
@@ -651,7 +667,7 @@ describe('ShaderStore: presets', () => {
     const { store } = setup(makeRecord({ presets: [preset] }));
     await store.initialize();
     store.setRender(
-      withBloomEffect(DEFAULT_RENDER, { enabled: true, strength: 1, radius: 0.5, threshold: 0.8 }),
+      withBloom(DEFAULT_RENDER, { enabled: true, strength: 1, radius: 0.5, threshold: 0.8 }),
     );
 
     store.applyPreset('calm');
@@ -827,7 +843,7 @@ describe('ShaderStore: revisions and compile completion', () => {
     expect(store.draftRevision()).toBe(initial + 1);
 
     store.setRender(
-      withBloomEffect(DEFAULT_RENDER, { enabled: true, strength: 1, radius: 1, threshold: 1 }),
+      withBloom(DEFAULT_RENDER, { enabled: true, strength: 1, radius: 1, threshold: 1 }),
     );
     expect(store.draftRevision()).toBe(initial + 2);
   });
