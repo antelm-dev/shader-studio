@@ -451,6 +451,38 @@ retains the desktop application metadata consumed by Electron Builder. Its
 production dependencies provide the PostgreSQL driver and Swagger package
 externalized by the SSR bundle, so `pnpm serve:ssr` can resolve them from `dist`.
 
+### Server dependency changes
+
+The API is a separate workspace package, but Angular builds its Express host from
+`apps/web/src/server/index.ts`. A new Node-only dependency in `libs/api` or
+`libs/backend` can therefore affect development, the production SSR bundle, and
+the Docker image in different ways. When adding or upgrading one:
+
+1. Declare it in the workspace package that imports it. If `pnpm dev` fails
+   during Vite SSR dependency resolution (for example, it looks for a package
+   under `apps/web` that only `libs/api` declares), check
+   `apps/web/angular.json` → `serve.options.prebundle.exclude`. This list is for
+   the web dev server; the desktop static target has its own configuration.
+2. Check `apps/web/angular.json` → `build.options.externalDependencies`. Packages
+   needed at runtime but left outside the SSR bundle must be available to the
+   built server. `pg` and `@nestjs/swagger` currently have pinned versions in
+   the root `package.json`; the Dockerfile installs those same versions into
+   the runtime image. Keep these declarations in sync when changing them.
+   Entries for Node built-ins or optional modules do not automatically require
+   a new Docker installation. Do not externalize a package just because it is
+   server-only; first establish whether bundling actually fails.
+3. Run `pnpm dev` for the development SSR path, then
+   `pnpm build && pnpm smoke:ssr` for the built server. The smoke test uses
+   SQLite; it does not prove that the external PostgreSQL driver is present in
+   the Docker runtime.
+   For changes to runtime dependencies or their versions, also build and start
+   the image in a disposable Compose deployment and check `/api/health` with
+   PostgreSQL configured (see `docs/release-readiness.md`).
+
+The Angular build imports the server entry to extract routes without initializing
+storage. That build can pass even when a dependency loaded only on the first API
+request is missing, which is why the built-server and container checks matter.
+
 The store keeps three layers of state deliberately distinct:
 
 - **record** — the shader as the server last gave it to us.

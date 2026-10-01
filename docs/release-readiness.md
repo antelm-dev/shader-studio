@@ -15,6 +15,9 @@ an actual result; a passing unit suite does not replace a packaged-app check.
 - [ ] For a standalone built-server check, run `pnpm build && pnpm smoke:ssr`.
       This checks production startup, anonymous readiness, protected library access,
       sanitized initialization failure and retry recovery using disposable SQLite.
+      When server dependencies change, also follow the
+      [server dependency checklist](../README.md#server-dependency-changes): this
+      smoke does not exercise PostgreSQL or the Docker runtime dependency tree.
 - [ ] Run `pnpm smoke` for the real browser workflow and plugin sandbox probes.
 - [ ] Build the Windows package with `pnpm pack:win`. For an account-enabled
       build, set `SHADER_STUDIO_ACCOUNT_URL` before building; otherwise verify that
