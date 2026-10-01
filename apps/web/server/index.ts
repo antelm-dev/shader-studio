@@ -11,10 +11,12 @@
  * same app, so `ng serve` gets the real API rather than a mock.
  *
  * The API itself lives in @shadergrove/api (libs/api); this file only composes.
- * apps/web/package.json still declares the API's runtime packages (Nest,
- * drizzle-orm, nodemailer…) because the dev server's Vite SSR runner resolves
- * bare imports from apps/web, not from libs/api: drop them and `ng serve` fails
- * with "Cannot find module '@nestjs/core'".
+ * Its server-only packages (Nest, drizzle-orm, nodemailer…) are listed under
+ * `serve.options.prebundle.exclude` in angular.json: the dev server's Vite SSR
+ * runner would otherwise resolve them from apps/web, which does not declare
+ * them, and `ng serve` would fail with "Cannot find module '@nestjs/core'".
+ * Excluded, esbuild bundles them from where they are imported instead. A new
+ * server-only package in libs/api or libs/backend goes on that list too.
  */
 
 import {

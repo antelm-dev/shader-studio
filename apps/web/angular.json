@@ -85,7 +85,17 @@
         "serve": {
           "builder": "@angular/build:dev-server",
           "options": {
-            "prebundle": { "exclude": ["@shadergrove/shared"] }
+            "prebundle": {
+              "exclude": [
+                "@shadergrove/shared",
+                "@nestjs/common",
+                "@nestjs/core",
+                "@nestjs/platform-express",
+                "drizzle-orm",
+                "nodemailer",
+                "reflect-metadata"
+              ]
+            }
           },
           "configurations": {
             "production": {
