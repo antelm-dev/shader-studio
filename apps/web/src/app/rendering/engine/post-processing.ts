@@ -140,6 +140,8 @@ export class PostProcessing {
   private suspended = false;
   private lastLossWithCustom = -Infinity;
 
+  /** Which shader's chain the built passes belong to; see `setScope`. */
+  private scope: string | null = null;
   private reported = '[]';
   private reportedList: CompileDiagnostic[] = [];
   private disposed = false;
@@ -259,6 +261,19 @@ export class PostProcessing {
       if (now - this.lastLossWithCustom < REPEATED_LOSS_WINDOW_MS) this.suspended = true;
       this.lastLossWithCustom = now;
     }
+    this.disposeComposer();
+    this.rejected.clear();
+  }
+
+  /**
+   * Name the shader whose chain is about to be set. Instance ids are unique
+   * within one chain only — a duplicated shader keeps its effects' ids — so a
+   * new scope forgets every built pass and rejection rather than let one
+   * shader's last valid program stand in for another's.
+   */
+  setScope(scope: string | null): void {
+    if (scope === this.scope) return;
+    this.scope = scope;
     this.disposeComposer();
     this.rejected.clear();
   }

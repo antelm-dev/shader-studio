@@ -253,6 +253,7 @@ export class ShaderCanvas {
 
         const draft = this.store.draft();
         const channelState = this.channelState();
+        engine.setEffectScope(this.store.record()?.id ?? null);
         const diagnostics = engine.setPasses(
           {
             vertex: this.store.vertex(),
@@ -336,7 +337,11 @@ export class ShaderCanvas {
     effect(() => {
       const engine = this.engine();
       const render = this.store.draft()?.render;
-      if (engine && render) engine.setRenderSettings(render);
+      // The record and the draft are adopted together, so this id is the draft's own.
+      const shaderId = this.store.record()?.id ?? null;
+      if (!engine || !render) return;
+      engine.setEffectScope(shaderId);
+      engine.setRenderSettings(render);
     });
 
     effect(() => {

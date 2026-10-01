@@ -111,7 +111,14 @@ const SOURCE_DEBOUNCE_MS = 300;
       <button matButton type="button" data-testid="effect-revert" (click)="revert()">
         {{ 'effectEditor.revert' | translate }}
       </button>
-      <button matButton="filled" type="button" cdkFocusInitial (click)="close()">
+      <button
+        matButton="filled"
+        type="button"
+        cdkFocusInitial
+        data-testid="effect-done"
+        [disabled]="sourceError()"
+        (click)="close()"
+      >
         {{ 'effectEditor.done' | translate }}
       </button>
     </mat-dialog-actions>
@@ -260,6 +267,7 @@ export class CustomEffectEditor {
     this.controlsDraft.set(null);
     this.controlsError.set(null);
     this.sourceError.set(false);
+    this.dialogRef.disableClose = false;
     this.mutate((effect) => ({
       ...effect,
       definition: structuredClone(original),
@@ -269,7 +277,7 @@ export class CustomEffectEditor {
 
   protected close(): void {
     this.flushSource();
-    this.dialogRef.close();
+    if (!this.sourceError()) this.dialogRef.close();
   }
 
   /**
@@ -283,6 +291,9 @@ export class CustomEffectEditor {
     const source = this.pendingSource();
     if (source === null) return;
     this.sourceError.set(source.length > LIMITS.customEffectSourceLength);
+    // Code that only exists in the editor must not be closed away: Done is
+    // disabled, and so are Escape and the backdrop, until it fits or is reverted.
+    this.dialogRef.disableClose = this.sourceError();
     if (this.sourceError()) return;
     this.pendingSource.set(null);
     this.updateDefinition((definition) => ({ ...definition, source }));

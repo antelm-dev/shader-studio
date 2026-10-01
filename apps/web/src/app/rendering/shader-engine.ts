@@ -587,6 +587,11 @@ export class ShaderEngine {
     this.post.setSettings(render);
   }
 
+  /** Which shader the next render settings belong to. See `PostProcessing.setScope`. */
+  setEffectScope(shaderId: string | null): void {
+    this.post.setScope(shaderId);
+  }
+
   /**
    * While a capture runs, these three are the live preview's business, not the
    * capture's — and the preview's settings keep arriving, because the panel that

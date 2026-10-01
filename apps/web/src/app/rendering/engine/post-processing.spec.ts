@@ -801,6 +801,35 @@ describe('Custom effects', () => {
     expect(valid!.uniforms['u_gain']!.value).toBe(1);
   });
 
+  it("never falls back on another shader's program for the same instance id", async () => {
+    post.setScope('shader-a');
+    post.setSettings(chain(customEffect('a')));
+    await loader.flush();
+    const [fromA] = installed();
+
+    // A duplicate of A keeps the id; its own code for it does not compile.
+    post.setScope('shader-b');
+    post.setSettings(
+      chain(customEffect('a', { source: 'vec4 effect(vec4 c, vec2 uv) { return BROKEN; }' })),
+    );
+
+    expect(fromA!.disposed).toBe(true);
+    expect(post.usesComposer()).toBe(false);
+    expect(reports.at(-1)).toEqual([expect.objectContaining({ docId: '@effect/a' })]);
+  });
+
+  it('keeps its passes while the scope stays the same', async () => {
+    post.setScope('shader-a');
+    post.setSettings(chain(customEffect('a')));
+    await loader.flush();
+    const [pass] = installed();
+
+    post.setScope('shader-a');
+    post.setSettings(chain(customEffect('a', { gain: 2 })));
+
+    expect(installed()).toEqual([pass]);
+  });
+
   it('leaves out an instance that has never compiled, with its diagnostic, and the rest runs', async () => {
     post.setSettings(
       chain(
