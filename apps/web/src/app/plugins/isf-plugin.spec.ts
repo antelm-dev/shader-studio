@@ -101,6 +101,14 @@ describe('importing ISF FX filters', () => {
     expect(effect.source).toContain('#define RENDERSIZE u_resolution');
   });
 
+  it('runs a one-pass filter as its first pass, PASSINDEX 0', async () => {
+    const header = { ISFVSN: '2', INPUTS: [{ NAME: 'inputImage', TYPE: 'image' }], PASSES: [{}] };
+    const effect = await importIsf(
+      `/*${JSON.stringify(header)}*/\nvoid main() { gl_FragColor = PASSINDEX == 0 ? IMG_THIS_PIXEL(inputImage) : vec4(0.0); }`,
+    );
+    expect(effect.source).toContain('#define PASSINDEX 0');
+  });
+
   it('chooses a range that keeps the default of a float input without MIN or MAX', async () => {
     const image = { NAME: 'inputImage', TYPE: 'image' };
     const header = {

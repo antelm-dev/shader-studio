@@ -12,7 +12,7 @@
 //
 // Supported: ISFVSN 2, one `inputImage`, no PASSES (or one plain pass), inputs of
 // type float, bool, long (with VALUES) and color (alpha dropped: controls are RGB).
-// Built-ins: isf_FragNormCoord, RENDERSIZE, TIME, IMG_THIS_PIXEL,
+// Built-ins: isf_FragNormCoord, RENDERSIZE, TIME, PASSINDEX, IMG_THIS_PIXEL,
 // IMG_THIS_NORM_PIXEL, IMG_NORM_PIXEL, IMG_PIXEL, IMG_SIZE. Anything else fails to
 // compile, and the host shows where.
 
@@ -39,6 +39,7 @@ const RESERVED = new Set([
   'vUv',
   'TIME',
   'RENDERSIZE',
+  'PASSINDEX',
   'IMG_THIS_PIXEL',
   'IMG_THIS_NORM_PIXEL',
   'IMG_NORM_PIXEL',
@@ -253,6 +254,8 @@ function importIsf(text) {
     '#define inputImage tDiffuse',
     '#define RENDERSIZE u_resolution',
     '#define TIME u_time',
+    // One pass at most, so always the first.
+    '#define PASSINDEX 0',
     '#define IMG_NORM_PIXEL(image, coord) texture2D(tDiffuse, coord)',
     '#define IMG_THIS_NORM_PIXEL(image) texture2D(tDiffuse, isf_uv)',
     '#define IMG_THIS_PIXEL(image) texture2D(tDiffuse, isf_uv)',
