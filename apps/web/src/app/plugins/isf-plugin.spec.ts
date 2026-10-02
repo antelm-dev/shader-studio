@@ -170,7 +170,10 @@ describe('importing ISF FX filters', () => {
 
 describe('exporting and re-importing', () => {
   it('round-trips an imported filter: code, controls, current values and the rest of the header', async () => {
-    const original = read('examples/controls.fs');
+    const original = read('examples/controls.fs').replace(
+      'Shadergrove fixture',
+      'Shadergrove *\\/ fixture',
+    );
     const imported = await importIsf(original);
     const tuned = { ...imported, values: { levels: 8, invert: true, tint: '#00ff00', channel: 2 } };
 
@@ -178,7 +181,7 @@ describe('exporting and re-importing', () => {
     expect(header(exported)).toMatchObject({
       ISFVSN: '2',
       DESCRIPTION: 'Posterize',
-      CREDIT: 'Shadergrove fixture',
+      CREDIT: 'Shadergrove */ fixture',
       CATEGORIES: ['Stylize'],
     });
     expect(isfBody(exported)).toBe(isfBody(original).replace(/\r\n/g, '\n'));
@@ -227,20 +230,35 @@ describe('exporting and re-importing', () => {
     expect(again.source).toContain('#define effect isf_inner_effect');
   });
 
+  it('round-trips comment terminators in an effect name and control label', async () => {
+    const native: EffectCandidate = {
+      name: 'A */ B',
+      source: 'vec4 effect(vec4 color, vec2 uv) { return color * u_gain; }',
+      controls: [
+        { key: 'gain', type: 'number', default: 1, min: 0, max: 2, label: 'Gain */ label' },
+      ],
+      values: {},
+    };
+
+    const again = await importIsf(await exportIsf(native));
+    expect(again.name).toBe(native.name);
+    expect(again.controls).toEqual(native.controls);
+  });
+
   it('refuses to export a select whose values are not integers, as an ISF long needs', async () => {
     await expect(
       exportIsf({
         name: 'Halves',
-        source: 'vec4 effect(vec4 color, vec2 uv) { return color * u_step; }',
+        source: 'vec4 effect(vec4 color, vec2 uv) { return color * u_amount; }',
         controls: [
-          { key: 'step', type: 'select', default: 0.5, options: { Half: 0.5, More: 1.5 } },
+          { key: 'amount', type: 'select', default: 0.5, options: { Half: 0.5, More: 1.5 } },
         ],
         values: {},
       }),
     ).rejects.toThrow(/integer/);
   });
 
-  it.each(['inputImage', 'u_time', 'u_gain', 'rgb'])(
+  it.each(['inputImage', 'u_time', 'u_gain', 'rgb', 'float', 'texture2D', 'inline', 'defined'])(
     'refuses to export a control named %s, which ISF or the plugin reserves',
     async (key) => {
       await expect(
@@ -324,6 +342,21 @@ describe('what the ISF plugin refuses, with a reason', () => {
     [
       'a reserved input name',
       isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'time', TYPE: 'float' }] }),
+      /reserved/,
+    ],
+    [
+      'an input named float, a GLSL keyword',
+      isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'float', TYPE: 'float' }] }),
+      /reserved/,
+    ],
+    [
+      'an input named sin, a GLSL built-in function',
+      isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'sin', TYPE: 'float' }] }),
+      /reserved/,
+    ],
+    [
+      'an input named inline, a GLSL future reserved word',
+      isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'inline', TYPE: 'float' }] }),
       /reserved/,
     ],
     [
