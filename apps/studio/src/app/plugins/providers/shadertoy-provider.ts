@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 
 import { PROJECT_LIMITS } from '@shadergrove/shared/plugin';
-import { isShadertoyAssetPath, parseShadertoyId } from '@shadergrove/shared/shadertoy-api';
+import { isShadertoyAssetPath, parseShadertoyId } from '@shadergrove/shared/shadertoy-convert';
 import { ShaderApi } from '../../api/shader-api';
 import type { ProviderSource, SourceProvider } from '../host-adapters';
 
@@ -34,6 +34,7 @@ export class ShadertoyApiProvider implements SourceProvider {
       label: 'shadertoy.apiKey',
       hint: 'shadertoy.apiKeyHint',
       maxLength: 128,
+      remember: 'shadertoyApiKey',
     },
   ] as const;
 

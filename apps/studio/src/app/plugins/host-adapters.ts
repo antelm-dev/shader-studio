@@ -29,6 +29,8 @@ export interface ProviderField {
   hint?: string;
   placeholder?: string;
   maxLength: number;
+  /** A host preference that keeps the value between imports (never sent to a plugin). */
+  remember?: 'shadertoyApiKey';
 }
 
 /** The bounded document a provider fetched, as it goes to the Worker. */

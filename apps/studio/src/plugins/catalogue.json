@@ -1,4 +1,45 @@
 {
   "format": "shadergrove-plugin-catalogue/v1",
-  "packages": []
+  "packages": [
+    {
+      "id": "dev.shadergrove.shadertoy",
+      "version": "1.0.0",
+      "name": "Shadertoy Import",
+      "description": "Import a Shadertoy shader into a new shader: by URL or ID with your own API key (buffers, Common, feedback and textures), or by pasting an Image pass.",
+      "publisher": "Shadergrove",
+      "license": "Apache-2.0",
+      "protocolVersion": 2,
+      "appVersionRange": ">=1.5.0 <2.0.0",
+      "file": "dev.shadergrove.shadertoy-1.0.0.sgplugin.json",
+      "bytes": 19275,
+      "sha256": "3903930c1d7f3d27bc6f1c866cb0a49f39d3d4a2582320c681491e6d1dd9c9fb",
+      "contributions": [
+        {
+          "kind": "projectImporter",
+          "id": "shadertoy",
+          "name": "Import from Shadertoy"
+        }
+      ]
+    },
+    {
+      "id": "dev.shadergrove.wallpaper-engine",
+      "version": "1.0.0",
+      "name": "Wallpaper Engine Export",
+      "description": "Export the open shader — unsaved edits included — as a Wallpaper Engine web wallpaper: multipass and textures, with its controls as wallpaper properties.",
+      "publisher": "Shadergrove",
+      "license": "Apache-2.0",
+      "protocolVersion": 2,
+      "appVersionRange": ">=1.5.0 <2.0.0",
+      "file": "dev.shadergrove.wallpaper-engine-1.0.0.sgplugin.json",
+      "bytes": 14644,
+      "sha256": "d20dee35a465693b3aac462ef1aade61008bab0659fd37b9c3fefe16bf061bdb",
+      "contributions": [
+        {
+          "kind": "projectExporter",
+          "id": "wallpaper-engine",
+          "name": "Export to Wallpaper Engine"
+        }
+      ]
+    }
+  ]
 }

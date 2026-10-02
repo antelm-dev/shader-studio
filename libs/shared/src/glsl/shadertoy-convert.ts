@@ -94,6 +94,14 @@ export function parseShadertoyId(idOrUrl: string): string {
   return id;
 }
 
+/** Media paths the host provider will fetch: Shadertoy's own texture files, nothing else. */
+const ASSET_PATH =
+  /^\/(?:media\/(?:a|ap|previz)|presets)\/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,127}\.(?:png|jpe?g|webp)$/;
+
+export function isShadertoyAssetPath(path: unknown): path is string {
+  return typeof path === 'string' && ASSET_PATH.test(path) && !path.includes('..');
+}
+
 const UNSUPPORTED_INPUT_KINDS = new Set([
   'cubemap',
   'volume',

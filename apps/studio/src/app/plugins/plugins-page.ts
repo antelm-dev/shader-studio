@@ -1,10 +1,19 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  afterNextRender,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import type { CustomEffect, ShaderControl, ShaderParams } from '@shadergrove/shared/model';
 import {
@@ -14,7 +23,10 @@ import {
   type EffectContribution,
   type ExporterContribution,
   type ImporterContribution,
+  type CatalogueEntry,
   type PluginContribution,
+  type ProjectExporterContribution,
+  type ProjectImporterContribution,
   type ThemeContribution,
   pluginThemeRef,
 } from '@shadergrove/shared/plugin';
@@ -23,17 +35,22 @@ import { defaultParams } from '@shadergrove/shared/validate';
 import { DesktopPlatform } from '../desktop/desktop-platform';
 import { I18n } from '../i18n/i18n';
 import { TranslatePipe } from '../i18n/translate.pipe';
+import { Preferences } from '../prefs/preferences';
 import { PAGE_STYLES } from '../publications/page';
 import { AppThemes } from '../themes/app-themes';
 import { ShaderStore } from '../workspace/shader-store';
 import { EffectAdoption, type AdoptionResult } from './effect-adoption';
+import { HostAdapters, type ProviderField } from './host-adapters';
+import { PluginCatalogueService } from './plugin-catalogue';
 import {
   PluginInstallations,
   type InstalledPlugin,
   type PluginReview,
 } from './plugin-installations';
+import { ProjectPluginActions, type ProjectActionOutcome } from './project-actions';
 
-type Message = { text: string; error: boolean };
+type Message = { text: string; error: boolean; warnings?: readonly string[] };
+type AvailableState = 'install' | 'update' | 'installed';
 
 /**
  * `/plugins`: the locally installed plugins, laid over the editor like
@@ -66,6 +83,76 @@ type Message = { text: string; error: boolean };
     </header>
 
     <main [attr.aria-busy]="installations.loading()">
+      <h2 class="section">{{ 'plugins.available' | translate }}</h2>
+      <p class="hint">{{ 'plugins.availableHint' | translate }}</p>
+      @switch (catalogue.state().status) {
+        @case ('ready') {
+          @if (available().length === 0) {
+            <p class="status">{{ 'plugins.availableEmpty' | translate }}</p>
+          }
+        }
+        @case ('error') {
+          <p class="error" role="alert" data-testid="catalogue-error">
+            {{ 'plugins.availableError' | translate: { message: catalogueError() } }}
+          </p>
+        }
+        @default {
+          <p class="status">{{ 'plugins.availableLoading' | translate }}</p>
+        }
+      }
+      @for (entry of available(); track entry.id) {
+        @let state = availableState(entry);
+        <article
+          class="plugin available"
+          [class.focused]="focus() === entry.id"
+          [attr.id]="'available-' + entry.id"
+          [attr.data-testid]="'available-' + entry.id"
+          [attr.aria-label]="entry.name"
+        >
+          <header>
+            <div class="identity">
+              <h3>{{ entry.name }}</h3>
+              <p>{{ entry.description }}</p>
+              <p class="muted">
+                {{ entry.id }} · {{ 'plugins.version' | translate: { version: entry.version } }} ·
+                {{ 'plugins.by' | translate: { publisher: entry.publisher } }} ·
+                {{ 'plugins.license' | translate: { license: entry.license } }}
+              </p>
+              <p class="muted">{{ 'plugins.official' | translate }}</p>
+            </div>
+            @switch (state) {
+              @case ('installed') {
+                <span class="muted" [attr.data-testid]="'available-installed-' + entry.id">
+                  {{ 'plugins.upToDate' | translate }}
+                </span>
+              }
+              @default {
+                <button
+                  matButton="tonal"
+                  type="button"
+                  [attr.data-testid]="'install-available-' + entry.id"
+                  [disabled]="busy() !== null || installations.loading()"
+                  (click)="installAvailable(entry)"
+                >
+                  {{
+                    state === 'update'
+                      ? ('plugins.updateTo' | translate: { version: entry.version })
+                      : ('plugins.installAvailable' | translate: { name: entry.name })
+                  }}
+                </button>
+              }
+            }
+          </header>
+          <ul class="contributions">
+            @for (contribution of entry.contributions; track contribution.id) {
+              <li>
+                <strong>{{ kindName(contribution.kind) }}</strong> — {{ contribution.name }}
+              </li>
+            }
+          </ul>
+        </article>
+      }
+
       <section class="install" [attr.aria-label]="'plugins.installFromFile' | translate">
         <button
           matButton="tonal"
@@ -156,9 +243,22 @@ type Message = { text: string; error: boolean };
       </section>
 
       @if (message(); as current) {
-        <p class="message" [class.error]="current.error" role="status" data-testid="plugin-message">
-          {{ current.text }}
-        </p>
+        <div
+          class="message"
+          [class.error]="current.error"
+          [attr.role]="current.error ? 'alert' : 'status'"
+          data-testid="plugin-message"
+        >
+          <p>{{ current.text }}</p>
+          @if (current.warnings?.length) {
+            <p class="muted">{{ 'plugins.warnings' | translate }}</p>
+            <ul data-testid="plugin-warnings">
+              @for (warning of current.warnings; track $index) {
+                <li>{{ warning }}</li>
+              }
+            </ul>
+          }
+        </div>
       }
 
       <h2 class="section">{{ 'plugins.installed' | translate }}</h2>
@@ -169,6 +269,8 @@ type Message = { text: string; error: boolean };
       @for (installed of installations.plugins(); track installed.id) {
         <article
           class="plugin"
+          [class.focused]="focus() === installed.id"
+          [attr.id]="'installed-' + installed.id"
           [attr.data-testid]="'plugin-' + installed.id"
           [attr.aria-label]="title(installed)"
         >
@@ -283,6 +385,97 @@ type Message = { text: string; error: boolean };
                           </button>
                         }
                       }
+                      @case ('projectImporter') {
+                        @let importer = asProjectImporter(contribution);
+                        @let provider = providerOf(importer);
+                        @if (importer.provider && !provider) {
+                          <p class="muted">{{ 'plugins.noAdapter' | translate }}</p>
+                        } @else {
+                          <p class="muted">{{ 'plugins.contentRights' | translate }}</p>
+                          @if (importer.modes.length > 1) {
+                            <div
+                              class="modes"
+                              role="radiogroup"
+                              [attr.aria-label]="contribution.name"
+                            >
+                              @for (mode of importer.modes; track mode) {
+                                <label>
+                                  <input
+                                    type="radio"
+                                    [name]="'mode-' + key"
+                                    [attr.data-testid]="'mode-' + mode + '-' + key"
+                                    [checked]="modeOf(key, importer) === mode"
+                                    (change)="setMode(key, mode)"
+                                  />
+                                  {{
+                                    (mode === 'provider'
+                                      ? 'plugins.modeProvider'
+                                      : 'plugins.modePaste'
+                                    ) | translate
+                                  }}
+                                </label>
+                              }
+                            </div>
+                          }
+                          @if (modeOf(key, importer) === 'provider' && provider) {
+                            @for (field of provider.fields; track field.key) {
+                              <label class="field stacked">
+                                <span>{{ field.label | translate }}</span>
+                                <input
+                                  [type]="field.kind === 'credential' ? 'password' : 'text'"
+                                  [attr.autocomplete]="field.kind === 'credential' ? 'off' : null"
+                                  [attr.data-testid]="'field-' + field.key + '-' + key"
+                                  [attr.maxlength]="field.maxLength"
+                                  [placeholder]="field.placeholder ?? ''"
+                                  [ngModel]="fieldValue(key, field)"
+                                  (ngModelChange)="setField(key, field, $event)"
+                                />
+                                @if (field.hint) {
+                                  <small class="muted">{{ field.hint | translate }}</small>
+                                }
+                              </label>
+                            }
+                          } @else {
+                            <label class="field stacked">
+                              <span>{{ 'plugins.pasteName' | translate }}</span>
+                              <input
+                                type="text"
+                                maxlength="64"
+                                [attr.data-testid]="'paste-name-' + key"
+                                [ngModel]="pasteName(key)"
+                                (ngModelChange)="setPaste(key, 'name', $event)"
+                              />
+                            </label>
+                            <label class="field stacked">
+                              <span>{{ 'plugins.pasteSource' | translate }}</span>
+                              <textarea
+                                rows="8"
+                                spellcheck="false"
+                                [attr.data-testid]="'paste-source-' + key"
+                                [ngModel]="pasteSource(key)"
+                                (ngModelChange)="setPaste(key, 'text', $event)"
+                              ></textarea>
+                              <small class="muted">{{ 'plugins.pasteHint' | translate }}</small>
+                            </label>
+                          }
+                          <ng-container
+                            [ngTemplateOutlet]="runControls"
+                            [ngTemplateOutletContext]="{ key, label: 'plugins.runImport' }"
+                          />
+                        }
+                      }
+                      @case ('projectExporter') {
+                        @let exporter = asProjectExporter(contribution);
+                        @if (!runtimeOf(exporter)) {
+                          <p class="muted">{{ 'plugins.noAdapter' | translate }}</p>
+                        } @else {
+                          <p class="muted">{{ 'plugins.exportHint' | translate }}</p>
+                          <ng-container
+                            [ngTemplateOutlet]="runControls"
+                            [ngTemplateOutletContext]="{ key, label: 'plugins.runExport' }"
+                          />
+                        }
+                      }
                       @case ('exporter') {
                         @let exporter = asExporter(contribution);
                         @if (customEffects().length === 0) {
@@ -326,6 +519,36 @@ type Message = { text: string; error: boolean };
         </article>
       }
     </main>
+
+    <!-- Run, progress and cancel for one project contribution. -->
+    <ng-template #runControls let-key="key" let-label="label">
+      @let running = projects.running();
+      @let runningHere = running && running.pluginId + '/' + running.contributionId === key;
+      <div class="run">
+        <button
+          matButton="filled"
+          type="button"
+          [attr.data-testid]="'run-' + key"
+          [disabled]="busy() !== null || running !== null"
+          (click)="runProject(key)"
+        >
+          {{ label | translate }}
+        </button>
+        @if (runningHere) {
+          <span class="muted" role="status" [attr.data-testid]="'step-' + key">
+            {{ stepLabel(running.step) }}
+          </span>
+          <button
+            matButton
+            type="button"
+            [attr.data-testid]="'cancel-' + key"
+            (click)="projects.cancel()"
+          >
+            {{ 'plugins.cancelRun' | translate }}
+          </button>
+        }
+      </div>
+    </ng-template>
 
     <!-- A form built from the simple controls a contribution declares; values kept per contribution. -->
     <ng-template #paramsForm let-key="key" let-controls="controls">
@@ -471,6 +694,50 @@ type Message = { text: string; error: boolean };
       gap: 8px;
     }
 
+    .plugin.focused {
+      border-color: var(--mat-sys-primary);
+      box-shadow: 0 0 0 1px var(--mat-sys-primary);
+    }
+
+    .available p {
+      margin: 4px 0;
+    }
+
+    .field.stacked {
+      flex-direction: column;
+      align-items: stretch;
+      align-self: stretch;
+      max-width: 640px;
+    }
+
+    .field.stacked input,
+    .field.stacked textarea {
+      font: var(--mat-sys-body-medium);
+      padding: 6px 8px;
+      border: 1px solid var(--mat-sys-outline);
+      border-radius: 4px;
+      background: var(--mat-sys-surface);
+      color: var(--mat-sys-on-surface);
+    }
+
+    .field.stacked textarea {
+      font-family: var(--app-font-mono, monospace);
+      resize: vertical;
+    }
+
+    .modes,
+    .run {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .message ul {
+      margin: 4px 0 0;
+      padding-left: 18px;
+    }
+
     .muted,
     .hint {
       color: var(--mat-sys-on-surface-variant);
@@ -498,6 +765,29 @@ export class PluginsPage {
   private readonly store = inject(ShaderStore);
   private readonly desktop = inject(DesktopPlatform);
   private readonly i18n = inject(I18n);
+  private readonly preferences = inject(Preferences);
+  private readonly adapters = inject(HostAdapters);
+  private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
+  protected readonly catalogue = inject(PluginCatalogueService);
+  protected readonly projects = inject(ProjectPluginActions);
+
+  /** The package a link asked to show (`/plugins?use=<id>`), highlighted and scrolled to. */
+  protected readonly focus = signal<string | null>(
+    inject(ActivatedRoute).snapshot.queryParamMap.get('use'),
+  );
+  protected readonly available = computed(() => {
+    const state = this.catalogue.state();
+    return state.status === 'ready' ? state.packages : [];
+  });
+  protected readonly catalogueError = computed(() => {
+    const state = this.catalogue.state();
+    return state.status === 'error' ? state.message : '';
+  });
+
+  /** Form state of project contributions, by `<package>/<contribution>`; never sent to a plugin as is. */
+  private readonly modes = signal<Record<string, 'paste' | 'provider'>>({});
+  private readonly fields = signal<Record<string, Record<string, string>>>({});
+  private readonly pastes = signal<Record<string, { name: string; text: string }>>({});
 
   protected readonly appVersion = APP_VERSION;
   protected readonly review = signal<PluginReview | null>(null);
@@ -520,6 +810,14 @@ export class PluginsPage {
     effect(() => {
       this.installations.profile();
       untracked(() => this.review.set(null));
+    });
+    void this.catalogue.load();
+    // Scroll to the package a link asked for, once both lists have something to show.
+    afterNextRender(() => this.scrollToFocus());
+    effect(() => {
+      this.installations.plugins();
+      this.available();
+      if (this.focus()) untracked(() => setTimeout(() => this.scrollToFocus()));
     });
   }
 
@@ -569,6 +867,168 @@ export class PluginsPage {
       await this.installations.remove(installed.id);
       this.say('plugins.removed', { name: this.title(installed) });
     });
+  }
+
+  protected availableState(entry: CatalogueEntry): AvailableState {
+    const installed = this.installations.find(entry.id)?.plugin?.manifest.version;
+    if (!installed) return 'install';
+    return isNewer(entry.version, installed) ? 'update' : 'installed';
+  }
+
+  /**
+   * Installs (or explicitly updates to) a catalogue package: its bytes are
+   * checked against the entry, then reviewed and installed exactly like a
+   * file — switched off. A failed update leaves the installed version alone.
+   */
+  protected async installAvailable(entry: CatalogueEntry): Promise<void> {
+    await this.run(`available:${entry.id}`, async () => {
+      const profile = this.installations.profile();
+      const bytes = await this.catalogue.fetchPackage(entry);
+      if (this.installations.profile() !== profile) {
+        this.say('plugins.contextChanged', {}, true);
+        return;
+      }
+      const review = this.installations.review(bytes);
+      if (!review.ok) throw new Error(review.errors[0]);
+      if (!review.compatible)
+        throw new Error(
+          this.i18n.t('plugins.incompatible', {
+            range: review.plugin.manifest.appVersionRange,
+            version: APP_VERSION,
+          }),
+        );
+      if (review.replaces) {
+        await this.installations.installReviewedUpdate(review);
+        this.say('plugins.updatedNotice', { name: entry.name, version: entry.version });
+      } else {
+        await this.installations.install(review);
+        this.say('plugins.installedNotice', { name: entry.name });
+      }
+    });
+  }
+
+  // --- Project contributions --------------------------------------------------
+
+  protected providerOf(importer: ProjectImporterContribution) {
+    return importer.provider ? this.adapters.provider(importer.provider) : null;
+  }
+
+  protected runtimeOf(exporter: ProjectExporterContribution) {
+    return this.adapters.runtime(exporter.runtime);
+  }
+
+  protected modeOf(key: string, importer: ProjectImporterContribution): 'paste' | 'provider' {
+    const chosen = this.modes()[key];
+    return chosen && importer.modes.includes(chosen) ? chosen : importer.modes[0]!;
+  }
+
+  protected setMode(key: string, mode: 'paste' | 'provider'): void {
+    this.modes.update((all) => ({ ...all, [key]: mode }));
+  }
+
+  protected fieldValue(key: string, field: ProviderField): string {
+    const typed = this.fields()[key]?.[field.key];
+    if (typed !== undefined) return typed;
+    return field.remember ? (this.preferences.value()[field.remember] ?? '') : '';
+  }
+
+  protected setField(key: string, field: ProviderField, value: string): void {
+    this.fields.update((all) => ({ ...all, [key]: { ...all[key], [field.key]: value } }));
+  }
+
+  protected pasteName(key: string): string {
+    return this.pastes()[key]?.name ?? this.i18n.t('shadertoy.defaultName');
+  }
+
+  protected pasteSource(key: string): string {
+    return this.pastes()[key]?.text ?? '';
+  }
+
+  protected setPaste(key: string, part: 'name' | 'text', value: string): void {
+    this.pastes.update((all) => ({
+      ...all,
+      [key]: { name: this.pasteName(key), text: this.pasteSource(key), [part]: value },
+    }));
+  }
+
+  protected stepLabel(step: string): string {
+    return this.i18n.t(`plugins.step.${step}` as Parameters<I18n['t']>[0]);
+  }
+
+  /** Runs the project importer or exporter keyed `<package>/<contribution>`. */
+  protected async runProject(key: string): Promise<void> {
+    const [pluginId, contributionId] = splitKey(key);
+    const contribution = this.installations
+      .find(pluginId)
+      ?.plugin?.manifest.contributions.find((entry) => entry.id === contributionId);
+    if (!contribution) return;
+    this.message.set(null);
+    let outcome: ProjectActionOutcome;
+    if (contribution.kind === 'projectExporter') {
+      outcome = await this.projects.runExport(pluginId, contributionId);
+    } else if (contribution.kind === 'projectImporter') {
+      const mode = this.modeOf(key, contribution);
+      if (mode === 'provider') {
+        const provider = this.providerOf(contribution);
+        if (!provider) return;
+        const values = Object.fromEntries(
+          provider.fields.map((field) => [field.key, this.fieldValue(key, field).trim()]),
+        );
+        // Credentials the host remembers stay in the host's preferences.
+        for (const field of provider.fields) {
+          if (field.remember && values[field.key]) {
+            this.preferences.patch({ [field.remember]: values[field.key] });
+          }
+        }
+        outcome = await this.projects.runImport(pluginId, contributionId, { mode, values });
+      } else {
+        outcome = await this.projects.runImport(pluginId, contributionId, {
+          mode,
+          name: this.pasteName(key).trim(),
+          text: this.pasteSource(key),
+        });
+      }
+    } else {
+      return;
+    }
+    this.reportOutcome(outcome);
+  }
+
+  private reportOutcome(outcome: ProjectActionOutcome): void {
+    switch (outcome.status) {
+      case 'imported':
+        this.message.set({
+          text: this.i18n.t('plugins.importedShader', { name: outcome.name }),
+          error: false,
+          warnings: outcome.warnings,
+        });
+        return;
+      case 'exported':
+        this.message.set({
+          text: this.i18n.t('plugins.exportedProject', { where: outcome.where }),
+          error: false,
+          warnings: outcome.warnings,
+        });
+        return;
+      case 'cancelled':
+        this.say('plugins.runCancelled');
+        return;
+      case 'stale':
+        this.say('plugins.staleResult', {}, true);
+        return;
+      case 'failed':
+        this.say('plugins.failed', { message: outcome.message }, true);
+        return;
+    }
+  }
+
+  private scrollToFocus(): void {
+    const id = this.focus();
+    if (!id) return;
+    const element =
+      this.host.nativeElement.querySelector<HTMLElement>(`[id="installed-${CSS.escape(id)}"]`) ??
+      this.host.nativeElement.querySelector<HTMLElement>(`[id="available-${CSS.escape(id)}"]`);
+    element?.scrollIntoView?.({ block: 'center' });
   }
 
   // --- Using ----------------------------------------------------------------
@@ -664,15 +1124,24 @@ export class PluginsPage {
   }
 
   protected kindLabel(contribution: PluginContribution): string {
-    return this.i18n.t(
-      contribution.kind === 'effect'
-        ? 'plugins.kindEffect'
-        : contribution.kind === 'importer'
-          ? 'plugins.kindImporter'
-          : contribution.kind === 'exporter'
-            ? 'plugins.kindExporter'
-            : 'plugins.kindTheme',
-    );
+    return this.kindName(contribution.kind);
+  }
+
+  protected kindName(kind: string): string {
+    switch (kind) {
+      case 'effect':
+        return this.i18n.t('plugins.kindEffect');
+      case 'importer':
+        return this.i18n.t('plugins.kindImporter');
+      case 'exporter':
+        return this.i18n.t('plugins.kindExporter');
+      case 'projectImporter':
+        return this.i18n.t('plugins.kindProjectImporter');
+      case 'projectExporter':
+        return this.i18n.t('plugins.kindProjectExporter');
+      default:
+        return this.i18n.t('plugins.kindTheme');
+    }
   }
 
   protected detail(contribution: PluginContribution): string {
@@ -691,9 +1160,9 @@ export class PluginsPage {
       case 'theme':
         return this.i18n.t(`theme.${contribution.scheme}`);
       case 'projectImporter':
-        return contribution.provider ?? contribution.modes.join(', ');
+        return this.i18n.t('plugins.importsNew');
       case 'projectExporter':
-        return contribution.runtime;
+        return this.i18n.t('plugins.exportsProject', { runtime: contribution.runtime });
     }
   }
 
@@ -705,6 +1174,10 @@ export class PluginsPage {
   protected asImporter = (contribution: PluginContribution) => contribution as ImporterContribution;
   protected asExporter = (contribution: PluginContribution) => contribution as ExporterContribution;
   protected asTheme = (contribution: PluginContribution) => contribution as ThemeContribution;
+  protected asProjectImporter = (contribution: PluginContribution) =>
+    contribution as ProjectImporterContribution;
+  protected asProjectExporter = (contribution: PluginContribution) =>
+    contribution as ProjectExporterContribution;
   protected themeRef(installed: InstalledPlugin, contribution: PluginContribution) {
     return pluginThemeRef(installed.id, contribution.id);
   }
@@ -798,4 +1271,19 @@ function download(blob: Blob, filename: string): void {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function splitKey(key: string): [string, string] {
+  const slash = key.lastIndexOf('/');
+  return [key.slice(0, slash), key.slice(slash + 1)];
+}
+
+/** Whether semantic version `a` is newer than `b` (pre-release tags are not ordered). */
+function isNewer(a: string, b: string): boolean {
+  const parse = (version: string) => version.split(/[.-]/).slice(0, 3).map(Number);
+  const [x, y] = [parse(a), parse(b)];
+  for (let index = 0; index < 3; index++) {
+    if (x[index] !== y[index]) return (x[index] ?? 0) > (y[index] ?? 0);
+  }
+  return false;
 }

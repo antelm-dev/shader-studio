@@ -19,9 +19,14 @@ import { newId } from '@shadergrove/shared/project';
 import { LIMITS, slugify } from '@shadergrove/shared/validate';
 import { PROJECT_LIMITS } from '../plugin/project';
 import { resolveTextureRequests } from '../plugin/texture-requests';
-import { SHADERTOY_ORIGIN, convertShadertoySource, parseShadertoyId } from './shadertoy-convert';
+import {
+  SHADERTOY_ORIGIN,
+  convertShadertoySource,
+  isShadertoyAssetPath,
+  parseShadertoyId,
+} from './shadertoy-convert';
 
-export { SHADERTOY_ORIGIN, parseShadertoyId } from './shadertoy-convert';
+export { SHADERTOY_ORIGIN, isShadertoyAssetPath, parseShadertoyId } from './shadertoy-convert';
 
 // This library compiles without DOM or Node types; every runtime that loads it has both.
 declare const TextDecoder: new (
@@ -69,14 +74,7 @@ export interface ShadertoyImportResult {
   warnings: string[];
 }
 
-/** Media paths the provider will fetch: Shadertoy's own texture files, nothing else. */
-const ASSET_PATH =
-  /^\/(?:media\/(?:a|ap|previz)|presets)\/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,127}\.(?:png|jpe?g|webp)$/;
 const MAX_REDIRECTS = 3;
-
-export function isShadertoyAssetPath(path: unknown): path is string {
-  return typeof path === 'string' && ASSET_PATH.test(path) && !path.includes('..');
-}
 
 export class ShadertoyRequestError extends Error {
   constructor(message: string) {
