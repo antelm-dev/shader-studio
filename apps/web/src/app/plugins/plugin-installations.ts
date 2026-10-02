@@ -70,8 +70,15 @@ export class PluginInstallations {
   private readonly storeFor = inject(PLUGIN_STORE);
   private readonly auth = inject(AuthService);
 
-  /** The web's partition key. The desktop app has one profile: its user data. */
-  readonly profile = computed(() => this.auth.user()?.id ?? 'anonymous');
+  /**
+   * The web's partition key, or `null` while the session is still being
+   * resolved: until then nothing is loaded, rather than show — and offer to run —
+   * the anonymous profile's plugins to someone about to turn out signed in. The
+   * desktop app has one profile, its user data.
+   */
+  readonly profile = computed(() =>
+    this.auth.status() === 'loading' ? null : (this.auth.user()?.id ?? 'anonymous'),
+  );
 
   private readonly pluginsSignal = signal<InstalledPlugin[]>([]);
   readonly plugins = this.pluginsSignal.asReadonly();
@@ -145,9 +152,16 @@ export class PluginInstallations {
     return this.pluginsSignal().find((installed) => installed.id === id);
   }
 
-  private async switchTo(profile: string): Promise<void> {
-    this.store = this.storeFor(profile);
+  private async switchTo(profile: string | null): Promise<void> {
     this.pluginsSignal.set([]);
+    if (profile === null) {
+      // Any load still in flight belongs to a profile that is no longer current.
+      this.loads++;
+      this.store = new NoPluginStore();
+      this.loading.set(true);
+      return;
+    }
+    this.store = this.storeFor(profile);
     await this.reload();
   }
 

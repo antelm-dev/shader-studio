@@ -61,6 +61,7 @@ const bytes = (text: string) => new TextEncoder().encode(text);
 describe('PluginInstallations', () => {
   let stores: MemoryStores;
   const user = signal<{ id: string } | null>(null);
+  const status = signal<'loading' | 'anonymous' | 'authenticated'>('anonymous');
   const draft = signal<{ render: RenderSettings } | null>(null);
   const probe = vi.fn(() => [] as unknown[]);
 
@@ -69,7 +70,7 @@ describe('PluginInstallations', () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: PLUGIN_STORE, useValue: (profile: string) => stores.for(profile) },
-        { provide: AuthService, useValue: { user } },
+        { provide: AuthService, useValue: { user, status } },
         {
           provide: ShaderStore,
           useValue: {
@@ -101,6 +102,7 @@ describe('PluginInstallations', () => {
   beforeEach(() => {
     stores = new MemoryStores();
     user.set(null);
+    status.set('anonymous');
     draft.set({ render: structuredClone(DEFAULT_RENDER) });
     probe.mockReset().mockReturnValue([]);
   });
@@ -166,6 +168,28 @@ describe('PluginInstallations', () => {
     user.set(null);
     await settle();
     expect(installations.plugins()).toHaveLength(1);
+  });
+
+  it('loads nothing until the session is known, so a signed-in user never sees the anonymous profile', async () => {
+    await stores.for('anonymous').put({
+      id: 'dev.example.tint',
+      text: packageText(),
+      enabled: true,
+      installedAt: '2026-01-01T00:00:00.000Z',
+    });
+    status.set('loading');
+    const installations = setup();
+    await settle();
+    expect(installations.plugins()).toEqual([]);
+    expect(installations.loading()).toBe(true);
+    expect(installations.host('dev.example.tint')).toBeNull();
+
+    user.set({ id: 'alice' });
+    status.set('authenticated');
+    await settle();
+    expect(installations.plugins()).toEqual([]);
+    expect(installations.loading()).toBe(false);
+    expect([...stores.byProfile.keys()]).toEqual(['anonymous', 'alice']);
   });
 
   it('revalidates what it reads: a corrupted or outdated record comes back off, and can still be removed', async () => {
