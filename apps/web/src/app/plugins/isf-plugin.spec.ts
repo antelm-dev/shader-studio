@@ -258,19 +258,28 @@ describe('exporting and re-importing', () => {
     ).rejects.toThrow(/integer/);
   });
 
-  it.each(['inputImage', 'u_time', 'u_gain', 'rgb', 'float', 'texture2D', 'inline', 'defined'])(
-    'refuses to export a control named %s, which ISF or the plugin reserves',
-    async (key) => {
-      await expect(
-        exportIsf({
-          name: 'Clash',
-          source: `vec4 effect(vec4 color, vec2 uv) { return color * u_${key}; }`,
-          controls: [{ key, type: 'number', default: 1, min: 0, max: 2 }],
-          values: {},
-        }),
-      ).rejects.toThrow(/reserved/);
-    },
-  );
+  it.each([
+    'inputImage',
+    'u_time',
+    'u_gain',
+    'rgb',
+    'float',
+    'texture2D',
+    'inline',
+    'defined',
+    'texture',
+    'round',
+    'viewMatrix',
+  ])('refuses to export a control named %s, which ISF or the plugin reserves', async (key) => {
+    await expect(
+      exportIsf({
+        name: 'Clash',
+        source: `vec4 effect(vec4 color, vec2 uv) { return color * u_${key}; }`,
+        controls: [{ key, type: 'number', default: 1, min: 0, max: 2 }],
+        values: {},
+      }),
+    ).rejects.toThrow(/reserved/);
+  });
 
   it('reads a control through a global function, so a parameter of the same name cannot shadow it', async () => {
     const exported = await exportIsf({
@@ -352,6 +361,21 @@ describe('what the ISF plugin refuses, with a reason', () => {
     [
       'an input named sin, a GLSL built-in function',
       isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'sin', TYPE: 'float' }] }),
+      /reserved/,
+    ],
+    [
+      'an input named texture, a GLSL ES 3.00 sampling function',
+      isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'texture', TYPE: 'float' }] }),
+      /reserved/,
+    ],
+    [
+      'an input named round, a GLSL ES 3.00 built-in function',
+      isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'round', TYPE: 'float' }] }),
+      /reserved/,
+    ],
+    [
+      'an input named viewMatrix, a three.js prefix uniform',
+      isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'viewMatrix', TYPE: 'float' }] }),
       /reserved/,
     ],
     [
