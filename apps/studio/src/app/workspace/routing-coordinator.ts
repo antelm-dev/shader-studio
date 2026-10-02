@@ -145,7 +145,9 @@ export class RoutingCoordinator {
   private onStandalonePage(): boolean {
     // A lazily loaded page is not `router.url` until its chunk has arrived, but the
     // navigation in flight already names it — and must not be normalized away meanwhile.
-    const target = this.router.currentNavigation()?.extractedUrl.toString();
+    // Read the navigation as a snapshot: tracking this signal would retrigger the
+    // selection effect on its own navigations and keep redirecting indefinitely.
+    const target = untracked(() => this.router.currentNavigation())?.extractedUrl.toString();
     return (
       STANDALONE_PAGE.test(this.router.url) ||
       (target !== undefined && STANDALONE_PAGE.test(target))
