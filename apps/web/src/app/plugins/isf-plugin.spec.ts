@@ -208,16 +208,19 @@ describe('exporting and re-importing', () => {
     expect(again.source).toContain('#define effect isf_inner_effect');
   });
 
-  it('refuses to export a control whose name ISF or the plugin reserves', async () => {
-    await expect(
-      exportIsf({
-        name: 'Clash',
-        source: 'vec4 effect(vec4 color, vec2 uv) { return color * u_inputImage; }',
-        controls: [{ key: 'inputImage', type: 'number', default: 1, min: 0, max: 2 }],
-        values: {},
-      }),
-    ).rejects.toThrow(/reserved/);
-  });
+  it.each(['inputImage', 'u_time', 'u_gain'])(
+    'refuses to export a control named %s, which ISF or the plugin reserves',
+    async (key) => {
+      await expect(
+        exportIsf({
+          name: 'Clash',
+          source: `vec4 effect(vec4 color, vec2 uv) { return color * u_${key}; }`,
+          controls: [{ key, type: 'number', default: 1, min: 0, max: 2 }],
+          values: {},
+        }),
+      ).rejects.toThrow(/reserved/);
+    },
+  );
 
   it('reads a control through a global function, so a parameter of the same name cannot shadow it', async () => {
     const exported = await exportIsf({
@@ -289,6 +292,11 @@ describe('what the ISF plugin refuses, with a reason', () => {
     [
       'a reserved input name',
       isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'time', TYPE: 'float' }] }),
+      /reserved/,
+    ],
+    [
+      'an input named like an app uniform',
+      isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'u_time', TYPE: 'float' }] }),
       /reserved/,
     ],
     [

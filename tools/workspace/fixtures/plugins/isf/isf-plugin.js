@@ -130,9 +130,17 @@ function hex(rgba) {
     : '#000000';
 }
 
-/** A name both sides can use: a control key here, an input NAME in ISF. */
+/**
+ * A name both sides can use: a control key here, an input NAME in ISF. `isf_` and `u_`
+ * names are this file's and the app's own: `u_time` is the time uniform, and a key
+ * `u_gain` beside a key `gain` would be read through the other's macro.
+ */
 const usableName = (key) =>
-  typeof key === 'string' && KEY.test(key) && !RESERVED.has(key) && !key.startsWith('isf_');
+  typeof key === 'string' &&
+  KEY.test(key) &&
+  !RESERVED.has(key) &&
+  !key.startsWith('isf_') &&
+  !key.startsWith('u_');
 
 /** One ISF input as a control, and the macro that makes the ISF name mean that control's uniform. */
 function inputToControl(input) {
