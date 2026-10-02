@@ -108,6 +108,14 @@
     "./publication": {
       "types": "./src/publication.ts",
       "default": "./src/publication.ts"
+    },
+    "./plugin": {
+      "types": "./src/plugin/package.ts",
+      "default": "./src/plugin/package.ts"
+    },
+    "./version": {
+      "types": "./src/version.ts",
+      "default": "./src/version.ts"
     }
   },
   "scripts": {

@@ -179,12 +179,12 @@ export class ShaderEngine {
   /** Custom post-processing effects' problems, whenever that list changes. See `PostProcessing.onDiagnostics`. */
   onEffectDiagnostics: ((diagnostics: CompileDiagnostic[]) => void) | null = null;
 
-  /** The custom post-processing effects' problems for the render settings in force now. */
   /** Compiles a custom effect off screen, adopting nothing. See `PostProcessing.probe`. */
   probeCustomEffect(effect: CustomEffect): CompileDiagnostic[] {
     return this.post.probe(effect);
   }
 
+  /** The custom post-processing effects' problems for the render settings in force now. */
   get effectDiagnostics(): CompileDiagnostic[] {
     return this.post.diagnostics;
   }

@@ -4,8 +4,8 @@ import {
   addPostProcessingEffect,
   canAddPostProcessingEffect,
   createCustomEffect,
-  type EffectCandidate,
-} from '@shadergrove/shared';
+} from '@shadergrove/shared/model';
+import type { EffectCandidate } from '@shadergrove/shared/plugin';
 import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { ShaderStore } from '../workspace/shader-store';

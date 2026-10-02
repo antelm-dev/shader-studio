@@ -6,19 +6,17 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { RouterLink } from '@angular/router';
 
+import type { CustomEffect, ShaderControl, ShaderParams } from '@shadergrove/shared/model';
 import {
-  APP_VERSION,
   PLUGIN_LIMITS,
   effectContributionCandidate,
   validateEffectCandidate,
-  type CustomEffect,
   type EffectContribution,
   type ExporterContribution,
   type ImporterContribution,
   type PluginContribution,
-  type ShaderControl,
-  type ShaderParams,
-} from '@shadergrove/shared';
+} from '@shadergrove/shared/plugin';
+import { APP_VERSION } from '@shadergrove/shared/version';
 import { defaultParams } from '@shadergrove/shared/validate';
 import { DesktopPlatform } from '../desktop/desktop-platform';
 import { I18n } from '../i18n/i18n';

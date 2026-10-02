@@ -9,11 +9,11 @@ import {
 } from '@angular/core';
 
 import {
-  APP_VERSION,
   isPluginCompatible,
   parsePluginPackage,
   type PluginPackage,
-} from '@shadergrove/shared';
+} from '@shadergrove/shared/plugin';
+import { APP_VERSION } from '@shadergrove/shared/version';
 import { AuthService } from '../auth/auth.service';
 import { DesktopPlatform } from '../desktop/desktop-platform';
 import { PluginHost } from './plugin-host';
