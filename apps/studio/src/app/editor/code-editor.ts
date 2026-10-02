@@ -120,6 +120,7 @@ export class CodeEditor {
 
   private readonly monaco = signal<MonacoApi | null>(null);
   private editor: Monaco.editor.IStandaloneCodeEditor | null = null;
+  private visibleTokensFrame: number | null = null;
 
   /** One model per document: the text, and the undo/redo stack behind it. */
   private readonly models = new Map<string, Monaco.editor.ITextModel>();
@@ -291,12 +292,33 @@ export class CodeEditor {
 
     const state = this.viewStates.get(doc.id);
     if (state) editor.restoreViewState(state);
+    else this.scheduleVisibleTokens();
 
     this.mounted = doc.id;
 
     // After the view state, never before: a held reveal is a deliberate jump to a
     // line, and it has to beat the cursor this document was last left at.
     this.flushPendingReveal(doc.id);
+  }
+
+  /**
+   * Colours the lines on screen now, rather than when the browser is next idle.
+   *
+   * Monaco highlights in two ways: the lines it is told are visible — on a
+   * scroll, a view-state restore, or the editor's creation — at once, and the
+   * whole document in the background, in idle callbacks. A shader rendering on
+   * every frame can leave the main thread no idle time at all, and then a resize
+   * or a newly mounted document (neither of which tells Monaco what is visible)
+   * shows plain text until the first scroll. Restoring the current view state is
+   * the public way to tell it; it moves nothing.
+   */
+  private scheduleVisibleTokens(): void {
+    if (this.visibleTokensFrame !== null) return;
+    this.visibleTokensFrame = requestAnimationFrame(() => {
+      this.visibleTokensFrame = null;
+      const state = this.editor?.saveViewState();
+      if (state) this.editor?.restoreViewState(state);
+    });
   }
 
   private flushPendingReveal(docId: string): void {
@@ -403,11 +425,16 @@ export class CodeEditor {
       if (id && model) this.valueChange.emit({ id, value: model.getValue() });
     });
 
+    // A resize changes which lines are on screen without scrolling.
+    editor.onDidLayoutChange(() => this.scheduleVisibleTokens());
+
     this.editor = editor;
     this.monaco.set(monaco);
     this.ready.set(true);
+    this.scheduleVisibleTokens();
 
     this.destroyRef.onDestroy(() => {
+      if (this.visibleTokensFrame !== null) cancelAnimationFrame(this.visibleTokensFrame);
       editor.dispose();
       for (const model of this.models.values()) model.dispose();
       this.models.clear();

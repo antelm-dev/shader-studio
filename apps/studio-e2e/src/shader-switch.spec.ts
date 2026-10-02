@@ -6,6 +6,10 @@ import { expect, test } from './fixtures';
 // coordinator's selection effect on its own navigation, which redirected
 // forever and froze the page (`RoutingCoordinator.onStandalonePage`).
 
+// CI runners have no GPU: every switch compiles and renders a shader in
+// software, around 20 s each, so five navigations need more than the default.
+test.describe.configure({ timeout: 180_000 });
+
 test('switching shaders keeps the URL, the selection and the page in step', async ({ page }) => {
   const response = await page.request.get('/api/shaders');
   expect(response.ok()).toBe(true);
@@ -18,6 +22,10 @@ test('switching shaders keeps the URL, the selection and the page in step', asyn
   const expectOpen = (name: string) => expectShaderOpen(page, name, idOf(name), shaders.length);
 
   await page.goto(`/shaders/${encodeURIComponent(idOf('Aurora Veil'))}`);
+  // Paused, the preview stops competing with the page for the CPU. Playback
+  // has nothing to do with routing, and the pause holds across in-app navigation.
+  await page.getByRole('button', { name: 'Pause' }).click();
+  await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible();
   await expectOpen('Aurora Veil');
 
   for (const name of ['Hex Pulse', 'Warp Tunnel']) {
