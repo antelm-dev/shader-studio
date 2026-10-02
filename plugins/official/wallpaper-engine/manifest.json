@@ -1,0 +1,19 @@
+{
+  "id": "dev.shadergrove.wallpaper-engine",
+  "version": "1.0.0",
+  "protocolVersion": 2,
+  "appVersionRange": ">=1.5.0 <2.0.0",
+  "name": "Wallpaper Engine Export",
+  "publisher": "Shadergrove",
+  "license": "Apache-2.0",
+  "contributions": [
+    {
+      "kind": "projectExporter",
+      "id": "wallpaper-engine",
+      "name": "Export to Wallpaper Engine",
+      "runtime": "wallpaper-web/v1",
+      "maxInputBytes": 4194304,
+      "maxOutputBytes": 4194304
+    }
+  ]
+}

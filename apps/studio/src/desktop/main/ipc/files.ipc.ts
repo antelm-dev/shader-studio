@@ -7,6 +7,7 @@ import { defineIpcModule, handle } from 'electron-ipc-module';
 import { PLUGIN_LIMITS } from '@shadergrove/shared';
 import { parseBundle } from '@shadergrove/shared/validate';
 import type { DialogResult } from '../../contracts/contracts';
+import { sanitizeProjectStem, validateProjectFiles, writeProjectFolder } from './project-folder';
 
 // A textured shader's bundle inlines its channel images as base64, and a
 // collection can hold many shaders — comfortably larger than the old
@@ -314,6 +315,45 @@ export function createFilesIpc() {
           await mkdir(directory, { recursive: true });
           await atomicWrite(join(directory, 'index.html'), bytes);
           return { status: 'ok', value: null };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+    ),
+    /**
+     * An export runtime's project (e.g. a Wallpaper Engine web wallpaper),
+     * written as a new folder inside one the user picks. The paths and sizes
+     * are checked again here; an existing folder is never overwritten, and the
+     * folder only appears once every file is written.
+     */
+    'save-project-folder': handle(
+      async (
+        event,
+        stem: string,
+        files: { path: string; bytes: Uint8Array }[],
+      ): Promise<DialogResult<{ path: string }>> => {
+        const valid = validateProjectFiles(files);
+        if (typeof valid === 'string') return { status: 'error', message: valid };
+        const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+        const options: OpenDialogOptions = {
+          title: 'Choose where to create the project folder',
+          buttonLabel: 'Create here',
+          properties: ['openDirectory', 'createDirectory'],
+        };
+        const picked = owner
+          ? await dialog.showOpenDialog(owner, options)
+          : await dialog.showOpenDialog(options);
+        if (picked.canceled || !picked.filePaths[0]) return { status: 'cancelled' };
+        try {
+          const path = await writeProjectFolder(
+            picked.filePaths[0],
+            sanitizeProjectStem(stem),
+            valid,
+          );
+          return { status: 'ok', value: { path } };
         } catch (error) {
           return {
             status: 'error',
