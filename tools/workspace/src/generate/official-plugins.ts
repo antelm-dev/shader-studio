@@ -8,9 +8,9 @@
  * run time — and written beside the catalogue in `apps/studio/src/plugins/`,
  * which the app ships as assets (`plugins/…` under its base URL).
  *
- * `plugins/official/release.json` lists which packages this release's
- * catalogue offers, in order; a package can be built and tested before it is
- * listed. The output is deterministic: run with `--check` to fail when the
+ * Every package folder is built; `plugins/official/release.json` lists which
+ * of them this release's catalogue offers, in order, so a package can be built
+ * and tested before it is listed. The output is deterministic: run with `--check` to fail when the
  * committed files are not what the sources build (`pnpm check:plugins`).
  */
 import { createHash } from 'node:crypto';
@@ -88,25 +88,36 @@ export function buildOfficialPlugins(): Map<string, string> {
   const release = JSON.parse(readFileSync(resolve(sourceDir, 'release.json'), 'utf8')) as {
     packages: string[];
   };
+  const names = readdirSync(sourceDir, { withFileTypes: true })
+    .filter(
+      (entry) => entry.isDirectory() && existsSync(resolve(sourceDir, entry.name, 'manifest.json')),
+    )
+    .map((entry) => entry.name)
+    .sort();
+  for (const name of release.packages) {
+    if (!names.includes(name)) throw new Error(`release.json lists unknown package "${name}"`);
+  }
   const files = new Map<string, string>();
+  const built = new Map(names.map((name) => [name, buildPackage(name)]));
+  for (const { fileName, text } of built.values()) files.set(fileName, text);
+
   const packages: CatalogueEntry[] = [];
   for (const name of release.packages) {
-    const built = buildPackage(name);
-    const parsed = parsePluginPackage(built.text);
+    const { fileName, text, listing } = built.get(name)!;
+    const parsed = parsePluginPackage(text);
     if (!parsed.ok) throw new Error(parsed.errors.join('; '));
     const { manifest } = parsed.value;
-    const bytes = Buffer.from(built.text, 'utf8');
-    files.set(built.fileName, built.text);
+    const bytes = Buffer.from(text, 'utf8');
     packages.push({
       id: manifest.id,
       version: manifest.version,
       name: manifest.name,
-      description: built.listing.description,
+      description: listing.description,
       publisher: manifest.publisher,
       license: manifest.license,
       protocolVersion: manifest.protocolVersion,
       appVersionRange: manifest.appVersionRange,
-      file: built.fileName,
+      file: fileName,
       bytes: bytes.byteLength,
       sha256: createHash('sha256').update(bytes).digest('hex'),
       contributions: manifest.contributions.map(({ kind, id, name: label }) => ({

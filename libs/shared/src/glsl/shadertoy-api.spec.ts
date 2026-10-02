@@ -18,11 +18,12 @@ function pngBytes(width: number, height: number): Uint8Array {
 }
 
 function jsonResponse(body: unknown): ShadertoyFetchResponse {
+  const bytes = new TextEncoder().encode(JSON.stringify(body));
   return {
     ok: true,
     status: 200,
     json: async () => body,
-    arrayBuffer: async () => new ArrayBuffer(0),
+    arrayBuffer: async () => bytes.buffer as ArrayBuffer,
   };
 }
 

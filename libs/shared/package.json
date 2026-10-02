@@ -61,6 +61,10 @@
       "types": "./src/glsl/shadertoy-api.ts",
       "default": "./src/glsl/shadertoy-api.ts"
     },
+    "./shadertoy-convert": {
+      "types": "./src/glsl/shadertoy-convert.ts",
+      "default": "./src/glsl/shadertoy-convert.ts"
+    },
     "./image-dimensions": {
       "types": "./src/glsl/image-dimensions.ts",
       "default": "./src/glsl/image-dimensions.ts"

@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, fromEvent, takeUntil, type Observable } from 'rxjs';
 
 import type {
   ApiErrorBody,
@@ -96,6 +96,24 @@ export abstract class ShaderApi {
     idOrUrl: string,
     apiKey: string,
   ): Promise<{ bundle: Bundle; warnings: string[] }>;
+  /** The Shadertoy JSON document for an id or URL (the `shadertoy-api/v1` provider). */
+  abstract fetchShadertoySource(
+    idOrUrl: string,
+    apiKey: string,
+    signal?: AbortSignal,
+  ): Promise<{ sourceId: string; source: unknown }>;
+  /** One Shadertoy media file by path (the `shadertoy-api/v1` provider). */
+  abstract fetchShadertoyAsset(path: string, signal?: AbortSignal): Promise<Uint8Array>;
+}
+
+/** An observable that stops — so its request is cancelled — when `signal` aborts. */
+export function abortable<T>(source: Observable<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return firstValueFrom(source);
+  signal.throwIfAborted();
+  return firstValueFrom(source.pipe(takeUntil(fromEvent(signal, 'abort')))).catch((error) => {
+    signal.throwIfAborted();
+    throw error;
+  });
 }
 
 @Injectable()
@@ -205,6 +223,35 @@ export class HttpShaderApi extends ShaderApi {
       idOrUrl,
       apiKey,
     });
+  }
+
+  override fetchShadertoySource(
+    idOrUrl: string,
+    apiKey: string,
+    signal?: AbortSignal,
+  ): Promise<{ sourceId: string; source: unknown }> {
+    return this.request(
+      abortable(
+        this.http.post<{ sourceId: string; source: unknown }>(
+          this.url('/import/shadertoy/source'),
+          { idOrUrl, apiKey },
+        ),
+        signal,
+      ),
+    );
+  }
+
+  override async fetchShadertoyAsset(path: string, signal?: AbortSignal): Promise<Uint8Array> {
+    const buffer = await this.request(
+      abortable(
+        this.http.get(this.url('/import/shadertoy/asset'), {
+          params: { path },
+          responseType: 'arraybuffer',
+        }),
+        signal,
+      ),
+    );
+    return new Uint8Array(buffer);
   }
 
   // --- Textures -------------------------------------------------------------

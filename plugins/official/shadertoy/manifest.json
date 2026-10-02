@@ -1,0 +1,20 @@
+{
+  "id": "dev.shadergrove.shadertoy",
+  "version": "1.0.0",
+  "protocolVersion": 2,
+  "appVersionRange": ">=1.5.0 <2.0.0",
+  "name": "Shadertoy Import",
+  "publisher": "Shadergrove",
+  "license": "Apache-2.0",
+  "contributions": [
+    {
+      "kind": "projectImporter",
+      "id": "shadertoy",
+      "name": "Import from Shadertoy",
+      "modes": ["provider", "paste"],
+      "provider": "shadertoy-api/v1",
+      "maxInputBytes": 2228224,
+      "maxOutputBytes": 4194304
+    }
+  ]
+}

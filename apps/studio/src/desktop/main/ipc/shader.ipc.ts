@@ -1,6 +1,10 @@
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
-import { importShadertoyShader } from '@shadergrove/shared/shadertoy-api';
+import {
+  fetchShadertoyAsset,
+  fetchShadertoySource,
+  importShadertoyShader,
+} from '@shadergrove/shared/shadertoy-api';
 import type { UpdateShaderPatch } from '@shadergrove/shared/api';
 import { ShaderLibrary, StorageError } from '@shadergrove/backend/library';
 import type { ImportMode, RenderSettings, ShaderParams } from '@shadergrove/shared/model';
@@ -22,6 +26,12 @@ function objectArg(value: unknown, name: string): Record<string, unknown> {
   }
   return value as Record<string, unknown>;
 }
+
+const SHADERTOY_TIMEOUT_MS = 15_000;
+
+/** Node's fetch with a per-request deadline; the Shadertoy fetchers pick everything else. */
+const shadertoyFetch = (url: string, init?: { redirect?: 'manual' }) =>
+  fetch(url, { ...init, signal: AbortSignal.timeout(SHADERTOY_TIMEOUT_MS) });
 
 export function createShaderIpc(storage: ShaderLibrary) {
   return defineIpcModule('shader', {
@@ -70,10 +80,24 @@ export function createShaderIpc(storage: ShaderLibrary) {
       const { payload, warnings } = await importShadertoyShader(
         stringArg(idOrUrl, 'idOrUrl'),
         stringArg(apiKey, 'apiKey'),
-        { fetch },
+        { fetch: shadertoyFetch },
       );
       return { bundle: buildShaderBundle(payload), warnings };
     }),
+    /**
+     * The installed Shadertoy plugin's `shadertoy-api/v1` provider: the JSON
+     * document only, bounded. The key is used for this one request; it is not
+     * kept, logged or returned.
+     */
+    'fetch-shadertoy-source': handle(async (_event, idOrUrl: string, apiKey: string) =>
+      fetchShadertoySource(stringArg(idOrUrl, 'idOrUrl'), stringArg(apiKey, 'apiKey'), {
+        fetch: shadertoyFetch,
+      }),
+    ),
+    /** One Shadertoy media file by path; anything else is refused before a request. */
+    'fetch-shadertoy-asset': handle(async (_event, path: string) =>
+      fetchShadertoyAsset(stringArg(path, 'path'), { fetch: shadertoyFetch }),
+    ),
     'set-texture': handle(
       (
         _event,

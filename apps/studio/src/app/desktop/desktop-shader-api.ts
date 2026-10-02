@@ -94,6 +94,26 @@ export class DesktopShaderApi extends ShaderApi {
     return this.request(() => window.electron.bridge.shader.importShadertoy(idOrUrl, apiKey));
   }
 
+  // IPC cannot be cancelled; an abort stops the caller waiting and the reply is dropped.
+  override fetchShadertoySource(
+    idOrUrl: string,
+    apiKey: string,
+    signal?: AbortSignal,
+  ): Promise<{ sourceId: string; source: unknown }> {
+    return untilAborted(
+      this.request(() => window.electron.bridge.shader.fetchShadertoySource(idOrUrl, apiKey)),
+      signal,
+    );
+  }
+
+  override async fetchShadertoyAsset(path: string, signal?: AbortSignal): Promise<Uint8Array> {
+    const bytes = await untilAborted(
+      this.request(() => window.electron.bridge.shader.fetchShadertoyAsset(path)),
+      signal,
+    );
+    return new Uint8Array(bytes);
+  }
+
   override setTexture(id: string, channel: number, upload: TextureUpload): Promise<ShaderRecord> {
     return this.request(() => window.electron.bridge.shader.setTexture(id, channel, upload));
   }
@@ -105,4 +125,14 @@ export class DesktopShaderApi extends ShaderApi {
   override setThumbnail(id: string, upload: ThumbnailUpload): Promise<ShaderRecord> {
     return this.request(() => window.electron.bridge.shader.setThumbnail(id, upload));
   }
+}
+
+function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  signal.throwIfAborted();
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
 }

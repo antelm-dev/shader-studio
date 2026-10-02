@@ -38,6 +38,7 @@ import { validateThemeFields, type ThemeContribution } from './themes';
 
 export * from './themes';
 export * from './project';
+export * from './texture-requests';
 export * from './wallpaper-web';
 export * from './catalogue';
 

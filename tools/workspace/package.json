@@ -13,7 +13,7 @@
     "generate:isf-plugin": "tsx src/generate/isf-plugin.ts",
     "generate:plugins": "tsx src/generate/official-plugins.ts",
     "smoke": "tsx src/smoke.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p ../../plugins/official/tsconfig.json",
     "smoke:ssr": "tsx src/ssr-smoke.ts"
   },
   "devDependencies": {
