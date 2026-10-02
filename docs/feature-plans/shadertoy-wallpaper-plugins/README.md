@@ -27,7 +27,7 @@ T1–T3 → 01; T4 → 02; T5 → 03; T6–T8 → 04 and coordinator gates.
 - Remote default: `master`, observed at
   `615702fddc89189ae4e4c85f1ef3a82c5287e171`. It is the release destination,
   not the launch base for this feature's merged plugin/app layout.
-- Planning ref: `codex/plan-shadertoy-wallpaper-plugins`. Pin its actual plan
+- Planning ref: `plans/shadertoy-wallpaper-plugins`. Pin its actual plan
   commit before execution. Integration branch: `codex/integrate-external-plugins`,
   initialized from the recorded source base after checking for collisions.
 - All tasks are `integration-only`, `integration-tip`: neither new contracts
@@ -251,7 +251,7 @@ References: [Wallpaper project import](https://docs.wallpaperengine.io/en/web/fi
 ```yaml
 review_contract:
   milestone: shadertoy-wallpaper-installed-plugins
-  planning_ref: codex/plan-shadertoy-wallpaper-plugins
+  planning_ref: plans/shadertoy-wallpaper-plugins
   source_base: '2fff989e13da062fd5f2a895be9d07e97acfe067'
   default_branch: master
   integration_branch: codex/integrate-external-plugins
