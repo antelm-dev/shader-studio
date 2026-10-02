@@ -7,7 +7,7 @@ import type {
   NativeSurfaceOpenRequest,
   NativeSurfaceResult,
   NativeSurfaceSnapshot,
-} from '../../../contracts/desktop/contracts';
+} from '../../contracts/contracts';
 
 import type { SurfaceWindowManager } from '../windows/surface-window-manager';
 import { resolveSupportLinkUrl } from './support-links';

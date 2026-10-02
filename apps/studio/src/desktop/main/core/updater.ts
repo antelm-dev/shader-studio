@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
-import type { UpdateState } from '../../../contracts/desktop/contracts';
+import type { UpdateState } from '../../contracts/contracts';
 import { updateChannelForVersion } from './update-channel';
 
 const unsupportedState = (): UpdateState => ({

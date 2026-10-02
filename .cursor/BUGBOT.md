@@ -14,12 +14,12 @@ Do not report stylistic preferences, refactors, or hypothetical concerns without
 - Keep the TypeScript strictness guarantees intact: do not accept `any`, unused values, ignored errors, or weakened compiler settings as fixes.
 - UI-visible text must be represented in both `i18n/en.json` and `i18n/fr.json` when it is user-facing.
 - Treat validation, sanitization, and size limits at application boundaries as safety-critical, especially for shader sources, project files, API payloads, and MCP input.
-- Maintain typed IPC boundaries between the Angular renderer and Electron main process. Changes to the IPC contract require regenerating `apps/studio/src/contracts/desktop/ipc-bridge.ts` with `pnpm gen:ipc`; never edit that generated file directly.
+- Maintain typed IPC boundaries between the Angular renderer and Electron main process. Changes to the IPC contract require regenerating `apps/studio/src/desktop/contracts/ipc-bridge.ts` with `pnpm gen:ipc`; never edit that generated file directly.
 - Preserve compatibility when changing persisted projects, sessions, editor groups, or surface layouts: update schema/version/migration/validation paths together and avoid silently discarding user state.
 
 ## Generated and release artifacts
 
-Do not request edits to generated output: `dist/`, `dist-main/`, `dist-web/`, `release/`, or `apps/studio/src/contracts/desktop/ipc-bridge.ts`. Review the source or generator change instead.
+Do not request edits to generated output: `dist/`, `dist-main/`, `dist-web/`, `release/`, or `apps/studio/src/desktop/contracts/ipc-bridge.ts`. Review the source or generator change instead.
 
 ## Relevant checks
 

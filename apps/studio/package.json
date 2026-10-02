@@ -161,8 +161,7 @@
           "{projectRoot}/tsconfig.desktop.*.json",
           "{projectRoot}/package.json",
           "sharedGlobals",
-          "^production",
-          "{projectRoot}/src/contracts/desktop/**/*"
+          "^production"
         ]
       },
       "gen:ipc": {
@@ -173,10 +172,10 @@
           "{projectRoot}/tsconfig.desktop.main.json",
           "sharedGlobals",
           "^production",
-          "{projectRoot}/src/contracts/desktop/contracts.ts"
+          "{projectRoot}/src/desktop/contracts/contracts.ts"
         ],
         "outputs": [
-          "{projectRoot}/src/contracts/desktop/ipc-bridge.ts"
+          "{projectRoot}/src/desktop/contracts/ipc-bridge.ts"
         ]
       },
       "dev:renderer": {
@@ -239,7 +238,8 @@
     "namedInputs": {
       "webProduction": [
         "production",
-        "!{projectRoot}/src/desktop/**/*",
+        "!{projectRoot}/src/desktop/main/**/*",
+        "!{projectRoot}/src/desktop/preload/**/*",
         "!{projectRoot}/scripts/desktop/**/*",
         "!{projectRoot}/tsconfig.desktop.*.json",
         "!{projectRoot}/rollup.desktop.config.mjs",

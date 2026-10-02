@@ -1,6 +1,6 @@
 import { contextBridge } from 'electron';
 
-import { bridge } from '../../contracts/desktop/ipc-bridge';
+import { bridge } from '../contracts/ipc-bridge';
 
 const api = { bridge };
 export type ElectronApi = typeof api;

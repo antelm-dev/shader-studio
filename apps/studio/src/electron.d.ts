@@ -1,4 +1,4 @@
-import type { bridge } from './contracts/desktop/ipc-bridge';
+import type { bridge } from './desktop/contracts/ipc-bridge';
 
 type ElectronApi = { bridge: typeof bridge };
 

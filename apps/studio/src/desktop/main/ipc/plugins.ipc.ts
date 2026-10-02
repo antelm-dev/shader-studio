@@ -5,7 +5,7 @@ import type { WebContents } from 'electron';
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
 import { PLUGIN_LIMITS, parsePluginPackage } from '@shadergrove/shared';
-import type { StoredPlugin } from '../../../contracts/desktop/contracts';
+import type { StoredPlugin } from '../../contracts/contracts';
 
 /**
  * Installed local plugins, one file each under `<userData>/plugins`.

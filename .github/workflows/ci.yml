@@ -76,7 +76,7 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      # `window.electron` is typed via desktop main/preload → apps/studio/src/contracts/desktop/ipc-bridge.ts
+      # `window.electron` is typed via desktop main/preload → apps/studio/src/desktop/contracts/ipc-bridge.ts
       # (gitignored). Without this, ng serve hits noImplicitAny on bridge callbacks.
       - name: Generate IPC bridge
         run: pnpm gen:ipc

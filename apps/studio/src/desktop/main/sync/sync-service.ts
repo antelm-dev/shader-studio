@@ -5,7 +5,7 @@ import type {
   SyncRemoveRequest,
   SyncRemoveResult,
   SyncStatus,
-} from '../../../contracts/desktop/contracts';
+} from '../../contracts/contracts';
 import type {
   ImportResult,
   ShaderPayload,

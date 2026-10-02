@@ -11,7 +11,7 @@
     "dist-web/**",
     "release/**",
     "data/**",
-    "apps/studio/src/contracts/desktop/ipc-bridge.ts"
+    "apps/studio/src/desktop/contracts/ipc-bridge.ts"
   ],
   "rules": {
     "typescript/no-explicit-any": "error",
@@ -32,7 +32,7 @@
             "paths": [
               {
                 "name": "electron",
-                "message": "Electron APIs belong in src/desktop; the Angular renderer uses src/contracts/desktop types."
+                "message": "Electron APIs belong in src/desktop; the Angular renderer uses src/desktop/contracts types."
               }
             ],
             "patterns": [
@@ -48,7 +48,7 @@
                 "message": "The Angular app must not import Node entry points from src/server or src/desktop."
               },
               {
-                "group": ["**/contracts/desktop/ipc-bridge", "**/contracts/desktop/ipc-bridge.*"],
+                "group": ["**/desktop/contracts/ipc-bridge", "**/desktop/contracts/ipc-bridge.*"],
                 "allowTypeImports": true,
                 "message": "The generated IPC bridge runs in the Electron preload; the Angular renderer may import its types only."
               }

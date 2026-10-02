@@ -14,9 +14,9 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { AccountState, AccountUser, SignInResult } from '../../../contracts/desktop/contracts';
+import type { AccountState, AccountUser, SignInResult } from '../../contracts/contracts';
 
-export type { AccountState } from '../../../contracts/desktop/contracts';
+export type { AccountState } from '../../contracts/contracts';
 
 export interface AccountSession {
   state(): AccountState;

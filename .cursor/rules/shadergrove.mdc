@@ -12,14 +12,14 @@ A self-hosted WebGL shader viewer/editor. pnpm monorepo (`pnpm@10`, Node `^22.22
 - `apps/studio` — the application (`@shadergrove/studio`): Angular 22 UI in `src/app/`, Express composition in `src/server/`, and Electron main/preload in `src/desktop/`. `src/app/` never imports server or Electron entry points (oxlint `no-restricted-imports`, see `.oxlintrc.json`). Desktop scripts live in `scripts/desktop/`. Angular, server, main and preload retain separate tsconfigs and test runners.
 - `apps/studio/src/server/api` — the HTTP API: one Nest module per feature (`system`, `shaders`, `auth`, `publications`, `admin`) over `core/`. Mounted by `src/server/index.ts`; API tests run in Node via `vitest.server.config.ts`.
 - `libs/backend` — shared backend logic (file storage, project model) used by web/server/desktop.
-- `apps/studio/src/contracts/desktop` — plain IPC contracts and generated bridge. Only Electron preload imports the bridge at runtime; the renderer imports its types.
+- `apps/studio/src/desktop/contracts` — plain IPC contracts and generated bridge. Only Electron preload imports the bridge at runtime; the renderer imports its types.
 - `tools/mcp` — MCP server exposing Shadergrove to AI tools (bridges to the running app via `SHADER_STUDIO_MCP_PORT`/`SHADER_STUDIO_MCP_TOKEN`, default port 4310).
 - `libs/shared` — types/utilities shared across all packages.
 - `tools/maintenance` — one-shot CLI for the PostgreSQL deployment (`migrate-files`, `claim-shaders`), bundled to `dist/shadergrove/cli.mjs` (`@shadergrove/maintenance`).
 - `tools/workspace` — repository checks, generators, smoke tests, and automation.
 - `examples/shaders/*` — example GLSL shaders (`fragment.glsl` / `vertex.glsl` pairs), not app code.
 
-Never edit generated output directly: `dist/`, `dist-main/`, `dist-web/`, `release/`, and `apps/studio/src/contracts/desktop/ipc-bridge.ts` (regenerate via `pnpm gen:ipc` instead).
+Never edit generated output directly: `dist/`, `dist-main/`, `dist-web/`, `release/`, and `apps/studio/src/desktop/contracts/ipc-bridge.ts` (regenerate via `pnpm gen:ipc` instead).
 
 ## Commands (always run from repo root with pnpm, never npm/yarn)
 

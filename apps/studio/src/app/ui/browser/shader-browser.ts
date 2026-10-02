@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import type { SyncStatus } from '../../../contracts/desktop/contracts';
+import type { SyncStatus } from '../../../desktop/contracts/contracts';
 import type { ThumbnailMeta } from '@shadergrove/shared/model';
 import { AuthService } from '../../auth/auth.service';
 import { DesktopAccount } from '../../desktop/desktop-account';

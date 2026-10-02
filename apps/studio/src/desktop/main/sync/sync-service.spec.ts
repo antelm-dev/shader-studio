@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LOCAL_SCOPE, ShaderLibrary, StorageError } from '@shadergrove/backend/library';
 import { SqliteRepository } from '@shadergrove/backend/persistence/sqlite';
-import type { SyncChangedEvent, SyncRemoveMode } from '../../../contracts/desktop/contracts';
+import type { SyncChangedEvent, SyncRemoveMode } from '../../contracts/contracts';
 import { buildShaderBundle, extFromMime, parseBundle } from '@shadergrove/shared/validate';
 import type { AccountState } from '../account/account-session';
 import { notifyingWrites, SyncService } from './sync-service';

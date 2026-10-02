@@ -389,10 +389,10 @@ apps/
       server/            Express host: security headers, /api mount, static, SSR
         create-library.ts  picks PostgreSQL (DATABASE_URL) or SQLite, then seeds
         api/             NestJS modules: core, system, shaders, auth, publications, admin
-      contracts/desktop/ plain IPC contracts and the generated bridge
       desktop/
         main/            Electron lifecycle, windows, updates, and IPC handlers
         preload/         sandboxed context bridge
+        contracts/       plain IPC contracts and the generated bridge
     scripts/desktop/     Electron development, IPC generation and packaging
     package.json         @shadergrove/studio, with separate runtime targets
 

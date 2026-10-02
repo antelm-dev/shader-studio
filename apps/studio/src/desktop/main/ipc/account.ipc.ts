@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron';
 import { defineIpcEvents, defineIpcModule, handle, listen } from 'electron-ipc-module';
 
-import type { AccountState } from '../../../contracts/desktop/contracts';
+import type { AccountState } from '../../contracts/contracts';
 import type { DesktopAccountSession } from '../account/account-session';
 
 type AccountEvents = { 'account-changed': [state: AccountState] };

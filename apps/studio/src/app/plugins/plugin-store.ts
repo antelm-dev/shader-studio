@@ -1,4 +1,4 @@
-import type { StoredPlugin } from '../../contracts/desktop/contracts';
+import type { StoredPlugin } from '../../desktop/contracts/contracts';
 
 export type { StoredPlugin };
 

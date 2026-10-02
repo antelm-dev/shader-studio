@@ -6,7 +6,7 @@ const log = createLogger('gen:ipc');
 
 const result = runIpcBridgeGeneration({
   ipcDir: './src/desktop/main/ipc',
-  outFile: './src/contracts/desktop/ipc-bridge.ts',
+  outFile: './src/desktop/contracts/ipc-bridge.ts',
   tsconfig: './tsconfig.desktop.main.json',
 });
 

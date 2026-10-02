@@ -6,7 +6,7 @@ import { defineIpcModule, handle } from 'electron-ipc-module';
 
 import { PLUGIN_LIMITS } from '@shadergrove/shared';
 import { parseBundle } from '@shadergrove/shared/validate';
-import type { DialogResult } from '../../../contracts/desktop/contracts';
+import type { DialogResult } from '../../contracts/contracts';
 
 // A textured shader's bundle inlines its channel images as base64, and a
 // collection can hold many shaders — comfortably larger than the old
