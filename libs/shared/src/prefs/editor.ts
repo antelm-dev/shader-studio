@@ -29,6 +29,7 @@ import {
   type Rect,
   type Size,
 } from '../geometry';
+import { isPluginThemeRef, type PluginThemeRef } from '../plugin/themes';
 
 // ---------------------------------------------------------------------------
 // Window
@@ -79,13 +80,8 @@ export interface EditorWindowState {
 export type WordWrapMode = 'off' | 'on' | 'bounded';
 export type CursorBlinking = 'blink' | 'smooth' | 'solid';
 
-/**
- * `auto` tracks the application's own light/dark setting, which is what most
- * people want and what makes the editor read as part of the app rather than an
- * iframe someone dropped into it. The rest pin the editor to one scheme.
- */
-export type EditorThemeId =
-  | 'auto'
+/** The palettes the app ships, always available whatever is installed. */
+export type BuiltinEditorThemeId =
   | 'studio-dark'
   | 'studio-light'
   | 'midnight'
@@ -93,8 +89,7 @@ export type EditorThemeId =
   | 'contrast-dark'
   | 'contrast-light';
 
-export const EDITOR_THEME_IDS: readonly EditorThemeId[] = [
-  'auto',
+export const BUILTIN_EDITOR_THEME_IDS: readonly BuiltinEditorThemeId[] = [
   'studio-dark',
   'studio-light',
   'midnight',
@@ -102,6 +97,34 @@ export const EDITOR_THEME_IDS: readonly EditorThemeId[] = [
   'contrast-dark',
   'contrast-light',
 ];
+
+/**
+ * `auto` tracks the application's own palette — built-in or a plugin theme —
+ * which is what most people want and what makes the editor read as part of the
+ * app rather than an iframe someone dropped into it. The rest pin the editor to
+ * one palette: a built-in, or a plugin theme by reference.
+ *
+ * A reference is kept on syntax alone; whether that theme is installed is only
+ * known once the plugins have loaded, and is decided where the theme is
+ * resolved, not here.
+ */
+export type EditorThemeId = 'auto' | BuiltinEditorThemeId | PluginThemeRef;
+
+/** `auto` and the built-ins: every id that needs no plugin. */
+export const EDITOR_THEME_IDS: readonly ('auto' | BuiltinEditorThemeId)[] = [
+  'auto',
+  ...BUILTIN_EDITOR_THEME_IDS,
+];
+
+export function isBuiltinEditorThemeId(value: unknown): value is BuiltinEditorThemeId {
+  return (BUILTIN_EDITOR_THEME_IDS as readonly unknown[]).includes(value);
+}
+
+/** A stored editor theme, read back: known ids and well-formed references survive, the rest is `auto`. */
+export function sanitizeEditorThemeId(value: unknown): EditorThemeId {
+  if (value === 'auto' || isBuiltinEditorThemeId(value) || isPluginThemeRef(value)) return value;
+  return DEFAULT_EDITOR_APPEARANCE.theme;
+}
 
 export interface EditorAppearance {
   fontFamily: string;
@@ -246,7 +269,7 @@ export function sanitizeAppearance(value: unknown): EditorAppearance {
       ['blink', 'smooth', 'solid'] as const,
       defaults.cursorBlinking,
     ),
-    theme: oneOf(input['theme'], EDITOR_THEME_IDS, defaults.theme),
+    theme: sanitizeEditorThemeId(input['theme']),
   };
 }
 

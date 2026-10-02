@@ -81,7 +81,9 @@ html {
   // The studio opens as a dark room with a lit canvas in it — most shaders are
   // dark, and bright chrome fights the preview it is meant to frame. The light
   // theme is there for the times you are reading code rather than watching it.
-  // `Preferences` overrides this inline once it knows what you last chose.
+  // `AppThemes` overrides this inline once it knows what you last chose — and a
+  // plugin theme brings its own scheme, plus inline values for the colour
+  // tokens below that it defines.
   color-scheme: dark;
 
   @include mat.theme(

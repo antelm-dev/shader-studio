@@ -7,7 +7,9 @@ import { DesktopPlatform } from '../../desktop/desktop-platform';
 import { isContainedPlacement } from '@shadergrove/shared/surfaces';
 import { PREVIEW_MINIMIZED_SIZE } from '@shadergrove/shared/preview-prefs';
 import type { ResizeEdge } from '@shadergrove/shared/geometry';
-import { COLOR_SCHEME_OPTIONS, Preferences, colorSchemeIcon } from '../../prefs/preferences';
+import { Preferences } from '../../prefs/preferences';
+import { AppThemes } from '../../themes/app-themes';
+import { ThemeMenu } from '../../themes/theme-menu';
 import { ShaderStore } from '../../workspace/shader-store';
 import { ShaderCanvas } from '../../rendering/shader-canvas';
 import { I18n } from '../../i18n/i18n';
@@ -48,6 +50,7 @@ import { PreviewWindowControls } from './preview-window-controls';
     SurfaceResizeHandles,
     SurfaceTitleBarDirective,
     ShaderCanvas,
+    ThemeMenu,
     TranslatePipe,
   ],
   template: `
@@ -150,8 +153,8 @@ import { PreviewWindowControls } from './preview-window-controls';
 
       <mat-divider />
 
-      <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
-        <mat-icon>{{ themeIcon() }}</mat-icon>
+      <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu.menu()">
+        <mat-icon>{{ themes.icon() }}</mat-icon>
         <span>{{ 'menu.theme' | translate }}</span>
       </button>
 
@@ -167,22 +170,7 @@ import { PreviewWindowControls } from './preview-window-controls';
       }
     </mat-menu>
 
-    <mat-menu #themeMenu="matMenu">
-      @for (option of colorSchemeOptions; track option.value) {
-        <button
-          mat-menu-item
-          type="button"
-          [attr.aria-checked]="preferences.value().colorScheme === option.value"
-          (click)="commands.setColorScheme(option.value)"
-        >
-          <mat-icon>{{ option.icon }}</mat-icon>
-          <span>{{ commands.themeLabel(option.value) }}</span>
-          @if (preferences.value().colorScheme === option.value) {
-            <mat-icon class="hint" aria-hidden="true">check</mat-icon>
-          }
-        </button>
-      }
-    </mat-menu>
+    <app-theme-menu #themeMenu="appThemeMenu" />
 
     @if (windowed() && projected().resizableFloating) {
       <surface-resize-handles
@@ -363,10 +351,7 @@ export class PreviewShell {
       : null,
   );
 
-  protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
-  protected readonly themeIcon = computed(() =>
-    colorSchemeIcon(this.preferences.value().colorScheme),
-  );
+  protected readonly themes = inject(AppThemes);
 
   protected readonly frameAnimating = computed(
     () => !this.gesture.dragging() && !this.reducedMotion.enabled(),

@@ -8,7 +8,7 @@
  * ```json
  * { "manifest": { "id", "version", "protocolVersion", "appVersionRange",
  *                 "name", "publisher", "license", "contributions": [...] },
- *   "code": "<JS for every importer/exporter>",
+ *   "code": "<JS for every importer/exporter, and only then>",
  *   "glsl": { "<effect id>": "<GLSL>" } }
  * ```
  *
@@ -17,15 +17,21 @@
  * independent: a package can be valid yet incompatible with this app.
  *
  * Validation happens before anything is activated. An `effect` is declarative
- * (GLSL plus controls the host turns into a pass); `importer`/`exporter` are JS
- * run in the plugin Worker. Only the host picks files, builds forms, saves and
- * mutates the project — see `ImporterInput` / `ExporterResult` for the calls.
+ * (GLSL plus controls the host turns into a pass), and so is a `theme` (colour
+ * roles the host maps onto its own tokens — see `themes`); `importer`/`exporter`
+ * are JS run in the plugin Worker. Only the host picks files, builds forms,
+ * saves and mutates the project — see `ImporterInput` / `ExporterResult` for the
+ * calls.
  */
 import type { ShaderControl, ShaderParams } from '../model';
 import { sanitizeParams, validateControls } from '../validate/controls';
 import { LIMITS } from '../validate/limits';
 import { isCleanString, isRecord } from '../validate/primitives';
 import { fail, ok, type Result } from '../validate/result';
+import { CONTRIBUTION_ID_PATTERN, PACKAGE_ID_PATTERN } from './ids';
+import { validateThemeFields, type ThemeContribution } from './themes';
+
+export * from './themes';
 
 export const PLUGIN_PROTOCOL_VERSION = 1;
 
@@ -50,7 +56,7 @@ export const PLUGIN_LIMITS = {
   callTimeoutMs: 10_000,
 } as const;
 
-export type PluginContributionKind = 'effect' | 'importer' | 'exporter';
+export type PluginContributionKind = 'effect' | 'importer' | 'exporter' | 'theme';
 
 interface ContributionBase {
   id: string;
@@ -85,7 +91,15 @@ export interface ExporterContribution extends ContributionBase {
   params: ShaderControl[];
 }
 
-export type PluginContribution = EffectContribution | ImporterContribution | ExporterContribution;
+export type PluginContribution =
+  | EffectContribution
+  | ImporterContribution
+  | ExporterContribution
+  | ThemeContribution;
+
+/** The kinds whose work runs as JS in the plugin Worker, and so need `code`. */
+export const isCodeContribution = (contribution: PluginContribution): boolean =>
+  contribution.kind === 'importer' || contribution.kind === 'exporter';
 
 export interface PluginManifest {
   id: string;
@@ -101,7 +115,7 @@ export interface PluginManifest {
 
 export interface PluginPackage {
   manifest: PluginManifest;
-  /** JS bundle for the Worker; required when there is an importer or exporter. */
+  /** JS bundle for the Worker; required when there is an importer or exporter, refused otherwise. */
   code?: string;
   /** GLSL by effect id; exactly one entry per `effect` contribution. */
   glsl: Record<string, string>;
@@ -203,8 +217,6 @@ declare const TextDecoder: new (
 const encoder = new TextEncoder();
 export const utf8Bytes = (text: string): number => encoder.encode(text).length;
 
-const ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-const CONTRIBUTION_ID_PATTERN = /^[a-z][a-z0-9-]{0,47}$/;
 const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/;
 const MIME_PATTERN = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/;
 const EXTENSION_PATTERN = /^\.[a-z0-9]{1,16}$/;
@@ -220,7 +232,7 @@ const MANIFEST_KEYS = [
   'license',
   'contributions',
 ];
-const CONTRIBUTION_KEYS: Record<PluginContributionKind, string[]> = {
+const CONTRIBUTION_KEYS: Record<Exclude<PluginContributionKind, 'theme'>, string[]> = {
   effect: ['kind', 'id', 'name', 'controls'],
   importer: [
     'kind',
@@ -280,7 +292,7 @@ export function validatePluginPackage(input: unknown): Result<PluginPackage> {
       return fail(`package.code must be at most ${PLUGIN_LIMITS.codeBytes} bytes`);
     }
   }
-  const needsCode = manifest.value.contributions.some((c) => c.kind !== 'effect');
+  const needsCode = manifest.value.contributions.some(isCodeContribution);
   if (needsCode && !code)
     return fail('package.code is required by importer/exporter contributions');
   if (!needsCode && code !== undefined) return fail('package.code is only for importer/exporter');
@@ -317,7 +329,7 @@ function validateManifest(input: unknown): Result<PluginManifest> {
   }
 
   const { id, version, protocolVersion, appVersionRange, contributions } = input;
-  if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+  if (typeof id !== 'string' || !PACKAGE_ID_PATTERN.test(id)) {
     return fail('manifest.id must be lowercase letters, digits, ".", "_" or "-" (64 max)');
   }
   if (typeof version !== 'string' || !VERSION_PATTERN.test(version)) {
@@ -373,11 +385,15 @@ function validateManifest(input: unknown): Result<PluginManifest> {
 function validateContribution(input: unknown, at: string): Result<PluginContribution> {
   if (!isRecord(input)) return fail(`${at} must be an object`);
   const kind = input['kind'];
-  if (kind !== 'effect' && kind !== 'importer' && kind !== 'exporter') {
-    return fail(`${at}.kind "${String(kind)}" is not supported (effect, importer or exporter)`);
+  if (kind !== 'effect' && kind !== 'importer' && kind !== 'exporter' && kind !== 'theme') {
+    return fail(
+      `${at}.kind "${String(kind)}" is not supported (effect, importer, exporter or theme)`,
+    );
   }
-  const unknownKey = firstUnknownKey(input, CONTRIBUTION_KEYS[kind]);
-  if (unknownKey) return fail(`${at}.${unknownKey} is not a known field`);
+  if (kind !== 'theme') {
+    const unknownKey = firstUnknownKey(input, CONTRIBUTION_KEYS[kind]);
+    if (unknownKey) return fail(`${at}.${unknownKey} is not a known field`);
+  }
 
   const id = input['id'];
   if (typeof id !== 'string' || !CONTRIBUTION_ID_PATTERN.test(id)) {
@@ -386,6 +402,8 @@ function validateContribution(input: unknown, at: string): Result<PluginContribu
   const name = text(input['name'], `${at}.name`);
   if (!name.ok) return name;
   const base = { id, name: name.value };
+
+  if (kind === 'theme') return validateThemeFields(input, at, base);
 
   if (kind === 'effect') {
     const controls = controlList(input['controls'], `${at}.controls`, PLUGIN_LIMITS.effectControls);

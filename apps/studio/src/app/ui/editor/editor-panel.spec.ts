@@ -54,7 +54,6 @@ class CodeEditorStub {
   readonly doc = input.required<EditorDoc>();
   readonly liveIds = input<readonly string[] | null>(null);
   readonly diagnostics = input<readonly unknown[]>([]);
-  readonly colorScheme = input<'light' | 'dark'>('dark');
   readonly appearance = input(DEFAULT_EDITOR_APPEARANCE);
   readonly valueChange = output<{ id: string; value: string }>();
 

@@ -7,7 +7,6 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { CodeEditor, type EditorDoc } from '../../editor/code-editor';
 import { EditorSettings } from '../../editor/editor-settings';
 import { FontLoader } from '../../editor/google-fonts';
-import { Preferences } from '../../prefs/preferences';
 import { FontPickerPanel } from './font-picker-panel';
 import { ThemePanel } from './theme-panel';
 import { TypeLayoutPanel } from './type-layout-panel';
@@ -79,7 +78,6 @@ void main() {
         [doc]="sample"
         [readOnly]="true"
         [appearance]="appearance()"
-        [colorScheme]="preferences.resolved()"
       />
     </mat-dialog-content>
 
@@ -143,7 +141,6 @@ export class EditorSettingsDialog {
 
   protected readonly settings = inject(EditorSettings);
   protected readonly fonts = inject(FontLoader);
-  protected readonly preferences = inject(Preferences);
 
   /** A document of its own, so the preview's model never collides with a real file's. */
   protected readonly sample: EditorDoc = {

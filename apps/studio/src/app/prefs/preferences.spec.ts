@@ -133,3 +133,54 @@ describe('Preferences inspector surface mirror', () => {
     expect(prefs.value().inspectorTab).toBe('presets');
   });
 });
+
+describe('Preferences theme fields', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('migrates a store from before plugin themes without losing the scheme or editor theme', () => {
+    const prefs = makePreferences(
+      JSON.stringify({ colorScheme: 'light', editorAppearance: { theme: 'parchment' } }),
+    );
+    expect(prefs.value().appThemeId).toBe('builtin');
+    expect(prefs.value().colorScheme).toBe('light');
+    expect(prefs.value().editorAppearance.theme).toBe('parchment');
+  });
+
+  it('keeps well-formed plugin references for the app and the editor, before any plugin loads', () => {
+    const prefs = makePreferences(
+      JSON.stringify({
+        colorScheme: 'system',
+        appThemeId: 'plugin:dev.example.themes/amber-dark',
+        editorAppearance: { theme: 'plugin:dev.example.themes/amber-light', fontSize: 15 },
+      }),
+    );
+    expect(prefs.value().appThemeId).toBe('plugin:dev.example.themes/amber-dark');
+    expect(prefs.value().colorScheme).toBe('system');
+    expect(prefs.value().editorAppearance).toMatchObject({
+      theme: 'plugin:dev.example.themes/amber-light',
+      fontSize: 15,
+    });
+  });
+
+  it('turns malformed theme values into the defaults and keeps every other field', () => {
+    const prefs = makePreferences(
+      JSON.stringify({
+        colorScheme: 'light',
+        appThemeId: 'plugin:../../etc',
+        editorAppearance: { theme: { id: 'x' }, fontSize: 15 },
+        fileExplorerWidth: 300,
+      }),
+    );
+    expect(prefs.value().appThemeId).toBe('builtin');
+    expect(prefs.value().colorScheme).toBe('light');
+    expect(prefs.value().editorAppearance).toMatchObject({ theme: 'auto', fontSize: 15 });
+    expect(prefs.value().fileExplorerWidth).toBe(300);
+  });
+
+  it('leaves the root colour scheme to the theme service', () => {
+    const prefs = makePreferences(JSON.stringify({ colorScheme: 'light' }));
+    TestBed.tick();
+    expect(prefs.resolved()).toBe('light');
+    expect(TestBed.inject(DOCUMENT).documentElement.style.colorScheme).toBeUndefined();
+  });
+});

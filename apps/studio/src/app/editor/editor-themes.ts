@@ -1,5 +1,9 @@
 import type { ResolvedColorScheme } from '../prefs/preferences';
-import type { EditorThemeId } from '@shadergrove/shared/editor-prefs';
+import {
+  isBuiltinEditorThemeId,
+  type BuiltinEditorThemeId,
+  type EditorThemeId,
+} from '@shadergrove/shared/editor-prefs';
 
 /**
  * The editor's colour schemes.
@@ -16,8 +20,8 @@ import type { EditorThemeId } from '@shadergrove/shared/editor-prefs';
 
 export type ThemeBase = 'vs' | 'vs-dark' | 'hc-black' | 'hc-light';
 
-/** A theme actually registered with Monaco: everything except `auto`. */
-export type ConcreteThemeId = Exclude<EditorThemeId, 'auto'>;
+/** A built-in theme, registered with Monaco up front. */
+export type ConcreteThemeId = BuiltinEditorThemeId;
 
 export interface EditorThemePalette {
   base: ThemeBase;
@@ -208,7 +212,7 @@ export const EDITOR_THEMES: readonly EditorThemeChoice[] = [
  * app, because someone will want exactly that.
  */
 export function resolveThemeId(theme: EditorThemeId, scheme: ResolvedColorScheme): ConcreteThemeId {
-  if (theme !== 'auto') return theme;
+  if (isBuiltinEditorThemeId(theme)) return theme;
   return scheme === 'light' ? 'studio-light' : 'studio-dark';
 }
 
