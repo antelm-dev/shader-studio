@@ -1,0 +1,30 @@
+// Started by playwright.config.ts's webServer: `ng serve` for apps/studio on a
+// throwaway SQLite store that is removed once the server stops. Arguments are
+// forwarded to `ng serve`. Run directly by Node, so: erasable TypeScript only.
+//
+// Windows offers no graceful stop (Playwright force-kills the process tree), so
+// the store is also wiped on start: a run that was killed leaves at most one.
+import { spawn } from 'node:child_process';
+import { rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+
+const studio = resolve(import.meta.dirname, '../../studio');
+const ng = createRequire(join(studio, 'package.json')).resolve('@angular/cli/bin/ng.js');
+const dataDir = join(tmpdir(), 'shadergrove-e2e');
+const wipe = () => rmSync(dataDir, { recursive: true, force: true, maxRetries: 5 });
+
+wipe();
+const server = spawn(process.execPath, [ng, 'serve', ...process.argv.slice(2)], {
+  cwd: studio,
+  env: { ...process.env, SHADER_DATA_DIR: dataDir },
+  stdio: 'inherit',
+});
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => server.kill(signal));
+}
+server.on('exit', (code) => {
+  wipe();
+  process.exit(code ?? 0);
+});

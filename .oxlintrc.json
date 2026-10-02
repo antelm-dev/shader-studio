@@ -11,6 +11,9 @@
     "dist-web/**",
     "release/**",
     "data/**",
+    "**/test-results/**",
+    "**/playwright-report/**",
+    "apps/studio-e2e/.auth/**",
     "apps/studio/src/desktop/contracts/ipc-bridge.ts"
   ],
   "rules": {
