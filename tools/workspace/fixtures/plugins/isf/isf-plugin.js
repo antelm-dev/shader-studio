@@ -12,6 +12,7 @@
 //
 // Supported: ISFVSN 2, one `inputImage`, no PASSES (or one plain pass), inputs of
 // type float, bool, long (with VALUES) and color (alpha dropped: controls are RGB).
+// Native exports sample inputImage with texture2D and need sampler2D hosts; rectangle-texture hosts need sampling rewritten with IMG_NORM_PIXEL.
 // Built-ins: isf_FragNormCoord, RENDERSIZE, TIME, PASSINDEX, IMG_THIS_PIXEL,
 // IMG_NORM_THIS_PIXEL (and IMG_THIS_NORM_PIXEL), IMG_NORM_PIXEL, IMG_PIXEL, IMG_SIZE. Anything else fails to
 // compile, and the host shows where.
@@ -765,6 +766,7 @@ function wrapNative(effect) {
   return [
     '// Exported from a Shadergrove custom effect: vec4 effect(vec4 color, vec2 uv) runs on',
     '// every pixel of inputImage. The defines map its names onto ISF’s.',
+    '// This effect samples inputImage with texture2D and needs a host that binds images as sampler2D; rectangle-texture hosts need sampling rewritten with IMG_NORM_PIXEL.',
     '#define tDiffuse inputImage',
     '#define vUv isf_FragNormCoord',
     '#define u_resolution RENDERSIZE',

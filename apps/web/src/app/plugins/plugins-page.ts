@@ -187,7 +187,7 @@ type Message = { text: string; error: boolean };
             <mat-slide-toggle
               [attr.data-testid]="'plugin-enable-' + installed.id"
               [attr.aria-label]="'plugins.enable' | translate: { name: title(installed) }"
-              [disabled]="installed.problem !== null"
+              [disabled]="installed.problem !== null || busy() !== null"
               [ngModel]="installed.active"
               (ngModelChange)="setEnabled(installed, $event)"
             />
@@ -196,6 +196,7 @@ type Message = { text: string; error: boolean };
               type="button"
               [attr.data-testid]="'plugin-remove-' + installed.id"
               [attr.aria-label]="'plugins.remove' | translate: { name: title(installed) }"
+              [disabled]="busy() !== null"
               (click)="remove(installed)"
             >
               <mat-icon>delete</mat-icon>
@@ -700,7 +701,7 @@ export class PluginsPage {
   }
 
   private async run(key: string, action: () => Promise<void>): Promise<void> {
-    if (this.busy() !== null) return;
+    if (this.busy() !== null) throw new Error('A plugin action is already running.');
     this.busy.set(key);
     this.message.set(null);
     try {
