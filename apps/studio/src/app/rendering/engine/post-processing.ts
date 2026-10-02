@@ -176,6 +176,13 @@ export class PostProcessing {
   onRenderPathChanged: (() => void) | null = null;
 
   /**
+   * Fired whenever the chain may draw differently — including when it changes
+   * asynchronously, after the modules load or edited custom code compiles — so
+   * a paused preview knows to draw again.
+   */
+  onChanged: (() => void) | null = null;
+
+  /**
    * Every custom-effect problem in the chain, whenever that list changes:
    * rejected code, an API this app does not run, a suspension. Each points at
    * its effect's document (`effectDocId`).
@@ -241,6 +248,7 @@ export class PostProcessing {
     }
     this.report();
     if (before !== this.usesComposer()) this.onRenderPathChanged?.();
+    this.onChanged?.();
   }
 
   /**

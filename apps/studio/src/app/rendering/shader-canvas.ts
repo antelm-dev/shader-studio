@@ -461,8 +461,12 @@ export class ShaderCanvas {
     }
 
     // Two complete draws let newly allocated multipass targets receive useful
-    // contents before they become visible.
-    if (this.settleFramesRemaining === 0) this.settleFramesRemaining = SETTLE_FRAMES;
+    // contents before they become visible. Asked for explicitly: a paused
+    // preview only draws when told to, and the reveal waits on these frames.
+    if (this.settleFramesRemaining === 0) {
+      this.settleFramesRemaining = SETTLE_FRAMES;
+      engine.requestFrames(SETTLE_FRAMES);
+    }
   }
 
   private onFrameRendered(): void {
