@@ -590,7 +590,13 @@ function inputToControl(input) {
           typeof labels[index] === 'string' && labels[index].trim()
             ? labels[index].trim()
             : String(value);
-        options[name in options ? `${name} (${value})` : name] = value;
+        let optionName = name;
+        let attempt = 1;
+        while (optionName in options) {
+          optionName = `${name} (${value})${attempt === 1 ? '' : ` ${attempt}`}`;
+          attempt++;
+        }
+        options[optionName] = value;
       });
       return {
         control: {

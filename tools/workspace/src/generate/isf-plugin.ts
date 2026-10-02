@@ -6,6 +6,7 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { createLogger } from '../lib/logger.js';
 import { root } from '../lib/paths.js';
@@ -19,7 +20,7 @@ export function buildIsfPackage(): string {
   return `${JSON.stringify({ manifest, code }, null, 2)}\n`;
 }
 
-if (import.meta.url === `file:///${process.argv[1]?.replace(/\\/g, '/')}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const out = resolve(dir, 'isf.sgplugin.json');
   writeFileSync(out, buildIsfPackage());
   log.info(`Wrote ${out}`);

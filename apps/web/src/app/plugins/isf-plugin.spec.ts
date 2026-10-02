@@ -140,6 +140,37 @@ describe('importing ISF FX filters', () => {
     ]);
   });
 
+  it.each([
+    {
+      labels: ['Mode', 'Mode (2)', 'Mode'],
+      options: { Mode: 0, 'Mode (2)': 1, 'Mode (2) 2': 2 },
+    },
+    {
+      labels: ['Mode', 'Mode (4)', 'Mode (4) 2', 'Mode (4) 3', 'Mode'],
+      options: { Mode: 0, 'Mode (4)': 1, 'Mode (4) 2': 2, 'Mode (4) 3': 3, 'Mode (4) 4': 4 },
+    },
+  ])('keeps every long input value when labels collide: $labels', async ({ labels, options }) => {
+    const header = {
+      ISFVSN: '2',
+      INPUTS: [
+        { NAME: 'inputImage', TYPE: 'image' },
+        {
+          NAME: 'mode',
+          TYPE: 'long',
+          VALUES: labels.map((_, index) => index),
+          LABELS: labels,
+          DEFAULT: 1,
+        },
+      ],
+    };
+    const effect = await importIsf(
+      `/*${JSON.stringify(header)}*/\nvoid main() { gl_FragColor = IMG_THIS_PIXEL(inputImage); }`,
+    );
+
+    expect(effect.controls).toEqual([{ key: 'mode', type: 'select', default: 1, options }]);
+    expect(effect.values).toEqual({ mode: 1 });
+  });
+
   it('turns float, bool, color and long inputs into controls with their defaults', async () => {
     const effect = await importIsf(read('examples/controls.fs'));
 
