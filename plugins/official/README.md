@@ -63,7 +63,9 @@ maxInputBytes, maxOutputBytes }`. Method `projectExporter:<id>`, called with
   nothing saved): `{ name, author?, project, controls, params, channels,
 postProcessingActive }`, where `channels` is texture _metadata_ only. It
   returns `{ data, warnings }`; `data` must satisfy the runtime's schema
-  (`libs/shared/src/plugin/wallpaper-web.ts`). The host runtime alone writes
+  (`libs/shared/src/plugin/wallpaper-web.ts`): every control as a `uniforms`
+  entry with its exact value, and the controls Wallpaper Engine can show as
+  `properties` that override their uniform. The host runtime alone writes
   executable files and assets.
 - Only the adapter ids above resolve (`SOURCE_PROVIDER_IDS`,
   `EXPORT_RUNTIME_IDS`); naming one selects host code and grants the plugin

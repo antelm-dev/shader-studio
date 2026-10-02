@@ -8,10 +8,22 @@
  * a numbered sibling — and the files are written into a hidden staging folder
  * that is renamed into place only once every write succeeded, so a failure or
  * a crash never leaves a half-written project under the final name.
+ *
+ * A delivery is a session (`ProjectFolderSessions`): the folder is picked
+ * first, the files are sent second, and the renderer can cancel in between or
+ * during the write. Cancellation is checked before every file and before the
+ * staging folder is committed, so a cancelled export leaves nothing on disk.
  */
 import { randomBytes } from 'node:crypto';
 import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+
+export class ProjectWriteCancelled extends Error {
+  constructor() {
+    super('The export was cancelled');
+    this.name = 'ProjectWriteCancelled';
+  }
+}
 
 export const MAX_PROJECT_BYTES = 64 * 1024 * 1024;
 const MAX_FILES = 8;
@@ -80,7 +92,12 @@ export async function writeProjectFolder(
   parent: string,
   stem: string,
   files: readonly ProjectFile[],
+  cancelled: () => boolean = () => false,
 ): Promise<string> {
+  const proceed = () => {
+    if (cancelled()) throw new ProjectWriteCancelled();
+  };
+  proceed();
   const leaf = sanitizeProjectStem(stem);
   let target = join(parent, leaf);
   for (let suffix = 2; await exists(target); suffix++) {
@@ -91,16 +108,81 @@ export async function writeProjectFolder(
   await mkdir(staging);
   try {
     for (const file of files) {
+      proceed();
       const path = join(staging, ...file.path.split('/'));
       await mkdir(dirname(path), { recursive: true });
       await writeFile(path, file.bytes, { flag: 'wx' });
     }
     // Checked again just before the rename: another writer may have taken the name meanwhile.
     if (await exists(target)) throw new Error('The destination folder appeared while writing');
+    proceed();
     await rename(staging, target);
     return target;
   } catch (error) {
     await rm(staging, { recursive: true, force: true }).catch(() => undefined);
     throw error;
+  }
+}
+
+interface FolderSession {
+  /** The window that opened it; another window may not use it. */
+  readonly owner: number;
+  readonly stem: string;
+  readonly parent: string;
+  cancelled: boolean;
+  writing: boolean;
+}
+
+/**
+ * Open deliveries, by an id the renderer only ever echoes back. `begin` is
+ * called once the user picked a parent folder; `write` sends the files once;
+ * `cancel` stops it at any point before the folder is committed.
+ */
+export class ProjectFolderSessions {
+  private readonly sessions = new Map<string, FolderSession>();
+
+  begin(owner: number, stem: string, parent: string): string {
+    const id = randomBytes(16).toString('hex');
+    this.sessions.set(id, {
+      owner,
+      stem: sanitizeProjectStem(stem),
+      parent,
+      cancelled: false,
+      writing: false,
+    });
+    return id;
+  }
+
+  async write(id: string, owner: number, input: unknown): Promise<string> {
+    const session = this.sessions.get(id);
+    if (!session || session.owner !== owner || session.writing) {
+      throw new Error('That export is not open');
+    }
+    session.writing = true;
+    try {
+      const files = validateProjectFiles(input);
+      if (typeof files === 'string') throw new Error(files);
+      return await writeProjectFolder(session.parent, session.stem, files, () => session.cancelled);
+    } finally {
+      this.sessions.delete(id);
+    }
+  }
+
+  /** Stops a delivery; a write in progress stops before its next file or its commit. */
+  cancel(id: string, owner: number): void {
+    const session = this.sessions.get(id);
+    if (!session || session.owner !== owner) return;
+    session.cancelled = true;
+    if (!session.writing) this.sessions.delete(id);
+  }
+
+  /** Drops every session of a window that went away. */
+  forget(owner: number): void {
+    for (const [id, session] of this.sessions) {
+      if (session.owner === owner) {
+        session.cancelled = true;
+        if (!session.writing) this.sessions.delete(id);
+      }
+    }
   }
 }

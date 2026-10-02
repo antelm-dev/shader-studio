@@ -28,7 +28,7 @@ import { inProcessStart } from './testing/in-process-sandbox';
 const root = resolve(import.meta.dirname, '../../../../..');
 const parsed = parsePluginPackage(
   readFileSync(
-    resolve(root, 'apps/studio/src/plugins/dev.shadergrove.wallpaper-engine-1.0.0.sgplugin.json'),
+    resolve(root, 'apps/studio/src/plugins/dev.shadergrove.wallpaper-engine-1.0.1.sgplugin.json'),
     'utf8',
   ),
 );
@@ -136,6 +136,7 @@ const playerProject = (html: string) =>
     passes: { id: string; fragment: string }[];
     controls: { key: string; uniform: string; type: string }[];
     params: Record<string, unknown>;
+    uniforms: { uniform: string; kind: string }[];
     channels: { path: string | null }[];
   };
 
@@ -224,13 +225,55 @@ describe('the Wallpaper Engine plugin package', () => {
       { key: 'ssmode', uniform: 'mode', type: 'combo' },
       { key: 'ssspeedrate2', uniform: 'speedRate', type: 'slider' },
     ]);
-    expect(player.params).toMatchObject({
-      ssspeedrate: 2.5,
-      ssglow: true,
-      sstint: '0 1 0',
-      ssmode: 2,
+    expect(player.params).toEqual({
+      speed_rate: 2.5,
+      glow: true,
+      tint: '0 1 0',
+      mode: 2,
+      speedRate: 0.25,
     });
     expect(html).toContain('window.wallpaperPropertyListener');
+  });
+
+  it('renders every control at its draft value, even past the property limit', async () => {
+    const many: ShaderControl[] = Array.from({ length: 65 }, (_, index) => ({
+      key: `c${index}`,
+      type: 'number',
+      default: 0,
+      min: 0,
+      max: 10,
+    }));
+    const values = Object.fromEntries(many.map((control) => [control.key, 7]));
+    const { result, html, json } = await exportAndAssemble(
+      snapshot({ controls: many, params: values }),
+    );
+    const player = playerProject(html);
+    expect(player.params['c64']).toBe(7);
+    expect(Object.keys(json.general.properties)).toHaveLength(64);
+    expect(json.general.properties).not.toHaveProperty('ssc64');
+    expect(result.warnings.join(' ')).toMatch(/at most 64 properties; 1 more control\(s\) keep/);
+  });
+
+  it('keeps an exact select value, and leaves out a property that could not hold it', async () => {
+    const select: ShaderControl[] = [
+      { key: 'mode', type: 'select', default: 0, options: { Zero: 0, Tiny: 1e-7 } },
+      { key: 'odd', type: 'select', default: 0, options: { Zero: 0, One: 1 } },
+    ];
+    const { result, html, json } = await exportAndAssemble(
+      snapshot({ controls: select, params: { mode: 1e-7, odd: 0.5 } }),
+    );
+    const player = playerProject(html);
+    expect(player.params).toEqual({ mode: 1e-7, odd: 0.5 });
+    expect(json.general.properties['ssmode']).toMatchObject({
+      type: 'combo',
+      value: '1e-7',
+      options: [
+        { label: 'Zero', value: '0' },
+        { label: 'Tiny', value: '1e-7' },
+      ],
+    });
+    expect(json.general.properties).not.toHaveProperty('ssodd');
+    expect(result.warnings.join(' ')).toMatch(/1 control\(s\) have a value .*: odd\./);
   });
 
   it('keeps the post-processing warning, and escapes a hostile title', async () => {
@@ -260,6 +303,7 @@ describe('the Wallpaper Engine plugin package', () => {
           wrap: 'clamp',
         },
       ],
+      uniforms: [],
       properties: [],
       channels: [],
     };

@@ -47,8 +47,22 @@ Host adapters are registered with `provideHostAdapters()` in both app configs:
 - `ShadertoyApiProvider` handles `shadertoy-api/v1`.
 - `WallpaperWebRuntime` handles `wallpaper-web/v1`.
 
-Delivery uses the `ProjectWriter` interface: a stored ZIP in the browser, and
-`files.save-project-folder` on the desktop.
+Delivery uses the `ProjectWriter` interface: a stored ZIP in the browser, and on
+the desktop a cancellable main-process session (`files.begin-project-folder`,
+`write-project-folder`, `cancel-project-folder`).
+
+## Review follow-up (PR #45)
+
+The first review raised four P2 findings, all fixed in one follow-up commit:
+
+- Imports now also refuse their result when the open shader changes (or one opens) mid-call.
+- Desktop export cancellation reaches the main process. It is checked before every file and
+  before the folder is committed, and the context is checked again after the folder dialog.
+- `wallpaper-web/v1` data carries a `uniforms` list with every control's exact draft value.
+  Wallpaper Engine properties only override those values, so controls past the 64-property
+  limit, and values a property could not hold, still render as in the draft. Combo values
+  accept any canonical finite number (e.g. `1e-7`), and controls left out of the property
+  list are named in a warning.
 
 ## Gate evidence (run on `31e9d90` unless noted)
 

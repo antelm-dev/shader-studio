@@ -239,6 +239,13 @@ const wallpaper = {
       wrap: 'clamp',
     },
   ],
+  uniforms: [
+    { uniform: 'speed', kind: 'float', value: 1 },
+    { uniform: 'glow', kind: 'bool', value: true },
+    { uniform: 'tint', kind: 'color', value: '1 0.5 0' },
+    { uniform: 'mode', kind: 'float', value: 1 },
+    { uniform: 'hidden', kind: 'float', value: 7 },
+  ],
   properties: [
     {
       key: 'ssspeed',
@@ -302,6 +309,44 @@ describe('validateWallpaperWebData', () => {
       }),
     ).toMatch(/duplicated/);
     expect(bad({ ...wallpaper, passes: [wallpaper.passes[1]] })).toMatch(/not exported/);
+  });
+
+  it('ties every property to a uniform of its kind, and keeps uniforms without properties', () => {
+    const bad = (value: unknown) => {
+      const result = validateWallpaperWebData(value);
+      return result.ok ? '' : result.errors[0];
+    };
+    const result = validateWallpaperWebData(wallpaper);
+    expect(result.ok && result.value.uniforms.find((u) => u.uniform === 'hidden')).toEqual({
+      uniform: 'hidden',
+      kind: 'float',
+      value: 7,
+    });
+    expect(bad({ ...wallpaper, uniforms: wallpaper.uniforms.slice(1) })).toMatch(/float uniform/);
+    expect(bad({ ...wallpaper, uniforms: [...wallpaper.uniforms, wallpaper.uniforms[0]] })).toMatch(
+      /duplicated/,
+    );
+    expect(
+      bad({ ...wallpaper, uniforms: [{ uniform: 'x', kind: 'color', value: '#fff' }] }),
+    ).toMatch(/uniforms\[0\]/);
+  });
+
+  it('accepts any finite combo value written exactly, such as 1e-7', () => {
+    const combo = {
+      ...wallpaper.properties[3],
+      options: [
+        { label: 'Zero', value: '0' },
+        { label: 'Tiny', value: '1e-7' },
+      ],
+      value: '1e-7',
+    };
+    expect(validateWallpaperWebData({ ...wallpaper, properties: [combo] }).ok).toBe(true);
+    const sloppy = {
+      ...combo,
+      options: [{ label: 'Tiny', value: '0.00000010' }],
+      value: '0.00000010',
+    };
+    expect(validateWallpaperWebData({ ...wallpaper, properties: [sloppy] }).ok).toBe(false);
   });
 });
 

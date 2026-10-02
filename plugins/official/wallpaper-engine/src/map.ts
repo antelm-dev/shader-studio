@@ -14,6 +14,7 @@ import type {
   WallpaperWebData,
   WallpaperWebPass,
   WallpaperWebProperty,
+  WallpaperWebUniform,
 } from '@shadergrove/shared/plugin';
 import { resolvePassOrder } from '@shadergrove/shared/project';
 
@@ -65,7 +66,7 @@ export function mapWallpaper(input: ProjectExportInput): {
     };
   });
 
-  const properties = wallpaperProperties(input.controls, input.params, warnings);
+  const { uniforms, properties } = wallpaperControls(input.controls, input.params, warnings);
   const channels = input.channels.flatMap((channel, slot) =>
     channel.present
       ? [
@@ -88,6 +89,7 @@ export function mapWallpaper(input: ProjectExportInput): {
       ...(author ? { author } : {}),
       vertex: expandMacros(input.project.vertex),
       passes,
+      uniforms,
       properties,
       channels,
     },
@@ -96,21 +98,82 @@ export function mapWallpaper(input: ProjectExportInput): {
 }
 
 /**
- * One user property per control, keyed `ss<key>` in lowercase letters and
- * digits — unique however the keys differ only in case or punctuation — with
- * the draft's current value as its default.
+ * Every control as a uniform with the draft's exact current value — what the
+ * wallpaper renders — and, where Wallpaper Engine can show it faithfully, as a
+ * user property keyed `ss<key>` in lowercase letters and digits (unique however
+ * the keys differ only in case or punctuation) whose default is that value.
+ *
+ * A control that cannot be a property without changing the render — beyond the
+ * property limit, a value outside its slider's range, a select value that is
+ * not one of its options — keeps its uniform value and is reported by name.
  */
-export function wallpaperProperties(
+export function wallpaperControls(
   controls: readonly ShaderControl[],
   params: ShaderParams,
   warnings: string[],
-): WallpaperWebProperty[] {
+): { uniforms: WallpaperWebUniform[]; properties: WallpaperWebProperty[] } {
   const used = new Set<string>();
+  const uniforms: WallpaperWebUniform[] = [];
   const properties: WallpaperWebProperty[] = [];
+  const omitted: string[] = [];
+  const unrepresentable: string[] = [];
   for (const control of controls) {
+    const value = params[control.key] ?? control.default;
+    const text = (control.label ?? control.key).slice(0, 64) || control.key;
+    let property: WallpaperWebProperty | null = null;
+    const common = { key: '', uniform: control.key, text, order: properties.length };
+    switch (control.type) {
+      case 'number': {
+        const current =
+          typeof value === 'number' && Number.isFinite(value) ? value : control.default;
+        uniforms.push({ uniform: control.key, kind: 'float', value: current });
+        if (current < control.min || current > control.max) {
+          unrepresentable.push(text);
+          break;
+        }
+        const step =
+          control.step && control.step > 0 ? control.step : niceStep(control.min, control.max);
+        property = {
+          ...common,
+          type: 'slider',
+          min: control.min,
+          max: control.max,
+          step,
+          precision: Math.min(6, decimals(step)),
+          value: current,
+        };
+        break;
+      }
+      case 'boolean':
+        uniforms.push({ uniform: control.key, kind: 'bool', value: value === true });
+        property = { ...common, type: 'bool', value: value === true };
+        break;
+      case 'color': {
+        const color = wallpaperColor(String(value));
+        uniforms.push({ uniform: control.key, kind: 'color', value: color });
+        property = { ...common, type: 'color', value: color };
+        break;
+      }
+      case 'select': {
+        const current =
+          typeof value === 'number' && Number.isFinite(value) ? value : control.default;
+        uniforms.push({ uniform: control.key, kind: 'float', value: current });
+        const options = Object.entries(control.options).map(([label, option]) => ({
+          label: label.slice(0, 64) || String(option),
+          value: String(option),
+        }));
+        if (!options.some((option) => option.value === String(current))) {
+          unrepresentable.push(text);
+          break;
+        }
+        property = { ...common, type: 'combo', options, value: String(current) };
+        break;
+      }
+    }
+    if (!property) continue;
     if (properties.length >= MAX_PROPERTIES) {
-      warnings.push(`Only the first ${MAX_PROPERTIES} controls become wallpaper properties.`);
-      break;
+      omitted.push(text);
+      continue;
     }
     const normalized = control.key
       .toLowerCase()
@@ -120,64 +183,23 @@ export function wallpaperProperties(
     let key = base;
     for (let suffix = 2; used.has(key); suffix++) key = `${base}${suffix}`;
     used.add(key);
-    const common = {
-      key,
-      uniform: control.key,
-      text: (control.label ?? control.key).slice(0, 64) || control.key,
-      order: properties.length,
-    };
-    const value = params[control.key] ?? control.default;
-    switch (control.type) {
-      case 'number': {
-        const step =
-          control.step && control.step > 0 ? control.step : niceStep(control.min, control.max);
-        const precision = Math.min(6, decimals(step));
-        const current =
-          typeof value === 'number' && Number.isFinite(value) ? value : control.default;
-        properties.push({
-          ...common,
-          type: 'slider',
-          min: control.min,
-          max: control.max,
-          step,
-          precision,
-          value: Math.min(control.max, Math.max(control.min, current)),
-        });
-        break;
-      }
-      case 'boolean':
-        properties.push({ ...common, type: 'bool', value: value === true });
-        break;
-      case 'color':
-        properties.push({ ...common, type: 'color', value: wallpaperColor(String(value)) });
-        break;
-      case 'select': {
-        const options = Object.entries(control.options)
-          .filter(([, option]) => /^-?\d{1,9}(?:\.\d{1,6})?$/.test(String(option)))
-          .slice(0, 64)
-          .map(([label, option]) => ({
-            label: label.slice(0, 64) || String(option),
-            value: String(option),
-          }));
-        if (options.length === 0) {
-          warnings.push(
-            `"${common.text}" has no options Wallpaper Engine can show; it was left out.`,
-          );
-          used.delete(key);
-          continue;
-        }
-        const current = String(value);
-        properties.push({
-          ...common,
-          type: 'combo',
-          options,
-          value: options.some((option) => option.value === current) ? current : options[0]!.value,
-        });
-        break;
-      }
-    }
+    properties.push({ ...property, key });
   }
-  return properties;
+  if (unrepresentable.length > 0) {
+    warnings.push(
+      bounded(
+        `${unrepresentable.length} control(s) have a value their wallpaper property could not hold (out of range, or not one of the options), so they are not properties and keep their current values: ${unrepresentable.join(', ')}.`,
+      ),
+    );
+  }
+  if (omitted.length > 0) {
+    warnings.push(
+      bounded(
+        `Wallpaper Engine shows at most ${MAX_PROPERTIES} properties; ${omitted.length} more control(s) keep their current values: ${omitted.join(', ')}.`,
+      ),
+    );
+  }
+  return { uniforms, properties };
 }
 
 /** `#rrggbb` (or `#rgb`) as Wallpaper Engine's `"r g b"`, each 0–1 with at most four decimals. */
@@ -201,4 +223,9 @@ function decimals(value: number): number {
   const text = String(value);
   if (text.includes('e-')) return Number(text.split('e-')[1]);
   return text.includes('.') ? text.split('.')[1]!.length : 0;
+}
+
+/** A warning within the protocol's 300-character limit. */
+function bounded(text: string): string {
+  return text.length <= 300 ? text : `${text.slice(0, 297)}…`;
 }

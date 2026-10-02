@@ -23,16 +23,16 @@
     },
     {
       "id": "dev.shadergrove.wallpaper-engine",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "name": "Wallpaper Engine Export",
       "description": "Export the open shader — unsaved edits included — as a Wallpaper Engine web wallpaper: multipass and textures, with its controls as wallpaper properties.",
       "publisher": "Shadergrove",
       "license": "Apache-2.0",
       "protocolVersion": 2,
       "appVersionRange": ">=1.5.0 <2.0.0",
-      "file": "dev.shadergrove.wallpaper-engine-1.0.0.sgplugin.json",
-      "bytes": 14644,
-      "sha256": "d20dee35a465693b3aac462ef1aade61008bab0659fd37b9c3fefe16bf061bdb",
+      "file": "dev.shadergrove.wallpaper-engine-1.0.1.sgplugin.json",
+      "bytes": 15565,
+      "sha256": "9865126f2c7d7de7be0750e4b36ba26aae1f681d0041113bdde7f431ae0cd2e3",
       "contributions": [
         {
           "kind": "projectExporter",

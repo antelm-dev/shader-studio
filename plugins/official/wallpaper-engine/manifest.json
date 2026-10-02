@@ -1,6 +1,6 @@
 {
   "id": "dev.shadergrove.wallpaper-engine",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "protocolVersion": 2,
   "appVersionRange": ">=1.5.0 <2.0.0",
   "name": "Wallpaper Engine Export",

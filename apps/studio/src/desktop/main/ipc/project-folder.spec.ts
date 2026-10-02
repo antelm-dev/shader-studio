@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   MAX_PROJECT_BYTES,
+  ProjectFolderSessions,
+  ProjectWriteCancelled,
   sanitizeProjectStem,
   validateProjectFiles,
   writeProjectFolder,
@@ -98,5 +100,38 @@ describe('project folder delivery', () => {
     await expect(writeProjectFolder(parent, 'Broken', files)).rejects.toThrow(/disk full/);
     disk.failOn = 0;
     expect(await readdir(parent)).toEqual(['blocked']);
+  });
+
+  it('cancels a session before or during its write, leaving nothing on disk', async () => {
+    const sessions = new ProjectFolderSessions();
+    const files = [...project(), { path: 'textures/channel0.png', bytes: new Uint8Array([1]) }];
+
+    // Cancelled after the folder was picked, before the files arrive.
+    const early = sessions.begin(1, 'Early', parent);
+    sessions.cancel(early, 1);
+    await expect(sessions.write(early, 1, files)).rejects.toThrow(/not open/);
+
+    // Cancelled once the write has started: it stops at its next check, before any commit.
+    const during = sessions.begin(1, 'During', parent);
+    const writing = sessions.write(during, 1, files);
+    sessions.cancel(during, 1);
+    await expect(writing).rejects.toBeInstanceOf(ProjectWriteCancelled);
+    expect(await readdir(parent)).toEqual([]);
+
+    // Another window cannot use or cancel a session; the owner's write still lands.
+    const owned = sessions.begin(1, 'Owned', parent);
+    sessions.cancel(owned, 2);
+    await expect(sessions.write(owned, 2, files)).rejects.toThrow(/not open/);
+    await expect(sessions.write(owned, 1, files)).resolves.toBe(join(parent, 'Owned'));
+    await expect(sessions.write(owned, 1, files)).rejects.toThrow(/not open/);
+  });
+
+  it('refuses a session write of files a runtime does not produce', async () => {
+    const sessions = new ProjectFolderSessions();
+    const id = sessions.begin(1, 'Bad', parent);
+    await expect(
+      sessions.write(id, 1, [...project(), { path: '../evil.js', bytes: text('x') }]),
+    ).rejects.toThrow(/path/);
+    expect(await readdir(parent)).toEqual([]);
   });
 });

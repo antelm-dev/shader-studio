@@ -166,55 +166,52 @@ export class ProjectPluginActions {
     const draft = this.store.draft();
     if (!record || !draft) return { status: 'failed', message: 'Open a shader first.' };
 
-    return this.operate(
-      pluginId,
-      contributionId,
-      async (signal, step, check) => {
-        const host = this.installations.host(pluginId);
-        if (!host) throw new StaleContext();
-        // The snapshot is the draft as it is now — unsaved edits included, nothing saved.
-        // Texture bytes come from the library and stay here; the plugin sees their metadata.
-        const snapshot = {
-          name: record.name,
-          author: record.author,
-          project: structuredClone(draft.project),
-          controls: structuredClone([...this.store.controls()]),
-          params: structuredClone(this.store.params()),
-          postProcessingActive: hasActivePostProcessing(draft.render),
-        };
-        step('converting');
-        const bundle = (await this.store.exportShader(record.id)) as ShaderBundle;
-        check();
-        const channels = bundle.shader.channels;
-        const input: ProjectExportInput = {
-          name: snapshot.name,
-          ...(snapshot.author ? { author: snapshot.author } : {}),
-          project: snapshot.project,
-          controls: snapshot.controls,
-          params: snapshot.params,
-          channels: channels.map(({ data, ...meta }) => ({
-            ...meta,
-            present: !!data && !!meta.ext,
-          })),
-          postProcessingActive: snapshot.postProcessingActive,
-        };
-        const textures: RuntimeTexture[] = channels.flatMap((channel, slot) =>
-          channel.data && channel.ext
-            ? [{ slot, ext: channel.ext, bytes: fromBase64(channel.data) }]
-            : [],
-        );
-        const result = await host.exportProject(contributionId, input, { signal });
-        check();
-        const output = runtime.assemble(result.data, textures);
-        if (!output.ok) throw new Error(output.errors[0] ?? 'The exported project is not valid');
-        step('writing');
-        check();
-        const delivered = await this.writer().write(output.value, signal);
-        if (delivered.status === 'cancelled') return { status: 'cancelled' };
-        return { status: 'exported', where: delivered.where, warnings: result.warnings };
-      },
-      record.id,
-    );
+    return this.operate(pluginId, contributionId, async (signal, step, check) => {
+      const host = this.installations.host(pluginId);
+      if (!host) throw new StaleContext();
+      // The snapshot is the draft as it is now — unsaved edits included, nothing saved.
+      // Texture bytes come from the library and stay here; the plugin sees their metadata.
+      const snapshot = {
+        name: record.name,
+        author: record.author,
+        project: structuredClone(draft.project),
+        controls: structuredClone([...this.store.controls()]),
+        params: structuredClone(this.store.params()),
+        postProcessingActive: hasActivePostProcessing(draft.render),
+      };
+      step('converting');
+      const bundle = (await this.store.exportShader(record.id)) as ShaderBundle;
+      check();
+      const channels = bundle.shader.channels;
+      const input: ProjectExportInput = {
+        name: snapshot.name,
+        ...(snapshot.author ? { author: snapshot.author } : {}),
+        project: snapshot.project,
+        controls: snapshot.controls,
+        params: snapshot.params,
+        channels: channels.map(({ data, ...meta }) => ({
+          ...meta,
+          present: !!data && !!meta.ext,
+        })),
+        postProcessingActive: snapshot.postProcessingActive,
+      };
+      const textures: RuntimeTexture[] = channels.flatMap((channel, slot) =>
+        channel.data && channel.ext
+          ? [{ slot, ext: channel.ext, bytes: fromBase64(channel.data) }]
+          : [],
+      );
+      const result = await host.exportProject(contributionId, input, { signal });
+      check();
+      const output = runtime.assemble(result.data, textures);
+      if (!output.ok) throw new Error(output.errors[0] ?? 'The exported project is not valid');
+      step('writing');
+      check();
+      // The context is checked again once a destination is chosen, and the write is
+      // cancelled with the signal — on the desktop, in the main process too.
+      const delivered = await this.writer().write(output.value, signal, check);
+      if (delivered.status === 'cancelled') return { status: 'cancelled' };
+      return { status: 'exported', where: delivered.where, warnings: result.warnings };
+    });
   }
 
   private async adopt(
@@ -240,12 +237,13 @@ export class ProjectPluginActions {
       step: (step: ProjectStep) => void,
       check: () => void,
     ) => Promise<ProjectActionOutcome>,
-    shaderId?: string,
   ): Promise<ProjectActionOutcome> {
     if (this.runningSignal())
       return { status: 'failed', message: 'Another plugin action is running.' };
     const context = this.installations.context(pluginId);
     if (!context) return { status: 'failed', message: 'Switch the plugin on to use it.' };
+    // Imports and exports alike finish only against the shader that was open (or not) at the start.
+    const shaderId = this.store.selectedId();
     const pending = this.installations.begin(pluginId);
     const cancel = new AbortController();
     this.cancelCurrent = cancel;
@@ -255,7 +253,7 @@ export class ProjectPluginActions {
       if (
         pending.signal.aborted ||
         !this.installations.isCurrent(context) ||
-        (shaderId !== undefined && this.store.selectedId() !== shaderId)
+        this.store.selectedId() !== shaderId
       ) {
         throw new StaleContext();
       }

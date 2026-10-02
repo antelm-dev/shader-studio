@@ -18,6 +18,8 @@ export const WALLPAPER_WEB_RUNTIME = 'wallpaper-web/v1';
 
 export const WALLPAPER_WEB_LIMITS = {
   passes: 5,
+  /** Every control of a shader, at the app's own limit. */
+  uniforms: LIMITS.controlCount,
   properties: 64,
   comboOptions: LIMITS.selectOptionCount,
   /** A composed pass (Common + files + pass + generated uniforms). */
@@ -55,6 +57,17 @@ export type WallpaperWebProperty = PropertyBase &
     | { type: 'combo'; options: { label: string; value: string }[]; value: string }
   );
 
+/**
+ * A control's uniform and the exact value the wallpaper renders with. Every
+ * control has one, whether or not it is also a user property; a property only
+ * overrides its uniform's value when Wallpaper Engine applies it.
+ */
+export type WallpaperWebUniform =
+  | { uniform: string; kind: 'float'; value: number }
+  | { uniform: string; kind: 'bool'; value: boolean }
+  /** `"r g b"`, each 0–1. */
+  | { uniform: string; kind: 'color'; value: string };
+
 export interface WallpaperWebChannel {
   slot: ChannelIndex;
   wrap: TextureWrapMode;
@@ -68,6 +81,8 @@ export interface WallpaperWebData {
   vertex: string;
   /** In render order; the last one is the Image pass. */
   passes: WallpaperWebPass[];
+  uniforms: WallpaperWebUniform[];
+  /** Each drives one of `uniforms`, of the matching kind. */
   properties: WallpaperWebProperty[];
   /** Sampling of the host's own textures, by slot. Only slots the host has are written. */
   channels: WallpaperWebChannel[];
@@ -94,6 +109,7 @@ export function validateWallpaperWebData(input: unknown): Result<WallpaperWebDat
     'author',
     'vertex',
     'passes',
+    'uniforms',
     'properties',
     'channels',
   ]);
@@ -141,6 +157,22 @@ export function validateWallpaperWebData(input: unknown): Result<WallpaperWebDat
     }
   }
 
+  const rawUniforms = input['uniforms'];
+  if (!Array.isArray(rawUniforms) || rawUniforms.length > WALLPAPER_WEB_LIMITS.uniforms) {
+    return fail(`wallpaper.uniforms must have at most ${WALLPAPER_WEB_LIMITS.uniforms} entries`);
+  }
+  const uniformList: WallpaperWebUniform[] = [];
+  const kinds = new Map<string, WallpaperWebUniform['kind']>();
+  for (const [index, raw] of rawUniforms.entries()) {
+    const parsed = validateUniform(raw);
+    if (!parsed) return fail(`wallpaper.uniforms[${index}] must be { uniform, kind, value }`);
+    if (kinds.has(parsed.uniform)) {
+      return fail(`wallpaper uniform "${parsed.uniform}" is duplicated`);
+    }
+    kinds.set(parsed.uniform, parsed.kind);
+    uniformList.push(parsed);
+  }
+
   const rawProperties = input['properties'];
   if (!Array.isArray(rawProperties) || rawProperties.length > WALLPAPER_WEB_LIMITS.properties) {
     return fail(
@@ -157,6 +189,10 @@ export function validateWallpaperWebData(input: unknown): Result<WallpaperWebDat
       return fail(`wallpaper property "${property.value.key}" is duplicated`);
     if (uniforms.has(property.value.uniform)) {
       return fail(`wallpaper uniform "${property.value.uniform}" has two properties`);
+    }
+    const kind = PROPERTY_KIND[property.value.type];
+    if (kinds.get(property.value.uniform) !== kind) {
+      return fail(`wallpaper property "${property.value.key}" must drive a ${kind} uniform`);
     }
     keys.add(property.value.key);
     uniforms.add(property.value.uniform);
@@ -195,9 +231,40 @@ export function validateWallpaperWebData(input: unknown): Result<WallpaperWebDat
     ...(author === undefined ? {} : { author }),
     vertex,
     passes,
+    uniforms: uniformList,
     properties,
     channels,
   });
+}
+
+const PROPERTY_KIND: Record<WallpaperWebProperty['type'], WallpaperWebUniform['kind']> = {
+  slider: 'float',
+  combo: 'float',
+  bool: 'bool',
+  color: 'color',
+};
+
+function validateUniform(input: unknown): WallpaperWebUniform | null {
+  if (!isRecord(input) || unknown(input, ['uniform', 'kind', 'value'])) return null;
+  const { uniform, kind, value } = input;
+  if (typeof uniform !== 'string' || !UNIFORM_KEY.test(uniform)) return null;
+  if (kind === 'float' && isFiniteNumber(value)) return { uniform, kind, value };
+  if (kind === 'bool' && typeof value === 'boolean') return { uniform, kind, value };
+  if (kind === 'color' && typeof value === 'string' && COLOR_VALUE.test(value)) {
+    return { uniform, kind, value };
+  }
+  return null;
+}
+
+/** A finite number written the way `String(number)` writes it, so it reads back exactly. */
+function isCanonicalNumber(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= 32 &&
+    value.trim() !== '' &&
+    Number.isFinite(Number(value)) &&
+    String(Number(value)) === value
+  );
 }
 
 function validatePass(input: unknown, at: string): Result<WallpaperWebPass> {
@@ -337,8 +404,7 @@ function validateProperty(input: unknown, at: string): Result<WallpaperWebProper
         if (
           !isRecord(option) ||
           unknown(option, ['label', 'value']) ||
-          typeof option['value'] !== 'string' ||
-          !/^-?\d{1,9}(?:\.\d{1,6})?$/.test(option['value'])
+          !isCanonicalNumber(option['value'])
         ) {
           return fail(`${at}.options entries must be { label, value } with a numeric value`);
         }

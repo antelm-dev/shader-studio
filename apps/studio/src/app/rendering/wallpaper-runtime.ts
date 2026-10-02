@@ -20,7 +20,6 @@ import {
   WALLPAPER_WEB_RUNTIME,
   validateWallpaperWebData,
   type WallpaperWebData,
-  type WallpaperWebProperty,
 } from '@shadergrove/shared/plugin';
 import { fail, mimeFromExt, ok, type Result } from '@shadergrove/shared/validate';
 
@@ -65,10 +64,10 @@ export function assembleWallpaper(
     format: 'shadergrove-wallpaper/v2',
     vertex: data.vertex,
     passes: data.passes,
+    // Every uniform with the draft's exact value; properties only override them.
+    uniforms: data.uniforms.map(({ uniform, kind }) => ({ uniform, kind })),
+    params: Object.fromEntries(data.uniforms.map(({ uniform, value }) => [uniform, value])),
     controls: data.properties.map(({ key, uniform, type }) => ({ key, uniform, type })),
-    params: Object.fromEntries(
-      data.properties.map((property) => [property.key, playerValue(property)]),
-    ),
     channels,
   };
 
@@ -120,16 +119,6 @@ export function projectJson(data: WallpaperWebData): Record<string, unknown> {
       : `${data.title}, exported from Shadergrove.`,
     general: { properties },
   };
-}
-
-/** What the player keeps for a property: what its uniform takes. */
-function playerValue(property: WallpaperWebProperty): number | boolean | string {
-  switch (property.type) {
-    case 'combo':
-      return Number(property.value);
-    default:
-      return property.value;
-  }
 }
 
 export function safeStem(value: string): string {
@@ -259,7 +248,7 @@ export const WALLPAPER_PLAYER = String.raw`(function () {
       project.controls.forEach(function (control) {
         var property = properties[control.key];
         if (!property || !("value" in property)) return;
-        params[control.key] = coerce(control.type, property.value, params[control.key]);
+        params[control.uniform] = coerce(control.type, property.value, params[control.uniform]);
       });
     }
   };
@@ -355,12 +344,12 @@ export const WALLPAPER_PLAYER = String.raw`(function () {
     set2f(compiled, "iMouseVel", velocity[0], velocity[1]);
     var clickAt = location(compiled, "u_clickData");
     if (clickAt !== null) gl.uniform3fv(clickAt, clicks);
-    project.controls.forEach(function (control) {
-      var value = params[control.key];
-      var at = location(compiled, "u_" + control.uniform);
+    project.uniforms.forEach(function (entry) {
+      var value = params[entry.uniform];
+      var at = location(compiled, "u_" + entry.uniform);
       if (at === null) return;
-      if (control.type === "bool") gl.uniform1i(at, value ? 1 : 0);
-      else if (control.type === "color") gl.uniform3fv(at, color(value));
+      if (entry.kind === "bool") gl.uniform1i(at, value ? 1 : 0);
+      else if (entry.kind === "color") gl.uniform3fv(at, color(value));
       else gl.uniform1f(at, Number(value));
     });
   }

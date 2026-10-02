@@ -7,7 +7,11 @@ import { defineIpcModule, handle } from 'electron-ipc-module';
 import { PLUGIN_LIMITS } from '@shadergrove/shared';
 import { parseBundle } from '@shadergrove/shared/validate';
 import type { DialogResult } from '../../contracts/contracts';
-import { sanitizeProjectStem, validateProjectFiles, writeProjectFolder } from './project-folder';
+import {
+  ProjectFolderSessions,
+  ProjectWriteCancelled,
+  sanitizeProjectStem,
+} from './project-folder';
 
 // A textured shader's bundle inlines its channel images as base64, and a
 // collection can hold many shaders — comfortably larger than the old
@@ -61,6 +65,8 @@ interface VideoSession {
 }
 
 const videos = new Map<string, VideoSession>();
+
+const projectFolders = new ProjectFolderSessions();
 
 /** No frame of a shader render has any business being this big; a 4K PNG is a few MB. */
 const MAX_FRAME_BYTES = 64 * 1024 * 1024;
@@ -291,18 +297,14 @@ export function createFilesIpc() {
     ),
     /**
      * An export runtime's project (e.g. a Wallpaper Engine web wallpaper),
-     * written as a new folder inside one the user picks. The paths and sizes
-     * are checked again here; an existing folder is never overwritten, and the
-     * folder only appears once every file is written.
+     * delivered as a new folder inside one the user picks, in three steps so
+     * the renderer can cancel at any point: pick the parent (`begin`), send the
+     * files (`write`: paths and sizes checked again here, an existing folder
+     * never overwritten, the folder committed only once every file is written),
+     * or `cancel`, which stops a write before its next file or its commit.
      */
-    'save-project-folder': handle(
-      async (
-        event,
-        stem: string,
-        files: { path: string; bytes: Uint8Array }[],
-      ): Promise<DialogResult<{ path: string }>> => {
-        const valid = validateProjectFiles(files);
-        if (typeof valid === 'string') return { status: 'error', message: valid };
+    'begin-project-folder': handle(
+      async (event, stem: string): Promise<DialogResult<{ id: string }>> => {
         const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
         const options: OpenDialogOptions = {
           title: 'Choose where to create the project folder',
@@ -313,14 +315,23 @@ export function createFilesIpc() {
           ? await dialog.showOpenDialog(owner, options)
           : await dialog.showOpenDialog(options);
         if (picked.canceled || !picked.filePaths[0]) return { status: 'cancelled' };
+        const sender = event.sender.id;
+        const id = projectFolders.begin(sender, sanitizeProjectStem(stem), picked.filePaths[0]);
+        event.sender.once('destroyed', () => projectFolders.forget(sender));
+        return { status: 'ok', value: { id } };
+      },
+    ),
+    'write-project-folder': handle(
+      async (
+        event,
+        id: string,
+        files: { path: string; bytes: Uint8Array }[],
+      ): Promise<DialogResult<{ path: string }>> => {
         try {
-          const path = await writeProjectFolder(
-            picked.filePaths[0],
-            sanitizeProjectStem(stem),
-            valid,
-          );
+          const path = await projectFolders.write(String(id), event.sender.id, files);
           return { status: 'ok', value: { path } };
         } catch (error) {
+          if (error instanceof ProjectWriteCancelled) return { status: 'cancelled' };
           return {
             status: 'error',
             message: error instanceof Error ? error.message : String(error),
@@ -328,6 +339,9 @@ export function createFilesIpc() {
         }
       },
     ),
+    'cancel-project-folder': handle(async (event, id: string): Promise<void> => {
+      projectFolders.cancel(String(id), event.sender.id);
+    }),
     'begin-video': handle(
       async (event, stem: string): Promise<DialogResult<{ id: string; path: string }>> => {
         const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;

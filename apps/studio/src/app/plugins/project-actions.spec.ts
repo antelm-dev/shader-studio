@@ -34,7 +34,14 @@ import { inProcessStart } from './testing/in-process-sandbox';
 const generated = resolve(import.meta.dirname, '../../plugins');
 const SHADERTOY = 'dev.shadergrove.shadertoy';
 const WALLPAPER = 'dev.shadergrove.wallpaper-engine';
-const text = (id: string) => readFileSync(resolve(generated, `${id}-1.0.0.sgplugin.json`), 'utf8');
+/** A package's text as the release catalogue lists it. */
+const text = (id: string) => {
+  const catalogue = JSON.parse(readFileSync(resolve(generated, 'catalogue.json'), 'utf8')) as {
+    packages: { id: string; file: string }[];
+  };
+  const entry = catalogue.packages.find((item) => item.id === id)!;
+  return readFileSync(resolve(generated, entry.file), 'utf8');
+};
 
 const shadertoyJson = {
   Shader: {
@@ -304,6 +311,57 @@ describe('ProjectPluginActions', () => {
     gate.resolve();
     expect(await switched).toEqual({ status: 'stale' });
     expect(written).toHaveLength(1);
+  });
+
+  it('imports nothing when another shader is opened while the import runs', async () => {
+    const { actions, installations } = setup();
+    await settle();
+    await installEnabled(installations, SHADERTOY);
+    const gate = deferred<void>();
+    fetchSource = async () => {
+      await gate.promise;
+      return { sourceId: 'abc', source: shadertoyJson };
+    };
+    const running = actions.runImport(SHADERTOY, 'shadertoy', {
+      mode: 'provider',
+      values: { idOrUrl: 'abc', apiKey: 'k' },
+    });
+    selectedId.set('other');
+    gate.resolve();
+    expect(await running).toEqual({ status: 'stale' });
+    expect(imported).toEqual([]);
+
+    // With no shader open at the start, opening one is a change too.
+    selectedId.set(null);
+    const later = deferred<void>();
+    fetchSource = async () => {
+      await later.promise;
+      return { sourceId: 'abc', source: shadertoyJson };
+    };
+    const fromNothing = actions.runImport(SHADERTOY, 'shadertoy', {
+      mode: 'provider',
+      values: { idOrUrl: 'abc', apiKey: 'k' },
+    });
+    selectedId.set('waves');
+    later.resolve();
+    expect(await fromNothing).toEqual({ status: 'stale' });
+    expect(imported).toEqual([]);
+  });
+
+  it('writes nothing when the shader changes while the destination is being chosen', async () => {
+    const { actions, installations } = setup();
+    await settle();
+    await installEnabled(installations, WALLPAPER);
+    actions.writer = (): ProjectWriter => ({
+      write: async (output, _signal, proceed) => {
+        selectedId.set('other'); // the user switched shaders while the folder dialog was open
+        proceed?.();
+        written.push({ stem: output.stem, paths: [] });
+        return { status: 'written', where: output.stem };
+      },
+    });
+    expect(await actions.runExport(WALLPAPER, 'wallpaper-engine')).toEqual({ status: 'stale' });
+    expect(written).toEqual([]);
   });
 
   it('refuses to start for a package that is off, and runs one action at a time', async () => {
