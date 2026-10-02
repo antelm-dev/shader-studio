@@ -9,6 +9,7 @@
     "check:fonts": "tsx src/check/fonts.ts",
     "check:ipc": "tsx src/check/ipc.ts",
     "generate:fonts": "tsx src/generate/fonts.ts",
+    "generate:isf-plugin": "tsx src/generate/isf-plugin.ts",
     "smoke": "tsx src/smoke.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "smoke:ssr": "tsx src/ssr-smoke.ts"
