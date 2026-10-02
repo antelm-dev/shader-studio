@@ -40,7 +40,15 @@ export const PLUGIN_STORE = new InjectionToken<(profile: string) => PluginStore>
 
 /** What a package file holds, before anything is installed. */
 export type PluginReview =
-  | { ok: true; plugin: PluginPackage; text: string; compatible: boolean; replaces: string | null }
+  | {
+      ok: true;
+      plugin: PluginPackage;
+      text: string;
+      compatible: boolean;
+      replaces: string | null;
+      /** The profile it was read for: it installs there or nowhere. */
+      profile: string | null;
+    }
   | { ok: false; errors: string[] };
 
 export interface InstalledPlugin {
@@ -111,6 +119,7 @@ export class PluginInstallations {
       text,
       compatible: isPluginCompatible(parsed.value.manifest, APP_VERSION),
       replaces: existing?.plugin?.manifest.version ?? (existing ? '?' : null),
+      profile: this.profile(),
     };
   }
 
@@ -120,6 +129,9 @@ export class PluginInstallations {
    */
   async install(review: Extract<PluginReview, { ok: true }>): Promise<void> {
     if (!review.compatible) throw new Error('This package is not made for this version of the app');
+    if (review.profile === null || review.profile !== this.profile()) {
+      throw new Error('The account changed since this package was picked; pick it again');
+    }
     await this.store.put({
       id: review.plugin.manifest.id,
       text: review.text,

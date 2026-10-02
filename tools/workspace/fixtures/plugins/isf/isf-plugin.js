@@ -6,7 +6,7 @@
 //
 // Import keeps the ISF GLSL as it is, between two marker lines, and adapts it with
 // the preprocessor only — `#define main isf_main`, the IMG_* macros, TIME,
-// RENDERSIZE, one macro per input (via a global where the type differs) — so
+// RENDERSIZE, one macro and one global per input — so
 // nothing in the author's code is rewritten.
 // Export rebuilds the JSON header from the effect's controls and current values.
 //
@@ -74,9 +74,10 @@ function splitIsf(text) {
 }
 
 /**
- * An input whose type differs here is read from a global set before the ISF main runs:
- * a macro expanding to an expression would also rewrite a declaration of that name, such
- * as a function parameter `vec4 color`, into one that does not compile.
+ * An input is read from a global set before the ISF main runs. A macro naming the uniform
+ * or an expression would also rewrite a declaration of that name, such as a function
+ * parameter `vec4 color`, into one that does not compile — `u_color` is itself a macro in
+ * a filter this plugin exported.
  */
 function viaGlobal(key, type, value) {
   return {
@@ -167,13 +168,13 @@ function inputToControl(input) {
           max,
           ...label(input),
         },
-        macro: `#define ${key} u_${key}`,
+        ...viaGlobal(key, 'float', `u_${key}`),
       };
     }
     case 'bool':
       return {
         control: { key, type: 'boolean', default: Boolean(input.DEFAULT), ...label(input) },
-        macro: `#define ${key} u_${key}`,
+        ...viaGlobal(key, 'bool', `u_${key}`),
       };
     case 'long': {
       const values = input.VALUES;
@@ -304,6 +305,11 @@ function controlToInput(control, values) {
       return { ...named, TYPE: 'bool', DEFAULT: Boolean(value) };
     case 'select': {
       const entries = Object.entries(control.options);
+      if (!entries.every((entry) => Number.isInteger(entry[1]))) {
+        fail(
+          `Control "${control.key}" cannot be exported: an ISF long input takes integer values only`,
+        );
+      }
       return {
         ...named,
         TYPE: 'long',

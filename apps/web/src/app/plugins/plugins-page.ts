@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -460,6 +460,14 @@ export class PluginsPage {
       (effect): effect is CustomEffect => effect.type === 'custom',
     ),
   );
+
+  constructor() {
+    // A package picked under one account is not offered for install under another.
+    effect(() => {
+      this.installations.profile();
+      untracked(() => this.review.set(null));
+    });
+  }
 
   protected readonly limits = computed(() =>
     this.i18n.t('plugins.limits', {

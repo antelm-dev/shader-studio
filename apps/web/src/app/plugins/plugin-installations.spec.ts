@@ -126,6 +126,20 @@ describe('PluginInstallations', () => {
     expect(installations.find('dev.example.tint')?.active).toBe(true);
   });
 
+  it('installs a reviewed package only into the profile it was reviewed for', async () => {
+    const installations = setup();
+    await settle();
+    const review = okReview(installations);
+
+    user.set({ id: 'bob' });
+    status.set('authenticated');
+    await settle();
+
+    await expect(installations.install(review)).rejects.toThrow(/account changed/);
+    expect(stores.byProfile.get('bob')?.size).toBe(0);
+    expect(stores.byProfile.get('anonymous')?.size).toBe(0);
+  });
+
   it('refuses an invalid file at review and an incompatible package at install', async () => {
     const installations = setup();
     await settle();

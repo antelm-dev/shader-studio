@@ -138,10 +138,11 @@ describe('importing ISF FX filters', () => {
       },
     ]);
     expect(effect.values).toEqual({ levels: 4, invert: false, tint: '#ff8040', channel: 0 });
-    // Each ISF name reaches its control's uniform, as ISF typed it: directly, or — when the
-    // type differs — through a global set before the ISF main, so a declaration of that
-    // name (a parameter `vec4 tint`) still compiles.
-    expect(effect.source).toContain('#define levels u_levels');
+    // Each ISF name reaches its control's uniform, as ISF typed it, through a global set
+    // before the ISF main, so a declaration of that name (a parameter `vec4 tint`) still
+    // compiles.
+    expect(effect.source).toContain('float isf_in_levels;\n#define levels isf_in_levels');
+    expect(effect.source).toContain('  isf_in_levels = u_levels;');
     expect(effect.source).toContain('vec4 isf_in_tint;\n#define tint isf_in_tint');
     expect(effect.source).toContain('  isf_in_tint = vec4(u_tint, 1.0);');
     expect(effect.source).toContain('int isf_in_channel;\n#define channel isf_in_channel');
@@ -206,6 +207,19 @@ describe('exporting and re-importing', () => {
     expect(again.values).toEqual({ gain: 1.5, tint: '#ff0000' });
     // Its own `effect` is renamed by the preprocessor so the wrapper's can exist.
     expect(again.source).toContain('#define effect isf_inner_effect');
+  });
+
+  it('refuses to export a select whose values are not integers, as an ISF long needs', async () => {
+    await expect(
+      exportIsf({
+        name: 'Halves',
+        source: 'vec4 effect(vec4 color, vec2 uv) { return color * u_step; }',
+        controls: [
+          { key: 'step', type: 'select', default: 0.5, options: { Half: 0.5, More: 1.5 } },
+        ],
+        values: {},
+      }),
+    ).rejects.toThrow(/integer/);
   });
 
   it.each(['inputImage', 'u_time', 'u_gain'])(
