@@ -13,7 +13,6 @@ import {
   type TextureChannelPayloads,
 } from '@shadergrove/shared';
 import { DEFAULT_VERTEX, makePass, type ShaderProject } from '@shadergrove/shared/project';
-import { buildWallpaperDocument } from '../rendering/wallpaper-export';
 import { WALLPAPER_PLAYER, assembleWallpaper } from '../rendering/wallpaper-runtime';
 import { PluginHost } from './plugin-host';
 import { ZipDownloadWriter } from './project-delivery';
@@ -22,7 +21,9 @@ import { inProcessStart } from './testing/in-process-sandbox';
 /**
  * The Wallpaper Engine package as the catalogue ships it, run through the real
  * `PluginHost`, then assembled by the host's `wallpaper-web/v1` runtime. The
- * built-in HTML export is the parity reference for the rendered passes.
+ * parity reference for the rendered passes is what the built-in HTML export
+ * produced for this same project, frozen in `legacy-passes.json` when it was
+ * removed in favour of the plugin.
  */
 const root = resolve(import.meta.dirname, '../../../../..');
 const parsed = parsePluginPackage(
@@ -160,23 +161,16 @@ describe('the Wallpaper Engine plugin package', () => {
     ]);
   });
 
-  it('renders the same passes as the built-in export, in the same order', async () => {
+  it('renders the same passes as the built-in export did, in the same order', async () => {
     const { html, output } = await exportAndAssemble();
-    const legacy = await buildWallpaperDocument({
-      name: 'Neon / Rain',
-      project: project(),
-      controls,
-      params,
-      channels,
-      postProcessingActive: false,
-    }).document.text();
-    const legacyPasses = JSON.parse(
-      legacy.slice(
-        legacy.indexOf('window.__SHADER_STUDIO_WALLPAPER__ = ') +
-          'window.__SHADER_STUDIO_WALLPAPER__ = '.length,
-        legacy.indexOf(';\n</script>'),
-      ),
-    ).passes as { id: string; fragment: string }[];
+    const legacyPasses = (
+      JSON.parse(
+        readFileSync(
+          resolve(root, 'plugins/official/wallpaper-engine/fixtures/legacy-passes.json'),
+          'utf8',
+        ),
+      ) as { passes: { id: string; fragment: string }[] }
+    ).passes;
     const player = playerProject(html);
     expect(player.passes.map(({ id, fragment }) => ({ id, fragment }))).toEqual(
       legacyPasses.map(({ id, fragment }) => ({ id, fragment })),

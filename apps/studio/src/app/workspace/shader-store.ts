@@ -725,31 +725,6 @@ export class ShaderStore {
   }
 
   /**
-   * Fetches a shader from Shadertoy and imports it the same way a `.shader.json`
-   * bundle is: buffers, the Common tab and channel wiring survive because the
-   * mapper (`@shadergrove/shared/shadertoy-api`) already produced a full
-   * bundle — this just runs it through the existing import pipeline.
-   */
-  async importShadertoyShader(idOrUrl: string, apiKey: string): Promise<void> {
-    try {
-      const { bundle, warnings } = await this.api.importShadertoy(idOrUrl, apiKey);
-      const result = await this.api.importBundle(bundle, 'rename');
-      await this.refreshList();
-
-      const first = result.imported[0];
-      if (first) await this.forceSelect(first.id);
-
-      const suffix = warnings.length ? ` ${warnings.join(' ')}` : '';
-      this.documentState.notify(
-        `Imported “${first?.name ?? 'shader'}” from Shadertoy.${suffix}`,
-        false,
-      );
-    } catch (error) {
-      this.report(error);
-    }
-  }
-
-  /**
    * Sync replaced these shaders underneath the editor. If the open one is among
    * them, re-open it; an unsaved draft goes to its recovery copy first, so the
    * usual "restore unsaved changes?" prompt offers it back over the new record.

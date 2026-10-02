@@ -1,0 +1,13 @@
+{
+  "source": "buildWallpaperDocument (built-in export, removed in the plugin cutover)",
+  "passes": [
+    {
+      "id": "buffer-a",
+      "fragment": "precision highp float;\n// Provided by the engine for every shader.\nuniform float iTime;\nuniform vec2 iResolution;\nuniform vec4 iMouse;\nuniform vec2 iMouseVel;\nuniform vec3 u_clickData[24];\nuniform sampler2D iChannel0;\nuniform sampler2D iChannel1;\nuniform sampler2D iChannel2;\nuniform sampler2D iChannel3;\n\n// One uniform per control in the schema, named u_<key>.\nuniform float u_speed_rate;\nuniform bool u_glow;\nuniform vec3 u_tint;\nuniform float u_mode;\nuniform float u_speedRate;\n\nvarying vec2 vUv;\n\nfloat commonValue() { return 1.0; }\nvoid main() { gl_FragColor = texture2D(iChannel0, vUv) * u_speed_rate; }"
+    },
+    {
+      "id": "image",
+      "fragment": "#extension GL_OES_standard_derivatives : enable\nprecision highp float;\n// Provided by the engine for every shader.\nuniform float iTime;\nuniform vec2 iResolution;\nuniform vec4 iMouse;\nuniform vec2 iMouseVel;\nuniform vec3 u_clickData[24];\nuniform sampler2D iChannel0;\nuniform sampler2D iChannel1;\nuniform sampler2D iChannel2;\nuniform sampler2D iChannel3;\n\n// One uniform per control in the schema, named u_<key>.\nuniform float u_speed_rate;\nuniform bool u_glow;\nuniform vec3 u_tint;\nuniform float u_mode;\nuniform float u_speedRate;\n\nvarying vec2 vUv;\n\nfloat commonValue() { return 1.0; }\nvec4 tint() { return vec4(commonValue()); }\nvoid main() { float edge = fwidth(vUv.x); gl_FragColor = texture2D(iChannel0, vUv) * tint() * edge; }"
+    }
+  ]
+}

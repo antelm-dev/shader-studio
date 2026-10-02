@@ -18,15 +18,16 @@ import {
   type SourceProviderId,
 } from '@shadergrove/shared/plugin';
 import type { Result } from '@shadergrove/shared/validate';
+import type { TranslationKey } from '../i18n/keys';
 
 /** A field the host renders for a provider. Credentials stay in the host. */
 export interface ProviderField {
   key: string;
   kind: 'text' | 'credential';
   /** i18n key of the label. */
-  label: string;
+  label: TranslationKey;
   /** i18n key of a hint under the field, if any. */
-  hint?: string;
+  hint?: TranslationKey;
   placeholder?: string;
   maxLength: number;
   /** A host preference that keeps the value between imports (never sent to a plugin). */

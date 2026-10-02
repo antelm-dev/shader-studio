@@ -87,13 +87,6 @@ export class DesktopShaderApi extends ShaderApi {
     return this.request(() => window.electron.bridge.shader.importBundle(bundle, mode));
   }
 
-  override importShadertoy(
-    idOrUrl: string,
-    apiKey: string,
-  ): Promise<{ bundle: Bundle; warnings: string[] }> {
-    return this.request(() => window.electron.bridge.shader.importShadertoy(idOrUrl, apiKey));
-  }
-
   // IPC cannot be cancelled; an abort stops the caller waiting and the reply is dropped.
   override fetchShadertoySource(
     idOrUrl: string,

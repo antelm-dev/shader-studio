@@ -6,6 +6,7 @@ import { Preferences, type WorkspacePreferences } from '../prefs/preferences';
 import { ShaderStore } from '../workspace/shader-store';
 import { RendererHandle } from '../rendering/renderer-handle';
 import { SurfaceLayoutService } from '../surfaces/surface-layout';
+import { PluginEntryPoints } from '../plugins/plugin-entry-points';
 import { WorkspaceActions } from './workspace-actions';
 import { I18n } from '../i18n/i18n';
 import type { TranslationKey } from '../i18n/keys';
@@ -46,6 +47,7 @@ export type TogglablePanel = keyof Pick<
 export class MenuCommands {
   private readonly store = inject(ShaderStore);
   private readonly workspace = inject(WorkspaceActions);
+  private readonly pluginEntries = inject(PluginEntryPoints);
   private readonly preferences = inject(Preferences);
   private readonly desktop = inject(DesktopPlatform);
   private readonly renderer = inject(RendererHandle);
@@ -170,7 +172,8 @@ export class MenuCommands {
     icon: () => 'wallpaper',
     label: () => this.i18n.t('action.exportWallpaper'),
     disabled: this.noShader,
-    action: () => void this.workspace.exportWallpaper(),
+    // Runs the enabled Wallpaper Engine exporter plugin, or leads to Plugins to install one.
+    action: () => void this.pluginEntries.exportWallpaper(),
   };
 
   readonly exportSequence: MenuCommand = {
