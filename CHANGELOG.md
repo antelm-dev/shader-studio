@@ -1,5 +1,76 @@
 # Changelog
 
+## [1.5.0](https://github.com/antelm-dev/shadergrove/compare/v1.4.0...v1.5.0) (2026-10-02)
+
+
+### Features
+
+* **backend:** publication snapshots and moderation storage ([9271018](https://github.com/antelm-dev/shadergrove/commit/9271018248b8bfcfbc38761cc7224974da325018))
+* custom post-processing effects with per-instance ids ([65fa6c6](https://github.com/antelm-dev/shadergrove/commit/65fa6c646e186d77e40705ad05cbd3366f7da19c))
+* local plugin package contract and bounded plugin host ([fdf752f](https://github.com/antelm-dev/shadergrove/commit/fdf752f0e9f475298d6ad0274348acacf8ce27bf))
+* plugin themes (phase 1) ([a4406f5](https://github.com/antelm-dev/shadergrove/commit/a4406f5ff62420956e011f89484221b4afec8cc1))
+* Plugins / Installed and the ISF filter package ([b218615](https://github.com/antelm-dev/shadergrove/commit/b218615634a923294a7cabf842c23e125543251e))
+* **plugins:** effect candidates, app version and desktop plugin storage ([f047d72](https://github.com/antelm-dev/shadergrove/commit/f047d724e341a867dea5dc34657d315c75840f37))
+* **plugins:** ISF FX filter package — import and export one-pass ISF as custom effects ([407b2ec](https://github.com/antelm-dev/shadergrove/commit/407b2ec0b09427f88f6d3d00aa1505e0c043585d))
+* public Explore and minimal moderation (phase 1) ([2095ab0](https://github.com/antelm-dev/shadergrove/commit/2095ab0f117e5d96ebbcedcf3c16b599d203c502))
+* **server:** public Explore and moderation API behind PUBLIC_EXPLORE_ENABLED ([72ab040](https://github.com/antelm-dev/shadergrove/commit/72ab04074564a511410b0f8aac13388efa002119))
+* **shared:** declarative theme contributions and theme references ([e5b4ac2](https://github.com/antelm-dev/shadergrove/commit/e5b4ac28c0b98282696bad0634232eb6c97b44ee))
+* **shared:** effect instance ids and embedded custom effects ([78d9ffb](https://github.com/antelm-dev/shadergrove/commit/78d9ffb2ff8de15384223e194bc39b61e7d1d850))
+* **shared:** local plugin package contract ([d90fb15](https://github.com/antelm-dev/shadergrove/commit/d90fb155d0124b5f8ce4202da991c3765050eabf))
+* **studio:** install, choose and keep plugin themes ([5945377](https://github.com/antelm-dev/shadergrove/commit/5945377dbfd633ba65dabc6d0d0b0af88dc208f9))
+* **web:** bounded plugin host with transferable buffers ([b80ded7](https://github.com/antelm-dev/shadergrove/commit/b80ded797529f4d964f7ba3ad05f15fee25ce392))
+* **web:** edit custom effects and duplicate instances in the rack ([fea10a4](https://github.com/antelm-dev/shadergrove/commit/fea10a4dd44ec42354f224274c5569a690d35a43))
+* **web:** Explore pages, copy-to-library and the publish dialog ([75aa08f](https://github.com/antelm-dev/shadergrove/commit/75aa08f9be5df28a9e20f8f4d758ce1f3aa74feb))
+* **web:** moderation page for publications, reports and restrictions ([f61e443](https://github.com/antelm-dev/shadergrove/commit/f61e443db5432fdac6d2525919f9fc64c8b18ccb))
+* **web:** Plugins / Installed — install, enable, use and remove local plugins ([d1d4284](https://github.com/antelm-dev/shadergrove/commit/d1d4284fd1ac3ad3440a7da6d811ed2bfe7245d3))
+* **web:** register /admin/publications ([b648698](https://github.com/antelm-dev/shadergrove/commit/b648698fffe3f19ab668f65bbb175ab3709652db))
+* **web:** render custom post-processing effects per instance ([6bec582](https://github.com/antelm-dev/shadergrove/commit/6bec5827cc3b5a36b0e58fd094898d71afdd0f6f))
+* **web:** route Explore over the editor and gate it on server capabilities ([d036ac7](https://github.com/antelm-dev/shadergrove/commit/d036ac762ef111346828f2c528ccada976a46023))
+* **website:** port the sampled-grove mock to a Next.js app ([dfc6d7b](https://github.com/antelm-dev/shadergrove/commit/dfc6d7bc9e96c215a8047990c93ad01e15ac6127))
+
+
+### Bug Fixes
+
+* **backend:** no restore under a restriction, and one read for a publication's detail ([0889110](https://github.com/antelm-dev/shadergrove/commit/0889110d5b14f237f0836f8c56b56de63333af53))
+* **editor:** colour the lines on screen without waiting for idle time ([a94b49c](https://github.com/antelm-dev/shadergrove/commit/a94b49c16fb2ebcffd563f9ce4d3ceb1713707d8))
+* **editor:** colour the lines on screen without waiting for idle time ([e79b4fb](https://github.com/antelm-dev/shadergrove/commit/e79b4fba8821ee7a037a83a50f534cf4f72cea2f))
+* effect errors follow the shader, the chain stops at its limit, oversize code stays out of the draft (codex round 2) ([c778d73](https://github.com/antelm-dev/shadergrove/commit/c778d73f635d29f6e4e6d60ac6a3879be8a4d995))
+* **mcp:** bump bridge protocol to 3 for effect instance ids and custom effects ([feda525](https://github.com/antelm-dev/shadergrove/commit/feda5251fd523601005d36da82841d310d2a1046))
+* **mcp:** bump the bridge protocol to 3 for effect instance ids and custom effects ([8094cc6](https://github.com/antelm-dev/shadergrove/commit/8094cc6bb64e773cc7479e17cd03ade5ca496e96))
+* **plugins:** Codex round 1 — damaged records, stale imports, sized ISF passes; format ([112b85d](https://github.com/antelm-dev/shadergrove/commit/112b85dd6e6266e415081f1f37d0f3adf0048c8e))
+* **plugins:** Codex round 10 — reserve GLSL ES 3.00 and three.js prefix identifiers ([982a4cc](https://github.com/antelm-dev/shadergrove/commit/982a4cc8af5433df3646bd93af280ad47d3619fa))
+* **plugins:** Codex round 11 — no plugin action while one runs; document sampler2D on native exports ([8ea0279](https://github.com/antelm-dev/shadergrove/commit/8ea027906f4a0e958b5d0f586bcafac0959865a9))
+* **plugins:** Codex round 12 — unique select option names, portable generator entry check ([28a61cf](https://github.com/antelm-dev/shadergrove/commit/28a61cf8bec857602f4ed745c2531f845e2e8d23))
+* **plugins:** Codex round 2 — ISF export of native effects, inputs shadowed by declarations ([22f029c](https://github.com/antelm-dev/shadergrove/commit/22f029c53ca36d07583c5fab0a8166a121daf701))
+* **plugins:** Codex round 3 — ISF float ranges, reserved names on export ([c27dcf6](https://github.com/antelm-dev/shadergrove/commit/c27dcf6972027109e4fcab1c54c590f2c9729c2e))
+* **plugins:** Codex round 4 — reserve u_ names in the ISF plugin ([6841d9b](https://github.com/antelm-dev/shadergrove/commit/6841d9b73088bb170ee2349c78e306e4a133fe9c))
+* **plugins:** Codex round 5 — every ISF input via a global, integer selects, review bound to its profile ([23ecc5d](https://github.com/antelm-dev/shadergrove/commit/23ecc5db2e2fec38a453eb814cebb09a50a75623))
+* **plugins:** Codex round 6 — PASSINDEX for one-pass ISF filters ([5607665](https://github.com/antelm-dev/shadergrove/commit/56076650c3708ba79458059112f91354ff6a8f71))
+* **plugins:** Codex round 7 — IMG_NORM_THIS_PIXEL, committed IndexedDB writes, bounded desktop reads, review read race ([8d287f6](https://github.com/antelm-dev/shadergrove/commit/8d287f6d36005ca22afe2bf9971a306aebb10244))
+* **plugins:** Codex round 8 — swizzle names, non-string IndexedDB keys ([1144a73](https://github.com/antelm-dev/shadergrove/commit/1144a73bd5808acd302af1dc32e1aebcc462c641))
+* **plugins:** Codex round 9 — GLSL keywords as names, comment terminators in the ISF header ([dd927f7](https://github.com/antelm-dev/shadergrove/commit/dd927f7c87eb31ca2938ed4bb485e8fc766627b0))
+* scope built effect programs to their shader; never close away unapplied code (codex round 3) ([7df82db](https://github.com/antelm-dev/shadergrove/commit/7df82db593771698c688a2a98fddcbff3474808c))
+* **studio:** avoid routing feedback loop in selection effect ([71da66f](https://github.com/antelm-dev/shadergrove/commit/71da66f567e8ceaf11ece07816199ca9c96de915))
+* **web:** bound plugin result walk, empty events and exporter input (codex round 1) ([9d00e8b](https://github.com/antelm-dev/shadergrove/commit/9d00e8bf9b79d3db25b0fc70eb314ee7d54f83a8))
+* **web:** charge sparse arrays for their length (codex round 4) ([16c9f2a](https://github.com/antelm-dev/shadergrove/commit/16c9f2ae3fc87ed47d2b3dacca52f1e90593da3d))
+* **web:** charge views for their backing buffer and BigInts for their size (codex round 3) ([98c2265](https://github.com/antelm-dev/shadergrove/commit/98c226545fe762eced306ceedb7ef5a9983af4cd))
+* **web:** effect code reaches the draft on every keystroke; the renderer debounces compiling ([7ebd1ad](https://github.com/antelm-dev/shadergrove/commit/7ebd1adbe5bc10ec2a4b37b5c6f0884b43e70c46))
+* **web:** escape the plugin's own "$" keys on the wire (codex round 5) ([bf4c76e](https://github.com/antelm-dev/shadergrove/commit/bf4c76e35fc2aa8facf087c4e9dbbe7dd9a02356))
+* **web:** keep a rejected custom edit off the last valid pass's uniforms (codex round 1) ([893de8f](https://github.com/antelm-dev/shadergrove/commit/893de8fadc3229c444aeea143ab8bd022abaeb49))
+* **web:** keep effect names readable in the rack and the editor unclipped ([87b315b](https://github.com/antelm-dev/shadergrove/commit/87b315b98aff21fbbd402e33194ea26da5c0b364))
+* **web:** keep plugin code out of the initial bundle ([23cfd89](https://github.com/antelm-dev/shadergrove/commit/23cfd895e4a372fa7542e621bab0f4552fc566b4))
+* **web:** keep the moderation inspector with the list it was opened from ([9d5a7a4](https://github.com/antelm-dev/shadergrove/commit/9d5a7a4be739ac43f28e172a698925797c3d9038))
+* **web:** load no plugin profile until the session is known ([2c2381c](https://github.com/antelm-dev/shadergrove/commit/2c2381c82fe0c8d1311ce7bdf8f0f8954c4b4187))
+* **web:** measure plugin messages by walking, not JSON (codex round 2) ([8e88013](https://github.com/antelm-dev/shadergrove/commit/8e88013abe7d6cf4bc917426642f55e3d5ea5bc5))
+* **web:** revert restores the effect values the editor opened with (codex round 5) ([45a7f7b](https://github.com/antelm-dev/shadergrove/commit/45a7f7b7f3686cfc9e3ea838cbd6d041d0dbd139))
+* **web:** the effect editor never closes over edits it has not applied (codex round 4) ([282e098](https://github.com/antelm-dev/shadergrove/commit/282e098fb3d3797ef2a297c60567b00f8ec02486))
+
+
+### Performance Improvements
+
+* **preview:** stop redrawing a paused preview that has not changed ([404fa74](https://github.com/antelm-dev/shadergrove/commit/404fa7409aa6799dea3a38aaa7ab8362a70f295e))
+* **preview:** stop redrawing a paused preview that has not changed ([a68af86](https://github.com/antelm-dev/shadergrove/commit/a68af86a1ccd273ea32c3fd555f00e3e5e68aa97))
+
 ## [1.4.0](https://github.com/antelm-dev/shadergrove/compare/v1.3.1...v1.4.0) (2026-09-30)
 
 
