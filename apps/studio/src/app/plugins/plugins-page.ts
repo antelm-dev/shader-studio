@@ -690,6 +690,10 @@ export class PluginsPage {
         });
       case 'theme':
         return this.i18n.t(`theme.${contribution.scheme}`);
+      case 'projectImporter':
+        return contribution.provider ?? contribution.modes.join(', ');
+      case 'projectExporter':
+        return contribution.runtime;
     }
   }
 

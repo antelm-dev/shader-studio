@@ -4,18 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "pnpm check:i18n && pnpm check:fonts && pnpm check:ipc",
+    "check": "pnpm check:i18n && pnpm check:fonts && pnpm check:ipc && pnpm check:plugins",
     "check:i18n": "tsx src/check/i18n.ts",
     "check:fonts": "tsx src/check/fonts.ts",
     "check:ipc": "tsx src/check/ipc.ts",
+    "check:plugins": "tsx src/generate/official-plugins.ts --check",
     "generate:fonts": "tsx src/generate/fonts.ts",
     "generate:isf-plugin": "tsx src/generate/isf-plugin.ts",
+    "generate:plugins": "tsx src/generate/official-plugins.ts",
     "smoke": "tsx src/smoke.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "smoke:ssr": "tsx src/ssr-smoke.ts"
   },
   "devDependencies": {
     "@types/node": "^20.17.19",
+    "esbuild": "^0.25.12",
     "playwright": "^1.57.0",
     "tsx": "^4.23.1",
     "typescript": "~6.0.2"
@@ -33,6 +36,15 @@
       },
       "check:ipc": {
         "cache": false
+      },
+      "check:plugins": {
+        "cache": false
+      },
+      "generate:plugins": {
+        "cache": false,
+        "outputs": [
+          "{workspaceRoot}/apps/studio/src/plugins"
+        ]
       },
       "generate:fonts": {
         "cache": false,

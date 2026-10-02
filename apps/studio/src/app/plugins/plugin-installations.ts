@@ -51,6 +51,19 @@ export type PluginReview =
     }
   | { ok: false; errors: string[] };
 
+/**
+ * Who an operation started for. A plugin call is asynchronous; its result is
+ * only adopted (or written) if this still describes the current state — the
+ * same profile, and the same package version, installed at the same moment,
+ * still switched on.
+ */
+export interface PluginOperationContext {
+  profile: string;
+  id: string;
+  version: string;
+  installedAt: string;
+}
+
 export interface InstalledPlugin {
   id: string;
   stored: StoredPlugin;
@@ -94,6 +107,8 @@ export class PluginInstallations {
 
   private store: PluginStore = new NoPluginStore();
   private loads = 0;
+  /** Work under way per package; aborted when the package is switched off, replaced or removed. */
+  private readonly pending = new Map<string, Set<AbortController>>();
 
   constructor() {
     effect(() => {
@@ -132,6 +147,8 @@ export class PluginInstallations {
     if (review.profile === null || review.profile !== this.profile()) {
       throw new Error('The account changed since this package was picked; pick it again');
     }
+    // A replacement must not let work started on the old version finish against the new one.
+    this.abortPending(review.plugin.manifest.id);
     await this.store.put({
       id: review.plugin.manifest.id,
       text: review.text,
@@ -141,17 +158,86 @@ export class PluginInstallations {
     await this.reload();
   }
 
+  /**
+   * Installs a catalogue package whose bytes were already checked against
+   * their entry. Versions are immutable: the same version is never installed
+   * over itself. A newer one replaces the old only here, explicitly, and is
+   * left off like any install; until the write succeeds, the old one stays.
+   */
+  async installReviewedUpdate(review: Extract<PluginReview, { ok: true }>): Promise<void> {
+    const existing = this.find(review.plugin.manifest.id);
+    if (existing?.plugin?.manifest.version === review.plugin.manifest.version) {
+      throw new Error(`Version ${review.plugin.manifest.version} is already installed`);
+    }
+    this.abortPending(review.plugin.manifest.id);
+    await this.install(review);
+  }
+
   async setEnabled(id: string, enabled: boolean): Promise<void> {
     const installed = this.find(id);
     if (!installed) return;
     if (enabled && installed.problem) throw new Error(installed.problem);
+    if (!enabled) this.abortPending(id);
     await this.store.put({ ...installed.stored, enabled });
     await this.reload();
   }
 
   async remove(id: string): Promise<void> {
+    this.abortPending(id);
     await this.store.remove(id);
     await this.reload();
+  }
+
+  /** The context an operation on an active package starts under, or `null` if it may not start. */
+  context(id: string): PluginOperationContext | null {
+    const installed = this.find(id);
+    const profile = this.profile();
+    if (!installed?.active || !installed.plugin || profile === null) return null;
+    return {
+      profile,
+      id,
+      version: installed.plugin.manifest.version,
+      installedAt: installed.stored.installedAt,
+    };
+  }
+
+  /** Whether an operation's context still holds: nothing changed under it. */
+  isCurrent(context: PluginOperationContext): boolean {
+    const now = this.context(context.id);
+    return (
+      now !== null &&
+      now.profile === context.profile &&
+      now.version === context.version &&
+      now.installedAt === context.installedAt
+    );
+  }
+
+  /**
+   * Register work on a package. Its signal aborts when the package is
+   * switched off, updated or removed, or the profile changes; call `done`
+   * when the work ends.
+   */
+  begin(id: string): { signal: AbortSignal; done: () => void } {
+    const controller = new AbortController();
+    const set = this.pending.get(id) ?? new Set<AbortController>();
+    set.add(controller);
+    this.pending.set(id, set);
+    return {
+      signal: controller.signal,
+      done: () => {
+        set.delete(controller);
+        if (set.size === 0 && this.pending.get(id) === set) this.pending.delete(id);
+      },
+    };
+  }
+
+  private abortPending(id?: string): void {
+    for (const [key, set] of this.pending) {
+      if (id !== undefined && key !== id) continue;
+      for (const controller of set) controller.abort(new Error('The plugin changed'));
+      set.clear();
+      this.pending.delete(key);
+    }
   }
 
   /** A host for an active plugin's importers and exporters; `null` for anything else. */
@@ -165,6 +251,7 @@ export class PluginInstallations {
   }
 
   private async switchTo(profile: string | null): Promise<void> {
+    this.abortPending();
     this.pluginsSignal.set([]);
     if (profile === null) {
       // Any load still in flight belongs to a profile that is no longer current.
