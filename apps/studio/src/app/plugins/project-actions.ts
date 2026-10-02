@@ -1,4 +1,4 @@
-import { Injectable, Injector, computed, inject, signal } from '@angular/core';
+import { Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
 
 import { hasActivePostProcessing, type ShaderBundle } from '@shadergrove/shared/model';
 import type {
@@ -54,7 +54,8 @@ class StaleContext extends Error {}
  * Every operation captures the profile, the open shader and the package's
  * version and install time when it starts, and is refused before anything is
  * adopted or written if any of them changed. Switching the package off,
- * updating or removing it, or signing in or out aborts it. One runs at a time.
+ * updating or removing it, signing in or out, or opening another shader aborts
+ * it, delivery included. One runs at a time.
  */
 @Injectable({ providedIn: 'root' })
 export class ProjectPluginActions {
@@ -209,7 +210,10 @@ export class ProjectPluginActions {
       // The context is checked again once a destination is chosen, and the write is
       // cancelled with the signal — on the desktop, in the main process too.
       const delivered = await this.writer().write(output.value, signal, check);
-      if (delivered.status === 'cancelled') return { status: 'cancelled' };
+      if (delivered.status === 'cancelled') {
+        check(); // a delivery stopped because the context changed is reported as such
+        return { status: 'cancelled' };
+      }
       return { status: 'exported', where: delivered.where, warnings: result.warnings };
     });
   }
@@ -247,11 +251,24 @@ export class ProjectPluginActions {
     const pending = this.installations.begin(pluginId);
     const cancel = new AbortController();
     this.cancelCurrent = cancel;
-    const signal = AbortSignal.any([pending.signal, cancel.signal]);
+    // Opening another shader at any point aborts the operation's signal — not only at the
+    // next check — so a delivery already under way (a desktop folder write in the main
+    // process) is cancelled before it commits.
+    const invalidated = new AbortController();
+    const watch = effect(
+      () => {
+        if (this.store.selectedId() !== shaderId) {
+          untracked(() => invalidated.abort(new StaleContext()));
+        }
+      },
+      { injector: this.injector, manualCleanup: true },
+    );
+    const signal = AbortSignal.any([pending.signal, cancel.signal, invalidated.signal]);
     const check = () => {
       if (cancel.signal.aborted) throw cancel.signal.reason;
       if (
         pending.signal.aborted ||
+        invalidated.signal.aborted ||
         !this.installations.isCurrent(context) ||
         this.store.selectedId() !== shaderId
       ) {
@@ -269,6 +286,7 @@ export class ProjectPluginActions {
       if (cancel.signal.aborted) return { status: 'cancelled' };
       if (
         error instanceof StaleContext ||
+        invalidated.signal.aborted ||
         pending.signal.aborted ||
         !this.installations.isCurrent(context)
       ) {
@@ -276,6 +294,7 @@ export class ProjectPluginActions {
       }
       return { status: 'failed', message: error instanceof Error ? error.message : String(error) };
     } finally {
+      watch.destroy();
       pending.done();
       this.cancelCurrent = null;
       this.runningSignal.set(null);

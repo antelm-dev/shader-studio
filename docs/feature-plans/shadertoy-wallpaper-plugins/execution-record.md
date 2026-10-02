@@ -56,6 +56,9 @@ the desktop a cancellable main-process session (`files.begin-project-folder`,
 The first review raised four P2 findings, all fixed in one follow-up commit:
 
 - Imports now also refuse their result when the open shader changes (or one opens) mid-call.
+- Opening another shader at any point aborts the operation's signal, not only at the next
+  check, so a desktop folder write already under way is cancelled in the main process before
+  it commits (re-review follow-up).
 - Desktop export cancellation reaches the main process. It is checked before every file and
   before the folder is committed, and the context is checked again after the folder dialog.
 - `wallpaper-web/v1` data carries a `uniforms` list with every control's exact draft value.

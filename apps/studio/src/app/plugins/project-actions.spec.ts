@@ -22,7 +22,7 @@ import { PluginHost } from './plugin-host';
 import { PLUGIN_STORE, PluginInstallations } from './plugin-installations';
 import type { StoredPlugin } from './plugin-store';
 import { ProjectPluginActions } from './project-actions';
-import type { ProjectWriter } from './project-delivery';
+import { DesktopFolderWriter, type ProjectWriter } from './project-delivery';
 import { inProcessStart } from './testing/in-process-sandbox';
 
 /**
@@ -362,6 +362,54 @@ describe('ProjectPluginActions', () => {
     });
     expect(await actions.runExport(WALLPAPER, 'wallpaper-engine')).toEqual({ status: 'stale' });
     expect(written).toEqual([]);
+  });
+
+  it('cancels a desktop folder write when the shader changes after the folder was chosen', async () => {
+    const { actions, installations } = setup();
+    await settle();
+    await installEnabled(installations, WALLPAPER);
+    // The main process, as the desktop writer sees it: the folder is chosen, then the write
+    // is held until either it is cancelled (reported `cancelled`) or allowed to commit.
+    const cancelled: string[] = [];
+    let commit!: () => void;
+    let writeStarted!: () => void;
+    const started = new Promise<void>((resolve) => (writeStarted = resolve));
+    Object.defineProperty(window, 'electron', {
+      configurable: true,
+      value: {
+        bridge: {
+          files: {
+            beginProjectFolder: async () => ({ status: 'ok', value: { id: 'session-1' } }),
+            cancelProjectFolder: async (id: string) => {
+              cancelled.push(id);
+              commit();
+            },
+            writeProjectFolder: () => {
+              writeStarted();
+              return new Promise((resolve) => {
+                commit = () =>
+                  resolve(
+                    cancelled.length > 0
+                      ? { status: 'cancelled' }
+                      : { status: 'ok', value: { path: '/projects/Waves' } },
+                  );
+              });
+            },
+          },
+        },
+      },
+    });
+    actions.writer = () => new DesktopFolderWriter();
+    try {
+      const running = actions.runExport(WALLPAPER, 'wallpaper-engine');
+      await started;
+      selectedId.set('other');
+      TestBed.tick();
+      expect(cancelled).toEqual(['session-1']);
+      expect(await running).toEqual({ status: 'stale' });
+    } finally {
+      Reflect.deleteProperty(window, 'electron');
+    }
   });
 
   it('refuses to start for a package that is off, and runs one action at a time', async () => {
