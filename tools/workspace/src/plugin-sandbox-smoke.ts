@@ -1,5 +1,5 @@
 /**
- * Drives the dev-only `pluginSandboxProbe()` (apps/web/src/app/plugins) and
+ * Drives the dev-only `pluginSandboxProbe()` (apps/studio/src/app/plugins) and
  * checks from outside the page what the page cannot see about itself:
  *
  * - no attempted request left the browser, and each CSP-governed one raised a

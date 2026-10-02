@@ -6,9 +6,9 @@ import { createLogger } from '../lib/logger.js';
 import { root } from '../lib/paths.js';
 
 const log = createLogger('ipc');
-const desktopRoot = resolve(root, 'apps/desktop');
-const ipcDir = resolve(desktopRoot, 'main/src/ipc');
-const outFile = resolve(root, 'libs/desktop-api/src/ipc-bridge.ts');
+const studioRoot = resolve(root, 'apps/studio');
+const ipcDir = resolve(studioRoot, 'src/desktop/main/ipc');
+const outFile = resolve(root, 'apps/studio/src/desktop/contracts/ipc-bridge.ts');
 
 const moduleNames = readdirSync(ipcDir)
   .filter((name) => name.endsWith('.ipc.ts'))
@@ -16,13 +16,13 @@ const moduleNames = readdirSync(ipcDir)
     const source = readFileSync(resolve(ipcDir, name), 'utf8');
     const match = source.match(/defineIpcModule\(\s*'([^']+)'/);
     if (!match) {
-      fail(`Could not find defineIpcModule name in apps/desktop/main/src/ipc/${name}`);
+      fail(`Could not find defineIpcModule name in apps/studio/src/desktop/main/ipc/${name}`);
     }
     return match[1];
   })
   .sort();
 
-if (moduleNames.length === 0) fail('No IPC modules found under apps/desktop/main/src/ipc');
+if (moduleNames.length === 0) fail('No IPC modules found under apps/studio/src/desktop/main/ipc');
 
 /**
  * Invoke the generator script directly. Going through `pnpm gen:ipc` / Nx can
@@ -30,8 +30,8 @@ if (moduleNames.length === 0) fail('No IPC modules found under apps/desktop/main
  * the second-run stability assertion tautological — especially across worktrees.
  */
 function runGenIpc(): SpawnSyncReturns<string> {
-  return spawnSync(process.execPath, ['scripts/gen-ipc.mjs'], {
-    cwd: desktopRoot,
+  return spawnSync(process.execPath, ['scripts/desktop/gen-ipc.mjs'], {
+    cwd: studioRoot,
     encoding: 'utf8',
   });
 }

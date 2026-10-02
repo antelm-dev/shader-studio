@@ -1,0 +1,252 @@
+{
+  "name": "@shadergrove/studio",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "ng build",
+    "build:renderer": "ng run shadergrove:desktop:production",
+    "build:desktop": "node scripts/desktop/build.mjs",
+    "build:main": "rollup -c rollup.desktop.config.mjs --environment NODE_ENV:production",
+    "dev": "ng serve",
+    "dev:renderer": "ng run shadergrove:desktop-serve:development",
+    "dev:desktop": "node scripts/desktop/dev.mjs",
+    "dev:server": "tsx src/server/index.ts",
+    "test": "pnpm test:server && pnpm test:desktop && pnpm test:web",
+    "test:web": "ng test --watch=false",
+    "test:desktop": "vitest run --config vitest.desktop.config.ts",
+    "test:watch": "ng test --watch",
+    "typecheck": "pnpm typecheck:web && pnpm typecheck:server && pnpm typecheck:desktop",
+    "typecheck:web": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
+    "typecheck:desktop": "pnpm gen:ipc && tsc --noEmit -p tsconfig.desktop.main.json && tsc --noEmit -p tsconfig.desktop.preload.json",
+    "gen:ipc": "node scripts/desktop/gen-ipc.mjs",
+    "clean:desktop": "node scripts/desktop/clean.mjs",
+    "pack:dir": "node scripts/desktop/build.mjs pack",
+    "pack:win": "node scripts/desktop/build.mjs pack --win",
+    "dist:win": "node scripts/desktop/build.mjs dist --win",
+    "test:server": "vitest run --config vitest.server.config.ts",
+    "typecheck:server": "tsc -p tsconfig.server.json --noEmit"
+  },
+  "dependencies": {
+    "@angular/cdk": "22.0.4",
+    "@angular/common": "^22.0.0",
+    "@angular/compiler": "^22.0.0",
+    "@angular/core": "^22.0.0",
+    "@angular/forms": "^22.0.0",
+    "@angular/localize": "22.0.6",
+    "@angular/material": "22.0.4",
+    "@angular/platform-browser": "^22.0.0",
+    "@angular/platform-server": "^22.0.0",
+    "@angular/router": "^22.0.0",
+    "@angular/ssr": "^22.0.6",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@nestjs/common": "^11.1.28",
+    "@nestjs/core": "^11.1.28",
+    "@nestjs/platform-express": "^11.1.28",
+    "@nestjs/swagger": "^11.4.6",
+    "@shadergrove/backend": "workspace:*",
+    "@shadergrove/shared": "workspace:*",
+    "better-auth": "^1.7.5",
+    "drizzle-orm": "0.45.2",
+    "electron-ipc-module": "1.1.0",
+    "electron-updater": "6.8.9",
+    "express": "^5.1.0",
+    "lil-gui": "^0.21.0",
+    "material-symbols": "^0.47.5",
+    "mediabunny": "^1.50.8",
+    "monaco-editor": "^0.55.1",
+    "nodemailer": "^10.0.10",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "~7.8.0",
+    "three": "^0.185.1",
+    "tslib": "^2.3.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@angular/build": "^22.0.6",
+    "@angular/cli": "^22.0.0",
+    "@angular/compiler-cli": "^22.0.0",
+    "@compodoc/compodoc": "^2.0.0",
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-replace": "^6.0.2",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@types/express": "^5.0.1",
+    "@types/node": "^20.17.19",
+    "@types/nodemailer": "^8.0.2",
+    "@types/three": "^0.185.1",
+    "electron": "^40.8.0",
+    "electron-builder": "^26.0.12",
+    "jsdom": "^28.0.0",
+    "rollup": "^4.30.1",
+    "tsx": "^4.23.1",
+    "typescript": "~6.0.2",
+    "vite-plugin-electron-run": "0.4.1",
+    "vitest": "^4.0.8"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "outputs": [
+          "{workspaceRoot}/dist/shadergrove"
+        ],
+        "inputs": [
+          "webProduction",
+          "^production",
+          {
+            "dependentTasksOutputFiles": "**/ipc-bridge.ts"
+          }
+        ],
+        "dependsOn": [
+          "gen:ipc"
+        ]
+      },
+      "build:desktop": {
+        "outputs": [
+          "{workspaceRoot}/dist-main",
+          "{workspaceRoot}/dist-web"
+        ]
+      },
+      "dev": {
+        "cache": false,
+        "persistent": true,
+        "dependsOn": [
+          "gen:ipc"
+        ]
+      },
+      "dev:desktop": {
+        "cache": false,
+        "persistent": true,
+        "dependsOn": [
+          "gen:ipc"
+        ]
+      },
+      "test:watch": {
+        "cache": false,
+        "persistent": true,
+        "dependsOn": [
+          "gen:ipc"
+        ]
+      },
+      "dev:server": {
+        "cache": false,
+        "persistent": true
+      },
+      "build:renderer": {
+        "outputs": [
+          "{workspaceRoot}/dist-web"
+        ],
+        "inputs": [
+          "webProduction",
+          "^production",
+          {
+            "dependentTasksOutputFiles": "**/ipc-bridge.ts"
+          }
+        ],
+        "cache": true,
+        "dependsOn": [
+          "gen:ipc"
+        ]
+      },
+      "build:main": {
+        "outputs": [
+          "{workspaceRoot}/dist-main"
+        ],
+        "inputs": [
+          "{projectRoot}/src/desktop/**/*",
+          "{projectRoot}/rollup.desktop.config.mjs",
+          "{projectRoot}/tsconfig.desktop.*.json",
+          "{projectRoot}/package.json",
+          "sharedGlobals",
+          "^production"
+        ]
+      },
+      "gen:ipc": {
+        "cache": true,
+        "inputs": [
+          "{projectRoot}/src/desktop/main/**/*.ts",
+          "{projectRoot}/scripts/desktop/gen-ipc.mjs",
+          "{projectRoot}/tsconfig.desktop.main.json",
+          "sharedGlobals",
+          "^production",
+          "{projectRoot}/src/desktop/contracts/contracts.ts"
+        ],
+        "outputs": [
+          "{projectRoot}/src/desktop/contracts/ipc-bridge.ts"
+        ]
+      },
+      "dev:renderer": {
+        "cache": false,
+        "persistent": true,
+        "dependsOn": [
+          "gen:ipc"
+        ]
+      },
+      "pack:dir": {
+        "cache": false
+      },
+      "pack:win": {
+        "cache": false
+      },
+      "dist:win": {
+        "cache": false
+      },
+      "test:server": {
+        "cache": true,
+        "inputs": [
+          "{projectRoot}/src/server/**/*",
+          "{projectRoot}/tsconfig.server.json",
+          "{projectRoot}/vitest.server.config.ts",
+          "{projectRoot}/package.json",
+          "sharedGlobals",
+          "^production"
+        ]
+      },
+      "test": {
+        "dependsOn": [
+          "gen:ipc"
+        ],
+        "inputs": [
+          "default",
+          "^production",
+          {
+            "dependentTasksOutputFiles": "**/ipc-bridge.ts"
+          }
+        ]
+      },
+      "typecheck": {
+        "dependsOn": [
+          "gen:ipc"
+        ],
+        "inputs": [
+          "default",
+          "^default",
+          {
+            "dependentTasksOutputFiles": "**/ipc-bridge.ts"
+          }
+        ]
+      },
+      "test:web": {
+        "dependsOn": [
+          "gen:ipc"
+        ]
+      }
+    },
+    "namedInputs": {
+      "webProduction": [
+        "production",
+        "!{projectRoot}/src/desktop/main/**/*",
+        "!{projectRoot}/src/desktop/preload/**/*",
+        "!{projectRoot}/scripts/desktop/**/*",
+        "!{projectRoot}/tsconfig.desktop.*.json",
+        "!{projectRoot}/rollup.desktop.config.mjs",
+        "!{projectRoot}/vitest.desktop.config.ts",
+        "!{projectRoot}/electron-builder.yml",
+        "!{projectRoot}/vitest.server.config.ts"
+      ]
+    }
+  }
+}

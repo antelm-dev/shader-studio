@@ -13,20 +13,22 @@ import { root } from './lib/paths.js';
 import { checkPluginSandbox } from './plugin-sandbox-smoke.js';
 
 const log = createLogger('smoke');
-const webDir = resolve(root, 'apps/web');
+const webDir = resolve(root, 'apps/studio');
 const require = createRequire(resolve(webDir, 'package.json'));
 const ngCli = require.resolve('@angular/cli/bin/ng.js');
 const PORT = Number(process.env['SMOKE_PORT'] ?? 4321);
 const BASE = `http://127.0.0.1:${PORT}`;
 const READY = /Local:\s+http:\/\/(?:localhost|127\.0\.0\.1):/;
 
-const ipc = spawnSync('pnpm', ['--filter', '@shadergrove/desktop', 'gen:ipc'], {
+const ipc = spawnSync('pnpm', ['--filter', '@shadergrove/studio', 'gen:ipc'], {
   cwd: root,
   encoding: 'utf8',
   shell: process.platform === 'win32',
 });
 if (ipc.status !== 0) {
-  log.error('smoke requires gen:ipc — window.electron types come from @shadergrove/desktop-api');
+  log.error(
+    'smoke requires gen:ipc — window.electron types come from studio/src/desktop/contracts/ipc-bridge.ts',
+  );
   log.error(ipc.stderr || ipc.stdout);
   process.exit(ipc.status ?? 1);
 }

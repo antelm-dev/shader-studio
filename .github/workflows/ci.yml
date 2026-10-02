@@ -57,7 +57,7 @@ jobs:
 
       - name: Build
         # Desktop packaging has its own Windows job below.
-        run: pnpm nx affected -t build --exclude shadergrove,@shadergrove/desktop
+        run: pnpm nx affected -t build --exclude shadergrove
 
       - name: Production SSR smoke
         run: pnpm build && pnpm smoke:ssr
@@ -76,7 +76,7 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      # `window.electron` is typed via main/preload → main/generated/ipc-bridge.ts
+      # `window.electron` is typed via desktop main/preload → apps/studio/src/desktop/contracts/ipc-bridge.ts
       # (gitignored). Without this, ng serve hits noImplicitAny on bridge callbacks.
       - name: Generate IPC bridge
         run: pnpm gen:ipc

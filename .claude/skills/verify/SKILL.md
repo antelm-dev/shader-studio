@@ -15,7 +15,7 @@ The library is per-account, so the server needs the same throwaway auth setup
 the smoke test uses (`tools/workspace/src/smoke.ts`):
 
 ```bash
-cd apps/web
+cd apps/studio
 SHADER_DATA_DIR=<scratch dir> BETTER_AUTH_URL=http://127.0.0.1:4321 \
 AUTH_REQUIRE_VERIFIED_EMAIL=0 AUTH_CHECK_COMPROMISED_PASSWORDS=0 \
   pnpm exec ng serve --port=4321 --host=127.0.0.1 --no-hmr

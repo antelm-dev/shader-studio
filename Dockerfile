@@ -12,11 +12,8 @@ ENV CI=true \
 RUN npm install --global pnpm@10.28.2
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/web/package.json ./apps/web/
-COPY apps/desktop/package.json ./apps/desktop/
-COPY libs/api/package.json ./libs/api/
+COPY apps/studio/package.json ./apps/studio/
 COPY libs/backend/package.json ./libs/backend/
-COPY libs/desktop-api/package.json ./libs/desktop-api/
 COPY libs/shared/package.json ./libs/shared/
 COPY tools/maintenance/package.json ./tools/maintenance/
 COPY tools/mcp/package.json ./tools/mcp/
@@ -30,7 +27,7 @@ COPY . .
 # The web declarations consume the generated, typed Electron IPC contract even
 # though the runtime image does not contain Electron. Generate it in the build
 # stage, then produce the SSR bundle (which keeps `pg` and Swagger external; see
-# apps/web/angular.json) and the standalone maintenance CLI (tools/maintenance).
+# apps/studio/angular.json) and the standalone maintenance CLI (tools/maintenance).
 RUN pnpm gen:ipc \
     && pnpm build \
     && pnpm --filter @shadergrove/maintenance build:cli

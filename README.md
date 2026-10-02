@@ -379,41 +379,62 @@ with them is up to it.
 
 ## Architecture
 
-Five concerns, kept apart on purpose. Nothing below the line knows about Angular.
+Application runtimes and reusable libraries keep their own boundaries. The libraries do not depend on Angular.
 
 ```
 apps/
-  web/                   the deployed app: one process for pages, files and /api
-    src/                 Angular browser, SSR, and desktop entry points
-      app/               workspace state, rendering, editor, and UI
+  studio/                one application package for web, SSR and desktop
+    src/
+      app/               Angular workspace state, rendering, editor, and UI
       server/            Express host: security headers, /api mount, static, SSR
         create-library.ts  picks PostgreSQL (DATABASE_URL) or SQLite, then seeds
-  desktop/
-    main/src/            Electron lifecycle, windows, updates, and IPC handlers
-    preload/src/         sandboxed context bridge
-    package.json         desktop build, development, packaging, and type checks
+        api/             NestJS modules: core, system, shaders, auth, publications, admin
+      desktop/
+        main/            Electron lifecycle, windows, updates, and IPC handlers
+        preload/         sandboxed context bridge
+        contracts/       plain IPC contracts and the generated bridge
+    scripts/desktop/     Electron development, IPC generation and packaging
+    package.json         @shadergrove/studio, with separate runtime targets
 
 libs/
-  api/                   the HTTP API (NestJS), mounted by apps/web; the desktop
-                         signs in and syncs through it too
-    src/core/            tokens, global auth guard, origin guard, Swagger, errors
-    src/system/          health and translations
-    src/shaders/         the private library: shaders, presets, textures, bundles
-    src/auth/            Better Auth, transactional mail, desktop sign-in handoff
-    src/publications/    public Explore and publishing
-    src/admin/           moderation (only while Explore is on)
   shared/                model, validation, GLSL, capture, and MCP contracts
   backend/               Node-only storage and i18n shared by server and desktop
     src/library/         ShaderLibrary — engine-agnostic shader domain logic
     src/persistence/     ShaderRepository + SQLite / Postgres / legacy adapters
     src/storage/         the legacy file store, now a read-only import source
-  desktop-api/           generated, typed IPC bridge contract
 
 tools/
   maintenance/           CLI: legacy import and pre-account shader ownership claims
   mcp/                   standalone `@shader-studio/mcp` server
   workspace/             checks, generators, smoke tests, and repo automation
 ```
+
+The application package keeps its runtime checks separate: Angular uses
+`tsconfig.app.json` and `tsconfig.spec.json`, the Express host uses
+`tsconfig.server.json`, and Electron uses `tsconfig.desktop.main.json` and
+`tsconfig.desktop.preload.json`. Angular test discovery excludes `src/server`
+and `src/desktop`. API and Electron tests use `vitest.server.config.ts` and
+`vitest.desktop.config.ts` in Node. The browser entry points cannot import the
+server or Electron main/preload (enforced by oxlint); they may import the
+generated IPC bridge only as a type. IPC contracts are local to studio, while
+`libs/backend` remains shared with the maintenance CLI and `libs/shared` with
+backend, studio and MCP.
+
+The root commands remain the entry points for developers. Within
+`@shadergrove/studio`, `build` produces web + SSR, `build:renderer` produces the
+static Angular desktop renderer, and `build:desktop` builds renderer + main +
+preload. Likewise, `dev:renderer` starts Angular on port 4201 while `dev:desktop`
+also starts Electron. `test` runs server, desktop and web checks, in that
+order; `typecheck` covers all three runtimes. `test:web`, `test:server`,
+`test:desktop`, `typecheck:web`, `typecheck:server` and `typecheck:desktop` can
+target one runtime. Nx excludes Electron sources and tooling from web build inputs; desktop
+builds retain their own outputs in `dist-main` and `dist-web`.
+
+Root Angular build, development and test targets generate the IPC bridge first.
+When invoking Angular directly inside studio, run `pnpm gen:ipc` beforehand.
+Complete generation before compilation; concurrent generation can temporarily
+leave the compiler without the bridge types. Cached web checks and builds also
+hash the generated bridge output.
 
 ### Storage
 
@@ -453,17 +474,16 @@ externalized by the SSR bundle, so `pnpm serve:ssr` can resolve them from `dist`
 
 ### Server dependency changes
 
-The API is a separate workspace package, but Angular builds its Express host from
-`apps/web/src/server/index.ts`. A new Node-only dependency in `libs/api` or
-`libs/backend` can therefore affect development, the production SSR bundle, and
-the Docker image in different ways. When adding or upgrading one:
+Angular builds the Express host and its local API from
+`apps/studio/src/server/index.ts`. A new Node-only dependency in studio or
+`libs/backend` can affect development, the production SSR bundle, and the Docker
+image in different ways. When adding or upgrading one:
 
-1. Declare it in the workspace package that imports it. If `pnpm dev` fails
-   during Vite SSR dependency resolution (for example, it looks for a package
-   under `apps/web` that only `libs/api` declares), check
-   `apps/web/angular.json` → `serve.options.prebundle.exclude`. This list is for
+1. Declare it in the workspace package that imports it (`apps/studio` for API
+   dependencies). If `pnpm dev` fails during Vite SSR dependency resolution, check
+   `apps/studio/angular.json` → `serve.options.prebundle.exclude`. This list is for
    the web dev server; the desktop static target has its own configuration.
-2. Check `apps/web/angular.json` → `build.options.externalDependencies`. Packages
+2. Check `apps/studio/angular.json` → `build.options.externalDependencies`. Packages
    needed at runtime but left outside the SSR bundle must be available to the
    built server. `pg` and `@nestjs/swagger` currently have pinned versions in
    the root `package.json`; the Dockerfile installs those same versions into
@@ -906,7 +926,7 @@ pnpm test
   import/export (v1 and v2, rename/overwrite), multipass projects, idempotent
   seeding, transaction rollback, revision conflicts, legacy migration, corrupt
   JSON and missing assets, and persistence across a restart.
-- **`libs/api/test/router.spec.ts`** — the REST layer over a real SQLite-backed
+- **`apps/studio/src/server/api/test/router.spec.ts`** — the REST layer over a real SQLite-backed
   library: status codes, the `{ error: { code, message } }` envelope, a `409` on
   a stale `expectedRevision`, and texture upload/serve/clear.
 

@@ -12,7 +12,7 @@
   "[jsonc]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
   "[glsl]": { "editor.formatOnSave": false },
 
-  "js/ts.tsdk": "apps/web/node_modules/typescript/lib",
+  "js/ts.tsdk": "apps/studio/node_modules/typescript/lib",
   "js/ts.enablePromptUseWorkspaceTsdk": true,
   "js/ts.preferences.autoImportFileExcludePatterns": ["**/dist/**", "**/dist-*/**"],
 
