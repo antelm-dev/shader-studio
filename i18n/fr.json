@@ -680,6 +680,7 @@
   "plugins.kindEffect": "Effet",
   "plugins.kindImporter": "Importateur",
   "plugins.kindExporter": "Exportateur",
+  "plugins.kindTheme": "Thème",
   "plugins.limits": "Limites : fichiers jusqu’à {input} octets, résultats jusqu’à {output} octets, {seconds} s par appel.",
   "plugins.controls": "{count} contrôles",
   "plugins.accepts": "lit {formats}",

@@ -616,7 +616,9 @@ export class PluginsPage {
         ? 'plugins.kindEffect'
         : contribution.kind === 'importer'
           ? 'plugins.kindImporter'
-          : 'plugins.kindExporter',
+          : contribution.kind === 'exporter'
+            ? 'plugins.kindExporter'
+            : 'plugins.kindTheme',
     );
   }
 
@@ -633,6 +635,8 @@ export class PluginsPage {
           mime: contribution.mime,
           extension: contribution.extension,
         });
+      case 'theme':
+        return this.i18n.t(`theme.${contribution.scheme}`);
     }
   }
 

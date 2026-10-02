@@ -683,6 +683,7 @@ export const TRANSLATION_KEYS = [
   'plugins.kindEffect',
   'plugins.kindImporter',
   'plugins.kindExporter',
+  'plugins.kindTheme',
   'plugins.limits',
   'plugins.controls',
   'plugins.accepts',
