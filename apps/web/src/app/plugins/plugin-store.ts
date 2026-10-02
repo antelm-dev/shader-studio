@@ -73,9 +73,12 @@ export class IndexedDbPluginStore implements PluginStore {
   ): Promise<unknown> {
     const db = await this.open();
     return new Promise((resolve, reject) => {
-      const request = run(db.transaction('plugins', mode).objectStore('plugins'));
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      // Settled by the transaction, not the request: a write is only saved once it commits,
+      // and a commit can still abort (quota, disk) after the request succeeded.
+      const transaction = db.transaction('plugins', mode);
+      const request = run(transaction.objectStore('plugins'));
+      transaction.oncomplete = () => resolve(request.result);
+      transaction.onabort = () => reject(transaction.error ?? request.error);
     });
   }
 }

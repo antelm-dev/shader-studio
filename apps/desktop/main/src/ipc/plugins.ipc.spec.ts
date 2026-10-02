@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { PLUGIN_LIMITS } from '@shadergrove/shared';
 import { createPluginFiles, createPluginsIpc } from './plugins.ipc';
 
 // The real module registers on Electron's ipcMain; here a module is just its handlers.
@@ -89,6 +90,15 @@ describe('plugin files', () => {
     await writeFile(join(dir, 'notes.txt'), 'hello');
 
     expect(await files.list()).toHaveLength(1);
+  });
+
+  it('does not read a file larger than any record it could have written', async () => {
+    await files.put(record(packageText('dev.example.tint')));
+    const [name] = await readdir(dir);
+    const text = await readFile(join(dir, name!), 'utf8');
+    await writeFile(join(dir, name!), text + ' '.repeat(PLUGIN_LIMITS.packageBytes * 6 + 4096));
+
+    expect(await files.list()).toEqual([]);
   });
 
   it('skips a record whose id is not the one its file is named after, so removing it cannot hit another file', async () => {

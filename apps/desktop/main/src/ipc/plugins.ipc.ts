@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { WebContents } from 'electron';
 import { defineIpcModule, handle } from 'electron-ipc-module';
@@ -17,6 +17,13 @@ import type { StoredPlugin } from '@shadergrove/desktop-api/contracts';
  * every load, so a file edited or corrupted on disk comes back disabled rather
  * than trusted.
  */
+/**
+ * The largest file a valid record can make: package text of at most `packageBytes`
+ * UTF-16 units — up to 3 UTF-8 bytes each, doubled again by JSON escaping — plus its
+ * few other fields. Anything bigger was not written here and is not read.
+ */
+const MAX_RECORD_BYTES = PLUGIN_LIMITS.packageBytes * 6 + 4096;
+
 export function createPluginFiles(dir: string) {
   const fileFor = (id: string) =>
     join(dir, `${createHash('sha256').update(id).digest('hex').slice(0, 32)}.json`);
@@ -26,8 +33,12 @@ export function createPluginFiles(dir: string) {
       const names = await readdir(dir).catch(() => [] as string[]);
       const stored: StoredPlugin[] = [];
       for (const name of names.filter((entry) => /^[0-9a-f]{32}\.json$/.test(entry))) {
-        const record = await readFile(join(dir, name), 'utf8')
-          .then((text) => JSON.parse(text) as unknown)
+        const path = join(dir, name);
+        const record = await stat(path)
+          .then((info) =>
+            info.isFile() && info.size <= MAX_RECORD_BYTES ? readFile(path, 'utf8') : null,
+          )
+          .then((text) => (text === null ? null : (JSON.parse(text) as unknown)))
           .catch(() => null);
         // A record whose id does not hash to its own file could not be removed by that id —
         // removing it would delete another package's file instead.

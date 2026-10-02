@@ -109,6 +109,16 @@ describe('importing ISF FX filters', () => {
     expect(effect.source).toContain('#define PASSINDEX 0');
   });
 
+  it("defines the spec's IMG_NORM_THIS_PIXEL and the IMG_THIS_NORM_PIXEL spelling", async () => {
+    const effect = await importIsf(read('examples/tint.fs'));
+    expect(effect.source).toContain(
+      '#define IMG_NORM_THIS_PIXEL(image) texture2D(tDiffuse, isf_uv)',
+    );
+    expect(effect.source).toContain(
+      '#define IMG_THIS_NORM_PIXEL(image) texture2D(tDiffuse, isf_uv)',
+    );
+  });
+
   it('chooses a range that keeps the default of a float input without MIN or MAX', async () => {
     const image = { NAME: 'inputImage', TYPE: 'image' };
     const header = {

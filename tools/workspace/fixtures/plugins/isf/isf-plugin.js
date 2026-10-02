@@ -13,7 +13,7 @@
 // Supported: ISFVSN 2, one `inputImage`, no PASSES (or one plain pass), inputs of
 // type float, bool, long (with VALUES) and color (alpha dropped: controls are RGB).
 // Built-ins: isf_FragNormCoord, RENDERSIZE, TIME, PASSINDEX, IMG_THIS_PIXEL,
-// IMG_THIS_NORM_PIXEL, IMG_NORM_PIXEL, IMG_PIXEL, IMG_SIZE. Anything else fails to
+// IMG_NORM_THIS_PIXEL (and IMG_THIS_NORM_PIXEL), IMG_NORM_PIXEL, IMG_PIXEL, IMG_SIZE. Anything else fails to
 // compile, and the host shows where.
 
 const HEADER_MARK = '// ISF-HEADER: ';
@@ -42,6 +42,7 @@ const RESERVED = new Set([
   'PASSINDEX',
   'IMG_THIS_PIXEL',
   'IMG_THIS_NORM_PIXEL',
+  'IMG_NORM_THIS_PIXEL',
   'IMG_NORM_PIXEL',
   'IMG_PIXEL',
   'IMG_SIZE',
@@ -257,6 +258,8 @@ function importIsf(text) {
     // One pass at most, so always the first.
     '#define PASSINDEX 0',
     '#define IMG_NORM_PIXEL(image, coord) texture2D(tDiffuse, coord)',
+    // The spec's name, and the spelling some hosts also accept.
+    '#define IMG_NORM_THIS_PIXEL(image) texture2D(tDiffuse, isf_uv)',
     '#define IMG_THIS_NORM_PIXEL(image) texture2D(tDiffuse, isf_uv)',
     '#define IMG_THIS_PIXEL(image) texture2D(tDiffuse, isf_uv)',
     '#define IMG_PIXEL(image, coord) texture2D(tDiffuse, (coord) / u_resolution)',

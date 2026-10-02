@@ -491,7 +491,11 @@ export class PluginsPage {
       });
       return;
     }
-    this.review.set(this.installations.review(new Uint8Array(await file.arrayBuffer())));
+    // The read is asynchronous; what it reviews belongs to the profile it was picked under.
+    const profile = this.installations.profile();
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (this.installations.profile() !== profile) return;
+    this.review.set(this.installations.review(bytes));
   }
 
   protected async install(review: Extract<PluginReview, { ok: true }>): Promise<void> {
