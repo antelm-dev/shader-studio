@@ -135,3 +135,16 @@ export interface SyncRemoveRequest {
  * (another account signed in) and `changed` (edited since): nothing deleted.
  */
 export type SyncRemoveResult = 'ok' | 'not-linked' | 'account-changed' | 'changed';
+
+/**
+ * One installed local plugin as it is kept on disk: the package file exactly as
+ * the user picked it — the renderer re-reads and revalidates it on every load —
+ * and whether they switched it on.
+ */
+export interface StoredPlugin {
+  /** The manifest id at install time — kept apart so a corrupted text can still be removed. */
+  id: string;
+  text: string;
+  enabled: boolean;
+  installedAt: string;
+}

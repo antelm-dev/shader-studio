@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { LIMITS } from '../validate/limits';
 import {
   PLUGIN_LIMITS,
+  effectContributionCandidate,
+  validateEffectCandidate,
   isPluginCompatible,
   parsePluginPackage,
   validatePluginPackage,
@@ -145,5 +148,50 @@ describe('isPluginCompatible', () => {
     expect(isPluginCompatible(manifest('>=1.5.0'), '1.4.9')).toBe(false);
     expect(isPluginCompatible(manifest('1.4.0'), '1.4.0')).toBe(true);
     expect(isPluginCompatible(manifest('>=1.4.0'), 'garbage')).toBe(false);
+  });
+});
+
+describe('validateEffectCandidate', () => {
+  const candidate = {
+    name: '  Gain ',
+    source: 'vec4 effect(vec4 c, vec2 uv) { return c * u_gain; }',
+    controls: [{ key: 'gain', type: 'number', default: 1, min: 0, max: 2 }],
+    values: { gain: 9, rogue: 1 },
+  };
+
+  it('accepts a candidate, trimming its name and sanitizing its values', () => {
+    expect(validateEffectCandidate(candidate)).toEqual({
+      ok: true,
+      value: { ...candidate, name: 'Gain', values: { gain: 2 } },
+    });
+  });
+
+  it('refuses what a saved custom effect would refuse', () => {
+    const errorOf = (input: unknown) => {
+      const result = validateEffectCandidate(input);
+      return result.ok ? '' : result.errors.join();
+    };
+    expect(errorOf({ ...candidate, source: '' })).toMatch(/source/);
+    expect(
+      errorOf({ ...candidate, source: 'x'.repeat(LIMITS.customEffectSourceLength + 1) }),
+    ).toMatch(/at most/);
+    expect(
+      errorOf({ ...candidate, controls: [{ key: 'time', type: 'boolean', default: true }] }),
+    ).toMatch(/reserved/);
+    expect(errorOf({ ...candidate, script: 'x' })).toMatch(/script/);
+    expect(errorOf('nope')).toMatch(/object/);
+  });
+
+  it('turns an effect contribution into a candidate with default values', () => {
+    const parsed = validatePluginPackage(pkg());
+    if (!parsed.ok) throw new Error(parsed.errors.join());
+    const contribution = parsed.value.manifest.contributions[0]!;
+    if (contribution.kind !== 'effect') throw new Error('expected the effect');
+    expect(effectContributionCandidate(parsed.value, contribution)).toEqual({
+      name: 'Tint',
+      source: 'vec4 effect(vec4 c, vec2 uv) { return c; }',
+      controls: effect.controls,
+      values: { amount: 0.5 },
+    });
   });
 });

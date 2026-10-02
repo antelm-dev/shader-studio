@@ -19,6 +19,7 @@ import { createAccountIpc } from './ipc/account.ipc';
 import { createFilesIpc } from './ipc/files.ipc';
 import { createI18nIpc } from './ipc/i18n.ipc';
 import { createMigrationIpc } from './ipc/migration.ipc';
+import { createPluginsIpc } from './ipc/plugins.ipc';
 import { createShaderIpc } from './ipc/shader.ipc';
 import { broadcastSync, createSyncIpc } from './ipc/sync.ipc';
 import { createUpdateIpc } from './ipc/update.ipc';
@@ -305,6 +306,11 @@ prepare({
       update: createUpdateIpc(updates),
       account: createAccountIpc(account),
       sync: createSyncIpc(sync),
+      // Only the main window manages plugins; output and satellite windows do not.
+      plugins: createPluginsIpc(
+        join(userData, 'plugins'),
+        (sender) => sender === mainWindow?.webContents,
+      ),
     });
     void sync.run();
 
