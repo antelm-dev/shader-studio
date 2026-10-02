@@ -36,6 +36,7 @@ const RESERVED = new Set([
   'effect',
   'inputImage',
   'tDiffuse',
+  'vUv',
   'TIME',
   'RENDERSIZE',
   'IMG_THIS_PIXEL',
@@ -129,24 +130,31 @@ function hex(rgba) {
     : '#000000';
 }
 
+/** A name both sides can use: a control key here, an input NAME in ISF. */
+const usableName = (key) =>
+  typeof key === 'string' && KEY.test(key) && !RESERVED.has(key) && !key.startsWith('isf_');
+
 /** One ISF input as a control, and the macro that makes the ISF name mean that control's uniform. */
 function inputToControl(input) {
   const key = input.NAME;
-  if (typeof key !== 'string' || !KEY.test(key) || RESERVED.has(key) || key.startsWith('isf_')) {
+  if (!usableName(key)) {
     fail(
       `Input name ${JSON.stringify(key)} cannot be used here: it must be a plain identifier, not a reserved name`,
     );
   }
   switch (input.TYPE) {
     case 'float': {
-      const min = number(input.MIN, 0);
-      const max = number(input.MAX, 1);
+      // ISF makes MIN and MAX optional; a control needs a range, so one is chosen that
+      // holds the DEFAULT rather than one that would change it.
+      const given = number(input.DEFAULT, undefined);
+      const min = number(input.MIN, Math.min(0, given ?? 0, number(input.MAX, 1) - 1));
+      const max = number(input.MAX, Math.max(min + 1, given ?? 1));
       if (!(min < max)) fail(`Input "${key}": MIN must be less than MAX`);
       return {
         control: {
           key,
           type: 'number',
-          default: clamp(number(input.DEFAULT, min), min, max),
+          default: clamp(given ?? min, min, max),
           min,
           max,
           ...label(input),
@@ -274,6 +282,11 @@ function rgba(value) {
 
 /** A control back as an ISF input, its DEFAULT the effect's current value. */
 function controlToInput(control, values) {
+  if (!usableName(control.key)) {
+    fail(
+      `Control "${control.key}" cannot be exported: its name is reserved in ISF or by this plugin`,
+    );
+  }
   const value = values[control.key] ?? control.default;
   const named = { NAME: control.key, ...(control.label ? { LABEL: control.label } : {}) };
   switch (control.type) {

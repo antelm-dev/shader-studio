@@ -101,6 +101,27 @@ describe('importing ISF FX filters', () => {
     expect(effect.source).toContain('#define RENDERSIZE u_resolution');
   });
 
+  it('chooses a range that keeps the default of a float input without MIN or MAX', async () => {
+    const image = { NAME: 'inputImage', TYPE: 'image' };
+    const header = {
+      ISFVSN: '2',
+      INPUTS: [
+        image,
+        { NAME: 'gain', TYPE: 'float', DEFAULT: 2 },
+        { NAME: 'bias', TYPE: 'float', DEFAULT: -3, MAX: 5 },
+        { NAME: 'plain', TYPE: 'float' },
+      ],
+    };
+    const effect = await importIsf(
+      `/*${JSON.stringify(header)}*/\nvoid main() { gl_FragColor = IMG_THIS_PIXEL(inputImage) * gain; }`,
+    );
+    expect(effect.controls).toEqual([
+      { key: 'gain', type: 'number', default: 2, min: 0, max: 2 },
+      { key: 'bias', type: 'number', default: -3, min: -3, max: 5 },
+      { key: 'plain', type: 'number', default: 0, min: 0, max: 1 },
+    ]);
+  });
+
   it('turns float, bool, color and long inputs into controls with their defaults', async () => {
     const effect = await importIsf(read('examples/controls.fs'));
 
@@ -185,6 +206,17 @@ describe('exporting and re-importing', () => {
     expect(again.values).toEqual({ gain: 1.5, tint: '#ff0000' });
     // Its own `effect` is renamed by the preprocessor so the wrapper's can exist.
     expect(again.source).toContain('#define effect isf_inner_effect');
+  });
+
+  it('refuses to export a control whose name ISF or the plugin reserves', async () => {
+    await expect(
+      exportIsf({
+        name: 'Clash',
+        source: 'vec4 effect(vec4 color, vec2 uv) { return color * u_inputImage; }',
+        controls: [{ key: 'inputImage', type: 'number', default: 1, min: 0, max: 2 }],
+        values: {},
+      }),
+    ).rejects.toThrow(/reserved/);
   });
 
   it('reads a control through a global function, so a parameter of the same name cannot shadow it', async () => {
