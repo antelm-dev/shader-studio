@@ -77,6 +77,9 @@ interface ProfilerWorkloadPass {
   readonly targetKey: string;
 }
 
+/** Frames a paused preview draws after a change: one into each target of a feedback buffer. */
+const INVALIDATION_FRAMES = 2;
+
 /** Uniforms the engine supplies to every shader, whether it declares them or not. */
 export const BUILT_IN_UNIFORMS = [
   'iTime',
@@ -139,6 +142,13 @@ export class ShaderEngine {
   private lastFrameTime = 0;
   private time = 0;
   private paused = false;
+  /**
+   * Frames still owed to a paused preview. Paused, nothing moves, so the loop
+   * draws only after something visible changed — a parameter, the shader, a
+   * texture, the size, the effects — rather than redrawing the same picture
+   * every frame and keeping the main thread busy for nothing.
+   */
+  private pendingFrames = INVALIDATION_FRAMES;
   private autoRipples = false;
   private nextAutoRipple = 0;
   private resolutionScale = 1;
@@ -219,7 +229,10 @@ export class ShaderEngine {
     });
     // The public callback stays the engine's: this forwards to whatever it is
     // set to at the moment a decode finishes, including `null`.
-    this.textures.onSettled = () => this.onTextureSettled?.();
+    this.textures.onSettled = () => {
+      this.requestFrames();
+      this.onTextureSettled?.();
+    };
 
     this.profiler = new PerformanceProfiler(
       () => this.renderer,
@@ -251,6 +264,7 @@ export class ShaderEngine {
     // A composer arrives long after the resize that would have sized it.
     this.post.onComposerCreated = () => this.resize();
     this.post.onRenderPathChanged = () => this.resetProfilerForWorkloadChange();
+    this.post.onChanged = () => this.requestFrames();
     this.post.onDiagnostics = (diagnostics) => this.onEffectDiagnostics?.(diagnostics);
 
     this.unsubscribe.push(
@@ -371,6 +385,7 @@ export class ShaderEngine {
     this.updateProfilerWorkload();
 
     this.post.setSettings(spec.render, force);
+    this.requestFrames();
 
     return diagnostics;
   }
@@ -512,6 +527,7 @@ export class ShaderEngine {
 
   setParams(params: ShaderParams): void {
     this.registry.setParams(params);
+    this.requestFrames();
   }
 
   /**
@@ -521,6 +537,7 @@ export class ShaderEngine {
    */
   setParam(key: string, value: ParamValue): void {
     this.registry.setParam(key, value);
+    this.requestFrames();
   }
 
   /**
@@ -553,6 +570,7 @@ export class ShaderEngine {
     const image = this.compiler.imagePass;
     if (image) this.binder.bind(image.uniforms, image.channels);
     else this.binder.bind(this.registry.primary, this.compiler.imageChannels);
+    this.requestFrames();
   }
 
   /** The texture a channel currently samples, placeholder included. */
@@ -583,6 +601,7 @@ export class ShaderEngine {
 
     const uniform = this.registry.primary[CHANNEL_UNIFORMS[index]];
     if (uniform) uniform.value = texture;
+    this.requestFrames();
   }
 
   // -------------------------------------------------------------------------
@@ -596,6 +615,7 @@ export class ShaderEngine {
   /** Which shader the next render settings belong to. See `PostProcessing.setScope`. */
   setEffectScope(shaderId: string | null): void {
     this.post.setScope(shaderId);
+    this.requestFrames();
   }
 
   /**
@@ -608,6 +628,18 @@ export class ShaderEngine {
   setPaused(paused: boolean): void {
     if (this.offline) this.offline.paused = paused;
     else this.paused = paused;
+  }
+
+  /**
+   * Asks a paused preview to draw again: the next few frames are drawn even
+   * though the clock is stopped. A running preview draws every frame anyway.
+   *
+   * More than one, because a feedback buffer only has its first useful
+   * contents after a draw into each of its two targets, and because whoever
+   * waits on `onFrameRendered` may count frames.
+   */
+  requestFrames(count = INVALIDATION_FRAMES): void {
+    this.pendingFrames = Math.max(this.pendingFrames, count);
   }
 
   setAutoRipples(enabled: boolean): void {
@@ -692,6 +724,7 @@ export class ShaderEngine {
     // reallocation would wipe every feedback buffer's history each time.
     this.targets.sync(this.targetSpecs, { width: width * scale, height: height * scale });
     if (profilerBufferChanged) this.resetProfilerForWorkloadChange();
+    this.requestFrames();
   }
 
   // -------------------------------------------------------------------------
@@ -801,6 +834,7 @@ export class ShaderEngine {
 
     this.resize();
     this.lastFrameTime = performance.now();
+    this.requestFrames();
     this.start();
   }
 
@@ -857,11 +891,13 @@ export class ShaderEngine {
     this.pointer.copy(position);
     this.setMouse((mouse) => mouse.set(position.x, position.y, 1, 0));
     this.spawnRipple(position.x, position.y);
+    this.requestFrames();
   };
 
   private readonly onPointerUp = (): void => {
     if (this.offline) return;
     this.setMouse((mouse) => (mouse.z = 0));
+    this.requestFrames();
   };
 
   private readonly onPointerLeave = (): void => {
@@ -870,6 +906,7 @@ export class ShaderEngine {
     this.pointerVelocity.set(0, 0);
     this.lastPointer = null;
     this.setMouse((mouse) => (mouse.z = 0));
+    this.requestFrames();
   };
 
   private readonly onContextMenu = (event: Event): void => event.preventDefault();
@@ -957,6 +994,7 @@ export class ShaderEngine {
     else this.post.restore();
 
     this.resize();
+    this.requestFrames();
     this.start();
     this.onContextRestored?.();
   }
@@ -968,13 +1006,20 @@ export class ShaderEngine {
     const delta = Math.min((now - this.lastFrameTime) / 1000, 1 / 20);
     this.lastFrameTime = now;
 
+    // Paused, the picture only changes when something asks for a frame. The
+    // profiler is the exception: it measures frames, so it keeps them coming.
+    const draw = !this.paused || this.pendingFrames > 0 || this.profiler.isEnabled;
+
+    // Frames actually drawn: a paused preview with nothing to redraw reads 0.
     this.fpsAccumulator += delta;
-    this.fpsFrames++;
+    if (draw) this.fpsFrames++;
     if (this.fpsAccumulator >= 0.5) {
       this.onFps?.(Math.round(this.fpsFrames / this.fpsAccumulator));
       this.fpsAccumulator = 0;
       this.fpsFrames = 0;
     }
+    if (!draw) return;
+    if (this.pendingFrames > 0) this.pendingFrames--;
 
     if (!this.paused) {
       // Time advances by delta rather than tracking the wall clock, so pausing
@@ -1009,7 +1054,6 @@ export class ShaderEngine {
       }
     }
 
-    // Draw even while paused, so parameter edits stay visible with time frozen.
     this.drawMeasured();
     this.onFrameRendered?.();
   }
