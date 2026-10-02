@@ -1,0 +1,33 @@
+{
+  "name": "@shadergrove/studio-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "playwright test",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@types/node": "^20.17.19",
+    "typescript": "~6.0.2"
+  },
+  "nx": {
+    "implicitDependencies": [
+      "@shadergrove/studio"
+    ],
+    "targets": {
+      "e2e": {
+        "cache": false,
+        "dependsOn": [
+          {
+            "projects": [
+              "@shadergrove/studio"
+            ],
+            "target": "gen:ipc"
+          }
+        ]
+      }
+    }
+  }
+}

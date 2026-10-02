@@ -33,6 +33,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "smoke": "nx run @shadergrove/workspace-tools:smoke",
+    "e2e": "nx run @shadergrove/studio-e2e:e2e",
     "gen:ipc": "nx run @shadergrove/studio:gen:ipc",
     "gen:fonts": "nx run @shadergrove/workspace-tools:generate:fonts",
     "pack:desktop": "nx run @shadergrove/studio:pack:dir",

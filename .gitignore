@@ -47,6 +47,9 @@ yarn-error.log
 testem.log
 /typings
 __screenshots__/
+test-results/
+playwright-report/
+/apps/studio-e2e/.auth
 
 # System files
 .DS_Store
