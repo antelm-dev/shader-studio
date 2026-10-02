@@ -55,6 +55,14 @@ export class DesktopPlatform {
     return result.status === 'ok';
   }
 
+  /** Saves what a plugin exporter produced, with the extension its manifest declared. */
+  async saveExport(filename: string, bytes: Uint8Array, extension: string): Promise<boolean> {
+    if (!this.available) return false;
+    const result = await window.electron.bridge.files.saveExport(filename, bytes, extension);
+    if (result.status === 'error') throw new Error(result.message);
+    return result.status === 'ok';
+  }
+
   async saveWallpaper(filename: string, archive: Blob): Promise<boolean> {
     if (!this.available) return false;
     const bytes = new Uint8Array(await archive.arrayBuffer());

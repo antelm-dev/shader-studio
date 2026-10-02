@@ -534,6 +534,24 @@ export class PostProcessing {
     this.onDiagnostics?.(diagnostics);
   }
 
+  /**
+   * Compile `effect` on the 1×1 probe without putting it anywhere: what the
+   * driver says, or nothing if it compiles. How a plugin's effect is checked
+   * before the host copies it into a shader.
+   */
+  probe(effect: CustomEffect): CompileDiagnostic[] {
+    if (this.disposed || this.context.status() !== 'live') {
+      return [{ severity: 'error', line: 0, source: 'fragment', message: 'No graphics context' }];
+    }
+    const result = this.customCompiler().build(effect, this.time, {
+      x: this.size.width * this.size.scale,
+      y: this.size.height * this.size.scale,
+    });
+    if ('diagnostics' in result) return result.diagnostics;
+    result.material.dispose();
+    return [];
+  }
+
   /** The custom-effect problems for the settings in force, as last reported. */
   get diagnostics(): CompileDiagnostic[] {
     return this.reportedList;

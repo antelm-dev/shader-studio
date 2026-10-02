@@ -6,6 +6,7 @@ import { DesktopConnect, desktopConnectLink } from './auth/desktop-connect';
 import { exploreOnWeb } from './publications/explore-access';
 import { ExplorePage } from './publications/explore-page';
 import { PublicationPage } from './publications/publication-page';
+import { PluginsPage } from './plugins/plugins-page';
 
 export const routes: Routes = [
   { path: '', component: RouteAnchor },
@@ -27,5 +28,8 @@ export const routes: Routes = [
   // Reachable by anyone, useful to nobody but a moderator: the page fetches
   // nothing until the server has said the account is one.
   { path: 'admin/publications', component: AdminPublicationsPage, canActivate: [exploreOnWeb] },
+  // Locally installed plugins, on web and desktop alike: laid over the editor like Explore,
+  // so the shader an effect is added to stays open underneath.
+  { path: 'plugins', component: PluginsPage },
   { path: '**', component: RouteAnchor },
 ];

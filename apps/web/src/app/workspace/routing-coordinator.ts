@@ -141,7 +141,7 @@ export class RoutingCoordinator {
    * while its author is off browsing.
    */
   private onStandalonePage(): boolean {
-    return /^\/(?:desktop\/connect|explore|admin)(?:[/?#]|$)/.test(this.router.url);
+    return /^\/(?:desktop\/connect|explore|admin|plugins)(?:[/?#]|$)/.test(this.router.url);
   }
 
   private canonicalUrl(): string {
