@@ -288,13 +288,15 @@ function registerJson(monaco: MonacoApi): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Every theme in the catalogue, registered up front — they are a few hundred
- * bytes of data each, and defining them lazily would mean a visible flash of the
- * wrong colours the first time someone picks one in the settings dialog.
+ * Every built-in theme, registered up front — they are a few hundred bytes of
+ * data each, and defining them lazily would mean a visible flash of the wrong
+ * colours the first time someone picks one in the settings dialog. Plugin
+ * themes come and go with their packages; `AppThemes` defines those.
  *
  * Monaco's theme is a *global* setting rather than a per-editor one, so a single
- * `setTheme` switches all three tabs at once. That is also why the editor cannot
- * offer a different theme per tab, and why nothing here tries to.
+ * `setTheme` switches every editor at once. That is also why the editor cannot
+ * offer a different theme per tab, and why `AppThemes` is the one place that
+ * calls it.
  */
 function registerThemes(monaco: MonacoApi): void {
   for (const theme of EDITOR_THEMES) {
@@ -303,7 +305,7 @@ function registerThemes(monaco: MonacoApi): void {
 }
 
 /** Monaco wants its colours without the `#`, in the rules but not in the colors. */
-function toMonacoTheme(palette: EditorThemePalette): Monaco.editor.IStandaloneThemeData {
+export function toMonacoTheme(palette: EditorThemePalette): Monaco.editor.IStandaloneThemeData {
   const { tokens } = palette;
   const hex = (color: string) => color.replace('#', '');
 

@@ -36,7 +36,6 @@ class FileCatalog extends I18nCatalog {
 class StubCodeEditor {
   readonly doc = input.required<EditorDoc>();
   readonly diagnostics = input<unknown>();
-  readonly colorScheme = input<unknown>();
   readonly appearance = input<unknown>();
   readonly valueChange = output<{ id: string; value: string }>();
 }

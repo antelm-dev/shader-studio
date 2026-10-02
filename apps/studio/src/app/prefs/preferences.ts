@@ -44,6 +44,11 @@ import {
   migrateLayoutFromPreferences,
   type LayoutPreferences,
 } from '@shadergrove/shared/surfaces';
+import {
+  DEFAULT_APP_THEME_ID,
+  sanitizeAppThemeId,
+  type AppThemeId,
+} from '@shadergrove/shared/plugin';
 import type { AppLocale } from '../i18n/i18n';
 
 /**
@@ -105,7 +110,16 @@ export interface WorkspacePreferences {
   resolutionScale: number;
   paused: boolean;
   autoRipples: boolean;
+  /**
+   * The built-in theme's scheme. Kept while a plugin theme is worn, which
+   * brings its own, so that switching back finds it as it was left.
+   */
   colorScheme: ColorScheme;
+  /**
+   * `builtin`, or a reference to a plugin theme. Only a reference: whether that
+   * theme is installed is the theme service's question, not this one's.
+   */
+  appThemeId: AppThemeId;
   /** How the editor is dressed: font, size, theme, and the rest. */
   editorAppearance: EditorAppearance;
   /** Where the editor sits: docked, floating, maximized or collapsed. */
@@ -143,6 +157,7 @@ const DEFAULTS: WorkspacePreferences = {
   paused: false,
   autoRipples: false,
   colorScheme: 'dark',
+  appThemeId: DEFAULT_APP_THEME_ID,
   editorAppearance: DEFAULT_EDITOR_APPEARANCE,
   editorWindow: DEFAULT_EDITOR_WINDOW,
   previewWindow: DEFAULT_PREVIEW_WINDOW,
@@ -185,8 +200,9 @@ export class Preferences {
   readonly value = this.state.asReadonly();
 
   /**
-   * The light/dark scheme actually painted. When the preference is `system`,
-   * this tracks the OS; otherwise it is the preference itself.
+   * The light/dark scheme of the *built-in* theme: the OS's when the preference
+   * is `system`, otherwise the preference itself. A plugin theme brings its own
+   * scheme — `AppThemes.scheme` is the one actually painted.
    */
   readonly resolved = computed<ResolvedColorScheme>(() => {
     const scheme = this.state().colorScheme;
@@ -205,12 +221,6 @@ export class Preferences {
       }
 
       effect(() => this.persist(this.state()));
-
-      // Every Material colour token is a `light-dark()` pair, so the whole
-      // palette follows the root `color-scheme` — nothing else has to change.
-      effect(() => {
-        this.document.documentElement.style.colorScheme = this.resolved();
-      });
     }
   }
 
@@ -325,6 +335,7 @@ export class Preferences {
         paused: parsed.paused ?? DEFAULTS.paused,
         autoRipples: parsed.autoRipples ?? DEFAULTS.autoRipples,
         colorScheme: sanitizeColorScheme(parsed.colorScheme),
+        appThemeId: sanitizeAppThemeId(parsed.appThemeId),
         editorAppearance: sanitizeAppearance(parsed.editorAppearance),
         editorWindow,
         previewWindow,

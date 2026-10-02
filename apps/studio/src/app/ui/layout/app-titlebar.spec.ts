@@ -23,6 +23,7 @@ import {
   createDefaultWorkspacePreferences,
   type WorkspacePreferences,
 } from '../../prefs/preferences';
+import { AppThemes } from '../../themes/app-themes';
 import { ShaderStore } from '../../workspace/shader-store';
 import { DocumentStatus } from '../editor/document-status';
 import { MenuCommands, type MenuCommand } from '../menu-commands';
@@ -85,6 +86,7 @@ describe('AppTitlebar Help and View menus', () => {
       paused: false,
       autoRipples: false,
       colorScheme: 'dark',
+      appThemeId: 'builtin',
       editorAppearance: DEFAULT_EDITOR_APPEARANCE,
       editorWindow: DEFAULT_EDITOR_WINDOW,
       previewWindow: DEFAULT_PREVIEW_WINDOW,
@@ -105,6 +107,17 @@ describe('AppTitlebar Help and View menus', () => {
             patch: (patch: Partial<WorkspacePreferences>) => {
               if (patch.language) language.set({ language: patch.language });
             },
+          },
+        },
+        {
+          provide: AppThemes,
+          useValue: {
+            icon: signal('dark_mode').asReadonly(),
+            entries: signal([]).asReadonly(),
+            isBuiltinSelected: (scheme: string) => scheme === 'dark',
+            isPluginSelected: () => false,
+            selectBuiltin: () => undefined,
+            selectPlugin: () => undefined,
           },
         },
         {

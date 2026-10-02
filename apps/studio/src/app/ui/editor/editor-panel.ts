@@ -231,7 +231,6 @@ type EditorSurface = Pick<CodeEditor, 'focus' | 'format' | 'layout' | 'revealIn'
             class="editor"
             [doc]="doc"
             [liveIds]="liveIds()"
-            [colorScheme]="preferences.resolved()"
             [appearance]="settings.effective()"
             [diagnostics]="activeDiagnostics()"
             (valueChange)="store.setDocSource($event.id, $event.value)"

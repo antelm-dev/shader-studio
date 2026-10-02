@@ -1,20 +1,25 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { EditorSettings } from '../../editor/editor-settings';
 import { EDITOR_THEMES } from '../../editor/editor-themes';
-import { Preferences } from '../../prefs/preferences';
+import { I18n } from '../../i18n/i18n';
+import { TranslatePipe } from '../../i18n/translate.pipe';
+import { AppThemes } from '../../themes/app-themes';
 
 /**
  * The "Colour scheme" tab of the editor settings dialog: the theme swatch
- * grid, including the "match the app" option. Split out because picking a
- * theme shares nothing with the font search or the type/layout form beyond
- * `EditorSettings.preview()`.
+ * grid, including the "match the app" option and the editor palettes of the
+ * installed plugin themes. Split out because picking a theme shares nothing
+ * with the font search or the type/layout form beyond `EditorSettings.preview()`.
+ *
+ * Picking here only previews, like everything else in the dialog: Cancel puts
+ * the saved choice back, Apply keeps it.
  */
 @Component({
   selector: 'app-theme-panel',
-  imports: [MatIconModule, MatTooltipModule],
+  imports: [MatIconModule, MatTooltipModule, TranslatePipe],
   template: `
     <section class="pane" aria-label="Colour scheme">
       <div class="themes" role="radiogroup" aria-label="Colour scheme">
@@ -31,11 +36,11 @@ import { Preferences } from '../../prefs/preferences';
           </span>
           <span class="theme-text">
             <span class="theme-name">Match the app</span>
-            <span class="theme-note"> Follows the studio's {{ preferences.resolved() }} theme </span>
+            <span class="theme-note">{{ followsApp() }}</span>
           </span>
         </button>
 
-        @for (theme of themes; track theme.id) {
+        @for (theme of builtins; track theme.id) {
           <button
             type="button"
             class="theme"
@@ -59,6 +64,38 @@ import { Preferences } from '../../prefs/preferences';
               <span class="theme-note">{{ theme.description }}</span>
             </span>
           </button>
+        }
+
+        @if (themes.entries().length > 0) {
+          <p class="group">{{ 'theme.installed' | translate }}</p>
+          @for (entry of themes.entries(); track entry.ref) {
+            <button
+              type="button"
+              class="theme"
+              role="radio"
+              [attr.data-testid]="'editor-theme-' + entry.ref"
+              [class.selected]="appearance().theme === entry.ref"
+              [attr.aria-checked]="appearance().theme === entry.ref"
+              (click)="settings.preview({ theme: entry.ref })"
+            >
+              <span
+                class="swatch"
+                aria-hidden="true"
+                [style.background]="entry.theme.editor.background"
+              >
+                <i [style.background]="entry.theme.editor.tokens.keyword"></i>
+                <i [style.background]="entry.theme.editor.tokens.type"></i>
+                <i [style.background]="entry.theme.editor.tokens.string"></i>
+              </span>
+              <span class="theme-text">
+                <span class="theme-name">{{ entry.theme.name }}</span>
+                <span class="theme-note">
+                  {{ entry.packageName }} ·
+                  {{ 'plugins.by' | translate: { publisher: entry.publisher } }}
+                </span>
+              </span>
+            </button>
+          }
         }
       </div>
     </section>
@@ -109,6 +146,12 @@ import { Preferences } from '../../prefs/preferences';
       border-color: var(--mat-sys-primary);
       background: var(--mat-sys-secondary-container);
       color: var(--mat-sys-on-secondary-container);
+    }
+
+    .group {
+      margin: 8px 0 2px;
+      color: var(--mat-sys-on-surface-variant);
+      font: var(--mat-sys-label-small);
     }
 
     .theme-note {
@@ -176,8 +219,16 @@ import { Preferences } from '../../prefs/preferences';
 })
 export class ThemePanel {
   protected readonly settings = inject(EditorSettings);
-  protected readonly preferences = inject(Preferences);
+  protected readonly themes = inject(AppThemes);
+  private readonly i18n = inject(I18n);
 
-  protected readonly themes = EDITOR_THEMES;
+  protected readonly builtins = EDITOR_THEMES;
   protected readonly appearance = this.settings.effective;
+
+  /** Which palette "Match the app" stands for right now. */
+  protected readonly followsApp = computed(() => {
+    const app = this.themes.app();
+    const name = app.kind === 'plugin' ? app.entry.theme.name : this.i18n.t(`theme.${app.scheme}`);
+    return this.i18n.t('editorTheme.followsApp', { theme: name });
+  });
 }

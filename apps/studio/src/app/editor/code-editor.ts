@@ -14,7 +14,6 @@ import {
 } from '@angular/core';
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.api.js';
 
-import type { ResolvedColorScheme } from '../prefs/preferences';
 import {
   DEFAULT_EDITOR_APPEARANCE,
   fontFamilyStack,
@@ -23,7 +22,7 @@ import {
 import type { CompileDiagnostic } from '@shadergrove/shared/diagnostic';
 import { ReducedMotion } from '../prefs/reduced-motion';
 import { FontLoader, findFont, nearestWeight } from './google-fonts';
-import { monacoThemeId, resolveThemeId } from './editor-themes';
+import { AppThemes } from '../themes/app-themes';
 import { GLSL_LANGUAGE_ID, JSON_LANGUAGE_ID, loadMonaco, type MonacoApi } from './monaco-loader';
 
 export type EditorLanguage = 'glsl' | 'json';
@@ -103,7 +102,6 @@ export class CodeEditor {
   readonly liveIds = input<readonly string[] | null>(null);
   readonly diagnostics = input<readonly CompileDiagnostic[]>([]);
   readonly readOnly = input(false);
-  readonly colorScheme = input<ResolvedColorScheme>('dark');
   readonly appearance = input<EditorAppearance>(DEFAULT_EDITOR_APPEARANCE);
 
   /**
@@ -118,6 +116,7 @@ export class CodeEditor {
   private readonly destroyRef = inject(DestroyRef);
   private readonly fonts = inject(FontLoader);
   private readonly reducedMotion = inject(ReducedMotion);
+  private readonly themes = inject(AppThemes);
 
   private readonly monaco = signal<MonacoApi | null>(null);
   private editor: Monaco.editor.IStandaloneCodeEditor | null = null;
@@ -226,14 +225,6 @@ export class CodeEditor {
     effect(() => {
       const options = this.options();
       untracked(() => this.editor?.updateOptions(options));
-    });
-
-    // `setTheme` is global to Monaco, not scoped to one editor; every instance
-    // asking for the same theme is harmless and keeps them all in step.
-    effect(() => {
-      const monaco = this.monaco();
-      const theme = monacoThemeId(resolveThemeId(this.appearance().theme, this.colorScheme()));
-      untracked(() => monaco?.editor.setTheme(theme));
     });
 
     // Fetch the chosen family, then tell Monaco to measure again. Monaco caches
@@ -381,6 +372,9 @@ export class CodeEditor {
 
   private async boot(): Promise<void> {
     const monaco = await loadMonaco();
+    // Monaco's theme is global, and `AppThemes` alone sets it — painted before
+    // this editor exists, so it never shows Monaco's default first.
+    this.themes.attachMonaco(monaco);
 
     const doc = untracked(this.doc);
     const model = monaco.editor.createModel(doc.value, this.monacoLanguage(doc.language));
@@ -389,9 +383,6 @@ export class CodeEditor {
 
     const editor = monaco.editor.create(this.host().nativeElement, {
       model,
-      theme: monacoThemeId(
-        resolveThemeId(untracked(this.appearance).theme, untracked(this.colorScheme)),
-      ),
       readOnly: untracked(this.readOnly),
       automaticLayout: true,
       scrollBeyondLastLine: false,

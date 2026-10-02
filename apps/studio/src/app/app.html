@@ -393,8 +393,8 @@
     <mat-divider />
 
     <h3 class="menu-section">{{ 'menu.settings' | translate }}</h3>
-    <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
-      <mat-icon>{{ themeIcon() }}</mat-icon>
+    <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu.menu()">
+      <mat-icon>{{ themes.icon() }}</mat-icon>
       <span>{{ 'menu.theme' | translate }}</span>
     </button>
     <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
@@ -422,22 +422,7 @@
     </button>
   </mat-menu>
 
-  <mat-menu #themeMenu="matMenu">
-    @for (option of colorSchemeOptions; track option.value) {
-    <button
-      mat-menu-item
-      type="button"
-      [attr.aria-checked]="preferences.value().colorScheme === option.value"
-      (click)="setColorScheme(option.value)"
-    >
-      <mat-icon>{{ option.icon }}</mat-icon>
-      <span>{{ themeLabel(option.value) }}</span>
-      @if (preferences.value().colorScheme === option.value) {
-      <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
-      }
-    </button>
-    }
-  </mat-menu>
+  <app-theme-menu #themeMenu="appThemeMenu" />
 
   <mat-menu #languageMenu="matMenu">
     @for (option of languageOptions; track option.value) {

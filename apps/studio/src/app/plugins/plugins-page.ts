@@ -15,6 +15,8 @@ import {
   type ExporterContribution,
   type ImporterContribution,
   type PluginContribution,
+  type ThemeContribution,
+  pluginThemeRef,
 } from '@shadergrove/shared/plugin';
 import { APP_VERSION } from '@shadergrove/shared/version';
 import { defaultParams } from '@shadergrove/shared/validate';
@@ -22,6 +24,7 @@ import { DesktopPlatform } from '../desktop/desktop-platform';
 import { I18n } from '../i18n/i18n';
 import { TranslatePipe } from '../i18n/translate.pipe';
 import { PAGE_STYLES } from '../publications/page';
+import { AppThemes } from '../themes/app-themes';
 import { ShaderStore } from '../workspace/shader-store';
 import { EffectAdoption, type AdoptionResult } from './effect-adoption';
 import {
@@ -209,6 +212,18 @@ type Message = { text: string; error: boolean };
                 @let key = installed.id + '/' + contribution.id;
                 <li class="contribution" [attr.data-testid]="'contribution-' + key">
                   <div>
+                    @if (contribution.kind === 'theme') {
+                      @let palette = asTheme(contribution).ui;
+                      <span
+                        class="swatch"
+                        aria-hidden="true"
+                        [style.background]="palette.background"
+                      >
+                        <i [style.background]="palette['surface-container-high']"></i>
+                        <i [style.background]="palette.primary"></i>
+                        <i [style.background]="palette['on-surface']"></i>
+                      </span>
+                    }
                     <strong>{{ kindLabel(contribution) }}</strong> — {{ contribution.name }}
                     <span class="muted">{{ detail(contribution) }}</span>
                   </div>
@@ -250,6 +265,23 @@ type Message = { text: string; error: boolean };
                           [accept]="accept(importer)"
                           (change)="runImporter(installed, importer, importInput)"
                         />
+                      }
+                      @case ('theme') {
+                        @let ref = themeRef(installed, contribution);
+                        @if (themes.isPluginSelected(ref)) {
+                          <p class="muted" [attr.data-testid]="'theme-in-use-' + key">
+                            {{ 'plugins.themeInUse' | translate }}
+                          </p>
+                        } @else {
+                          <button
+                            matButton="tonal"
+                            type="button"
+                            [attr.data-testid]="'use-theme-' + key"
+                            (click)="themes.selectPlugin(ref)"
+                          >
+                            {{ 'plugins.useTheme' | translate }}
+                          </button>
+                        }
                       }
                       @case ('exporter') {
                         @let exporter = asExporter(contribution);
@@ -406,6 +438,26 @@ type Message = { text: string; error: boolean };
       padding: 6px 0;
     }
 
+    .swatch {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 2px;
+      width: 20px;
+      height: 20px;
+      margin-right: 6px;
+      padding: 3px;
+      box-sizing: border-box;
+      vertical-align: middle;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 3px;
+    }
+
+    .swatch i {
+      flex: 1;
+      height: 60%;
+      border-radius: 1px;
+    }
+
     .field {
       display: flex;
       align-items: center;
@@ -441,6 +493,7 @@ type Message = { text: string; error: boolean };
 })
 export class PluginsPage {
   protected readonly installations = inject(PluginInstallations);
+  protected readonly themes = inject(AppThemes);
   private readonly adoption = inject(EffectAdoption);
   private readonly store = inject(ShaderStore);
   private readonly desktop = inject(DesktopPlatform);
@@ -647,6 +700,10 @@ export class PluginsPage {
   protected asEffect = (contribution: PluginContribution) => contribution as EffectContribution;
   protected asImporter = (contribution: PluginContribution) => contribution as ImporterContribution;
   protected asExporter = (contribution: PluginContribution) => contribution as ExporterContribution;
+  protected asTheme = (contribution: PluginContribution) => contribution as ThemeContribution;
+  protected themeRef(installed: InstalledPlugin, contribution: PluginContribution) {
+    return pluginThemeRef(installed.id, contribution.id);
+  }
   protected asControls = (controls: unknown) => controls as ShaderControl[];
 
   protected optionsOf(control: ShaderControl): [string, number][] {

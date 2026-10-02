@@ -15,7 +15,6 @@ import { LIMITS, sanitizeParams, validateControls } from '@shadergrove/shared/va
 import { CodeEditor, type EditorDoc } from '../../editor/code-editor';
 import { EditorSettings } from '../../editor/editor-settings';
 import { TranslatePipe } from '../../i18n/translate.pipe';
-import { Preferences } from '../../prefs/preferences';
 import { effectDocId } from '../../rendering/engine/custom-effect-pass';
 import { ShaderStore } from '../../workspace/shader-store';
 
@@ -57,7 +56,6 @@ export interface CustomEffectEditorData {
           class="code"
           [doc]="doc()!"
           [diagnostics]="diagnostics()"
-          [colorScheme]="preferences.resolved()"
           [appearance]="settings.effective()"
           (valueChange)="setSource($event.value)"
         />
@@ -172,7 +170,6 @@ export class CustomEffectEditor {
   private readonly data = inject<CustomEffectEditorData>(MAT_DIALOG_DATA);
   private readonly dialogRef = inject<MatDialogRef<CustomEffectEditor>>(MatDialogRef);
   private readonly store = inject(ShaderStore);
-  protected readonly preferences = inject(Preferences);
   protected readonly settings = inject(EditorSettings);
 
   protected readonly nameLength = LIMITS.nameLength;

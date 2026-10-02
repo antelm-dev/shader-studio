@@ -28,12 +28,9 @@ import { map } from 'rxjs';
 
 import type { ImportMode } from '@shadergrove/shared/model';
 import { DEFAULT_PANEL_WIDTHS, PANEL_LIMITS } from '@shadergrove/shared/panel-prefs';
-import {
-  COLOR_SCHEME_OPTIONS,
-  Preferences,
-  colorSchemeIcon,
-  type ColorScheme,
-} from './prefs/preferences';
+import { COLOR_SCHEME_OPTIONS, Preferences } from './prefs/preferences';
+import { AppThemes } from './themes/app-themes';
+import { ThemeMenu } from './themes/theme-menu';
 import { DesktopAccount } from './desktop/desktop-account';
 import { DesktopPlatform } from './desktop/desktop-platform';
 import { DesktopSync } from './desktop/desktop-sync';
@@ -75,6 +72,7 @@ const ZEN_EDGE_PX = 48;
     BottomPanel,
     EditorShell,
     InspectorShell,
+    ThemeMenu,
     TranslatePipe,
     MatButtonModule,
     MatDialogModule,
@@ -100,6 +98,7 @@ export class App {
   protected readonly store = inject(ShaderStore);
   protected readonly sync = inject(DesktopSync);
   protected readonly preferences = inject(Preferences);
+  protected readonly themes = inject(AppThemes);
   protected readonly workspace = inject(WorkspaceActions);
   protected readonly desktop = inject(DesktopPlatform);
   protected readonly status = inject(DocumentStatus);
@@ -153,11 +152,7 @@ export class App {
     this.isHandset() ? this.handsetDrawerOpen() : this.preferences.value().browserOpen,
   );
 
-  protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
   protected readonly languageOptions = LANGUAGE_OPTIONS;
-  protected readonly themeIcon = computed(() =>
-    colorSchemeIcon(this.preferences.value().colorScheme),
-  );
 
   protected readonly inspectorOpen = computed(() => this.layout.inspectorOpen());
 
@@ -337,8 +332,8 @@ export class App {
       (option): MenuCommand => ({
         id: `theme-${option.value}`,
         icon: () => option.icon,
-        label: () => `${this.i18n.t('menu.theme')}: ${this.themeLabel(option.value)}`,
-        action: () => this.setColorScheme(option.value),
+        label: () => `${this.i18n.t('menu.theme')}: ${this.i18n.t(`theme.${option.value}`)}`,
+        action: () => this.themes.selectBuiltin(option.value),
       }),
     ),
     {
@@ -378,7 +373,10 @@ export class App {
           commands: [...this.shaderCommands, this.deleteShader],
         },
         { label: this.i18n.t('menu.importExport'), commands: this.importExportCommands },
-        { label: this.i18n.t('menu.settings'), commands: this.settingsCommands },
+        {
+          label: this.i18n.t('menu.settings'),
+          commands: [...this.settingsCommands, ...this.pluginThemeCommands()],
+        },
       ],
     };
 
@@ -507,16 +505,18 @@ export class App {
     this.preferences.patch({ browserWidth: width });
   }
 
-  protected setColorScheme(colorScheme: ColorScheme): void {
-    this.preferences.patch({ colorScheme });
-  }
-
   protected setLanguage(language: AppLocale): void {
     this.i18n.setLocale(language);
   }
 
-  protected themeLabel(theme: ColorScheme): string {
-    return this.i18n.t(`theme.${theme}`);
+  /** The installed themes, as they are when the palette opens. */
+  private pluginThemeCommands(): MenuCommand[] {
+    return this.themes.entries().map((entry) => ({
+      id: `theme-${entry.ref}`,
+      icon: () => 'palette',
+      label: () => `${this.i18n.t('menu.theme')}: ${entry.theme.name}`,
+      action: () => this.themes.selectPlugin(entry.ref),
+    }));
   }
 
   protected toggleBrowser(): void {

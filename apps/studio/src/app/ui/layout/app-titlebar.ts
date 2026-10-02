@@ -1,16 +1,13 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { DesktopPlatform } from '../../desktop/desktop-platform';
-import {
-  COLOR_SCHEME_OPTIONS,
-  Preferences,
-  colorSchemeIcon,
-  type ColorScheme,
-} from '../../prefs/preferences';
+import { Preferences } from '../../prefs/preferences';
+import { AppThemes } from '../../themes/app-themes';
+import { ThemeMenu } from '../../themes/theme-menu';
 import { ShaderStore } from '../../workspace/shader-store';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
@@ -21,7 +18,14 @@ import { WorkspaceActions } from '../workspace-actions';
 
 @Component({
   selector: 'app-titlebar',
-  imports: [MatDividerModule, MatIconModule, MatMenuModule, MatTooltipModule, TranslatePipe],
+  imports: [
+    MatDividerModule,
+    MatIconModule,
+    MatMenuModule,
+    MatTooltipModule,
+    ThemeMenu,
+    TranslatePipe,
+  ],
   template: `
     <header class="titlebar" (dblclick)="onTitlebarDblClick($event)">
       <div class="leading no-drag">
@@ -133,8 +137,8 @@ import { WorkspaceActions } from '../workspace-actions';
         </button>
       }
       <mat-divider />
-      <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu">
-        <mat-icon>{{ themeIcon() }}</mat-icon>
+      <button mat-menu-item type="button" [matMenuTriggerFor]="themeMenu.menu()">
+        <mat-icon>{{ themes.icon() }}</mat-icon>
         <span>{{ 'menu.theme' | translate }}</span>
       </button>
       <button mat-menu-item type="button" (click)="workspace.openEditorSettings()">
@@ -159,22 +163,7 @@ import { WorkspaceActions } from '../workspace-actions';
       </button>
     </mat-menu>
 
-    <mat-menu #themeMenu="matMenu">
-      @for (option of colorSchemeOptions; track option.value) {
-        <button
-          mat-menu-item
-          type="button"
-          [attr.aria-checked]="preferences.value().colorScheme === option.value"
-          (click)="setColorScheme(option.value)"
-        >
-          <mat-icon>{{ option.icon }}</mat-icon>
-          <span>{{ themeLabel(option.value) }}</span>
-          @if (preferences.value().colorScheme === option.value) {
-            <mat-icon class="theme-check" aria-hidden="true">check</mat-icon>
-          }
-        </button>
-      }
-    </mat-menu>
+    <app-theme-menu #themeMenu="appThemeMenu" />
 
     <mat-menu #windowMenu="matMenu">
       @for (item of windowCommands; track item.id) {
@@ -342,10 +331,7 @@ export class AppTitlebar {
   private readonly commands = inject(MenuCommands);
   private readonly layout = inject(SurfaceLayoutService);
 
-  protected readonly colorSchemeOptions = COLOR_SCHEME_OPTIONS;
-  protected readonly themeIcon = computed(() =>
-    colorSchemeIcon(this.preferences.value().colorScheme),
-  );
+  protected readonly themes = inject(AppThemes);
 
   // --- Menus --------------------------------------------------------------
   // One group of one menu each — the groups the dividers separate. Save, Quit,
@@ -417,14 +403,6 @@ export class AppTitlebar {
       action: () => this.desktop.toggleMaximize(),
     },
   ];
-
-  protected themeLabel(theme: ColorScheme): string {
-    return this.i18n.t(`theme.${theme}`);
-  }
-
-  protected setColorScheme(colorScheme: ColorScheme): void {
-    this.preferences.patch({ colorScheme });
-  }
 
   protected onTitlebarDblClick(event: MouseEvent): void {
     if ((event.target as HTMLElement | null)?.closest('.no-drag')) return;
