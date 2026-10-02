@@ -137,10 +137,12 @@ function hex(rgba) {
  * A name both sides can use: a control key here, an input NAME in ISF. `isf_` and `u_`
  * names are this file's and the app's own: `u_time` is the time uniform, and a key
  * `u_gain` beside a key `gain` would be read through the other's macro.
+ * Swizzle names would also rewrite vector components through the input macro.
  */
 const usableName = (key) =>
   typeof key === 'string' &&
   KEY.test(key) &&
+  !/^(?:[xyzw]{1,4}|[rgba]{1,4}|[stpq]{1,4})$/.test(key) &&
   !RESERVED.has(key) &&
   !key.startsWith('isf_') &&
   !key.startsWith('u_');
@@ -150,7 +152,7 @@ function inputToControl(input) {
   const key = input.NAME;
   if (!usableName(key)) {
     fail(
-      `Input name ${JSON.stringify(key)} cannot be used here: it must be a plain identifier, not a reserved name`,
+      `Input name ${JSON.stringify(key)} cannot be used here: it must be a plain identifier, not a reserved name or vector swizzle`,
     );
   }
   switch (input.TYPE) {
@@ -299,7 +301,7 @@ function rgba(value) {
 function controlToInput(control, values) {
   if (!usableName(control.key)) {
     fail(
-      `Control "${control.key}" cannot be exported: its name is reserved in ISF or by this plugin`,
+      `Control "${control.key}" cannot be exported: its name is reserved in ISF or by this plugin, or is a vector swizzle`,
     );
   }
   const value = values[control.key] ?? control.default;

@@ -24,7 +24,7 @@ export class IndexedDbPluginStore implements PluginStore {
   constructor(private readonly name: string) {}
 
   /**
-   * Each record under its own key, whatever it holds: a value damaged outside
+   * Each record under its own string key, whatever it holds: a value damaged outside
    * the app comes back with an empty text — listed as invalid, removable by that
    * key — instead of failing the whole list.
    */
@@ -36,9 +36,10 @@ export class IndexedDbPluginStore implements PluginStore {
       request.onsuccess = () => {
         const cursor = request.result;
         if (!cursor) return resolve(records);
+        if (typeof cursor.key !== 'string') return cursor.continue();
         const value = cursor.value as Partial<StoredPlugin> | null;
         records.push({
-          id: String(cursor.key),
+          id: cursor.key,
           text: typeof value?.text === 'string' ? value.text : '',
           enabled: value?.enabled === true,
           installedAt: typeof value?.installedAt === 'string' ? value.installedAt : '',

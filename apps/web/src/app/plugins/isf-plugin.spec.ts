@@ -240,7 +240,7 @@ describe('exporting and re-importing', () => {
     ).rejects.toThrow(/integer/);
   });
 
-  it.each(['inputImage', 'u_time', 'u_gain'])(
+  it.each(['inputImage', 'u_time', 'u_gain', 'rgb'])(
     'refuses to export a control named %s, which ISF or the plugin reserves',
     async (key) => {
       await expect(
@@ -330,6 +330,24 @@ describe('what the ISF plugin refuses, with a reason', () => {
       'an input named like an app uniform',
       isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'u_time', TYPE: 'float' }] }),
       /reserved/,
+    ],
+    [
+      'an input named r, a vector component',
+      isf(
+        { ISFVSN: '2', INPUTS: [image, { NAME: 'r', TYPE: 'float' }] },
+        'void main() { vec4 c = IMG_THIS_PIXEL(inputImage); gl_FragColor = vec4(c.r * r, c.gba); }',
+      ),
+      /vector swizzle/,
+    ],
+    [
+      'an input named xy, a vector swizzle',
+      isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'xy', TYPE: 'float' }] }),
+      /vector swizzle/,
+    ],
+    [
+      'an input named stpq, a vector swizzle',
+      isf({ ISFVSN: '2', INPUTS: [image, { NAME: 'stpq', TYPE: 'float' }] }),
+      /vector swizzle/,
     ],
     [
       'a long without VALUES',
