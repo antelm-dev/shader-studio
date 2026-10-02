@@ -1,0 +1,307 @@
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.03fr 1fr;
+  align-items: center;
+  gap: 16px;
+  min-height: min(740px, calc(100svh - 104px));
+  padding-block: 66px 64px;
+}
+
+/* The grove fills the hero edge to edge; the art column only places the square. */
+.field {
+  position: absolute;
+  inset: 0 auto;
+  left: calc(50% - 50vw);
+  width: 100vw;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.copy {
+  position: relative;
+  z-index: 2;
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 30px;
+  color: #bdc8b5;
+}
+.eyebrow::before {
+  content: '';
+  width: 24px;
+  height: 1px;
+  background: var(--accent);
+}
+.title {
+  margin: 0;
+  font-size: clamp(62px, 7.1vw, 104px);
+  line-height: 0.99;
+  font-weight: 550;
+  letter-spacing: -0.067em;
+}
+.title .line {
+  display: block;
+  white-space: nowrap;
+}
+.title em {
+  color: var(--accent);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  letter-spacing: -0.075em;
+}
+.description {
+  max-width: 390px;
+  margin: 28px 0 0;
+  color: #aeb8a8;
+  font-size: 16px;
+  line-height: 1.75;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px 25px;
+  margin-top: 30px;
+}
+.primaryLink {
+  display: inline-flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: 17px 23px;
+  min-height: 54px;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #142008;
+  font-size: 14px;
+  font-weight: 650;
+  transition:
+    transform 0.2s,
+    background 0.2s;
+}
+.primaryLink:hover {
+  background: #b5ff76;
+  transform: translateY(-2px);
+}
+.note {
+  margin-top: 22px;
+  color: #84917c;
+  font-size: 11px;
+  letter-spacing: 0.015em;
+}
+.note span {
+  margin-inline: 9px;
+  color: #53604a;
+}
+
+.artColumn {
+  position: relative;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.artwork {
+  position: relative;
+  width: 113%;
+  aspect-ratio: 1;
+  margin: -24px -6.5% 0;
+  isolation: isolate;
+}
+.artGrid {
+  position: absolute;
+  inset: 8%;
+  border: 1px solid #35432b55;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: -1;
+}
+.artGrid::before,
+.artGrid::after {
+  content: '';
+  position: absolute;
+  border: 1px solid #35432b35;
+  border-radius: 50%;
+}
+.artGrid::before {
+  inset: 15%;
+}
+.artGrid::after {
+  inset: 31%;
+}
+.staticArt {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+.axisLabel {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  writing-mode: vertical-rl;
+  color: #7e8e73;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+.caption,
+.hint,
+.notice {
+  position: relative;
+  z-index: 2;
+}
+.caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: #92a387;
+  padding: 0 18px;
+  margin-top: -12px;
+}
+.caption :global(.micro) {
+  font-size: 9px;
+}
+.liveState {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.liveDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.liveState[data-paused='true'] .liveDot {
+  background: #899381;
+}
+.motionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 1px solid #46503f;
+  border-radius: 4px;
+  background: #192015;
+  color: #d4dfcc;
+  font-size: 11px;
+}
+.motionButton:hover {
+  border-color: #899d79;
+}
+.motionButton svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+}
+.hint {
+  color: #839478;
+  text-align: center;
+  font-size: 11px;
+  margin: 20px 0 0;
+}
+.notice {
+  color: #c5d1bc;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+@media (min-width: 1500px) {
+  .hero {
+    min-height: 740px;
+  }
+}
+@media (max-width: 1000px) {
+  .hero {
+    min-height: 640px;
+    padding-block: 50px;
+  }
+  .title {
+    font-size: clamp(60px, 7.4vw, 78px);
+  }
+  .caption {
+    padding: 0;
+  }
+  .caption > :global(.micro) {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .hero {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding-block: 42px 36px;
+    gap: 25px;
+  }
+  .title {
+    font-size: clamp(56px, 11.7vw, 84px);
+  }
+  .title .line {
+    display: inline;
+    white-space: normal;
+  }
+  .title .line:first-child {
+    display: block;
+  }
+  .eyebrow {
+    margin-bottom: 24px;
+    font-size: 9px;
+  }
+  .description {
+    font-size: 14px;
+    max-width: 38ch;
+    margin-top: 22px;
+  }
+  .actions {
+    gap: 10px 20px;
+    margin-top: 23px;
+  }
+  .primaryLink {
+    padding: 15px 18px;
+    min-height: 50px;
+    font-size: 13px;
+  }
+  .note {
+    margin-top: 18px;
+    font-size: 10px;
+  }
+  .artColumn {
+    width: min(470px, 100%);
+    margin: auto;
+  }
+  .artwork {
+    width: 100%;
+    margin: 0;
+  }
+  .axisLabel {
+    right: -8px;
+  }
+  .caption {
+    margin-top: 0;
+  }
+  .caption > :global(.micro) {
+    display: block;
+  }
+  .hint {
+    margin-top: 14px;
+  }
+}
+@media (max-width: 360px) {
+  .caption > :global(.micro) {
+    display: none;
+  }
+  .title {
+    font-size: 50px;
+  }
+}

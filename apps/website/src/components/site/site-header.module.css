@@ -1,0 +1,80 @@
+.masthead {
+  min-height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.055em;
+}
+.brandMark {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+}
+.navigation {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  font-size: 13px;
+}
+.navigation a {
+  color: #c1c9bc;
+}
+.navigation a:hover {
+  color: var(--accent);
+}
+.navigation .navCta {
+  padding: 11px 17px;
+  border: 1px solid #56634d;
+  border-radius: 5px;
+  color: #f0f1e9;
+}
+
+@media (max-width: 1000px) {
+  .navigation {
+    gap: 20px;
+  }
+}
+@media (max-width: 720px) {
+  .masthead {
+    min-height: 82px;
+    gap: 16px;
+  }
+  .wordmark {
+    font-size: 21px;
+    gap: 8px;
+  }
+  .brandMark {
+    width: 29px;
+    height: 29px;
+  }
+  .navigation {
+    gap: 0;
+  }
+  .navigation .desktopLink {
+    display: none;
+  }
+  .navigation .navCta {
+    padding: 10px 12px;
+    font-size: 11px;
+  }
+  .navCta :global(.arrow) {
+    margin-left: 6px;
+  }
+}
+@media (max-width: 360px) {
+  .navigation .navCta {
+    padding: 9px;
+  }
+  .wordmark {
+    font-size: 19px;
+  }
+}

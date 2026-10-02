@@ -1,0 +1,1457 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#10130f" />
+    <meta
+      name="description"
+      content="A little code. A living world. Shadergrove is your workspace for writing, tuning, and collecting real-time shaders."
+    />
+    <title>Shadergrove — A little code. A living world.</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2036%2036%22%3E%3Ccircle%20cx%3D%227.92%22%20cy%3D%2228.08%22%20r%3D%223.86%22%20fill%3D%22rgb(53%2C220%2C196)%22%20data-t%3D%220.5%22%20%2F%3E%3Ccircle%20cx%3D%2218.00%22%20cy%3D%2228.08%22%20r%3D%222.56%22%20fill%3D%22rgb(83%2C159%2C215)%22%20data-t%3D%220.7%22%20%2F%3E%3Ccircle%20cx%3D%2228.08%22%20cy%3D%2228.08%22%20r%3D%222.42%22%20fill%3D%22rgb(114%2C98%2C234)%22%20data-t%3D%220.9%22%20%2F%3E%3Ccircle%20cx%3D%227.92%22%20cy%3D%2218.00%22%20r%3D%223.31%22%20fill%3D%22rgb(95%2C234%2C142)%22%20data-t%3D%220.3%22%20%2F%3E%3Ccircle%20cx%3D%2218.00%22%20cy%3D%2218.00%22%20r%3D%224.74%22%20fill%3D%22rgb(53%2C220%2C196)%22%20data-t%3D%220.5%22%20%2F%3E%3Ccircle%20cx%3D%2228.08%22%20cy%3D%2218.00%22%20r%3D%223.31%22%20fill%3D%22rgb(83%2C159%2C215)%22%20data-t%3D%220.7%22%20%2F%3E%3Ccircle%20cx%3D%227.92%22%20cy%3D%227.92%22%20r%3D%222.42%22%20fill%3D%22rgb(136%2C248%2C89)%22%20data-t%3D%220.09999999999999998%22%20%2F%3E%3Ccircle%20cx%3D%2218.00%22%20cy%3D%227.92%22%20r%3D%222.56%22%20fill%3D%22rgb(95%2C234%2C142)%22%20data-t%3D%220.3%22%20%2F%3E%3Ccircle%20cx%3D%2228.08%22%20cy%3D%227.92%22%20r%3D%223.86%22%20fill%3D%22rgb(53%2C220%2C196)%22%20data-t%3D%220.5%22%20%2F%3E%3C%2Fsvg%3E"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, 'Segoe UI', Arial, sans-serif;
+        background: #10130f;
+        color: #f0f1e9;
+        font-synthesis: none;
+        --muted: #a2ac9d;
+        --accent: #9dff3e;
+        --line: #2b3328;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: 24px;
+      }
+      body {
+        margin: 0;
+        min-width: 280px;
+        overflow-x: clip;
+      }
+      button,
+      a {
+        -webkit-tap-highlight-color: transparent;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      button:focus-visible,
+      a:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 6px;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      ::selection {
+        background: #9dff3e;
+        color: #10130f;
+      }
+      .shell {
+        width: min(1440px, 100%);
+        margin: auto;
+        padding-inline: clamp(24px, 5vw, 80px);
+      }
+      .skip-link {
+        position: absolute;
+        top: -80px;
+        left: 24px;
+        padding: 12px;
+        background: #9dff3e;
+        color: #10130f;
+        z-index: 5;
+      }
+      .skip-link:focus {
+        top: 12px;
+      }
+      .masthead {
+        min-height: 104px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        border-bottom: 1px solid var(--line);
+      }
+      .wordmark {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 24px;
+        font-weight: 650;
+        letter-spacing: -0.055em;
+      }
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        flex: 0 0 auto;
+      }
+      .navigation {
+        display: flex;
+        align-items: center;
+        gap: 32px;
+        font-size: 13px;
+      }
+      .navigation a {
+        color: #c1c9bc;
+      }
+      .navigation a:hover {
+        color: var(--accent);
+      }
+      .navigation .nav-cta {
+        padding: 11px 17px;
+        border: 1px solid #56634d;
+        border-radius: 5px;
+        color: #f0f1e9;
+      }
+      .arrow {
+        display: inline-block;
+        margin-left: 12px;
+      }
+      .hero {
+        position: relative;
+        display: grid;
+        grid-template-columns: 1.03fr 1fr;
+        align-items: center;
+        gap: 16px;
+        min-height: min(740px, calc(100svh - 104px));
+        padding-block: 66px 64px;
+      }
+      .hero-copy {
+        position: relative;
+        z-index: 2;
+      }
+      .eyebrow,
+      .micro {
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.5;
+        font-weight: 400;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 0 30px;
+        color: #bdc8b5;
+      }
+      .eyebrow::before {
+        content: '';
+        width: 24px;
+        height: 1px;
+        background: var(--accent);
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(62px, 7.1vw, 104px);
+        line-height: 0.99;
+        font-weight: 550;
+        letter-spacing: -0.067em;
+      }
+      h1 .line {
+        display: block;
+        white-space: nowrap;
+      }
+      h1 em {
+        color: var(--accent);
+        font-family: Georgia, 'Times New Roman', serif;
+        font-weight: 400;
+        letter-spacing: -0.075em;
+      }
+      .hero-description {
+        max-width: 390px;
+        margin: 28px 0 0;
+        color: #aeb8a8;
+        font-size: 16px;
+        line-height: 1.75;
+      }
+      .hero-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px 25px;
+        margin-top: 30px;
+      }
+      .primary-link {
+        display: inline-flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 24px;
+        padding: 17px 23px;
+        min-height: 54px;
+        border-radius: 5px;
+        background: var(--accent);
+        color: #142008;
+        font-size: 14px;
+        font-weight: 650;
+        transition:
+          transform 0.2s,
+          background 0.2s;
+      }
+      .primary-link:hover {
+        background: #b5ff76;
+        transform: translateY(-2px);
+      }
+      .text-link {
+        padding-block: 12px;
+        font-size: 13px;
+        color: #d4dbce;
+      }
+      .text-link:hover {
+        color: var(--accent);
+      }
+      .hero-note {
+        margin-top: 22px;
+        color: #84917c;
+        font-size: 11px;
+        letter-spacing: 0.015em;
+      }
+      .hero-note span {
+        margin-inline: 9px;
+        color: #53604a;
+      }
+      .art-column {
+        position: relative;
+        min-width: 0;
+        align-self: stretch;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .artwork {
+        position: relative;
+        width: 113%;
+        margin: -24px -6.5% 0;
+        isolation: isolate;
+      }
+      .artwork::before {
+        content: '';
+        position: absolute;
+        inset: 2%;
+        z-index: -1;
+        pointer-events: none;
+        background:
+          radial-gradient(ellipse at 28% 30%, #8bc84312, transparent 58%),
+          radial-gradient(ellipse at 72% 70%, #6646ac14, transparent 60%);
+      }
+      .art-grid {
+        position: absolute;
+        inset: 8%;
+        border: 1px solid #35432b55;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: -1;
+      }
+      .art-grid::before,
+      .art-grid::after {
+        content: '';
+        position: absolute;
+        border: 1px solid #35432b35;
+        border-radius: 50%;
+      }
+      .art-grid::before {
+        inset: 15%;
+      }
+      .art-grid::after {
+        inset: 31%;
+      }
+      canvas,
+      .static-art {
+        display: block;
+        width: 100%;
+        aspect-ratio: 1;
+      }
+      /* The grove fills the hero edge to edge; the art column only places the square. */
+      #shaderCanvas {
+        position: absolute;
+        inset: 0 auto;
+        left: calc(50% - 50vw);
+        width: 100vw;
+        height: 100%;
+        aspect-ratio: auto;
+        z-index: 1;
+        pointer-events: none;
+      }
+      .artwork {
+        aspect-ratio: 1;
+      }
+      .art-caption,
+      .art-hint,
+      .notice {
+        position: relative;
+        z-index: 2;
+      }
+      .axis-label {
+        position: absolute;
+        right: -10px;
+        top: 50%;
+        writing-mode: vertical-rl;
+        color: #7e8e73;
+        font-size: 9px;
+        letter-spacing: 0.18em;
+      }
+      .art-caption {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        color: #92a387;
+        padding: 0 18px;
+        margin-top: -12px;
+      }
+      .art-caption .micro {
+        font-size: 9px;
+      }
+      .live-state {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .live-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .live-state[data-paused='true'] .live-dot {
+        background: #899381;
+      }
+      .motion-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 40px;
+        padding: 8px 11px;
+        border: 1px solid #46503f;
+        border-radius: 4px;
+        background: #192015;
+        color: #d4dfcc;
+        font-size: 11px;
+      }
+      .motion-button:hover {
+        border-color: #899d79;
+      }
+      .motion-button svg,
+      .action svg {
+        width: 13px;
+        height: 13px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.6;
+      }
+      .art-hint {
+        color: #839478;
+        text-align: center;
+        font-size: 11px;
+        margin: 20px 0 0;
+      }
+      .notice {
+        color: #c5d1bc;
+        font-size: 13px;
+        line-height: 1.5;
+        text-align: center;
+      }
+      .feature-strip {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        padding-block: 28px;
+        gap: 30px;
+      }
+      .feature {
+        display: flex;
+        align-items: flex-start;
+        gap: 18px;
+      }
+      .feature + .feature {
+        border-left: 1px solid var(--line);
+        padding-left: 30px;
+      }
+      .feature .micro {
+        color: #849777;
+        margin-top: 3px;
+      }
+      .feature h2 {
+        margin: 0 0 7px;
+        font-size: 14px;
+        font-weight: 550;
+      }
+      .feature p {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.6;
+        color: #91a087;
+      }
+      .playground {
+        display: grid;
+        grid-template-columns: 0.85fr 1.15fr;
+        gap: 80px;
+        padding-block: 100px 80px;
+      }
+      .section-label {
+        color: #93a485;
+        margin: 0 0 20px;
+      }
+      .playground h2 {
+        font-size: clamp(34px, 3.5vw, 48px);
+        line-height: 1.08;
+        letter-spacing: -0.05em;
+        font-weight: 500;
+        margin: 0;
+      }
+      .playground-intro > p:last-of-type {
+        color: #a2af99;
+        line-height: 1.75;
+        font-size: 14px;
+        max-width: 35ch;
+        margin-top: 20px;
+      }
+      .back-to-art {
+        display: inline-block;
+        margin-top: 10px;
+        border-bottom: 1px solid #536649;
+      }
+      .palette-heading {
+        font-size: 11px;
+        font-weight: 400;
+        margin: 0 0 12px;
+        color: #b5c2ab;
+      }
+      .palettes {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .palette {
+        padding: 16px 12px;
+        border: 1px solid #3d4935;
+        border-radius: 5px;
+        background: #161c13;
+        color: #dae3d3;
+        text-align: left;
+      }
+      .palette:hover {
+        background: #232d1d;
+      }
+      .palette[aria-pressed='true'] {
+        border-color: #9dff3e;
+        background: #202c18;
+      }
+      .swatch {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-bottom: 12px;
+      }
+      .swatch i {
+        display: block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--color);
+      }
+      .palette-name {
+        font-size: 12px;
+      }
+      .palette-number {
+        float: right;
+        font-size: 10px;
+        color: #97a58c;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 10px 14px;
+        border: 1px solid #46503f;
+        border-radius: 4px;
+        background: transparent;
+        color: #cdd9c4;
+        font-size: 12px;
+      }
+      .action:hover:not(:disabled),
+      .action[aria-pressed='true'] {
+        background: #25321c;
+        border-color: #8ca279;
+      }
+      .lockups {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 18px 26px;
+        margin-top: 30px;
+      }
+      .lockup {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 650;
+        letter-spacing: -0.05em;
+      }
+      .lockup canvas {
+        width: 1.35em;
+        height: 1.35em;
+      }
+      .export-note {
+        margin-top: 18px;
+        color: #8c9d80;
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+        padding-block: 28px;
+        border-top: 1px solid var(--line);
+        color: #98a78e;
+        font-size: 11px;
+      }
+      footer a:hover {
+        color: #d2f4ba;
+      }
+      @media (min-width: 1500px) {
+        .hero {
+          min-height: 740px;
+        }
+      }
+      @media (max-width: 1000px) {
+        .navigation {
+          gap: 20px;
+        }
+        .hero {
+          min-height: 640px;
+          padding-block: 50px;
+        }
+        h1 {
+          font-size: clamp(60px, 7.4vw, 78px);
+        }
+        .art-caption {
+          padding: 0;
+        }
+        .art-caption > .micro {
+          display: none;
+        }
+        .playground {
+          gap: 35px;
+        }
+        .feature + .feature {
+          padding-left: 18px;
+        }
+        .feature {
+          gap: 12px;
+        }
+      }
+      @media (max-width: 720px) {
+        .masthead {
+          min-height: 82px;
+          gap: 16px;
+        }
+        .wordmark {
+          font-size: 21px;
+          gap: 8px;
+        }
+        .brand-mark {
+          width: 29px;
+          height: 29px;
+        }
+        .navigation {
+          gap: 0;
+        }
+        .navigation .desktop-link {
+          display: none;
+        }
+        .navigation .nav-cta {
+          padding: 10px 12px;
+          font-size: 11px;
+        }
+        .nav-cta .arrow {
+          margin-left: 6px;
+        }
+        .hero {
+          grid-template-columns: 1fr;
+          min-height: 0;
+          padding-block: 42px 36px;
+          gap: 25px;
+        }
+        h1 {
+          font-size: clamp(56px, 11.7vw, 84px);
+        }
+        h1 .line {
+          display: inline;
+          white-space: normal;
+        }
+        h1 .line:first-child {
+          display: block;
+        }
+        .eyebrow {
+          margin-bottom: 24px;
+          font-size: 9px;
+        }
+        .hero-description {
+          font-size: 14px;
+          max-width: 38ch;
+          margin-top: 22px;
+        }
+        .hero-actions {
+          gap: 10px 20px;
+          margin-top: 23px;
+        }
+        .primary-link {
+          padding: 15px 18px;
+          min-height: 50px;
+          font-size: 13px;
+        }
+        .hero-note {
+          margin-top: 18px;
+          font-size: 10px;
+        }
+        .art-column {
+          width: min(470px, 100%);
+          margin: auto;
+        }
+        .artwork {
+          width: 100%;
+          margin: 0;
+        }
+        .axis-label {
+          right: -8px;
+        }
+        .art-caption {
+          margin-top: 0;
+        }
+        .art-caption > .micro {
+          display: block;
+        }
+        .art-hint {
+          margin-top: 14px;
+        }
+        .feature-strip {
+          grid-template-columns: 1fr;
+          gap: 22px;
+          padding-block: 28px;
+        }
+        .feature + .feature {
+          border-left: none;
+          padding-left: 0;
+        }
+        .feature {
+          gap: 18px;
+        }
+        .feature p {
+          font-size: 12px;
+        }
+        .playground {
+          grid-template-columns: 1fr;
+          padding-block: 58px;
+          gap: 28px;
+        }
+        .playground-intro > p:last-of-type {
+          max-width: 45ch;
+        }
+        .palette {
+          padding: 14px 10px;
+        }
+        .palette-number {
+          display: none;
+        }
+        .lockups {
+          gap: 20px;
+        }
+      }
+      @media (max-width: 360px) {
+        .navigation .nav-cta {
+          padding: 9px;
+        }
+        .wordmark {
+          font-size: 19px;
+        }
+        .art-caption > .micro {
+          display: none;
+        }
+        h1 {
+          font-size: 50px;
+        }
+        .shell {
+          padding-inline: 20px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        *,
+        *::before,
+        *::after {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <svg width="0" height="0" aria-hidden="true" style="position: absolute">
+      <defs>
+        <symbol id="groveMark" viewBox="0 0 36 36">
+          <circle cx="7.92" cy="28.08" r="3.86" fill="rgb(53,220,196)" data-t="0.5" />
+          <circle cx="18.00" cy="28.08" r="2.56" fill="rgb(83,159,215)" data-t="0.7" />
+          <circle cx="28.08" cy="28.08" r="2.42" fill="rgb(114,98,234)" data-t="0.9" />
+          <circle cx="7.92" cy="18.00" r="3.31" fill="rgb(95,234,142)" data-t="0.3" />
+          <circle cx="18.00" cy="18.00" r="4.74" fill="rgb(53,220,196)" data-t="0.5" />
+          <circle cx="28.08" cy="18.00" r="3.31" fill="rgb(83,159,215)" data-t="0.7" />
+          <circle
+            cx="7.92"
+            cy="7.92"
+            r="2.42"
+            fill="rgb(136,248,89)"
+            data-t="0.09999999999999998"
+          />
+          <circle cx="18.00" cy="7.92" r="2.56" fill="rgb(95,234,142)" data-t="0.3" />
+          <circle cx="28.08" cy="7.92" r="3.86" fill="rgb(53,220,196)" data-t="0.5" />
+        </symbol>
+      </defs>
+    </svg>
+    <div class="shell">
+      <header class="masthead">
+        <a class="wordmark" href="#main" aria-label="Shadergrove home"
+          ><svg class="brand-mark" viewBox="0 0 36 36" aria-hidden="true">
+            <use href="#groveMark" /></svg
+          >Shadergrove</a
+        >
+        <nav class="navigation" aria-label="Main navigation">
+          <a class="desktop-link" href="#workflow">The workspace</a>
+          <a class="desktop-link" href="#playground">The grove</a>
+          <a class="nav-cta" href="https://github.com/antelm-dev/shadergrove"
+            >GitHub <span class="arrow" aria-hidden="true">↗</span></a
+          >
+        </nav>
+      </header>
+      <main id="main">
+        <section class="hero" aria-labelledby="heroTitle">
+          <canvas
+            id="shaderCanvas"
+            role="img"
+            aria-label="Sampled grove: a wave flowing through a grid of lime, cyan and violet circles."
+            >A grid of circular crowns, shaped by a travelling wave.</canvas
+          >
+          <div class="hero-copy">
+            <p class="eyebrow">A workspace for real-time imagination</p>
+            <h1 id="heroTitle">
+              <span class="line">A little code.</span>
+              <span class="line">A <em>living</em></span>
+              <span class="line">world.</span>
+            </h1>
+            <p class="hero-description">
+              A home for your shaders. Write, play and grow your collection in a workspace made for
+              real-time creation.
+            </p>
+            <div class="hero-actions">
+              <a class="primary-link" href="https://github.com/antelm-dev/shadergrove#quick-start"
+                >Start creating <span aria-hidden="true">↗</span></a
+              >
+              <a class="text-link" href="#playground"
+                >Meet the grove <span class="arrow" aria-hidden="true">↓</span></a
+              >
+            </div>
+            <p class="hero-note">
+              Open source <span aria-hidden="true">/</span> Web &amp; desktop
+              <span aria-hidden="true">/</span> Yours to shape
+            </p>
+          </div>
+          <div class="art-column">
+            <div class="artwork" id="artwork">
+              <div class="art-grid" aria-hidden="true"></div>
+              <svg
+                id="staticArt"
+                class="static-art"
+                viewBox="0 0 600 600"
+                role="img"
+                aria-label="Static sampled grove"
+                hidden
+              >
+                <circle cx="98.40" cy="501.60" r="26.62" fill="rgb(53,220,196)" data-t="0.5" />
+                <circle cx="199.20" cy="501.60" r="24.70" fill="rgb(71,183,208)" data-t="0.62" />
+                <circle cx="300.00" cy="501.60" r="17.69" fill="rgb(89,147,219)" data-t="0.74" />
+                <circle cx="400.80" cy="501.60" r="17.15" fill="rgb(108,110,231)" data-t="0.86" />
+                <circle cx="501.60" cy="501.60" r="17.14" fill="rgb(126,73,242)" data-t="0.98" />
+                <circle cx="98.40" cy="400.80" r="47.20" fill="rgb(78,228,164)" data-t="0.38" />
+                <circle cx="199.20" cy="400.80" r="46.44" fill="rgb(53,220,196)" data-t="0.5" />
+                <circle cx="300.00" cy="400.80" r="28.26" fill="rgb(71,183,208)" data-t="0.62" />
+                <circle cx="400.80" cy="400.80" r="18.23" fill="rgb(89,147,219)" data-t="0.74" />
+                <circle
+                  cx="501.60"
+                  cy="400.80"
+                  r="17.88"
+                  fill="rgb(108,110,231)"
+                  data-t="0.8600000000000001"
+                />
+                <circle cx="98.40" cy="300.00" r="30.03" fill="rgb(103,237,132)" data-t="0.26" />
+                <circle cx="199.20" cy="300.00" r="32.50" fill="rgb(78,228,164)" data-t="0.38" />
+                <circle cx="300.00" cy="300.00" r="47.38" fill="rgb(53,220,196)" data-t="0.5" />
+                <circle cx="400.80" cy="300.00" r="32.50" fill="rgb(71,183,208)" data-t="0.62" />
+                <circle cx="501.60" cy="300.00" r="30.03" fill="rgb(89,147,219)" data-t="0.74" />
+                <circle cx="98.40" cy="199.20" r="17.88" fill="rgb(128,245,100)" data-t="0.14" />
+                <circle cx="199.20" cy="199.20" r="18.23" fill="rgb(103,237,132)" data-t="0.26" />
+                <circle cx="300.00" cy="199.20" r="28.26" fill="rgb(78,228,164)" data-t="0.38" />
+                <circle cx="400.80" cy="199.20" r="46.44" fill="rgb(53,220,196)" data-t="0.5" />
+                <circle cx="501.60" cy="199.20" r="47.20" fill="rgb(71,183,208)" data-t="0.62" />
+                <circle
+                  cx="98.40"
+                  cy="98.40"
+                  r="17.14"
+                  fill="rgb(153,254,67)"
+                  data-t="0.020000000000000018"
+                />
+                <circle
+                  cx="199.20"
+                  cy="98.40"
+                  r="17.15"
+                  fill="rgb(128,245,100)"
+                  data-t="0.13999999999999996"
+                />
+                <circle cx="300.00" cy="98.40" r="17.69" fill="rgb(103,237,132)" data-t="0.26" />
+                <circle
+                  cx="400.80"
+                  cy="98.40"
+                  r="24.70"
+                  fill="rgb(78,228,164)"
+                  data-t="0.37999999999999995"
+                />
+                <circle cx="501.60" cy="98.40" r="26.62" fill="rgb(53,220,196)" data-t="0.5" />
+              </svg>
+              <span class="axis-label micro" aria-hidden="true">Code → colour → possibility</span>
+            </div>
+            <div class="art-caption">
+              <span class="micro">01 / Sampled grove</span>
+              <span id="liveState" class="live-state micro" data-paused="false"
+                ><span class="live-dot" aria-hidden="true"></span
+                ><span id="liveLabel">In motion</span></span
+              >
+              <button id="motionButton" type="button" class="motion-button" aria-pressed="false">
+                <svg id="pauseIcon" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M5 3v10M11 3v10" /></svg
+                ><svg id="playIcon" viewBox="0 0 16 16" aria-hidden="true" hidden>
+                  <path d="m5 3 8 5-8 5Z" /></svg
+                ><span id="motionLabel">Pause animation</span>
+              </button>
+            </div>
+            <p class="art-hint">Move your cursor. Leave a little ripple.</p>
+            <p id="notice" class="notice" role="status" hidden></p>
+            <noscript
+              ><p class="notice">Enable JavaScript to bring the grove to life.</p>
+              <style>
+                #shaderCanvas {
+                  display: none;
+                }
+                #staticArt[hidden] {
+                  display: block !important;
+                }
+                .motion-button {
+                  display: none;
+                }
+              </style></noscript
+            >
+          </div>
+        </section>
+        <section id="workflow" class="feature-strip" aria-label="Inside the workspace">
+          <div class="feature">
+            <span class="micro" aria-hidden="true">01</span>
+            <div>
+              <h2>Write. See. Repeat.</h2>
+              <p>Edit GLSL with a live preview.</p>
+            </div>
+          </div>
+          <div class="feature">
+            <span class="micro" aria-hidden="true">02</span>
+            <div>
+              <h2>Find your own frequency.</h2>
+              <p>Tune the controls. Save the feeling.</p>
+            </div>
+          </div>
+          <div class="feature">
+            <span class="micro" aria-hidden="true">03</span>
+            <div>
+              <h2>Let your collection grow.</h2>
+              <p>Keep your shaders, presets and possibilities.</p>
+            </div>
+          </div>
+        </section>
+        <section class="playground" id="playground" aria-labelledby="playgroundTitle">
+          <div class="playground-intro">
+            <p class="section-label micro">Small samples. Shared roots.</p>
+            <h2 id="playgroundTitle">A grove, grown<br />from a wave.</h2>
+            <p>
+              Each dot is a little canopy. Together, they trace a moving field of colour. Play with
+              the palette, freeze a moment, and take a piece with you.
+            </p>
+            <a class="text-link back-to-art" href="#artwork"
+              >Back to the living canvas <span class="arrow" aria-hidden="true">↑</span></a
+            >
+          </div>
+          <div class="playground-controls">
+            <h3 id="paletteHeading" class="palette-heading micro">Choose your light</h3>
+            <div class="palettes" role="group" aria-labelledby="paletteHeading">
+              <button type="button" class="palette" data-palette="living" aria-pressed="true">
+                <span class="swatch" aria-hidden="true"
+                  ><i style="--color: #9dff3e"></i><i style="--color: #35dcc4"></i
+                  ><i style="--color: #8143f4"></i></span
+                ><span class="palette-name">Grove</span><span class="palette-number">01</span>
+              </button>
+              <button type="button" class="palette" data-palette="contour" aria-pressed="false">
+                <span class="swatch" aria-hidden="true"
+                  ><i style="--color: #e4e83a"></i><i style="--color: #35dcc4"></i
+                  ><i style="--color: #0d7367"></i></span
+                ><span class="palette-name">Forest</span><span class="palette-number">02</span>
+              </button>
+              <button type="button" class="palette" data-palette="aurora" aria-pressed="false">
+                <span class="swatch" aria-hidden="true"
+                  ><i style="--color: #93ff3e"></i><i style="--color: #2bcbea"></i
+                  ><i style="--color: #ca6bff"></i></span
+                ><span class="palette-name">Afterglow</span><span class="palette-number">03</span>
+              </button>
+            </div>
+            <div class="actions">
+              <button id="monoButton" type="button" class="action" aria-pressed="false">
+                Mono
+              </button>
+              <button id="resetButton" type="button" class="action">Reset frame</button>
+              <button id="downloadButton" type="button" class="action">
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M8 2v8m-3-3 3 3 3-3M3 11v3h10v-3" /></svg
+                ><span id="downloadLabel">Download PNG</span>
+              </button>
+            </div>
+            <div id="lockups" class="lockups" aria-label="The logo at small sizes">
+              <span class="lockup" style="font-size: 26px"
+                ><canvas aria-hidden="true"></canvas>Shadergrove</span
+              >
+              <span class="lockup" style="font-size: 17px"
+                ><canvas aria-hidden="true"></canvas>Shadergrove</span
+              >
+              <span class="lockup" style="font-size: 12px"
+                ><canvas aria-hidden="true"></canvas>Shadergrove</span
+              >
+            </div>
+            <p id="exportNote" class="export-note" aria-live="polite">
+              Transparent background · 2400 × 2400
+            </p>
+          </div>
+        </section>
+      </main>
+      <footer>
+        <span>Shadergrove — built from light, yours to shape.</span
+        ><span id="paletteCaption" aria-live="polite">01 / Grove</span
+        ><a href="directions.html"
+          >Explore the identity sketches <span aria-hidden="true">↗</span></a
+        >
+      </footer>
+    </div>
+    <script id="vertexShader" type="x-shader/x-vertex">
+      attribute vec2 a_position;
+      void main() { gl_Position = vec4(a_position, 0.0, 1.0); }
+    </script>
+    <!-- Direction 01: the preview, small marks and transparent export share this geometry. -->
+    <script id="fragmentShader" type="x-shader/x-fragment">
+      precision highp float;
+      uniform vec2 u_resolution;
+      uniform float u_time;
+      uniform vec2 u_pointer;
+      uniform vec3 u_top;
+      uniform vec3 u_mid;
+      uniform vec3 u_bottom;
+      uniform float u_mono;
+      uniform float u_samples;
+      uniform vec3 u_mark; // The mark's square box: centre (device pixels, y up) and side.
+      uniform float u_field; // 1 behind the hero: the grove continues past the square.
+      const float PI = 3.14159265;
+      void main() {
+        // The 5 × 5 square fills 84% of its box.
+        float px = 1.0 / (u_mark.z * 0.84);
+        vec2 p = (gl_FragCoord.xy - u_mark.xy) * px;
+        float phase = u_time * 0.5235987756;
+        float n = u_samples;
+        float pitch = 1.0 / n;
+        vec2 cell = floor((p + 0.5) / pitch);
+        bool inSquare = all(greaterThanEqual(cell, vec2(0.0))) && all(lessThanEqual(cell, vec2(n - 1.0)));
+        if (!inSquare && u_field < 0.5) {
+          gl_FragColor = vec4(0.0);
+          return;
+        }
+        vec2 center = (cell + 0.5) * pitch - 0.5;
+        float x = center.x;
+        float wave = 0.30 * x + 0.11 * sin(2.0 * PI * x)
+          + 0.09 * (sin(3.2 * x - phase) - sin(3.2 * x));
+        float offWave = (center.y - wave) / 0.2;
+        vec2 d = center - u_pointer;
+        float nearPointer = exp(-dot(d, d) * 30.0);
+        float onWave = clamp(exp(-offWave * offWave) + 0.7 * nearPointer, 0.0, 1.0);
+        float radius = pitch * mix(n < 4.0 ? 0.24 : 0.17, 0.47, onWave);
+        if (!inSquare) {
+          // Beyond the square there is no wave: crowns shrink with distance from the mark, and
+          // fade out before the canvas edges so the field never ends on a cut.
+          radius = pitch * (0.14 * exp(-(length(center) - 0.5) / 0.45) + 0.18 * nearPointer);
+          vec2 dotPx = u_mark.xy + center / px;
+          vec2 edge = min(dotPx, u_resolution - dotPx);
+          radius *= smoothstep(0.0, pitch / px, min(edge.x, edge.y));
+        }
+        float alpha = 1.0 - smoothstep(-px, px, length(p - center) - radius);
+        float t = clamp(0.5 + 0.6 * (center.x - center.y), 0.0, 1.0);
+        vec3 color = t < 0.5 ? mix(u_top, u_mid, t * 2.0) : mix(u_mid, u_bottom, t * 2.0 - 1.0);
+        if (u_mono > 0.5) color = vec3(0.95, 0.95, 0.93);
+        gl_FragColor = vec4(color * alpha, alpha);
+      }
+    </script>
+    <script>
+      (() => {
+        'use strict';
+
+        const palettes = {
+          living: {
+            name: 'Grove',
+            number: '01',
+            accent: '#9dff3e',
+            colors: ['#9dff3e', '#35dcc4', '#8143f4'],
+
+            description: 'lime, cyan, and violet',
+          },
+          contour: {
+            name: 'Forest',
+            number: '02',
+            accent: '#35dcc4',
+            colors: ['#e4e83a', '#35dcc4', '#0d7367'],
+
+            description: 'turquoise, forest green, and deep teal, with a lime highlight',
+          },
+          aurora: {
+            name: 'Afterglow',
+            number: '03',
+            accent: '#c4a7ff',
+            colors: ['#93ff3e', '#2bcbea', '#ca6bff'],
+
+            description: 'luminous green, cyan, and soft violet',
+          },
+        };
+        const canvas = document.getElementById('shaderCanvas');
+        const artwork = document.getElementById('artwork');
+        const hero = document.querySelector('.hero');
+        const notice = document.getElementById('notice');
+        const motionButton = document.getElementById('motionButton');
+        const downloadButton = document.getElementById('downloadButton');
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const vertexSource = document.getElementById('vertexShader').textContent;
+        const fragmentSource = document.getElementById('fragmentShader').textContent;
+        const color = (hex) =>
+          [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16) / 255);
+        const lockupCanvases = [...document.querySelectorAll('#lockups canvas')];
+        let currentPalette = 'living';
+        let mono = false;
+        let lockupRenderers = [];
+        let paused = reducedMotion.matches;
+        let visible = true;
+        let time = 0;
+        let lastFrame = null;
+        let animationFrame = null;
+        let renderer = null;
+        let heroMark = null;
+        let pointer = [9, 9];
+        let targetPointer = [9, 9];
+        let exporting = false;
+
+        function createRenderer(targetCanvas) {
+          const gl = targetCanvas.getContext('webgl', {
+            alpha: true,
+            premultipliedAlpha: true,
+            antialias: false,
+            depth: false,
+            stencil: false,
+            preserveDrawingBuffer: false,
+            powerPreference: 'low-power',
+          });
+          if (!gl) throw new Error('WebGL is unavailable');
+          let program = null;
+          let buffer = null;
+          const shaders = [];
+          try {
+            const compile = (type, source) => {
+              const shader = gl.createShader(type);
+              if (!shader) throw new Error('Unable to create a shader');
+              shaders.push(shader);
+              gl.shaderSource(shader, source);
+              gl.compileShader(shader);
+              if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                throw new Error(gl.getShaderInfoLog(shader) || 'Shader compilation failed');
+              }
+              return shader;
+            };
+            program = gl.createProgram();
+            if (!program) throw new Error('Unable to create a shader program');
+            gl.attachShader(program, compile(gl.VERTEX_SHADER, vertexSource));
+            gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSource));
+            gl.linkProgram(program);
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+              throw new Error(gl.getProgramInfoLog(program) || 'Shader linking failed');
+            }
+            gl.useProgram(program);
+            buffer = gl.createBuffer();
+            if (!buffer) throw new Error('Unable to create a vertex buffer');
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(
+              gl.ARRAY_BUFFER,
+              new Float32Array([-1, -1, 3, -1, -1, 3]),
+              gl.STATIC_DRAW,
+            );
+            const position = gl.getAttribLocation(program, 'a_position');
+            gl.enableVertexAttribArray(position);
+            gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+            const uniforms = Object.fromEntries(
+              [
+                'resolution',
+                'time',
+                'pointer',
+                'top',
+                'mid',
+                'bottom',
+                'mono',
+                'samples',
+                'mark',
+                'field',
+              ].map((name) => [name, gl.getUniformLocation(program, `u_${name}`)]),
+            );
+            return {
+              gl,
+              // `mark` places the square on a larger canvas ({ box: [x, y, side], cssSide });
+              // without it the square is centred, as in the lockups and exports.
+              draw(palette, frameTime, framePointer, mono, mark = null) {
+                gl.viewport(0, 0, targetCanvas.width, targetCanvas.height);
+                gl.uniform2f(uniforms.resolution, targetCanvas.width, targetCanvas.height);
+                gl.uniform1f(uniforms.time, frameTime);
+                gl.uniform2fv(uniforms.pointer, framePointer);
+                ['top', 'mid', 'bottom'].forEach((name, index) => {
+                  gl.uniform3fv(uniforms[name], color(palette.colors[index]));
+                });
+
+                gl.uniform1f(uniforms.mono, mono ? 1 : 0);
+                const { width, height } = targetCanvas;
+                const box = mark ? mark.box : [width / 2, height / 2, Math.min(width, height)];
+                const cssSide = mark ? mark.cssSide : targetCanvas.clientWidth || width;
+                gl.uniform3fv(uniforms.mark, box);
+                gl.uniform1f(uniforms.field, mark ? 1 : 0);
+                // Use CSS pixels for the simplified mark, so high-DPI favicons keep the same silhouette.
+                gl.uniform1f(uniforms.samples, cssSide < 44 ? 3 : 5);
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+              },
+              dispose() {
+                gl.deleteBuffer(buffer);
+                gl.deleteProgram(program);
+                shaders.forEach((shader) => gl.deleteShader(shader));
+              },
+            };
+          } catch (error) {
+            if (buffer) gl.deleteBuffer(buffer);
+            if (program) gl.deleteProgram(program);
+            shaders.forEach((shader) => gl.deleteShader(shader));
+            throw error;
+          }
+        }
+
+        function draw() {
+          if (!renderer) return;
+          const palette = palettes[currentPalette];
+          renderer.draw(palette, time, pointer, mono, heroMark);
+        }
+
+        function drawLockups() {
+          lockupRenderers.forEach((small) => small.draw(palettes[currentPalette], 0, [9, 9], mono));
+        }
+
+        function schedule() {
+          if (renderer && !paused && visible && !document.hidden && animationFrame === null) {
+            animationFrame = requestAnimationFrame(frame);
+          }
+        }
+
+        function stop() {
+          if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+          animationFrame = null;
+          lastFrame = null;
+        }
+
+        function frame(timestamp) {
+          animationFrame = null;
+          if (lastFrame !== null) time += Math.min((timestamp - lastFrame) / 1000, 0.1);
+          lastFrame = timestamp;
+          pointer = pointer.map((value, index) => value + (targetPointer[index] - value) * 0.1);
+          draw();
+          schedule();
+        }
+
+        function syncMotion() {
+          const isStill = paused || !renderer;
+          motionButton.setAttribute('aria-pressed', String(isStill));
+          document.getElementById('motionLabel').textContent = isStill
+            ? 'Resume animation'
+            : 'Pause animation';
+          document.getElementById('pauseIcon').toggleAttribute('hidden', isStill);
+          document.getElementById('playIcon').toggleAttribute('hidden', !isStill);
+          document.getElementById('liveState').dataset.paused = String(isStill);
+          document.getElementById('liveLabel').textContent = isStill ? 'Still frame' : 'In motion';
+          motionButton.disabled = !renderer;
+          downloadButton.disabled = !renderer || exporting;
+          document.querySelector('.art-hint').textContent = !renderer
+            ? 'A still moment in the grove.'
+            : isStill
+              ? 'A still moment. Resume to explore.'
+              : 'Move your cursor. Leave a little ripple.';
+        }
+
+        function fallback(palette) {
+          const rgb = palette.colors.map(color);
+          document.querySelectorAll('#staticArt circle').forEach((circle) => {
+            const t = Number(circle.dataset.t);
+            const a = t < 0.5 ? rgb[0] : rgb[1];
+            const b = t < 0.5 ? rgb[1] : rgb[2];
+            const f = t < 0.5 ? t * 2 : t * 2 - 1;
+            const fill = mono
+              ? '#f2f2ef'
+              : 'rgb(' + a.map((v, i) => Math.round((v + (b[i] - v) * f) * 255)).join(',') + ')';
+            circle.setAttribute('fill', fill);
+          });
+          document
+            .getElementById('staticArt')
+            .setAttribute('aria-label', 'Static sampled grove in ' + describe(palette) + '.');
+        }
+
+        function describe(palette) {
+          return mono ? 'one flat white ink' : palette.description;
+        }
+
+        function selectPalette(key) {
+          currentPalette = key;
+          const palette = palettes[key];
+          document.querySelectorAll('[data-palette]').forEach((button) => {
+            button.setAttribute('aria-pressed', String(button.dataset.palette === key));
+          });
+          document.getElementById('monoButton').setAttribute('aria-pressed', String(mono));
+          document.documentElement.style.setProperty('--accent', palette.accent);
+          canvas.setAttribute(
+            'aria-label',
+            `Shadergrove sampled grove: a grid of circular crowns in ${describe(palette)}.`,
+          );
+          document.getElementById('paletteCaption').textContent =
+            `${palette.number} / ${palette.name}${mono ? ' · Mono' : ''}`;
+          fallback(palette);
+          draw();
+          drawLockups();
+        }
+
+        function resize() {
+          const scale = Math.min(window.devicePixelRatio || 1, 2);
+          [canvas, ...lockupCanvases].forEach((target) => {
+            const bounds = target.getBoundingClientRect();
+            target.width = Math.max(1, Math.round(bounds.width * scale));
+            target.height = Math.max(1, Math.round(bounds.height * scale));
+          });
+          // The square sits where the art column's box is, measured on the hero canvas.
+          const field = canvas.getBoundingClientRect();
+          const box = artwork.getBoundingClientRect();
+          heroMark = {
+            box: [
+              (box.left + box.width / 2 - field.left) * scale,
+              canvas.height - (box.top + box.height / 2 - field.top) * scale,
+              box.width * scale,
+            ],
+            cssSide: box.width,
+          };
+          draw();
+          drawLockups();
+        }
+
+        function showFallback(message) {
+          stop();
+          renderer = null;
+          canvas.hidden = true;
+          document.getElementById('lockups').hidden = true;
+          document.getElementById('staticArt').removeAttribute('hidden');
+          notice.textContent = message;
+          notice.hidden = false;
+          document.getElementById('exportNote').textContent =
+            'PNG export needs WebGL. You can still explore the palettes.';
+          syncMotion();
+        }
+
+        function initialize() {
+          try {
+            lockupRenderers.forEach((small) => small.dispose());
+            lockupRenderers = [];
+            renderer = createRenderer(canvas);
+            try {
+              lockupRenderers = lockupCanvases.map((target) => createRenderer(target));
+              document.getElementById('lockups').hidden = false;
+            } catch (error) {
+              console.warn('Shadergrove small-size preview:', error.message);
+              document.getElementById('lockups').hidden = true;
+            }
+            canvas.hidden = false;
+            document.getElementById('staticArt').setAttribute('hidden', '');
+            notice.hidden = true;
+            document.getElementById('exportNote').textContent =
+              'Transparent background · 2400 × 2400';
+            resize();
+            syncMotion();
+            schedule();
+          } catch (error) {
+            console.warn('Shadergrove shader preview:', error.message);
+            showFallback('A still preview for this browser. Live rendering needs WebGL.');
+          }
+        }
+
+        document.querySelectorAll('[data-palette]').forEach((button) => {
+          button.addEventListener('click', () => selectPalette(button.dataset.palette));
+        });
+        document.getElementById('monoButton').addEventListener('click', () => {
+          mono = !mono;
+          selectPalette(currentPalette);
+        });
+        motionButton.addEventListener('click', () => {
+          paused = !paused;
+          pointer = targetPointer = [9, 9];
+          stop();
+          draw();
+          syncMotion();
+          schedule();
+        });
+        document.getElementById('resetButton').addEventListener('click', () => {
+          time = 0;
+          paused = true;
+          pointer = targetPointer = [9, 9];
+          stop();
+          draw();
+          syncMotion();
+        });
+        hero.addEventListener('pointermove', (event) => {
+          if (paused || reducedMotion.matches || event.pointerType === 'touch') return;
+          const bounds = artwork.getBoundingClientRect();
+          targetPointer = [
+            ((event.clientX - bounds.left) / bounds.width - 0.5) *
+              (bounds.width / bounds.height) *
+              (1 / 0.84),
+            (0.5 - (event.clientY - bounds.top) / bounds.height) / 0.84,
+          ];
+        });
+        hero.addEventListener('pointerleave', () => {
+          targetPointer = [9, 9];
+        });
+        document.addEventListener('visibilitychange', () => {
+          stop();
+          schedule();
+        });
+        reducedMotion.addEventListener('change', (event) => {
+          paused = event.matches;
+          pointer = targetPointer = [9, 9];
+          stop();
+          draw();
+          syncMotion();
+          schedule();
+        });
+        const resizeObserver = new ResizeObserver(resize);
+        resizeObserver.observe(canvas);
+        resizeObserver.observe(artwork);
+        new IntersectionObserver(([entry]) => {
+          visible = entry.isIntersecting;
+          stop();
+          schedule();
+        }).observe(hero);
+        canvas.addEventListener('webglcontextlost', (event) => {
+          event.preventDefault();
+          showFallback(
+            'The live canvas is resting. Rendering will resume when the graphics connection returns.',
+          );
+        });
+        canvas.addEventListener('webglcontextrestored', initialize);
+
+        downloadButton.addEventListener('click', async () => {
+          if (!renderer || exporting) return;
+          exporting = true;
+          syncMotion();
+          document.getElementById('downloadLabel').textContent = 'Preparing PNG…';
+          const exportCanvas = document.createElement('canvas');
+          exportCanvas.width = 2400;
+          exportCanvas.height = 2400;
+          const key = currentPalette;
+          const exportMono = mono;
+          const frameTime = time;
+          let exportRenderer = null;
+          try {
+            exportRenderer = createRenderer(exportCanvas);
+            const maxSize = Math.min(
+              exportRenderer.gl.getParameter(exportRenderer.gl.MAX_RENDERBUFFER_SIZE),
+              ...exportRenderer.gl.getParameter(exportRenderer.gl.MAX_VIEWPORT_DIMS),
+            );
+            if (maxSize < 2400) {
+              exportCanvas.width = maxSize;
+              exportCanvas.height = maxSize;
+            }
+            exportRenderer.draw(palettes[key], frameTime, [9, 9], exportMono);
+            // Snapshot immediately after drawing; preserveDrawingBuffer is unnecessary.
+            const blob = await new Promise((resolve) => exportCanvas.toBlob(resolve, 'image/png'));
+            if (!blob) throw new Error('Unable to create the PNG');
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `shadergrove-sampled-grove-${key}${exportMono ? '-mono' : ''}.png`;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 30000);
+            document.getElementById('exportNote').textContent =
+              `Saved ${palettes[key].name}${exportMono ? ' Mono' : ''} · transparent PNG · ${exportCanvas.width} × ${exportCanvas.height}`;
+          } catch (error) {
+            document.getElementById('exportNote').textContent =
+              'The PNG could not be saved. Please try again.';
+            console.warn('Shadergrove PNG export:', error.message);
+          } finally {
+            if (exportRenderer) {
+              exportRenderer.dispose();
+              exportRenderer.gl.getExtension('WEBGL_lose_context')?.loseContext();
+            }
+            exporting = false;
+            document.getElementById('downloadLabel').textContent = 'Download PNG';
+            syncMotion();
+          }
+        });
+
+        selectPalette(currentPalette);
+        initialize();
+      })();
+    </script>
+  </body>
+</html>

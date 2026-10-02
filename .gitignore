@@ -36,6 +36,11 @@ yarn-error.log
 !.vscode/mcp.json
 .history/*
 
+# Next.js (apps/website)
+**/.next
+/apps/website/out
+next-env.d.ts
+
 # Miscellaneous
 **/.angular/cache
 .nx/cache

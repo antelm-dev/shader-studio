@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#141416" />
+    <title>Shadergrove — Identity directions</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, 'Segoe UI', Arial, sans-serif;
+        background: #141416;
+        color: #f2f2ef;
+        --muted: #a4a4ac;
+        --line: #2c2c30;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+      button:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #f2f2ef;
+        outline-offset: 4px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+
+      .bar {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 12px clamp(16px, 5vw, 48px);
+        background: rgb(20 20 22 / 0.88);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--line);
+      }
+      .bar strong {
+        font-size: 16px;
+        font-weight: 650;
+        letter-spacing: -0.04em;
+      }
+      .bar a {
+        color: var(--muted);
+        font-size: 12px;
+        margin-left: 10px;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+      }
+      .controls button {
+        min-height: 36px;
+        padding: 6px 12px;
+        border: 1px solid #414147;
+        border-radius: 8px;
+        background: transparent;
+        color: #ededeb;
+        font-size: 13px;
+      }
+      .controls button:hover {
+        background: #252529;
+      }
+
+      main {
+        width: min(980px, 100%);
+        margin: auto;
+        padding: 8px clamp(16px, 5vw, 48px) 48px;
+      }
+      .notice {
+        color: #c8c8cd;
+        text-align: center;
+        padding: 40px 0;
+      }
+      .direction {
+        padding: 40px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .direction h2 {
+        margin: 0;
+        font-size: clamp(22px, 4vw, 30px);
+        font-weight: 600;
+        letter-spacing: -0.04em;
+      }
+      .direction h2 span {
+        color: var(--muted);
+        font-weight: 400;
+        margin-right: 10px;
+      }
+      .idea {
+        margin: 10px 0 20px;
+        color: #c8c8cd;
+        line-height: 1.55;
+        max-width: 62ch;
+      }
+      .idea code {
+        font-size: 0.9em;
+        color: #f2f2ef;
+      }
+      canvas {
+        display: block;
+      }
+      .live {
+        width: 100%;
+        aspect-ratio: 1.6;
+        border-radius: 14px;
+        background: #19191c;
+        touch-action: pan-y;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 18px 32px;
+        margin-top: 18px;
+      }
+      figure {
+        margin: 0;
+      }
+      figcaption {
+        margin-top: 8px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .still {
+        width: 168px;
+        aspect-ratio: 1.6;
+        border-radius: 10px;
+        background: #19191c;
+      }
+      .icons {
+        display: flex;
+        align-items: flex-end;
+        gap: 14px;
+      }
+      .lockup {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 26px;
+        font-weight: 650;
+        letter-spacing: -0.05em;
+      }
+      .verdict {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px 32px;
+        margin: 20px 0 0;
+        font-size: 14px;
+        line-height: 1.5;
+        color: #c8c8cd;
+      }
+      .verdict dt {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      .verdict dd {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <div><strong>Shadergrove</strong><a href="index.html">Current prototype</a></div>
+      <div class="controls">
+        <button id="motionButton" type="button" aria-pressed="false">Pause</button>
+        <button id="resetButton" type="button" aria-label="Reset to time zero">Reset</button>
+      </div>
+    </div>
+    <main id="directions">
+      <p id="notice" class="notice" hidden></p>
+    </main>
+
+    <script>
+      (() => {
+        'use strict';
+
+        // Shared by every direction. Each mark is drawn in its own units, fitted to the tile.
+        const PRELUDE = `
+          precision highp float;
+          uniform vec2 u_resolution;
+          uniform float u_time;
+          uniform vec2 u_pointer; // Tile coordinates (0..1, y up); far away when idle.
+          uniform float u_mono;
+          const float PI = 3.14159265;
+          const vec3 WHITE = vec3(0.98, 1.0, 0.95);
+          const vec3 INK = vec3(0.95, 0.95, 0.93);
+          float px;    // Mark units per device pixel.
+          float phase; // One twelve-second loop; time zero is the canonical still.
+          vec2 pointer;
+
+          vec2 markSpace(vec2 size) {
+            float aspect = u_resolution.x / u_resolution.y;
+            float scale = max(size.x / aspect, size.y) / 0.84;
+            px = scale / u_resolution.y;
+            phase = u_time * 0.5235987756;
+            pointer = (u_pointer - 0.5) * vec2(aspect, 1.0) * scale;
+            return (gl_FragCoord.xy / u_resolution - 0.5) * vec2(aspect, 1.0) * scale;
+          }
+          float roundedBox(vec2 p, vec2 halfSize, float radius) {
+            vec2 d = abs(p) - halfSize + radius;
+            return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)) - radius;
+          }
+          // The Living Canvas palette along t: lime, cyan, violet.
+          vec3 brand(float t) {
+            vec3 lime = vec3(0.616, 1.0, 0.243);
+            vec3 cyan = vec3(0.208, 0.863, 0.769);
+            vec3 violet = vec3(0.506, 0.263, 0.957);
+            return t < 0.5 ? mix(lime, cyan, t * 2.0) : mix(cyan, violet, t * 2.0 - 1.0);
+          }
+          // The default colour of every new Shadertoy shader. The canonical still is its frame at
+          // t = 3.5, where the cycle passes through teal and green.
+          vec3 uvColor(vec2 uv) {
+            return 0.5 + 0.5 * cos(phase + 3.5 + uv.xyx + vec3(0.0, 2.0, 4.0));
+          }
+          void emit(vec3 color, float alpha) {
+            gl_FragColor = vec4(clamp(color, 0.0, 1.0) * alpha, alpha);
+          }
+        `;
+
+        // 00 — the current prototype (Living Canvas), unchanged in spirit.
+        const WAVE = `
+          const vec3 LIGHT = vec3(-0.55, 0.35, 0.76);
+          float silhouette(vec2 p) {
+            float bend = -0.065 * sin(PI * p.x / 0.825);
+            return roundedBox(vec2(p.x, p.y - bend), vec2(0.825, 0.42), 0.075);
+          }
+          float drift(float x, float k, float ph) {
+            return sin(k * x - ph) - sin(k * x);
+          }
+          vec2 seams(float x) {
+            float pin = sin(PI * clamp(x, 0.0, 1.0));
+            vec2 rest = vec2(
+              -0.08 + 0.23 * smoothstep(0.0, 0.30, x) + 0.29 * smoothstep(0.50, 0.94, x),
+              -0.42 + 0.15 * smoothstep(0.0, 0.30, x) + 0.30 * smoothstep(0.45, 1.0, x)
+            );
+            return rest + pin * vec2(
+              0.028 * (drift(x, 5.0, phase) + 0.35 * drift(x, 9.0, 2.0 * phase)),
+              0.024 * (drift(x + 0.3, 4.0, phase) + 0.35 * drift(x, 8.0, 2.0 * phase))
+            );
+          }
+          vec2 slope(vec2 p) {
+            vec2 foldK = vec2(PI / 0.825, -0.9);
+            vec2 rippleK = vec2(2.6, 1.3);
+            vec2 detailK = vec2(-1.7, 2.9);
+            vec2 d = p - pointer;
+            return -0.08 * sin(dot(foldK, p) + 0.4 - 0.35 * sin(phase)) * foldK
+              + 0.032 * cos(dot(rippleK, p) - phase) * rippleK
+              + 0.012 * cos(dot(detailK, p) - 2.0 * phase) * detailK
+              + 0.62 * exp(-dot(d, d) * 14.0) * d;
+          }
+          void main() {
+            vec2 p = markSpace(vec2(1.66, 0.98));
+            float edge = silhouette(p);
+            float alpha = 1.0 - smoothstep(-px, px, edge);
+            if (alpha <= 0.0) { gl_FragColor = vec4(0.0); return; }
+            float x = clamp((p.x + 0.825) / 1.65, 0.0, 1.0);
+            vec2 curve = seams(x);
+            vec2 dydx = (seams(x + 0.002) - curve) / (0.002 * 1.65);
+            vec2 dist = abs(p.y - curve) / sqrt(1.0 + dydx * dydx);
+            float taper = mix(0.35, 1.0, smoothstep(0.0, 0.22, x)) * (1.0 - 0.6 * smoothstep(0.35, 1.0, x));
+            float halfWidth = max(mix(0.0085, 0.013, u_mono) * taper, 0.75 * px);
+            float seam = 1.0 - smoothstep(halfWidth - 0.5 * px, halfWidth + 0.5 * px, min(dist.x, dist.y));
+            if (u_mono > 0.5) { emit(INK, alpha * (1.0 - seam)); return; }
+            vec3 top = mix(vec3(0.616, 1.0, 0.243), vec3(0.208, 0.863, 0.769), smoothstep(0.45, 1.0, x));
+            vec3 bottom = mix(vec3(0.506, 0.263, 0.957), vec3(0.714, 0.314, 1.0), smoothstep(0.15, 1.0, x));
+            float soft = max(0.012, px);
+            vec3 color = mix(bottom, vec3(0.224, 0.796, 0.878), smoothstep(curve.y - soft, curve.y + soft, p.y));
+            color = mix(color, top, smoothstep(curve.x - soft, curve.x + soft, p.y));
+            vec3 normal = normalize(vec3(-slope(p), 1.0));
+            float facing = dot(normal, LIGHT) - LIGHT.z;
+            color *= 1.0 + 0.6 * (facing > 0.0 ? 0.5 : 1.4) * facing;
+            float spec = pow(max(dot(normal, normalize(LIGHT + vec3(0.0, 0.0, 1.0))), 0.0), 24.0);
+            color = mix(color, WHITE, clamp(spec * 0.18, 0.0, 1.0));
+            emit(mix(color, WHITE, seam), alpha);
+          }
+        `;
+
+        // 01 and 02 — an orchard seen from above is a grid of round crowns; a shader's output is a
+        // grid of samples. Crown size samples one travelling wave, so the old wave survives in dots.
+        const GROVE = `
+          float waveY(float x) {
+            float rest = 0.30 * x + 0.11 * sin(2.0 * PI * x);
+            return rest + 0.09 * (sin(3.2 * x - phase) - sin(3.2 * x)); // Zero drift at t = 0.
+          }
+          void main() {
+            vec2 p = markSpace(vec2(1.0));
+            // A 5 × 5 grove; below about 36 pixels the mark drops to 3 × 3 so crowns stay round.
+            float n = px < 1.0 / 36.0 ? 5.0 : 3.0;
+            float pitch = 1.0 / n;
+            vec2 cell = floor((p + 0.5) / pitch);
+            if (any(lessThan(cell, vec2(0.0))) || any(greaterThan(cell, vec2(n - 1.0)))) {
+              gl_FragColor = vec4(0.0);
+              return;
+            }
+            vec2 center = (cell + 0.5) * pitch - 0.5;
+            float offWave = (center.y - waveY(center.x)) / 0.2;
+            float onWave = exp(-offWave * offWave);
+            vec2 toPointer = center - pointer;
+            onWave = clamp(onWave + 0.7 * exp(-dot(toPointer, toPointer) * 30.0), 0.0, 1.0);
+            float radius = pitch * mix(0.17, 0.47, onWave);
+            float alpha = 1.0 - smoothstep(-px, px, length(p - center) - radius);
+            if (u_mono > 0.5) { emit(INK, alpha); return; }
+            #if UV_COLOR
+              vec3 color = uvColor(center + 0.5); // Each crown is one pixel of that shader.
+            #else
+              vec3 color = brand(clamp(0.5 + 0.6 * (center.x - center.y), 0.0, 1.0));
+            #endif
+            emit(color, alpha);
+          }
+        `;
+
+        // 03 — a tree's cross-section: growth rings are contour lines of one field. The rings move
+        // outward exactly one step per loop.
+        const RINGS = `
+          void main() {
+            vec2 p = markSpace(vec2(1.0));
+            float rim = length(p) - 0.5;
+            float alpha = 1.0 - smoothstep(-px, px, rim);
+            if (alpha <= 0.0) { gl_FragColor = vec4(0.0); return; }
+            vec2 d = p - vec2(-0.07, 0.05); // The heart sits off centre, like a real trunk.
+            float angle = atan(d.y, d.x);
+            float wobble = (0.009 * sin(3.0 * angle + 0.8) + 0.005 * sin(5.0 * angle - 1.3))
+              * smoothstep(0.0, 0.2, length(d));
+            vec2 toPointer = p - pointer;
+            float field = length(d) + wobble - 0.05 * exp(-dot(toPointer, toPointer) * 20.0);
+            float spacing = max(0.085, 6.0 * px); // Fewer rings when small.
+            float rings = field / spacing - phase / (2.0 * PI);
+            float line = abs(fract(rings + 0.5) - 0.5) * spacing;
+            float halfWidth = max(mix(0.007, 0.011, u_mono), 0.75 * px);
+            float seam = (1.0 - smoothstep(halfWidth - 0.5 * px, halfWidth + 0.5 * px, line))
+              * smoothstep(0.02, 0.05, field);
+            if (u_mono > 0.5) { emit(INK, alpha * (1.0 - seam)); return; }
+            vec3 color = brand(clamp(field / 0.55, 0.0, 1.0));
+            color *= 0.93 + 0.07 * step(0.5, fract(rings * 0.5)); // Early and late wood.
+            emit(mix(color, WHITE, seam), alpha);
+          }
+        `;
+
+        // 04 — smooth unions turn separate crowns into one continuous canopy.
+        const CANOPY = `
+          float merge(float a, float b, float k) {
+            float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+            return mix(b, a, h) - k * h * (1.0 - h);
+          }
+          void main() {
+            vec2 p = markSpace(vec2(1.12, 1.08));
+            float sway = 0.025 * sin(phase);
+            float left = length(p - vec2(-0.25, 0.04 + sway)) - 0.25;
+            float right = length(p - vec2(0.25, 0.04 - sway)) - 0.25;
+            float top = length(p - vec2(sway, 0.24)) - 0.27;
+            float crown = merge(merge(left, right, 0.13), top, 0.13);
+            float trunk = roundedBox(p - vec2(0.0, -0.23), vec2(0.072, 0.27), 0.065);
+            float field = merge(crown, trunk, 0.12);
+            float alpha = 1.0 - smoothstep(-px, px, field);
+            if (u_mono > 0.5) { emit(INK, alpha); return; }
+            vec2 d = p - pointer;
+            float light = exp(-dot(d, d) * 14.0);
+            float band = 0.5 + 0.5 * sin(12.0 * p.y + 4.0 * p.x - phase);
+            vec3 color = brand(clamp(0.48 - 0.7 * p.y + 0.25 * p.x, 0.0, 1.0));
+            color *= 0.88 + 0.12 * band;
+            emit(mix(color, WHITE, 0.22 * light), alpha);
+          }
+        `;
+
+        // 05 — six lens-shaped leaves surround an open centre, like a camera aperture.
+        const APERTURE = `
+          void main() {
+            vec2 p = markSpace(vec2(1.1));
+            float field = 10.0;
+            float petal = 0.0;
+            for (int i = 0; i < 6; i++) {
+              float angle = float(i) * PI / 3.0;
+              vec2 radial = vec2(cos(angle), sin(angle));
+              vec2 tangent = vec2(-radial.y, radial.x);
+              vec2 center = 0.30 * radial;
+              vec2 d = center - pointer;
+              float tilt = 0.52 + 0.10 * sin(phase) + 0.10 * exp(-dot(d, d) * 18.0);
+              vec2 local = vec2(dot(p - center, radial), dot(p - center, tangent));
+              vec2 q = mat2(cos(tilt), -sin(tilt), sin(tilt), cos(tilt)) * local;
+              float leaf = max(length(q - vec2(0.0, 0.16)), length(q + vec2(0.0, 0.16))) - 0.27;
+              if (leaf < field) { field = leaf; petal = float(i); }
+            }
+            float alpha = 1.0 - smoothstep(-px, px, field);
+            vec3 color = brand(0.5 + 0.45 * cos(petal * PI / 3.0 - 0.3 * sin(phase)));
+            emit(u_mono > 0.5 ? INK : color, alpha);
+          }
+        `;
+
+        // 06 — a sturdy G cut from a circular field; the opening survives at favicon size.
+        const GRAFT = `
+          void main() {
+            vec2 p = markSpace(vec2(1.06));
+            float ring = abs(length(p) - 0.35) - 0.14;
+            float arc = max(ring, min(p.y - 0.015, (0.75 * p.x - p.y) / 1.25));
+            float bar = roundedBox(p - vec2(0.26, -0.075), vec2(0.23, 0.085), 0.02);
+            float field = max(min(arc, bar), length(p) - 0.49);
+            float alpha = 1.0 - smoothstep(-px, px, field);
+            if (u_mono > 0.5) { emit(INK, alpha); return; }
+            float angle = atan(p.y, p.x);
+            float flow = 0.5 + 0.5 * sin(angle - phase + 2.0 * length(p));
+            vec2 d = p - pointer;
+            vec3 color = brand(flow);
+            color = mix(color, WHITE, 0.20 * exp(-dot(d, d) * 16.0));
+            emit(color, alpha);
+          }
+        `;
+
+        // 07 — three isometric slices: a grove's terrain and a shader's compositing stack.
+        const STRATA = `
+          void main() {
+            vec2 p = markSpace(vec2(1.14, 1.10));
+            float alpha = 0.0;
+            vec3 color = vec3(0.0);
+            for (int i = 0; i < 3; i++) {
+              float layer = float(i);
+              float y = -0.23 + 0.23 * layer;
+              float shift = 0.026 * sin(phase + layer * 0.7) - 0.026 * sin(layer * 0.7);
+              vec2 d = vec2(0.0, y) - pointer;
+              y += 0.035 * exp(-dot(d, d) * 18.0);
+              vec2 q = vec2(p.x - shift, (p.y - y) * 1.85);
+              q = vec2(q.x + q.y, q.y - q.x) * 0.70710678;
+              float field = roundedBox(q, vec2(0.35), 0.045);
+              // Cut a little space above the previous slice so mono keeps three distinct layers.
+              float coverage = 1.0 - smoothstep(-px, px, field);
+              float border = 1.0 - smoothstep(0.025 - px, 0.025 + px, field);
+              vec3 tint = brand(1.0 - 0.5 * layer);
+              float contour = 0.5 + 0.5 * sin(20.0 * length(q) - phase);
+              tint *= 0.88 + 0.12 * contour;
+              color = mix(color, (u_mono > 0.5 ? INK : tint) * coverage, border);
+              alpha = mix(alpha, coverage, border);
+            }
+            gl_FragColor = vec4(color, alpha);
+          }
+        `;
+
+        const directions = [
+          {
+            id: 'wave',
+            number: '00',
+            name: 'Living wave',
+            source: PRELUDE + WAVE,
+            idea: 'The prototype so far: a lit sheet of cloth with two flowing seams.',
+            works: 'Attractive and calm. Already polished, with mono and size handling.',
+            risks:
+              'It does not need a shader. “Grove” is absent. A familiar gradient-wave look, and small inside a square icon.',
+          },
+          {
+            id: 'grove',
+            number: '01',
+            name: 'Sampled grove',
+            source: '#define UV_COLOR 0\n' + PRELUDE + GROVE,
+            idea: 'An orchard seen from above is a grid of round crowns; a shader’s output is a grid of samples. Crown size samples one travelling wave, so the old wave survives, drawn in dots.',
+            works:
+              'Shader and grove are one picture. Ownable, square by nature, and it simplifies itself to 3 × 3 at favicon size.',
+            risks:
+              'Dot grids can read as “data” or a dice face. The wave must stay legible in the still.',
+          },
+          {
+            id: 'groveUv',
+            number: '02',
+            name: 'Sampled grove · UV colour',
+            source: '#define UV_COLOR 1\n' + PRELUDE + GROVE,
+            idea: 'The same grove, but each crown is one pixel of the default Shadertoy shader: <code>0.5 + 0.5 * cos(t + uv.xyx + vec3(0, 2, 4))</code>. The still is its frame at t = 3.5.',
+            works:
+              'Instantly familiar to shader people. The colour really is shaped by code, and it loops with the mark.',
+            risks:
+              'The brand colour becomes a behaviour, not a swatch. An insider reference that others will not catch.',
+          },
+          {
+            id: 'rings',
+            number: '03',
+            name: 'Growth rings',
+            source: PRELUDE + RINGS,
+            idea: 'A tree’s cross-section: rings are contour lines of one field, among the first effects anyone writes in a shader. They grow outward one step per loop.',
+            works: 'Grove and growth read at once. A circle makes a natural app icon.',
+            risks: 'Contour and topographic marks are common. Fine lines need care at small sizes.',
+          },
+          {
+            id: 'canopy',
+            number: '04',
+            name: 'Merging canopy',
+            source: PRELUDE + CANOPY,
+            idea: 'Three crowns grow into one tree through a smooth union of distance fields. The silhouette breathes while light travels through the canopy; move the pointer to light it locally.',
+            works:
+              'A direct grove reference with a soft, welcoming silhouette. One solid shape stays clear in mono.',
+            risks:
+              'Could read as a sustainability or gardening brand. The shader connection lives mostly in the motion.',
+          },
+          {
+            id: 'aperture',
+            number: '05',
+            name: 'Leaf aperture',
+            source: PRELUDE + APERTURE,
+            idea: 'Six leaves open around a pocket of light. A botanical rosette meets a camera aperture: nature on the outside, image-making at the centre. Hover to gently turn the nearest leaves.',
+            works:
+              'A compact radial symbol with a useful negative space. Each leaf can carry a different part of the palette.',
+            risks:
+              'May suggest a flower, camera, or familiar pinwheel logo. The gaps are the first detail to lose at small sizes.',
+          },
+          {
+            id: 'graft',
+            number: '06',
+            name: 'Field-grown G',
+            source: PRELUDE + GRAFT,
+            idea: 'A bold G becomes a window onto a travelling colour field. Its geometry stays fixed as the shader flows around it: a stable initial with a living surface.',
+            works:
+              'The most direct link to the name. Thick strokes and a deliberate opening make a practical app icon and one-colour stamp.',
+            risks:
+              'Less botanical and less distinctive as a silhouette. A single-letter mark needs strong typography around it.',
+          },
+          {
+            id: 'strata',
+            number: '07',
+            name: 'Living strata',
+            source: PRELUDE + STRATA,
+            idea: 'Three floating slices of terrain echo the layers of a shader composition. Lime canopy, cyan middle, violet ground: the grove becomes a small world that shifts and lifts towards the pointer.',
+            works:
+              'Connects landscape and creative tooling. The stacked silhouette gives the mark depth without relying on realistic lighting.',
+            risks:
+              'Layer symbols are common in design software. The wide diamond shape has less visual weight inside a square.',
+          },
+        ];
+
+        // ---- Page
+
+        const main = document.getElementById('directions');
+        const notice = document.getElementById('notice');
+        const iconCanvas = (id, size, mono) =>
+          `<canvas data-shader="${id}" data-mode="still" ${mono ? 'data-mono' : ''} style="width:${size}px;height:${size}px" aria-hidden="true"></canvas>`;
+        directions.forEach((direction) => {
+          const section = document.createElement('section');
+          section.className = 'direction';
+          section.setAttribute('aria-labelledby', `${direction.id}Title`);
+          section.innerHTML = `
+            <h2 id="${direction.id}Title"><span>${direction.number}</span>${direction.name}</h2>
+            <p class="idea">${direction.idea}</p>
+            <canvas class="live" data-shader="${direction.id}" data-mode="live" role="img"
+              aria-label="${direction.name}, animated"></canvas>
+            <div class="row">
+              <figure>
+                <canvas class="still" data-shader="${direction.id}" data-mode="still" aria-hidden="true"></canvas>
+                <figcaption>Still · t = 0</figcaption>
+              </figure>
+              <figure>
+                <div class="icons">${[64, 32, 16].map((size) => iconCanvas(direction.id, size)).join('')}</div>
+                <figcaption>Icon 64 · 32 · 16</figcaption>
+              </figure>
+              <figure>
+                <div class="icons">${[64, 32, 16].map((size) => iconCanvas(direction.id, size, true)).join('')}</div>
+                <figcaption>Mono</figcaption>
+              </figure>
+              <figure>
+                <div class="lockup">${iconCanvas(direction.id, 40)}Shadergrove</div>
+                <figcaption>Lockup</figcaption>
+              </figure>
+            </div>
+            <dl class="verdict">
+              <div><dt>Works</dt><dd>${direction.works}</dd></div>
+              <div><dt>Risks</dt><dd>${direction.risks}</dd></div>
+            </dl>`;
+          main.append(section);
+        });
+
+        // ---- Rendering: one WebGL context draws every tile, then copies it into the tile's 2D canvas.
+
+        const glCanvas = document.createElement('canvas');
+        const gl = glCanvas.getContext('webgl', {
+          alpha: true,
+          premultipliedAlpha: true,
+          antialias: false,
+          depth: false,
+          stencil: false,
+          powerPreference: 'low-power',
+        });
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const motionButton = document.getElementById('motionButton');
+        let paused = reducedMotion.matches;
+        let time = 0;
+        let lastFrame = null;
+        let animationFrame = null;
+        let programs = null;
+
+        function showNotice(message) {
+          notice.textContent = message;
+          notice.hidden = false;
+          main.prepend(notice);
+        }
+
+        function compileAll() {
+          const vertex = gl.createShader(gl.VERTEX_SHADER);
+          gl.shaderSource(
+            vertex,
+            'attribute vec2 a_position; void main() { gl_Position = vec4(a_position, 0.0, 1.0); }',
+          );
+          gl.compileShader(vertex);
+          const result = {};
+          directions.forEach(({ id, source }) => {
+            const fragment = gl.createShader(gl.FRAGMENT_SHADER);
+            gl.shaderSource(fragment, source);
+            gl.compileShader(fragment);
+            if (!gl.getShaderParameter(fragment, gl.COMPILE_STATUS)) {
+              throw new Error(`${id}: ${gl.getShaderInfoLog(fragment)}`);
+            }
+            const program = gl.createProgram();
+            gl.attachShader(program, vertex);
+            gl.attachShader(program, fragment);
+            gl.bindAttribLocation(program, 0, 'a_position');
+            gl.linkProgram(program);
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+              throw new Error(`${id}: ${gl.getProgramInfoLog(program)}`);
+            }
+            const uniforms = Object.fromEntries(
+              ['resolution', 'time', 'pointer', 'mono'].map((name) => [
+                name,
+                gl.getUniformLocation(program, `u_${name}`),
+              ]),
+            );
+            result[id] = { program, uniforms };
+          });
+          gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+          gl.enableVertexAttribArray(0);
+          gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+          return result;
+        }
+
+        const tiles = [...document.querySelectorAll('canvas[data-shader]')].map((canvas) => ({
+          canvas,
+          context: canvas.getContext('2d'),
+          shader: canvas.dataset.shader,
+          live: canvas.dataset.mode === 'live',
+          mono: canvas.hasAttribute('data-mono'),
+          visible: true,
+          pointer: [9, 9],
+          target: [9, 9],
+        }));
+        const liveTiles = tiles.filter((tile) => tile.live);
+
+        function render(tile, frameTime) {
+          const { width, height } = tile.canvas;
+          const { program, uniforms } = programs[tile.shader];
+          gl.useProgram(program);
+          gl.viewport(0, 0, width, height);
+          gl.uniform2f(uniforms.resolution, width, height);
+          gl.uniform1f(uniforms.time, frameTime);
+          gl.uniform2fv(uniforms.pointer, tile.live ? tile.pointer : [9, 9]);
+          gl.uniform1f(uniforms.mono, tile.mono ? 1 : 0);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+          tile.context.globalCompositeOperation = 'copy';
+          // WebGL's origin is bottom left, so the drawn region sits at the bottom of the shared canvas.
+          tile.context.drawImage(
+            glCanvas,
+            0,
+            glCanvas.height - height,
+            width,
+            height,
+            0,
+            0,
+            width,
+            height,
+          );
+        }
+
+        function renderAll() {
+          if (!programs) return;
+          tiles.forEach((tile) => render(tile, tile.live ? time : 0));
+        }
+
+        function resize() {
+          const scale = Math.min(window.devicePixelRatio || 1, 2);
+          let maxWidth = 1;
+          let maxHeight = 1;
+          tiles.forEach(({ canvas }) => {
+            const bounds = canvas.getBoundingClientRect();
+            canvas.width = Math.max(1, Math.round(bounds.width * scale));
+            canvas.height = Math.max(1, Math.round(bounds.height * scale));
+            maxWidth = Math.max(maxWidth, canvas.width);
+            maxHeight = Math.max(maxHeight, canvas.height);
+          });
+          if (glCanvas.width !== maxWidth || glCanvas.height !== maxHeight) {
+            glCanvas.width = maxWidth;
+            glCanvas.height = maxHeight;
+          }
+          renderAll();
+        }
+
+        function frame(timestamp) {
+          animationFrame = null;
+          if (lastFrame !== null) time += Math.min((timestamp - lastFrame) / 1000, 0.1);
+          lastFrame = timestamp;
+          liveTiles.forEach((tile) => {
+            tile.pointer = tile.pointer.map((value, i) => value + (tile.target[i] - value) * 0.12);
+            if (tile.visible) render(tile, time);
+          });
+          schedule();
+        }
+
+        function schedule() {
+          if (programs && !paused && !document.hidden && animationFrame === null) {
+            animationFrame = requestAnimationFrame(frame);
+          }
+        }
+
+        function stop() {
+          if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+          animationFrame = null;
+          lastFrame = null;
+        }
+
+        function syncMotion() {
+          motionButton.textContent = paused ? 'Play' : 'Pause';
+          motionButton.setAttribute('aria-pressed', String(paused));
+        }
+
+        motionButton.addEventListener('click', () => {
+          paused = !paused;
+          stop();
+          syncMotion();
+          schedule();
+        });
+        document.getElementById('resetButton').addEventListener('click', () => {
+          time = 0;
+          paused = true;
+          liveTiles.forEach((tile) => (tile.pointer = tile.target = [9, 9]));
+          stop();
+          syncMotion();
+          renderAll();
+        });
+        liveTiles.forEach((tile) => {
+          tile.canvas.addEventListener('pointermove', (event) => {
+            if (paused) return;
+            const bounds = tile.canvas.getBoundingClientRect();
+            tile.target = [
+              (event.clientX - bounds.left) / bounds.width,
+              1 - (event.clientY - bounds.top) / bounds.height,
+            ];
+          });
+          tile.canvas.addEventListener('pointerleave', () => (tile.target = [9, 9]));
+        });
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            const tile = liveTiles.find(({ canvas }) => canvas === entry.target);
+            if (tile) tile.visible = entry.isIntersecting;
+          });
+        });
+        liveTiles.forEach(({ canvas }) => observer.observe(canvas));
+        document.addEventListener('visibilitychange', () => {
+          stop();
+          schedule();
+        });
+        reducedMotion.addEventListener('change', (event) => {
+          paused = event.matches;
+          stop();
+          syncMotion();
+          schedule();
+        });
+        glCanvas.addEventListener('webglcontextlost', (event) => {
+          event.preventDefault();
+          stop();
+          programs = null;
+          showNotice('The graphics context was lost. Reload the page to continue.');
+        });
+
+        syncMotion();
+        if (!gl) {
+          showNotice('These sketches need WebGL.');
+          return;
+        }
+        try {
+          programs = compileAll();
+        } catch (error) {
+          showNotice(`A sketch failed to compile. ${error.message}`);
+          return;
+        }
+        new ResizeObserver(resize).observe(main);
+        resize();
+        schedule();
+      })();
+    </script>
+  </body>
+</html>

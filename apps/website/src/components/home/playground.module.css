@@ -1,0 +1,159 @@
+.playground {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: 80px;
+  padding-block: 100px 80px;
+}
+.sectionLabel {
+  color: #93a485;
+  margin: 0 0 20px;
+}
+.intro h2 {
+  font-size: clamp(34px, 3.5vw, 48px);
+  line-height: 1.08;
+  letter-spacing: -0.05em;
+  font-weight: 500;
+  margin: 0;
+}
+.intro > p:last-of-type {
+  color: #a2af99;
+  line-height: 1.75;
+  font-size: 14px;
+  max-width: 35ch;
+  margin-top: 20px;
+}
+.backToArt {
+  display: inline-block;
+  margin-top: 10px;
+  border-bottom: 1px solid #536649;
+}
+
+.paletteHeading {
+  font-size: 11px;
+  font-weight: 400;
+  margin: 0 0 12px;
+  color: #b5c2ab;
+}
+.palettes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.palette {
+  padding: 16px 12px;
+  border: 1px solid #3d4935;
+  border-radius: 5px;
+  background: #161c13;
+  color: #dae3d3;
+  text-align: left;
+}
+.palette:hover {
+  background: #232d1d;
+}
+.palette[aria-pressed='true'] {
+  border-color: #9dff3e;
+  background: #202c18;
+}
+.swatch {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.swatch i {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color);
+}
+.paletteName {
+  font-size: 12px;
+}
+.paletteNumber {
+  float: right;
+  font-size: 10px;
+  color: #97a58c;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid #46503f;
+  border-radius: 4px;
+  background: transparent;
+  color: #cdd9c4;
+  font-size: 12px;
+}
+.action:hover:not(:disabled),
+.action[aria-pressed='true'] {
+  background: #25321c;
+  border-color: #8ca279;
+}
+.action svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+}
+
+.lockups {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px 26px;
+  margin-top: 30px;
+}
+.lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+  letter-spacing: -0.05em;
+}
+.lockup canvas {
+  width: 1.35em;
+  height: 1.35em;
+}
+.exportNote {
+  margin-top: 18px;
+  color: #8c9d80;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1000px) {
+  .playground {
+    gap: 35px;
+  }
+}
+@media (max-width: 720px) {
+  .playground {
+    grid-template-columns: 1fr;
+    padding-block: 58px;
+    gap: 28px;
+  }
+  .intro > p:last-of-type {
+    max-width: 45ch;
+  }
+  .palette {
+    padding: 14px 10px;
+  }
+  .paletteNumber {
+    display: none;
+  }
+  .lockups {
+    gap: 20px;
+  }
+}

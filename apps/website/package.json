@@ -1,0 +1,45 @@
+{
+  "name": "@shadergrove/website",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "serve out",
+    "typecheck": "next typegen && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@shadergrove/brand": "workspace:*",
+    "next": "16.3.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.19",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "serve": "^14.2.6",
+    "typescript": "~6.0.2"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "outputs": [
+          "{projectRoot}/out"
+        ]
+      },
+      "dev": {
+        "cache": false,
+        "continuous": true
+      },
+      "start": {
+        "cache": false,
+        "continuous": true,
+        "dependsOn": [
+          "build"
+        ]
+      }
+    }
+  }
+}
