@@ -6,7 +6,8 @@
 //
 // Import keeps the ISF GLSL as it is, between two marker lines, and adapts it with
 // the preprocessor only — `#define main isf_main`, the IMG_* macros, TIME,
-// RENDERSIZE, one macro per input — so nothing in the author's code is rewritten.
+// RENDERSIZE, one macro per input (via a global where the type differs) — so
+// nothing in the author's code is rewritten.
 // Export rebuilds the JSON header from the effect's controls and current values.
 //
 // Supported: ISFVSN 2, one `inputImage`, no PASSES (or one plain pass), inputs of
@@ -69,6 +70,18 @@ function splitIsf(text) {
     fail('The ISF JSON header must be an object');
   }
   return { header, body: text.slice(end + 2).replace(/^\r?\n/, '') };
+}
+
+/**
+ * An input whose type differs here is read from a global set before the ISF main runs:
+ * a macro expanding to an expression would also rewrite a declaration of that name, such
+ * as a function parameter `vec4 color`, into one that does not compile.
+ */
+function viaGlobal(key, type, value) {
+  return {
+    macro: `${type} isf_in_${key};\n#define ${key} isf_in_${key}`,
+    setup: `  isf_in_${key} = ${value};`,
+  };
 }
 
 function checkSupported(header) {
@@ -173,13 +186,13 @@ function inputToControl(input) {
           options,
           ...label(input),
         },
-        macro: `#define ${key} int(u_${key})`,
+        ...viaGlobal(key, 'int', `int(u_${key})`),
       };
     }
     case 'color':
       return {
         control: { key, type: 'color', default: hex(input.DEFAULT), ...label(input) },
-        macro: `#define ${key} vec4(u_${key}, 1.0)`,
+        ...viaGlobal(key, 'vec4', `vec4(u_${key}, 1.0)`),
       };
     case 'image':
       return fail(
@@ -240,6 +253,7 @@ function importIsf(text) {
     '#undef main',
     'vec4 effect(vec4 isf_color, vec2 isf_coord) {',
     '  isf_uv = isf_coord;',
+    ...converted.flatMap((entry) => (entry.setup ? [entry.setup] : [])),
     '  isf_main();',
     '  return gl_FragColor;',
     '}',
@@ -300,29 +314,43 @@ function extractIsf(source) {
   return { header, body: lines.slice(begin + 1, end).join('\n') };
 }
 
-/** Any other custom effect: its own code, made to read ISF's names, under an ISF main. */
+/**
+ * Any other custom effect: its own code, made to read ISF's names, under an ISF main.
+ * A control is read through a function declared at global scope, where its name can
+ * only be the ISF input — a macro expanding to the bare name would bind to whatever
+ * the effect's code declares under it, like `effect(vec4 color, …)` for a control `color`.
+ */
 function wrapNative(effect) {
-  const macros = effect.controls.map((control) => {
-    switch (control.type) {
-      case 'color':
-        return `#define u_${control.key} ${control.key}.rgb`;
-      case 'select':
-        return `#define u_${control.key} float(${control.key})`;
-      default:
-        return `#define u_${control.key} ${control.key}`;
-    }
+  const readers = effect.controls.flatMap((control) => {
+    const [type, value] =
+      control.type === 'color'
+        ? ['vec3', `${control.key}.rgb`]
+        : control.type === 'select'
+          ? ['float', `float(${control.key})`]
+          : control.type === 'boolean'
+            ? ['bool', control.key]
+            : ['float', control.key];
+    return [
+      `${type} isf_u_${control.key}() { return ${value}; }`,
+      `#define u_${control.key} isf_u_${control.key}()`,
+    ];
   });
   return [
     '// Exported from a Shadergrove custom effect: vec4 effect(vec4 color, vec2 uv) runs on',
     '// every pixel of inputImage. The defines map its names onto ISF’s.',
     '#define tDiffuse inputImage',
+    '#define vUv isf_FragNormCoord',
     '#define u_resolution RENDERSIZE',
     '#define u_time TIME',
-    ...macros,
+    ...readers,
     effect.source.replace(/\s+$/, ''),
     'void main() {',
     '  gl_FragColor = effect(IMG_THIS_PIXEL(inputImage), isf_FragNormCoord);',
     '}',
+    // Imported back, this code is followed by Shadergrove's own main, which reads `vUv`.
+    ...['tDiffuse', 'vUv', 'u_resolution', 'u_time']
+      .concat(effect.controls.map((control) => `u_${control.key}`))
+      .map((name) => `#undef ${name}`),
     '',
   ].join('\n');
 }

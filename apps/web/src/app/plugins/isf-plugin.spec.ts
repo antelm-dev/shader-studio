@@ -117,10 +117,14 @@ describe('importing ISF FX filters', () => {
       },
     ]);
     expect(effect.values).toEqual({ levels: 4, invert: false, tint: '#ff8040', channel: 0 });
-    // Each ISF name reaches its control's uniform through the preprocessor, as ISF typed it.
+    // Each ISF name reaches its control's uniform, as ISF typed it: directly, or — when the
+    // type differs — through a global set before the ISF main, so a declaration of that
+    // name (a parameter `vec4 tint`) still compiles.
     expect(effect.source).toContain('#define levels u_levels');
-    expect(effect.source).toContain('#define tint vec4(u_tint, 1.0)');
-    expect(effect.source).toContain('#define channel int(u_channel)');
+    expect(effect.source).toContain('vec4 isf_in_tint;\n#define tint isf_in_tint');
+    expect(effect.source).toContain('  isf_in_tint = vec4(u_tint, 1.0);');
+    expect(effect.source).toContain('int isf_in_channel;\n#define channel isf_in_channel');
+    expect(effect.source).toContain('  isf_in_channel = int(u_channel);');
   });
 });
 
@@ -168,7 +172,9 @@ describe('exporting and re-importing', () => {
       { NAME: 'gain', TYPE: 'float', DEFAULT: 1.5, MIN: 0, MAX: 2 },
       { NAME: 'tint', TYPE: 'color', DEFAULT: [1, 0, 0, 1] },
     ]);
-    expect(exported).toContain('#define u_gain gain');
+    expect(exported).toContain('float isf_u_gain() { return gain; }');
+    expect(exported).toContain('#define u_gain isf_u_gain()');
+    expect(exported).toContain('#define vUv isf_FragNormCoord');
     expect(exported).toContain(
       'gl_FragColor = effect(IMG_THIS_PIXEL(inputImage), isf_FragNormCoord);',
     );
@@ -179,6 +185,18 @@ describe('exporting and re-importing', () => {
     expect(again.values).toEqual({ gain: 1.5, tint: '#ff0000' });
     // Its own `effect` is renamed by the preprocessor so the wrapper's can exist.
     expect(again.source).toContain('#define effect isf_inner_effect');
+  });
+
+  it('reads a control through a global function, so a parameter of the same name cannot shadow it', async () => {
+    const exported = await exportIsf({
+      name: 'Tint',
+      source: 'vec4 effect(vec4 color, vec2 uv) { return vec4(color.rgb * u_color, color.a); }',
+      controls: [{ key: 'color', type: 'color', default: '#ffffff' }],
+      values: {},
+    });
+    expect(exported).toContain('vec3 isf_u_color() { return color.rgb; }');
+    expect(exported).toContain('#define u_color isf_u_color()');
+    expect(exported.indexOf('isf_u_color() {')).toBeLessThan(exported.lastIndexOf('vec4 effect('));
   });
 });
 
