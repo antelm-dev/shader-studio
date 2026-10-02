@@ -3,6 +3,7 @@ import { PLUGIN_LIMITS, validatePluginPackage, type PluginPackage } from '@shade
 
 import { PluginCallError, PluginHost, type SandboxHandle } from './plugin-host';
 import { decodeResult } from './plugin-sandbox';
+import { encodeLikePrelude } from './testing/in-process-sandbox';
 
 const raw = {
   manifest: {
@@ -53,27 +54,6 @@ interface Fake extends SandboxHandle {
   terminate: Mock<(reason?: string | Error) => Promise<void>>;
 }
 
-/**
- * What the Worker prelude in `plugin-sandbox.js` does to a handler's return
- * value. A copy: the prelude only exists as text, so the smoke test is what
- * exercises the real one.
- */
-function encode(value: unknown): { json: string; buffers: ArrayBuffer[] } {
-  const buffers: ArrayBuffer[] = [];
-  const json = JSON.stringify(value ?? null, (_key, item: unknown) => {
-    if (item instanceof ArrayBuffer) {
-      if (!buffers.includes(item)) buffers.push(item);
-      return { $buffer: buffers.indexOf(item) };
-    }
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
-    const record = item as Record<string, unknown>;
-    const keys = Object.keys(record);
-    if (!keys.some((k) => k.startsWith('$'))) return item;
-    return Object.fromEntries(keys.map((k) => [k.startsWith('$') ? '$' + k : k, record[k]]));
-  });
-  return { json, buffers };
-}
-
 /** A sandbox whose plugin answers `reply`, sent over the real wire encoding. */
 function host(
   reply: (params: unknown) => unknown,
@@ -101,7 +81,7 @@ function host(
             maxResultBytes: options?.maxResultBytes,
           });
           const value = await Promise.race([stopped, Promise.resolve().then(() => reply(params))]);
-          return decodeResult(encode(value), options?.maxResultBytes ?? Infinity);
+          return decodeResult(encodeLikePrelude(value), options?.maxResultBytes ?? Infinity);
         },
       };
       sandboxes.push(sandbox);

@@ -27,5 +27,13 @@ export const routes: Routes = [
   // Reachable by anyone, useful to nobody but a moderator: the page fetches
   // nothing until the server has said the account is one.
   { path: 'admin/publications', component: AdminPublicationsPage, canActivate: [exploreOnWeb] },
+  // Locally installed plugins, on web and desktop alike: laid over the editor like Explore,
+  // so the shader an effect is added to stays open underneath. Lazy, unlike Explore —
+  // it carries the plugin host and package validation, which nobody else needs at startup;
+  // the coordinator reads the navigation in flight, so the chunk's delay is safe.
+  {
+    path: 'plugins',
+    loadComponent: () => import('./plugins/plugins-page').then((m) => m.PluginsPage),
+  },
   { path: '**', component: RouteAnchor },
 ];

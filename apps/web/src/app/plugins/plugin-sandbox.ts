@@ -21,7 +21,7 @@
  * prelude and posts something else is refused. What cannot be bounded is the
  * browser deserializing a hostile message before the host sees it.
  */
-import { PLUGIN_LIMITS, utf8Bytes } from '@shadergrove/shared';
+import { PLUGIN_LIMITS, utf8Bytes } from '@shadergrove/shared/plugin';
 
 const BOOTSTRAP_PATH = 'plugin-sandbox.js';
 /** A frame that does not confirm has no running bootstrap, so no Worker to stop. */

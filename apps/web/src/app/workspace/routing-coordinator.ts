@@ -18,6 +18,8 @@ import { ShaderStore } from './shader-store';
  * needs to call anything for routing to come alive, except reading
  * `routeShaderId()` once, before hydration, for the SSR snapshot.
  */
+const STANDALONE_PAGE = /^\/(?:desktop\/connect|explore|admin|plugins)(?:[/?#]|$)/;
+
 @Injectable({ providedIn: 'root' })
 export class RoutingCoordinator {
   private readonly router = inject(Router);
@@ -141,7 +143,13 @@ export class RoutingCoordinator {
    * while its author is off browsing.
    */
   private onStandalonePage(): boolean {
-    return /^\/(?:desktop\/connect|explore|admin)(?:[/?#]|$)/.test(this.router.url);
+    // A lazily loaded page is not `router.url` until its chunk has arrived, but the
+    // navigation in flight already names it — and must not be normalized away meanwhile.
+    const target = this.router.currentNavigation()?.extractedUrl.toString();
+    return (
+      STANDALONE_PAGE.test(this.router.url) ||
+      (target !== undefined && STANDALONE_PAGE.test(target))
+    );
   }
 
   private canonicalUrl(): string {

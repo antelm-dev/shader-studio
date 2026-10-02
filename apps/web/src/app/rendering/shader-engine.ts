@@ -3,6 +3,7 @@ import type * as THREE from 'three';
 import {
   MAX_WAVES,
   legacyTextureBindings,
+  type CustomEffect,
   type ParamValue,
   type RenderSettings,
   type ShaderControl,
@@ -177,6 +178,11 @@ export class ShaderEngine {
   onContextRestored: (() => void) | null = null;
   /** Custom post-processing effects' problems, whenever that list changes. See `PostProcessing.onDiagnostics`. */
   onEffectDiagnostics: ((diagnostics: CompileDiagnostic[]) => void) | null = null;
+
+  /** Compiles a custom effect off screen, adopting nothing. See `PostProcessing.probe`. */
+  probeCustomEffect(effect: CustomEffect): CompileDiagnostic[] {
+    return this.post.probe(effect);
+  }
 
   /** The custom post-processing effects' problems for the render settings in force now. */
   get effectDiagnostics(): CompileDiagnostic[] {

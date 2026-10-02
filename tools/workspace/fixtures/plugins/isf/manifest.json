@@ -1,0 +1,31 @@
+{
+  "id": "dev.shadergrove.isf",
+  "version": "1.0.0",
+  "protocolVersion": 1,
+  "appVersionRange": ">=1.4.0 <2.0.0",
+  "name": "ISF filters",
+  "publisher": "Shadergrove",
+  "license": "Apache-2.0",
+  "contributions": [
+    {
+      "kind": "importer",
+      "id": "isf-import",
+      "name": "ISF filter (.fs)",
+      "mime": [],
+      "extensions": [".fs"],
+      "maxInputBytes": 262144,
+      "maxOutputBytes": 131072,
+      "params": []
+    },
+    {
+      "kind": "exporter",
+      "id": "isf-export",
+      "name": "ISF filter (.fs)",
+      "mime": "text/plain",
+      "extension": ".fs",
+      "maxInputBytes": 131072,
+      "maxOutputBytes": 262144,
+      "params": []
+    }
+  ]
+}

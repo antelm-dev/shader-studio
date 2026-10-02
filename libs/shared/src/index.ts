@@ -17,3 +17,4 @@ export * from './surfaces';
 export * from './session';
 export { TEMPLATE_CONTROLS, TEMPLATE_FRAGMENT } from './templates';
 export * from './plugin/package';
+export { APP_VERSION } from './version';

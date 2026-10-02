@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
+import { PLUGIN_LIMITS } from '@shadergrove/shared';
 import { parseBundle } from '@shadergrove/shared/validate';
 import type { DialogResult } from '@shadergrove/desktop-api/contracts';
 
@@ -234,6 +235,44 @@ export function createFilesIpc() {
         const options = {
           defaultPath: basename(filename),
           filters: [{ name: 'PNG image', extensions: ['png'] }],
+        };
+        const picked = owner
+          ? await dialog.showSaveDialog(owner, options)
+          : await dialog.showSaveDialog(options);
+        if (picked.canceled || !picked.filePath) return { status: 'cancelled' };
+        try {
+          await atomicWrite(picked.filePath, bytes);
+          return { status: 'ok', value: null };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+    ),
+    /**
+     * What a plugin exporter produced, saved where the user says. The plugin
+     * only suggested the name: it is cut to a leaf, and the extension is the
+     * one its manifest declared, not one it chose at run time.
+     */
+    'save-export': handle(
+      async (
+        event,
+        filename: string,
+        bytes: Uint8Array,
+        extension: string,
+      ): Promise<DialogResult<null>> => {
+        if (!(bytes instanceof Uint8Array) || bytes.byteLength > PLUGIN_LIMITS.callOutputBytes) {
+          return { status: 'error', message: 'Invalid or oversized export' };
+        }
+        if (typeof extension !== 'string' || !/^\.[a-z0-9]{1,16}$/.test(extension)) {
+          return { status: 'error', message: 'Invalid export extension' };
+        }
+        const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+        const options = {
+          defaultPath: basename(String(filename)),
+          filters: [{ name: extension.slice(1).toUpperCase(), extensions: [extension.slice(1)] }],
         };
         const picked = owner
           ? await dialog.showSaveDialog(owner, options)

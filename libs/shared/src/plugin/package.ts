@@ -22,7 +22,8 @@
  * mutates the project — see `ImporterInput` / `ExporterResult` for the calls.
  */
 import type { ShaderControl, ShaderParams } from '../model';
-import { validateControls } from '../validate/controls';
+import { sanitizeParams, validateControls } from '../validate/controls';
+import { LIMITS } from '../validate/limits';
 import { isCleanString, isRecord } from '../validate/primitives';
 import { fail, ok, type Result } from '../validate/result';
 
@@ -118,6 +119,62 @@ export interface ImporterInput {
  */
 export interface ImporterResult {
   candidate: unknown;
+}
+
+/**
+ * An effect a plugin offers the host: an `effect` contribution, or what an
+ * importer returns as its `candidate`. Plain data the host revalidates here and
+ * compiles before it copies anything into a shader — the shader keeps the copy,
+ * whatever becomes of the plugin.
+ */
+export interface EffectCandidate {
+  name: string;
+  source: string;
+  controls: ShaderControl[];
+  values: ShaderParams;
+}
+
+const CANDIDATE_KEYS = ['name', 'source', 'controls', 'values'];
+
+/** Validate an effect candidate against the same limits a custom effect is saved under. */
+export function validateEffectCandidate(input: unknown): Result<EffectCandidate> {
+  if (!isRecord(input)) return fail('effect must be an object');
+  const unknownKey = firstUnknownKey(input, CANDIDATE_KEYS);
+  if (unknownKey) return fail(`effect.${unknownKey} is not a known field`);
+  const name = text(input['name'], 'effect.name');
+  if (!name.ok) return name;
+  const source = input['source'];
+  if (typeof source !== 'string' || source.trim() === '') {
+    return fail('effect.source must be non-empty GLSL');
+  }
+  if (source.length > LIMITS.customEffectSourceLength) {
+    return fail(`effect.source must be at most ${LIMITS.customEffectSourceLength} characters`);
+  }
+  const controls = controlList(
+    input['controls'],
+    'effect.controls',
+    LIMITS.customEffectControlCount,
+  );
+  if (!controls.ok) return controls;
+  return ok({
+    name: name.value.trim(),
+    source,
+    controls: controls.value,
+    values: sanitizeParams(controls.value, input['values']),
+  });
+}
+
+/** The candidate an `effect` contribution stands for: its GLSL, controls and their defaults. */
+export function effectContributionCandidate(
+  plugin: PluginPackage,
+  contribution: EffectContribution,
+): EffectCandidate {
+  return {
+    name: contribution.name,
+    source: plugin.glsl[contribution.id] ?? '',
+    controls: contribution.controls,
+    values: sanitizeParams(contribution.controls, {}),
+  };
 }
 
 /** What the host sends an exporter: the one chosen effect definition, nothing else of the project. */

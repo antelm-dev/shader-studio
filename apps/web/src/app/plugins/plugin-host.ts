@@ -11,11 +11,11 @@
  * one at a time, so at most one plugin Worker is alive. Quotas bound bytes and
  * time; they do not bound native memory or GPU time.
  */
+import type { ShaderParams } from '@shadergrove/shared/model';
 import {
   PLUGIN_LIMITS,
   exporterMethod,
   importerMethod,
-  sanitizeParams,
   utf8Bytes,
   type ExporterContribution,
   type ExporterInput,
@@ -24,8 +24,8 @@ import {
   type ImporterInput,
   type ImporterResult,
   type PluginPackage,
-  type ShaderParams,
-} from '@shadergrove/shared';
+} from '@shadergrove/shared/plugin';
+import { sanitizeParams } from '@shadergrove/shared/validate';
 
 import {
   PluginCallError,

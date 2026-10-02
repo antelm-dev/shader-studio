@@ -72,6 +72,15 @@
         <mat-icon>explore</mat-icon>
       </a>
       }
+      <a
+        matIconButton
+        routerLink="/plugins"
+        data-testid="open-plugins"
+        [matTooltip]="'plugins.title' | translate"
+        [attr.aria-label]="'plugins.title' | translate"
+      >
+        <mat-icon>extension</mat-icon>
+      </a>
     </div>
 
     <div class="bar-center">
