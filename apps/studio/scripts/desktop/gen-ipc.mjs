@@ -5,9 +5,9 @@ import { createLogger } from './_lib/logger.mjs';
 const log = createLogger('gen:ipc');
 
 const result = runIpcBridgeGeneration({
-  ipcDir: './main/src/ipc',
+  ipcDir: './src/desktop/main/ipc',
   outFile: '../../libs/desktop-api/src/ipc-bridge.ts',
-  tsconfig: './tsconfig.main.json',
+  tsconfig: './tsconfig.desktop.main.json',
 });
 
 log.info(`Wrote ${result.outFile}`);

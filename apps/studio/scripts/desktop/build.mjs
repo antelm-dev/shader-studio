@@ -9,20 +9,20 @@ import { Arch, Platform, build as buildInstaller } from 'electron-builder';
 import { createLogger } from './_lib/logger.mjs';
 
 const log = createLogger('desktop');
-const root = resolve(import.meta.dirname, '../../..');
+const root = resolve(import.meta.dirname, '../../../..');
 const releaseDir = resolve(root, 'release');
 const require = createRequire(import.meta.url);
 const electronVersion = require('electron/package.json').version;
 const updateChannel = process.env['ELECTRON_UPDATE_CHANNEL'];
 
 const commands = {
-  clean: ['pnpm', 'run', 'clean'],
+  clean: ['pnpm', 'run', 'clean:desktop'],
   ipc: ['pnpm', 'run', 'gen:ipc'],
-  webTypes: ['pnpm', '--filter', '@shadergrove/web', 'typecheck'],
+  webTypes: ['pnpm', '--filter', '@shadergrove/studio', 'typecheck:web'],
   backendTypes: ['pnpm', '--filter', '@shadergrove/backend', 'typecheck'],
-  mainTypes: ['pnpm', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.main.json'],
-  preloadTypes: ['pnpm', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.preload.json'],
-  web: ['pnpm', '--filter', '@shadergrove/web', 'build:desktop'],
+  mainTypes: ['pnpm', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.desktop.main.json'],
+  preloadTypes: ['pnpm', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.desktop.preload.json'],
+  web: ['pnpm', '--filter', '@shadergrove/studio', 'build:renderer'],
   main: ['pnpm', 'run', 'build:main'],
 };
 
@@ -58,7 +58,7 @@ async function packageDesktop() {
   const artifacts = await buildInstaller({
     projectDir: root,
     config: {
-      extends: 'apps/desktop/electron-builder.yml',
+      extends: 'apps/studio/electron-builder.yml',
       electronVersion,
       ...(updateChannel
         ? {
@@ -152,7 +152,7 @@ function parseArch(value) {
 function usage(error) {
   log.error(error);
   log.error(
-    'Usage: node scripts/build.mjs [build|pack|dist] [--win|--mac|--linux] [--arch=x64|arm64|ia32|armv7l]',
+    'Usage: node scripts/desktop/build.mjs [build|pack|dist] [--win|--mac|--linux] [--arch=x64|arm64|ia32|armv7l]',
   );
   process.exit(1);
 }

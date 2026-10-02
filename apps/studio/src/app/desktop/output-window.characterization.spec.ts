@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * Characterization of the Electron output BrowserWindow open/close rules
- * encoded in `apps/desktop/main/src/main.ts` at the native-surfaces start
- * commit. Kept as a pure state-machine fixture under web tests because the
- * desktop package has no vitest target yet.
+ * encoded in `apps/studio/src/desktop/main/main.ts` at the native-surfaces start
+ * commit. Kept as a pure state-machine fixture under Angular tests; the Electron
+ * main process has a separate Node test suite.
  *
  * Agent 04 must preserve these semantics while replacing the special case with
  * a generic surface manager (adapter for Agent 07).

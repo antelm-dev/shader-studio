@@ -13,7 +13,9 @@
     "types": ["node", "@angular/localize"]
   },
   "include": [
-    "src/**/*.ts",
+    "src/*.ts",
+    "src/app/**/*.ts",
+    "src/server/**/*.ts",
     "../../libs/api/src/**/*.ts",
     "../../libs/backend/src/**/*.ts",
     "../../libs/desktop-api/src/**/*.ts",

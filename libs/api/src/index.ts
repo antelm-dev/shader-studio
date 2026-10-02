@@ -1,6 +1,6 @@
 /**
  * The HTTP API (`/api/*`): NestJS routes, accounts and the HTTP policy around
- * them. Not a service of its own — apps/web/src/server mounts it beside the SSR
+ * them. Not a service of its own — apps/studio/src/server mounts it beside the SSR
  * handler — but a real boundary all the same: the desktop app signs in and
  * syncs through these routes, so they change as a contract, not as web code.
  *

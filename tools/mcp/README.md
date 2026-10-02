@@ -26,7 +26,7 @@ desktop builds must explicitly enable it through `provideMcpBridge({ enabled:
 true, host: '127.0.0.1', port: 4310, secure: false })` in their application
 providers, with the host, port and transport chosen for that deployment. Pairing
 a token alone does not enable the bridge. There is no user-facing pairing screen
-yet. See `apps/web/src/app/mcp/mcp-bridge-config.ts` for the configuration contract.
+yet. See `apps/studio/src/app/mcp/mcp-bridge-config.ts` for the configuration contract.
 
 ## Install & run
 

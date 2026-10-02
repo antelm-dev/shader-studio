@@ -13,27 +13,27 @@ const production = process.env.NODE_ENV === 'production';
 
 export default defineConfig([
   {
-    input: './preload/src/preload.ts',
+    input: './src/desktop/preload/preload.ts',
     cache: false,
     output: { file: '../../dist-main/preload.cjs', format: 'cjs', sourcemap: !production },
     external: ['electron'],
     plugins: [
       ipcBridge({
-        ipcDir: './main/src/ipc',
+        ipcDir: './src/desktop/main/ipc',
         outFile: '../../libs/desktop-api/src/ipc-bridge.ts',
-        tsconfig: './tsconfig.main.json',
+        tsconfig: './tsconfig.desktop.main.json',
       }),
       json(),
       commonjs(),
       typescript({
-        tsconfig: './tsconfig.preload.json',
+        tsconfig: './tsconfig.desktop.preload.json',
         compilerOptions: { sourceMap: !production },
       }),
       production && terser(),
     ],
   },
   {
-    input: './main/src/main.ts',
+    input: './src/desktop/main/main.ts',
     cache: false,
     watch: { clearScreen: false },
     output: { file: '../../dist-main/main.cjs', format: 'cjs', sourcemap: !production },
@@ -42,7 +42,10 @@ export default defineConfig([
       json(),
       nodeResolve({ exportConditions: ['node'] }),
       commonjs(),
-      typescript({ tsconfig: './tsconfig.main.json', compilerOptions: { sourceMap: !production } }),
+      typescript({
+        tsconfig: './tsconfig.desktop.main.json',
+        compilerOptions: { sourceMap: !production },
+      }),
       replace({
         preventAssignment: true,
         __ELECTRON_PRODUCTION__: JSON.stringify(production),

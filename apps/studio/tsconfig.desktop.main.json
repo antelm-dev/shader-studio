@@ -8,6 +8,6 @@
     "rootDir": "../..",
     "sourceMap": true
   },
-  "include": ["main/src/**/*.ts"],
+  "include": ["src/desktop/main/**/*.ts"],
   "exclude": ["generated/**", "**/*.spec.ts"]
 }

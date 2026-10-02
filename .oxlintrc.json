@@ -20,10 +20,10 @@
   "overrides": [
     {
       "files": [
-        "apps/web/src/app/**",
-        "apps/web/src/main.ts",
-        "apps/web/src/main.desktop.ts",
-        "apps/web/src/main.server.ts"
+        "apps/studio/src/app/**",
+        "apps/studio/src/main.ts",
+        "apps/studio/src/main.desktop.ts",
+        "apps/studio/src/main.server.ts"
       ],
       "rules": {
         "no-restricted-imports": [
@@ -33,12 +33,23 @@
               {
                 "name": "@shadergrove/api",
                 "message": "The Angular app must not import the server: src/server and @shadergrove/api run in Node only, beside the app, and are mounted by src/server/index.ts."
+              },
+              {
+                "name": "electron",
+                "message": "Electron APIs belong in src/desktop; the Angular renderer uses @shadergrove/desktop-api."
               }
             ],
             "patterns": [
               {
-                "group": ["**/server", "**/server/**"],
-                "message": "The Angular app must not import the server: src/server and @shadergrove/api run in Node only, beside the app, and are mounted by src/server/index.ts."
+                "group": [
+                  "**/server",
+                  "**/server/**",
+                  "**/desktop/main",
+                  "**/desktop/main/**",
+                  "**/desktop/preload",
+                  "**/desktop/preload/**"
+                ],
+                "message": "The Angular app must not import Node entry points from src/server or src/desktop."
               }
             ]
           }

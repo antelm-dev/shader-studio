@@ -9,13 +9,21 @@ const commands = {
   angular: {
     name: 'angular',
     entry: pnpm,
-    args: ['--filter', '@shadergrove/web', 'dev:desktop'],
+    args: ['--filter', '@shadergrove/studio', 'dev:renderer'],
     stdin: 'ignore',
   },
   rollup: {
     name: 'rollup',
     entry: pnpm,
-    args: ['exec', 'rollup', '-c', '--environment', 'NODE_ENV:development', '--watch'],
+    args: [
+      'exec',
+      'rollup',
+      '-c',
+      'rollup.desktop.config.mjs',
+      '--environment',
+      'NODE_ENV:development',
+      '--watch',
+    ],
     stdin: 'inherit',
   },
 };

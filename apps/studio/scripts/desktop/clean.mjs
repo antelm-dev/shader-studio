@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { createLogger } from './_lib/logger.mjs';
 
 const log = createLogger('clean');
-const root = resolve(import.meta.dirname, '../../..');
+const root = resolve(import.meta.dirname, '../../../..');
 const paths = ['dist-main', 'dist-web', 'release'].map((path) => resolve(root, path));
 
 await Promise.all(paths.map((path) => rm(path, { recursive: true, force: true })));

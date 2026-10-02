@@ -383,18 +383,19 @@ Five concerns, kept apart on purpose. Nothing below the line knows about Angular
 
 ```
 apps/
-  web/                   the deployed app: one process for pages, files and /api
-    src/                 Angular browser, SSR, and desktop entry points
-      app/               workspace state, rendering, editor, and UI
+  studio/                one application package for web, SSR and desktop
+    src/
+      app/               Angular workspace state, rendering, editor, and UI
       server/            Express host: security headers, /api mount, static, SSR
         create-library.ts  picks PostgreSQL (DATABASE_URL) or SQLite, then seeds
-  desktop/
-    main/src/            Electron lifecycle, windows, updates, and IPC handlers
-    preload/src/         sandboxed context bridge
-    package.json         desktop build, development, packaging, and type checks
+      desktop/
+        main/            Electron lifecycle, windows, updates, and IPC handlers
+        preload/         sandboxed context bridge
+    scripts/desktop/     Electron development, IPC generation and packaging
+    package.json         @shadergrove/studio, with separate runtime targets
 
 libs/
-  api/                   the HTTP API (NestJS), mounted by apps/web; the desktop
+  api/                   the HTTP API (NestJS), mounted by apps/studio; the desktop
                          signs in and syncs through it too
     src/core/            tokens, global auth guard, origin guard, Swagger, errors
     src/system/          health and translations
@@ -414,6 +415,22 @@ tools/
   mcp/                   standalone `@shader-studio/mcp` server
   workspace/             checks, generators, smoke tests, and repo automation
 ```
+
+The application package keeps its runtime checks separate: Angular uses
+`tsconfig.app.json` and `tsconfig.spec.json`, the Express host uses
+`tsconfig.server.json`, and Electron uses `tsconfig.desktop.main.json` and
+`tsconfig.desktop.preload.json`. Angular test discovery excludes `src/desktop`;
+Electron tests use `vitest.desktop.config.ts` in Node. The browser entry points
+cannot import the server or Electron main/preload (enforced by oxlint).
+
+The root commands remain the entry points for developers. Within
+`@shadergrove/studio`, `build` produces web + SSR, `build:renderer` produces the
+static Angular desktop renderer, and `build:desktop` builds renderer + main +
+preload. Likewise, `dev:renderer` starts Angular on port 4201 while `dev:desktop`
+also starts Electron. `test` and `typecheck` run both web and desktop checks;
+`test:web`, `test:desktop`, `typecheck:web` and `typecheck:desktop` can target one
+runtime. Nx excludes Electron sources and tooling from web build inputs; desktop
+builds retain their own outputs in `dist-main` and `dist-web`.
 
 ### Storage
 
@@ -454,16 +471,16 @@ externalized by the SSR bundle, so `pnpm serve:ssr` can resolve them from `dist`
 ### Server dependency changes
 
 The API is a separate workspace package, but Angular builds its Express host from
-`apps/web/src/server/index.ts`. A new Node-only dependency in `libs/api` or
+`apps/studio/src/server/index.ts`. A new Node-only dependency in `libs/api` or
 `libs/backend` can therefore affect development, the production SSR bundle, and
 the Docker image in different ways. When adding or upgrading one:
 
 1. Declare it in the workspace package that imports it. If `pnpm dev` fails
    during Vite SSR dependency resolution (for example, it looks for a package
-   under `apps/web` that only `libs/api` declares), check
-   `apps/web/angular.json` → `serve.options.prebundle.exclude`. This list is for
+   under `apps/studio` that only `libs/api` declares), check
+   `apps/studio/angular.json` → `serve.options.prebundle.exclude`. This list is for
    the web dev server; the desktop static target has its own configuration.
-2. Check `apps/web/angular.json` → `build.options.externalDependencies`. Packages
+2. Check `apps/studio/angular.json` → `build.options.externalDependencies`. Packages
    needed at runtime but left outside the SSR bundle must be available to the
    built server. `pg` and `@nestjs/swagger` currently have pinned versions in
    the root `package.json`; the Dockerfile installs those same versions into

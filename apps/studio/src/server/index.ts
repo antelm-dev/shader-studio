@@ -13,7 +13,7 @@
  * The API itself lives in @shadergrove/api (libs/api); this file only composes.
  * Its server-only packages (Nest, drizzle-orm, nodemailer…) are listed under
  * `serve.options.prebundle.exclude` in angular.json: the dev server's Vite SSR
- * runner would otherwise resolve them from apps/web, which does not declare
+ * runner would otherwise resolve them from apps/studio, which does not declare
  * them, and `ng serve` would fail with "Cannot find module '@nestjs/core'".
  * Excluded, esbuild bundles them from where they are imported instead. A new
  * server-only package in libs/api or libs/backend goes on that list too.

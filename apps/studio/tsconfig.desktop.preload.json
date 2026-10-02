@@ -8,5 +8,5 @@
     "rootDir": "../..",
     "sourceMap": true
   },
-  "include": ["preload/src/**/*.ts"]
+  "include": ["src/desktop/preload/**/*.ts"]
 }

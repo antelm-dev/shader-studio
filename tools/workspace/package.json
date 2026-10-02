@@ -37,7 +37,7 @@
       "generate:fonts": {
         "cache": false,
         "outputs": [
-          "{workspaceRoot}/apps/web/src/app/editor/font-catalogue.ts"
+          "{workspaceRoot}/apps/studio/src/app/editor/font-catalogue.ts"
         ]
       },
       "smoke": {
