@@ -812,12 +812,12 @@ export class PluginsPage {
       untracked(() => this.review.set(null));
     });
     void this.catalogue.load();
-    // Scroll to the package a link asked for, once both lists have something to show.
+    // Scroll to the package a link asked for, once, as soon as its card is on the page.
     afterNextRender(() => this.scrollToFocus());
     effect(() => {
       this.installations.plugins();
       this.available();
-      if (this.focus()) untracked(() => setTimeout(() => this.scrollToFocus()));
+      if (this.focus() && !this.scrolled) untracked(() => setTimeout(() => this.scrollToFocus()));
     });
   }
 
@@ -1022,13 +1022,17 @@ export class PluginsPage {
     }
   }
 
+  private scrolled = false;
+
   private scrollToFocus(): void {
     const id = this.focus();
-    if (!id) return;
+    if (!id || this.scrolled) return;
     const element =
       this.host.nativeElement.querySelector<HTMLElement>(`[id="installed-${CSS.escape(id)}"]`) ??
       this.host.nativeElement.querySelector<HTMLElement>(`[id="available-${CSS.escape(id)}"]`);
-    element?.scrollIntoView?.({ block: 'center' });
+    if (!element) return;
+    this.scrolled = true;
+    element.scrollIntoView?.({ block: 'center' });
   }
 
   // --- Using ----------------------------------------------------------------
