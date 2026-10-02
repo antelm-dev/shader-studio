@@ -26,7 +26,9 @@ const ipc = spawnSync('pnpm', ['--filter', '@shadergrove/studio', 'gen:ipc'], {
   shell: process.platform === 'win32',
 });
 if (ipc.status !== 0) {
-  log.error('smoke requires gen:ipc — window.electron types come from @shadergrove/desktop-api');
+  log.error(
+    'smoke requires gen:ipc — window.electron types come from studio/src/contracts/desktop/ipc-bridge.ts',
+  );
   log.error(ipc.stderr || ipc.stdout);
   process.exit(ipc.status ?? 1);
 }

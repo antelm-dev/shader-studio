@@ -5,7 +5,7 @@ import type {
   SyncRemoveRequest,
   SyncRemoveResult,
   SyncStatus,
-} from '@shadergrove/desktop-api/contracts';
+} from '../../../contracts/desktop/contracts';
 import type {
   ImportResult,
   ShaderPayload,

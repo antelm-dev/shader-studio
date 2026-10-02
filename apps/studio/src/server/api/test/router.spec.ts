@@ -17,12 +17,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { LOCAL_SCOPE, ShaderLibrary } from '@shadergrove/backend/library';
 import { SqliteRepository } from '@shadergrove/backend/persistence/sqlite';
 
-import type { AuditDetails, AuditEvent, Auditor } from '../src/auth/audit';
-import { createAuth } from '../src/auth/auth';
-import { readAuthConfig } from '../src/auth/auth-config';
-import type { Mail, Mailer } from '../src/auth/mailer';
-import { securityHeaders } from '../src/core/security-headers';
-import { createNestApi, type NestApi } from '../src/bootstrap';
+import type { AuditDetails, AuditEvent, Auditor } from '../auth/audit';
+import { createAuth } from '../auth/auth';
+import { readAuthConfig } from '../auth/auth-config';
+import type { Mail, Mailer } from '../auth/mailer';
+import { securityHeaders } from '../core/security-headers';
+import { createNestApi, type NestApi } from '../bootstrap';
 
 const PASSWORD = 'correct horse battery staple';
 

@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron';
 import { defineIpcEvents, defineIpcModule, handle } from 'electron-ipc-module';
 
 import { StorageError } from '@shadergrove/backend/library';
-import type { SyncChangedEvent, SyncRemoveRequest } from '@shadergrove/desktop-api/contracts';
+import type { SyncChangedEvent, SyncRemoveRequest } from '../../../contracts/desktop/contracts';
 import type { SyncService } from '../sync/sync-service';
 
 type SyncEvents = { 'sync-changed': [event: SyncChangedEvent] };

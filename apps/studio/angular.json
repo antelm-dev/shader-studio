@@ -203,7 +203,7 @@
           "options": {
             "buildTarget": "shadergrove:build:development",
             "runner": "vitest",
-            "exclude": ["src/desktop/**"]
+            "exclude": ["src/desktop/**", "src/server/**"]
           }
         }
       }

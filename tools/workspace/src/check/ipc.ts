@@ -8,7 +8,7 @@ import { root } from '../lib/paths.js';
 const log = createLogger('ipc');
 const studioRoot = resolve(root, 'apps/studio');
 const ipcDir = resolve(studioRoot, 'src/desktop/main/ipc');
-const outFile = resolve(root, 'libs/desktop-api/src/ipc-bridge.ts');
+const outFile = resolve(root, 'apps/studio/src/contracts/desktop/ipc-bridge.ts');
 
 const moduleNames = readdirSync(ipcDir)
   .filter((name) => name.endsWith('.ipc.ts'))

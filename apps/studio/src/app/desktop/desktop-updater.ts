@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 
-import type { UpdateState } from '@shadergrove/desktop-api/contracts';
+import type { UpdateState } from '../../contracts/desktop/contracts';
 // The release version release-please bumps; esbuild inlines just this field.
 import { version } from '../../../../../package.json';
 

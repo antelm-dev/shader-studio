@@ -13,9 +13,7 @@ RUN npm install --global pnpm@10.28.2
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/studio/package.json ./apps/studio/
-COPY libs/api/package.json ./libs/api/
 COPY libs/backend/package.json ./libs/backend/
-COPY libs/desktop-api/package.json ./libs/desktop-api/
 COPY libs/shared/package.json ./libs/shared/
 COPY tools/maintenance/package.json ./tools/maintenance/
 COPY tools/mcp/package.json ./tools/mcp/

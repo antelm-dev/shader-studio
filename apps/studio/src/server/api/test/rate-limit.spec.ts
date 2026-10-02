@@ -15,11 +15,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { LOCAL_SCOPE, ShaderLibrary } from '@shadergrove/backend/library';
 import { SqliteRepository } from '@shadergrove/backend/persistence/sqlite';
 
-import { silentAuditor } from '../src/auth/audit';
-import { createAuth } from '../src/auth/auth';
-import { readAuthConfig } from '../src/auth/auth-config';
-import type { Mailer } from '../src/auth/mailer';
-import { createNestApi, type NestApi } from '../src/bootstrap';
+import { silentAuditor } from '../auth/audit';
+import { createAuth } from '../auth/auth';
+import { readAuthConfig } from '../auth/auth-config';
+import type { Mailer } from '../auth/mailer';
+import { createNestApi, type NestApi } from '../bootstrap';
 
 const noMail: Mailer = { send: async () => undefined };
 

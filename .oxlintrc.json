@@ -11,7 +11,7 @@
     "dist-web/**",
     "release/**",
     "data/**",
-    "libs/desktop-api/src/ipc-bridge.ts"
+    "apps/studio/src/contracts/desktop/ipc-bridge.ts"
   ],
   "rules": {
     "typescript/no-explicit-any": "error",
@@ -31,12 +31,8 @@
           {
             "paths": [
               {
-                "name": "@shadergrove/api",
-                "message": "The Angular app must not import the server: src/server and @shadergrove/api run in Node only, beside the app, and are mounted by src/server/index.ts."
-              },
-              {
                 "name": "electron",
-                "message": "Electron APIs belong in src/desktop; the Angular renderer uses @shadergrove/desktop-api."
+                "message": "Electron APIs belong in src/desktop; the Angular renderer uses src/contracts/desktop types."
               }
             ],
             "patterns": [
@@ -50,6 +46,11 @@
                   "**/desktop/preload/**"
                 ],
                 "message": "The Angular app must not import Node entry points from src/server or src/desktop."
+              },
+              {
+                "group": ["**/contracts/desktop/ipc-bridge", "**/contracts/desktop/ipc-bridge.*"],
+                "allowTypeImports": true,
+                "message": "The generated IPC bridge runs in the Electron preload; the Angular renderer may import its types only."
               }
             ]
           }

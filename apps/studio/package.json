@@ -12,18 +12,20 @@
     "dev:renderer": "ng run shadergrove:desktop-serve:development",
     "dev:desktop": "node scripts/desktop/dev.mjs",
     "dev:server": "tsx src/server/index.ts",
-    "test": "pnpm test:web && pnpm test:desktop",
+    "test": "pnpm test:server && pnpm test:desktop && pnpm test:web",
     "test:web": "ng test --watch=false",
     "test:desktop": "vitest run --config vitest.desktop.config.ts",
     "test:watch": "ng test --watch",
-    "typecheck": "pnpm typecheck:web && pnpm typecheck:desktop",
-    "typecheck:web": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "typecheck": "pnpm typecheck:web && pnpm typecheck:server && pnpm typecheck:desktop",
+    "typecheck:web": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
     "typecheck:desktop": "pnpm gen:ipc && tsc --noEmit -p tsconfig.desktop.main.json && tsc --noEmit -p tsconfig.desktop.preload.json",
     "gen:ipc": "node scripts/desktop/gen-ipc.mjs",
     "clean:desktop": "node scripts/desktop/clean.mjs",
     "pack:dir": "node scripts/desktop/build.mjs pack",
     "pack:win": "node scripts/desktop/build.mjs pack --win",
-    "dist:win": "node scripts/desktop/build.mjs dist --win"
+    "dist:win": "node scripts/desktop/build.mjs dist --win",
+    "test:server": "vitest run --config vitest.server.config.ts",
+    "typecheck:server": "tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
     "@angular/cdk": "22.0.4",
@@ -40,11 +42,13 @@
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@nestjs/common": "^11.1.28",
-    "@shadergrove/api": "workspace:*",
+    "@nestjs/core": "^11.1.28",
+    "@nestjs/platform-express": "^11.1.28",
+    "@nestjs/swagger": "^11.4.6",
     "@shadergrove/backend": "workspace:*",
-    "@shadergrove/desktop-api": "workspace:*",
     "@shadergrove/shared": "workspace:*",
     "better-auth": "^1.7.5",
+    "drizzle-orm": "0.45.2",
     "electron-ipc-module": "1.1.0",
     "electron-updater": "6.8.9",
     "express": "^5.1.0",
@@ -52,6 +56,8 @@
     "material-symbols": "^0.47.5",
     "mediabunny": "^1.50.8",
     "monaco-editor": "^0.55.1",
+    "nodemailer": "^10.0.10",
+    "reflect-metadata": "^0.2.2",
     "rxjs": "~7.8.0",
     "three": "^0.185.1",
     "tslib": "^2.3.0",
@@ -89,7 +95,13 @@
         ],
         "inputs": [
           "webProduction",
-          "^production"
+          "^production",
+          {
+            "dependentTasksOutputFiles": "**/ipc-bridge.ts"
+          }
+        ],
+        "dependsOn": [
+          "gen:ipc"
         ]
       },
       "build:desktop": {
@@ -100,15 +112,24 @@
       },
       "dev": {
         "cache": false,
-        "persistent": true
+        "persistent": true,
+        "dependsOn": [
+          "gen:ipc"
+        ]
       },
       "dev:desktop": {
         "cache": false,
-        "persistent": true
+        "persistent": true,
+        "dependsOn": [
+          "gen:ipc"
+        ]
       },
       "test:watch": {
         "cache": false,
-        "persistent": true
+        "persistent": true,
+        "dependsOn": [
+          "gen:ipc"
+        ]
       },
       "dev:server": {
         "cache": false,
@@ -120,9 +141,15 @@
         ],
         "inputs": [
           "webProduction",
-          "^production"
+          "^production",
+          {
+            "dependentTasksOutputFiles": "**/ipc-bridge.ts"
+          }
         ],
-        "cache": true
+        "cache": true,
+        "dependsOn": [
+          "gen:ipc"
+        ]
       },
       "build:main": {
         "outputs": [
@@ -134,7 +161,8 @@
           "{projectRoot}/tsconfig.desktop.*.json",
           "{projectRoot}/package.json",
           "sharedGlobals",
-          "^production"
+          "^production",
+          "{projectRoot}/src/contracts/desktop/**/*"
         ]
       },
       "gen:ipc": {
@@ -144,15 +172,19 @@
           "{projectRoot}/scripts/desktop/gen-ipc.mjs",
           "{projectRoot}/tsconfig.desktop.main.json",
           "sharedGlobals",
-          "^production"
+          "^production",
+          "{projectRoot}/src/contracts/desktop/contracts.ts"
         ],
         "outputs": [
-          "{workspaceRoot}/libs/desktop-api/src/ipc-bridge.ts"
+          "{projectRoot}/src/contracts/desktop/ipc-bridge.ts"
         ]
       },
       "dev:renderer": {
         "cache": false,
-        "persistent": true
+        "persistent": true,
+        "dependsOn": [
+          "gen:ipc"
+        ]
       },
       "pack:dir": {
         "cache": false
@@ -162,6 +194,46 @@
       },
       "dist:win": {
         "cache": false
+      },
+      "test:server": {
+        "cache": true,
+        "inputs": [
+          "{projectRoot}/src/server/**/*",
+          "{projectRoot}/tsconfig.server.json",
+          "{projectRoot}/vitest.server.config.ts",
+          "{projectRoot}/package.json",
+          "sharedGlobals",
+          "^production"
+        ]
+      },
+      "test": {
+        "dependsOn": [
+          "gen:ipc"
+        ],
+        "inputs": [
+          "default",
+          "^production",
+          {
+            "dependentTasksOutputFiles": "**/ipc-bridge.ts"
+          }
+        ]
+      },
+      "typecheck": {
+        "dependsOn": [
+          "gen:ipc"
+        ],
+        "inputs": [
+          "default",
+          "^default",
+          {
+            "dependentTasksOutputFiles": "**/ipc-bridge.ts"
+          }
+        ]
+      },
+      "test:web": {
+        "dependsOn": [
+          "gen:ipc"
+        ]
       }
     },
     "namedInputs": {
@@ -172,7 +244,8 @@
         "!{projectRoot}/tsconfig.desktop.*.json",
         "!{projectRoot}/rollup.desktop.config.mjs",
         "!{projectRoot}/vitest.desktop.config.ts",
-        "!{projectRoot}/electron-builder.yml"
+        "!{projectRoot}/electron-builder.yml",
+        "!{projectRoot}/vitest.server.config.ts"
       ]
     }
   }

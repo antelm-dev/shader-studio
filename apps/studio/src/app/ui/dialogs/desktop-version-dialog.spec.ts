@@ -5,7 +5,7 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { UpdateState } from '@shadergrove/desktop-api/contracts';
+import type { UpdateState } from '../../../contracts/desktop/contracts';
 import { DesktopPlatform } from '../../desktop/desktop-platform';
 import { DesktopUpdater } from '../../desktop/desktop-updater';
 import { I18nCatalog, type I18nCatalogMap } from '../../i18n/catalog';

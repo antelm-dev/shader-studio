@@ -16,10 +16,9 @@
     "src/*.ts",
     "src/app/**/*.ts",
     "src/server/**/*.ts",
-    "../../libs/api/src/**/*.ts",
     "../../libs/backend/src/**/*.ts",
-    "../../libs/desktop-api/src/**/*.ts",
+    "src/contracts/**/*.ts",
     "../../libs/shared/src/**/*.ts"
   ],
-  "exclude": ["src/**/*.spec.ts", "../../libs/api/src/**/*.spec.ts"]
+  "exclude": ["src/**/*.spec.ts"]
 }

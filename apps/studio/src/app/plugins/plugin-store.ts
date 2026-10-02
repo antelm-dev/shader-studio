@@ -1,4 +1,4 @@
-import type { StoredPlugin } from '@shadergrove/desktop-api/contracts';
+import type { StoredPlugin } from '../../contracts/desktop/contracts';
 
 export type { StoredPlugin };
 

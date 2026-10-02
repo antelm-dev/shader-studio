@@ -1,4 +1,4 @@
-import type { bridge } from '@shadergrove/desktop-api';
+import type { bridge } from './contracts/desktop/ipc-bridge';
 
 type ElectronApi = { bridge: typeof bridge };
 

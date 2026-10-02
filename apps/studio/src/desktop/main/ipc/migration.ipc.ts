@@ -5,7 +5,7 @@ import { defineIpcModule, handle } from 'electron-ipc-module';
 
 import { ShaderLibrary } from '@shadergrove/backend/library';
 import { createLegacyReader } from '@shadergrove/backend/persistence/legacy';
-import type { MigrationResult } from '@shadergrove/desktop-api/contracts';
+import type { MigrationResult } from '../../../contracts/desktop/contracts';
 
 async function exists(path: string): Promise<boolean> {
   try {

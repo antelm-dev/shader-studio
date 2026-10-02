@@ -4,7 +4,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 
-import type { SyncRemoveResult } from '@shadergrove/desktop-api/contracts';
+import type { SyncRemoveResult } from '../../contracts/desktop/contracts';
 import { DEFAULT_CHANNELS, DEFAULT_RENDER, type ShaderRecord } from '@shadergrove/shared/model';
 import { migrateLegacyProject } from '@shadergrove/shared/project';
 import { ShaderApi } from '../api/shader-api';

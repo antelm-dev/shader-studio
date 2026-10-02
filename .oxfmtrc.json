@@ -11,7 +11,7 @@
     "CHANGELOG.md",
     ".release-please-manifest.json",
     "data/**",
-    "libs/desktop-api/src/ipc-bridge.ts",
+    "apps/studio/src/contracts/desktop/ipc-bridge.ts",
     "tools/workspace/fixtures/plugins/isf/isf.sgplugin.json",
     ".angular/**"
   ]

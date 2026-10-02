@@ -1,6 +1,6 @@
 /**
  * The desktop's account session (contract C4). It signs in through the system
- * browser with PKCE (RFC 8252, see `libs/api/src/auth/desktop-handoff.ts`)
+ * browser with PKCE (RFC 8252, see `apps/studio/src/server/api/auth/desktop-handoff.ts`)
  * and keeps the bearer token here, in the main process, encrypted at rest with
  * `safeStorage`. Nothing else ever sees the token: the rest of the app goes
  * through `fetch()`, and the renderer only receives `AccountState`.
@@ -14,9 +14,9 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { AccountState, AccountUser, SignInResult } from '@shadergrove/desktop-api/contracts';
+import type { AccountState, AccountUser, SignInResult } from '../../../contracts/desktop/contracts';
 
-export type { AccountState } from '@shadergrove/desktop-api/contracts';
+export type { AccountState } from '../../../contracts/desktop/contracts';
 
 export interface AccountSession {
   state(): AccountState;

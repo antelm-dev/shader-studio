@@ -9,7 +9,7 @@ import {
 } from '@shadergrove/shared/model';
 import { composePass } from '@shadergrove/shared/pass-source';
 import { imagePass } from '@shadergrove/shared/project';
-import type { SyncRemoveMode, SyncRemoveResult } from '@shadergrove/desktop-api/contracts';
+import type { SyncRemoveMode, SyncRemoveResult } from '../../contracts/desktop/contracts';
 import { AuthService, type AuthResult } from '../auth/auth.service';
 import { DesktopAccount } from '../desktop/desktop-account';
 import { DesktopPlatform } from '../desktop/desktop-platform';

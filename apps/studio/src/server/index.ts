@@ -10,13 +10,11 @@
  * In development the Angular CLI imports `reqHandler` below and drives this
  * same app, so `ng serve` gets the real API rather than a mock.
  *
- * The API itself lives in @shadergrove/api (libs/api); this file only composes.
- * Its server-only packages (Nest, drizzle-orm, nodemailer…) are listed under
- * `serve.options.prebundle.exclude` in angular.json: the dev server's Vite SSR
- * runner would otherwise resolve them from apps/studio, which does not declare
- * them, and `ng serve` would fail with "Cannot find module '@nestjs/core'".
- * Excluded, esbuild bundles them from where they are imported instead. A new
- * server-only package in libs/api or libs/backend goes on that list too.
+ * The API lives beside this host in src/server/api; this file only composes.
+ * Its dependencies are declared by studio. The Node-only packages (Nest,
+ * drizzle-orm, nodemailer…) remain excluded from Vite prebundling in angular.json
+ * so the SSR build handles their Node imports. When changing server dependencies,
+ * verify development SSR, the production bundle and Docker runtime separately.
  */
 
 import {
@@ -32,7 +30,7 @@ import {
   readAuthConfig,
   readExploreConfig,
   securityHeaders,
-} from '@shadergrove/api';
+} from './api/index';
 import express, { type Application } from 'express';
 import { join } from 'node:path';
 

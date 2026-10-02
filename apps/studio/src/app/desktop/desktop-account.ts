@@ -1,6 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 
-import type { AccountState, SignInResult } from '@shadergrove/desktop-api/contracts';
+import type { AccountState, SignInResult } from '../../contracts/desktop/contracts';
 
 /**
  * The desktop's account, as the main process reports it. The session itself
