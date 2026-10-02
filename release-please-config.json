@@ -9,9 +9,7 @@
     ".": {
       "package-name": "shadergrove",
       "initial-version": "1.0.0",
-      "extra-files": [
-        "libs/shared/src/version.ts"
-      ]
+      "extra-files": ["libs/shared/src/version.ts"]
     }
   }
 }

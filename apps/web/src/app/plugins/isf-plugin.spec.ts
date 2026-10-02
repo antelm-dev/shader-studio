@@ -225,6 +225,11 @@ describe('what the ISF plugin refuses, with a reason', () => {
       /Persistent/,
     ],
     [
+      'a pass with its own size',
+      isf({ ISFVSN: '2', INPUTS: [image], PASSES: [{ WIDTH: '$WIDTH/2', HEIGHT: '$HEIGHT/2' }] }),
+      /WIDTH or HEIGHT/,
+    ],
+    [
       'imported images',
       isf({ ISFVSN: '2', INPUTS: [image], IMPORTED: { noise: { PATH: 'noise.png' } } }),
       /IMPORTED/,

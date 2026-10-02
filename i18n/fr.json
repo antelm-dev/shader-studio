@@ -697,6 +697,7 @@
   "plugins.compileFailed": "L’effet ne compile pas : {message}",
   "plugins.fileRefused": "Ce plugin ne lit pas ce type de fichier.",
   "plugins.fileTooLarge": "Ce fichier dépasse ce que le plugin accepte.",
+  "plugins.contextChanged": "Le shader ouvert, le compte ou le plugin a changé pendant l'import ; rien n'a été ajouté.",
   "plugins.failed": "Le plugin a échoué : {message}",
   "plugins.exported": "{name} exporté."
 }

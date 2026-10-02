@@ -23,8 +23,30 @@ export class IndexedDbPluginStore implements PluginStore {
 
   constructor(private readonly name: string) {}
 
+  /**
+   * Each record under its own key, whatever it holds: a value damaged outside
+   * the app comes back with an empty text — listed as invalid, removable by that
+   * key — instead of failing the whole list.
+   */
   async list(): Promise<StoredPlugin[]> {
-    return this.request('readonly', (store) => store.getAll()) as Promise<StoredPlugin[]>;
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const records: StoredPlugin[] = [];
+      const request = db.transaction('plugins', 'readonly').objectStore('plugins').openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return resolve(records);
+        const value = cursor.value as Partial<StoredPlugin> | null;
+        records.push({
+          id: String(cursor.key),
+          text: typeof value?.text === 'string' ? value.text : '',
+          enabled: value?.enabled === true,
+          installedAt: typeof value?.installedAt === 'string' ? value.installedAt : '',
+        });
+        cursor.continue();
+      };
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async put(record: StoredPlugin): Promise<void> {

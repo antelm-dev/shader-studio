@@ -89,6 +89,10 @@ function checkSupported(header) {
     if (pass.TARGET || pass.PERSISTENT || pass.FLOAT) {
       fail('Persistent or named pass buffers are not supported');
     }
+    // The effect renders at the output size; a pass of its own size would not be the same image.
+    if (pass.WIDTH !== undefined || pass.HEIGHT !== undefined) {
+      fail('Passes with their own WIDTH or HEIGHT are not supported');
+    }
   }
 }
 

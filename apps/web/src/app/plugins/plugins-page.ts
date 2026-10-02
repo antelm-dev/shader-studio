@@ -537,12 +537,23 @@ export class PluginsPage {
     const host = this.installations.host(installed.id);
     if (!host) return;
     const key = `${installed.id}/${importer.id}`;
+    // The call is asynchronous: its result belongs to the profile, shader and plugin it started with.
+    const profile = this.installations.profile();
+    const shader = this.store.selectedId();
     await this.run(key, async () => {
       const result = await host.importFile(
         importer.id,
         await file.arrayBuffer(),
         this.valuesFor(key, importer.params),
       );
+      if (
+        this.installations.profile() !== profile ||
+        this.store.selectedId() !== shader ||
+        !this.installations.find(installed.id)?.active
+      ) {
+        this.say('plugins.contextChanged', {}, true);
+        return;
+      }
       const candidate = validateEffectCandidate(result.candidate);
       if (!candidate.ok) {
         this.say('plugins.failed', { message: candidate.errors[0] ?? '' }, true);

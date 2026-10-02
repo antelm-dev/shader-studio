@@ -700,6 +700,7 @@ export const TRANSLATION_KEYS = [
   'plugins.compileFailed',
   'plugins.fileRefused',
   'plugins.fileTooLarge',
+  'plugins.contextChanged',
   'plugins.failed',
   'plugins.exported',
 ] as const;

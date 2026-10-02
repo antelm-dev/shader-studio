@@ -29,7 +29,9 @@ export function createPluginFiles(dir: string) {
         const record = await readFile(join(dir, name), 'utf8')
           .then((text) => JSON.parse(text) as unknown)
           .catch(() => null);
-        if (isStoredPlugin(record)) stored.push(record);
+        // A record whose id does not hash to its own file could not be removed by that id —
+        // removing it would delete another package's file instead.
+        if (isStoredPlugin(record) && fileFor(record.id).endsWith(name)) stored.push(record);
       }
       return stored;
     },

@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -89,6 +89,17 @@ describe('plugin files', () => {
     await writeFile(join(dir, 'notes.txt'), 'hello');
 
     expect(await files.list()).toHaveLength(1);
+  });
+
+  it('skips a record whose id is not the one its file is named after, so removing it cannot hit another file', async () => {
+    await files.put(record(packageText('dev.example.a')));
+    await files.put(record(packageText('dev.example.b')));
+    const [first] = await readdir(dir);
+    const stored = JSON.parse(await readFile(join(dir, first!), 'utf8'));
+    const other = stored.id === 'dev.example.a' ? 'dev.example.b' : 'dev.example.a';
+    await writeFile(join(dir, first!), JSON.stringify({ ...stored, id: other }));
+
+    expect((await files.list()).map((item) => item.id)).toEqual([other]);
   });
 });
 

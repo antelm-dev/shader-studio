@@ -12,6 +12,7 @@
     ".release-please-manifest.json",
     "data/**",
     "libs/desktop-api/src/ipc-bridge.ts",
+    "tools/workspace/fixtures/plugins/isf/isf.sgplugin.json",
     ".angular/**"
   ]
 }
