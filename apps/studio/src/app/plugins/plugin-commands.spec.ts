@@ -48,11 +48,30 @@ function rival(): string {
   return JSON.stringify(shadertoy);
 }
 
+/** A protocol-1 package with one effect, as a third party would ship it. */
+function effectPackage(): string {
+  return JSON.stringify({
+    manifest: {
+      id: 'dev.example.tint',
+      version: '1.0.0',
+      protocolVersion: 1,
+      appVersionRange: '>=1.0.0',
+      name: 'Tint',
+      publisher: 'Example',
+      license: 'MIT',
+      contributions: [{ kind: 'effect', id: 'tint', name: 'Red tint', controls: [] }],
+    },
+    glsl: { tint: 'vec4 effect(vec4 c, vec2 uv) { return c * vec4(1.0, 0.5, 0.5, 1.0); }' },
+  });
+}
+
 describe('PluginCommands', () => {
   const user = signal<{ id: string } | null>(null);
   const status = signal<'loading' | 'anonymous' | 'authenticated'>('anonymous');
   const record = signal<{ id: string; name: string } | null>({ id: 'waves', name: 'Waves' });
   const navigate = vi.fn(async () => true);
+  const adopt = vi.fn(() => ({ ok: true as const }));
+  const notice = signal<{ text: string; error: boolean } | null>(null);
   let profiles: Map<string, Map<string, StoredPlugin>>;
 
   const provider: SourceProvider = {
@@ -91,10 +110,10 @@ describe('PluginCommands', () => {
         { provide: WorkspaceActions, useValue: {} },
         {
           provide: ShaderStore,
-          useValue: { selectedId: signal('waves'), record, notice: signal(null) },
+          useValue: { selectedId: signal('waves'), record, notice },
         },
         { provide: AppThemes, useValue: { entries: signal([]) } },
-        { provide: EffectAdoption, useValue: { adopt: () => ({ ok: true }) } },
+        { provide: EffectAdoption, useValue: { adopt } },
         { provide: Router, useValue: { navigate } },
         { provide: SOURCE_PROVIDERS, useValue: provider, multi: true },
         provideHostAdapters({ exportRuntimes: [WallpaperWebRuntime] }),
@@ -127,6 +146,8 @@ describe('PluginCommands', () => {
     status.set('anonymous');
     record.set({ id: 'waves', name: 'Waves' });
     navigate.mockClear();
+    adopt.mockClear();
+    notice.set(null);
   });
 
   afterEach(() => TestBed.resetTestingModule());
@@ -214,6 +235,58 @@ describe('PluginCommands', () => {
     // Each opens its own package's form in Plugins, not the first one found.
     commands.imports()[1].action();
     expect(navigate).toHaveBeenCalledWith(['/plugins'], { queryParams: { use: other } });
+  });
+
+  it('adds an effect only while the package it was offered for is still the current one', async () => {
+    const { commands, installations } = setup();
+    await settle();
+    const tint = await install(installations, effectPackage());
+    await installations.setEnabled(tint, true);
+    expect(labels(commands.effects())).toEqual(['action.addPluginEffect {"name":"Red tint"}']);
+
+    commands.effects()[0].action();
+    expect(adopt).toHaveBeenCalledOnce();
+    expect(adopt.mock.calls[0]).toEqual([expect.objectContaining({ name: 'Red tint' })]);
+
+    // The palette keeps the commands it opened with; under another profile they must not run.
+    const [kept] = commands.effects();
+    user.set({ id: 'u1' });
+    status.set('authenticated');
+    await settle();
+    expect(commands.effects()).toEqual([]);
+    kept.action();
+    expect(adopt).toHaveBeenCalledOnce();
+    expect(notice()).toEqual({ text: 'plugins.staleResult', error: true });
+
+    // Back on the first profile, but the package was removed and installed again: still stale.
+    user.set(null);
+    status.set('anonymous');
+    await settle();
+    const [before] = commands.effects();
+    await installations.remove(tint);
+    // An install is stamped to the millisecond: make sure the new one is later.
+    await new Promise((done) => setTimeout(done, 5));
+    await install(installations, effectPackage());
+    await installations.setEnabled(tint, true);
+    before.action();
+    expect(adopt).toHaveBeenCalledOnce();
+    commands.effects()[0].action();
+    expect(adopt).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses a kept export command once its package is switched off', async () => {
+    const { commands, installations } = setup();
+    await settle();
+    await install(installations, text(WALLPAPER));
+    await installations.setEnabled(WALLPAPER, true);
+    const run = vi
+      .spyOn(TestBed.inject(ProjectPluginActions), 'runExport')
+      .mockResolvedValue({ status: 'cancelled' });
+    const [kept] = commands.exports();
+    await installations.setEnabled(WALLPAPER, false);
+    kept.action();
+    expect(run).not.toHaveBeenCalled();
+    expect(notice()).toEqual({ text: 'plugins.staleResult', error: true });
   });
 
   it('runs an export through its own contribution', async () => {

@@ -8,7 +8,11 @@ import type { MenuCommand } from '../ui/menu-commands';
 import { ShaderStore } from '../workspace/shader-store';
 import { EffectAdoption, adoptionMessage } from './effect-adoption';
 import { HostAdapters } from './host-adapters';
-import { PluginInstallations, type InstalledPlugin } from './plugin-installations';
+import {
+  PluginInstallations,
+  type InstalledPlugin,
+  type PluginOperationContext,
+} from './plugin-installations';
 import { ProjectPluginActions } from './project-actions';
 
 /** A menu command that a plugin contribution put there. */
@@ -73,13 +77,14 @@ export class PluginCommands {
     distinguish(
       this.projects.exporters().map(({ installed, contribution }) => {
         const command = this.adapters.runtime(contribution.runtime)?.command;
+        const context = this.installations.context(installed.id);
         return {
           ref: `${installed.id}/${contribution.id}`,
           package: packageName(installed),
           icon: command?.icon ?? 'output',
           text: () => (command ? this.i18n.t(command.label) : `${contribution.name}…`),
           disabled: () => this.noShader() || this.projects.running() !== null,
-          action: () => void this.runExport(installed.id, contribution.id),
+          action: () => void this.runExport(context, contribution.id),
         };
       }),
     ),
@@ -90,8 +95,9 @@ export class PluginCommands {
       this.installations
         .plugins()
         .filter((installed) => installed.active && installed.plugin)
-        .flatMap((installed) =>
-          installed
+        .flatMap((installed) => {
+          const context = this.installations.context(installed.id);
+          return installed
             .plugin!.manifest.contributions.filter(
               (contribution): contribution is EffectContribution => contribution.kind === 'effect',
             )
@@ -101,9 +107,9 @@ export class PluginCommands {
               icon: 'auto_awesome',
               text: () => this.i18n.t('action.addPluginEffect', { name: contribution.name }),
               disabled: this.noShader,
-              action: () => this.addEffect(installed, contribution),
-            })),
-        ),
+              action: () => this.addEffect(context, contribution.id),
+            }));
+        }),
     ),
   );
 
@@ -121,9 +127,29 @@ export class PluginCommands {
     return this.router.navigate(['/plugins'], { queryParams: { use: packageId } });
   }
 
-  private async runExport(pluginId: string, contributionId: string): Promise<void> {
+  /**
+   * The installation a command was built for, if it still is the current one.
+   * A command can outlive its list — the palette keeps the commands it opened
+   * with — so the package is looked up again, never taken from the closure:
+   * switched off, updated, removed or under another profile, it is not run.
+   */
+  private current(context: PluginOperationContext | null): InstalledPlugin | null {
+    if (!context || !this.installations.isCurrent(context)) return null;
+    return this.installations.find(context.id) ?? null;
+  }
+
+  private stale(): void {
+    this.store.notice.set({ text: this.i18n.t('plugins.staleResult'), error: true });
+  }
+
+  private async runExport(
+    context: PluginOperationContext | null,
+    contributionId: string,
+  ): Promise<void> {
+    const installed = this.current(context);
+    if (!installed) return this.stale();
     const name = this.store.record()?.name ?? '';
-    const outcome = await this.projects.runExport(pluginId, contributionId);
+    const outcome = await this.projects.runExport(installed.id, contributionId);
     switch (outcome.status) {
       case 'exported': {
         const warning = outcome.warnings.length > 0 ? ` ${outcome.warnings.join(' ')}` : '';
@@ -140,15 +166,19 @@ export class PluginCommands {
         });
         return;
       case 'stale':
-        this.store.notice.set({ text: this.i18n.t('plugins.staleResult'), error: true });
-        return;
+        return this.stale();
       case 'cancelled':
         return;
     }
   }
 
-  private addEffect(installed: InstalledPlugin, contribution: EffectContribution): void {
-    if (!installed.plugin) return;
+  private addEffect(context: PluginOperationContext | null, contributionId: string): void {
+    const installed = this.current(context);
+    const contribution = installed?.plugin?.manifest.contributions.find(
+      (entry): entry is EffectContribution =>
+        entry.kind === 'effect' && entry.id === contributionId,
+    );
+    if (!installed?.plugin || !contribution) return this.stale();
     const result = this.adoption.adopt(effectContributionCandidate(installed.plugin, contribution));
     const { key, params, error } = adoptionMessage(result, contribution.name);
     this.store.notice.set({ text: this.i18n.t(key, params), error });

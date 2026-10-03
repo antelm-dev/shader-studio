@@ -10,11 +10,13 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { map } from 'rxjs';
 
 import type { CustomEffect, ShaderControl, ShaderParams } from '@shadergrove/shared/model';
 import {
@@ -772,9 +774,15 @@ export class PluginsPage {
   protected readonly catalogue = inject(PluginCatalogueService);
   protected readonly projects = inject(ProjectPluginActions);
 
-  /** The package a link asked to show (`/plugins?use=<id>`), highlighted and scrolled to. */
-  protected readonly focus = signal<string | null>(
-    inject(ActivatedRoute).snapshot.queryParamMap.get('use'),
+  private readonly route = inject(ActivatedRoute);
+  /**
+   * The package a link asked to show (`/plugins?use=<id>`), highlighted and
+   * scrolled to. Followed, not read once: a link to another package while this
+   * page is open reuses the page.
+   */
+  protected readonly focus = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get('use'))),
+    { initialValue: this.route.snapshot.queryParamMap.get('use') },
   );
   protected readonly available = computed(() => {
     const state = this.catalogue.state();
@@ -813,13 +821,15 @@ export class PluginsPage {
       untracked(() => this.review.set(null));
     });
     void this.catalogue.load();
-    // Scroll to the package a link asked for, once, as soon as its card is on the page.
+    // Scroll to the package a link asked for, once per link, as soon as its card is on the page.
     afterNextRender(() => this.scrollToFocus());
     effect(() => {
       this.installations.plugins();
       this.available();
+      const focus = this.focus();
+      if (!focus) this.scrolledTo = null;
       // Only in the browser: a server render has no page to scroll (nor `CSS`).
-      if (this.focus() && !this.scrolled && isPlatformBrowser(this.platform)) {
+      if (focus && this.scrolledTo !== focus && isPlatformBrowser(this.platform)) {
         untracked(() => setTimeout(() => this.scrollToFocus()));
       }
     });
@@ -1026,17 +1036,18 @@ export class PluginsPage {
     }
   }
 
-  private scrolled = false;
+  /** The package last scrolled to: each new link scrolls once. */
+  private scrolledTo: string | null = null;
   private readonly platform = inject(PLATFORM_ID);
 
   private scrollToFocus(): void {
     const id = this.focus();
-    if (!id || this.scrolled) return;
+    if (!id || this.scrolledTo === id) return;
     const element =
       this.host.nativeElement.querySelector<HTMLElement>(`[id="installed-${CSS.escape(id)}"]`) ??
       this.host.nativeElement.querySelector<HTMLElement>(`[id="available-${CSS.escape(id)}"]`);
     if (!element) return;
-    this.scrolled = true;
+    this.scrolledTo = id;
     element.scrollIntoView?.({ block: 'center' });
   }
 
