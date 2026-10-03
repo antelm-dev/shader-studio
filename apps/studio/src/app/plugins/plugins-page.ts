@@ -1,19 +1,22 @@
-import { NgTemplateOutlet } from '@angular/common';
+import { NgTemplateOutlet, isPlatformBrowser } from '@angular/common';
 import {
   Component,
   ElementRef,
   afterNextRender,
   computed,
   effect,
+  PLATFORM_ID,
   inject,
   signal,
   untracked,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { map } from 'rxjs';
 
 import type { CustomEffect, ShaderControl, ShaderParams } from '@shadergrove/shared/model';
 import {
@@ -39,7 +42,7 @@ import { Preferences } from '../prefs/preferences';
 import { PAGE_STYLES } from '../publications/page';
 import { AppThemes } from '../themes/app-themes';
 import { ShaderStore } from '../workspace/shader-store';
-import { EffectAdoption, type AdoptionResult } from './effect-adoption';
+import { EffectAdoption, adoptionMessage, type AdoptionResult } from './effect-adoption';
 import { HostAdapters, type ProviderField } from './host-adapters';
 import { PluginCatalogueService } from './plugin-catalogue';
 import {
@@ -771,9 +774,15 @@ export class PluginsPage {
   protected readonly catalogue = inject(PluginCatalogueService);
   protected readonly projects = inject(ProjectPluginActions);
 
-  /** The package a link asked to show (`/plugins?use=<id>`), highlighted and scrolled to. */
-  protected readonly focus = signal<string | null>(
-    inject(ActivatedRoute).snapshot.queryParamMap.get('use'),
+  private readonly route = inject(ActivatedRoute);
+  /**
+   * The package a link asked to show (`/plugins?use=<id>`), highlighted and
+   * scrolled to. Followed, not read once: a link to another package while this
+   * page is open reuses the page.
+   */
+  protected readonly focus = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get('use'))),
+    { initialValue: this.route.snapshot.queryParamMap.get('use') },
   );
   protected readonly available = computed(() => {
     const state = this.catalogue.state();
@@ -812,12 +821,17 @@ export class PluginsPage {
       untracked(() => this.review.set(null));
     });
     void this.catalogue.load();
-    // Scroll to the package a link asked for, once, as soon as its card is on the page.
+    // Scroll to the package a link asked for, once per link, as soon as its card is on the page.
     afterNextRender(() => this.scrollToFocus());
     effect(() => {
       this.installations.plugins();
       this.available();
-      if (this.focus() && !this.scrolled) untracked(() => setTimeout(() => this.scrollToFocus()));
+      const focus = this.focus();
+      if (!focus) this.scrolledTo = null;
+      // Only in the browser: a server render has no page to scroll (nor `CSS`).
+      if (focus && this.scrolledTo !== focus && isPlatformBrowser(this.platform)) {
+        untracked(() => setTimeout(() => this.scrollToFocus()));
+      }
     });
   }
 
@@ -1022,16 +1036,18 @@ export class PluginsPage {
     }
   }
 
-  private scrolled = false;
+  /** The package last scrolled to: each new link scrolls once. */
+  private scrolledTo: string | null = null;
+  private readonly platform = inject(PLATFORM_ID);
 
   private scrollToFocus(): void {
     const id = this.focus();
-    if (!id || this.scrolled) return;
+    if (!id || this.scrolledTo === id) return;
     const element =
       this.host.nativeElement.querySelector<HTMLElement>(`[id="installed-${CSS.escape(id)}"]`) ??
       this.host.nativeElement.querySelector<HTMLElement>(`[id="available-${CSS.escape(id)}"]`);
     if (!element) return;
-    this.scrolled = true;
+    this.scrolledTo = id;
     element.scrollIntoView?.({ block: 'center' });
   }
 
@@ -1215,31 +1231,8 @@ export class PluginsPage {
   }
 
   private report(result: AdoptionResult, name: string): void {
-    if (result.ok) {
-      this.say('plugins.added', { name });
-      return;
-    }
-    switch (result.reason) {
-      case 'no-shader':
-        this.say('plugins.noShader', {}, true);
-        return;
-      case 'chain-full':
-        this.say('plugins.chainFull', {}, true);
-        return;
-      case 'no-renderer':
-        this.say('plugins.noRenderer', {}, true);
-        return;
-      case 'compile': {
-        const first = result.diagnostics[0];
-        const message = first
-          ? first.line > 0
-            ? `${first.line}: ${first.message}`
-            : first.message
-          : '';
-        this.say('plugins.compileFailed', { message }, true);
-        return;
-      }
-    }
+    const { key, params, error } = adoptionMessage(result, name);
+    this.say(key, params, error);
   }
 
   private async run(key: string, action: () => Promise<void>): Promise<void> {

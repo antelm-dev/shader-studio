@@ -193,10 +193,10 @@ describe('ProjectPluginActions', () => {
     const { actions, installations } = setup();
     await settle();
     await installEnabled(installations, SHADERTOY);
-    expect(actions.importerFor('shadertoy-api/v1')?.installed.id).toBe(SHADERTOY);
-    expect(actions.exporterFor('wallpaper-web/v1')).toBeNull();
+    expect(actions.importers().map(({ installed }) => installed.id)).toEqual([SHADERTOY]);
+    expect(actions.exporters()).toEqual([]);
     await installations.setEnabled(SHADERTOY, false);
-    expect(actions.importerFor('shadertoy-api/v1')).toBeNull();
+    expect(actions.importers()).toEqual([]);
   });
 
   it('imports through the provider and the Worker, keeping the key host-side', async () => {

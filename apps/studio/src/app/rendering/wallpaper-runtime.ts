@@ -32,6 +32,7 @@ const TEXTURE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
 @Injectable()
 export class WallpaperWebRuntime implements ExportRuntime {
   readonly id = WALLPAPER_WEB_RUNTIME;
+  readonly command = { label: 'action.exportWallpaper', icon: 'wallpaper' } as const;
 
   assemble(data: unknown, textures: readonly RuntimeTexture[]): Result<RuntimeOutput> {
     return assembleWallpaper(data, textures);

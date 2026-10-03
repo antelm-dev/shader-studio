@@ -1,8 +1,8 @@
 // The official Shadertoy and Wallpaper Engine plugins, end to end in the
 // browser: discovered under Available, installed (off), switched on, run from
 // Installed — paste and API imports, a ZIP export of the open draft — kept
-// across a reload, and removed. The old menu shortcuts lead to Plugins when the
-// plugin is missing and use it when it is on. Shadertoy itself is never
+// across a reload, and removed. Their menu entries exist only while the plugin
+// is installed and switched on, and use it then. Shadertoy itself is never
 // contacted: the app's own provider routes are answered by the test, which is
 // also how it sees exactly what the browser sent to the server.
 
@@ -66,14 +66,42 @@ async function menuItem(page: Page, name: RegExp): Promise<void> {
   await page.getByRole('menuitem', { name }).click();
 }
 
+/** The rows of the More actions menu's Import & export section, as they are now. */
+async function importExportItems(page: Page): Promise<string[]> {
+  await page.getByRole('button', { name: 'More actions' }).click();
+  const section = page.getByRole('menuitem', { name: /Import & export/ });
+  if (await section.isVisible()) await section.click();
+  await expect(page.getByRole('menuitem', { name: /Export shader/ }).first()).toBeVisible();
+  const names = (await page.getByRole('menuitem').allTextContents()).map((name) => name.trim());
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  return names;
+}
+
+async function openPlugins(page: Page): Promise<void> {
+  await page.getByTestId('open-plugins').click();
+  await expect(page).toHaveURL(/\/plugins/);
+}
+
+async function backToEditor(page: Page): Promise<void> {
+  await page.getByRole('link', { name: /back to the editor/i }).click();
+  await expect(page.locator('mat-toolbar.toolbar')).toBeVisible();
+}
+
+/** Installs from Available: the package arrives switched off. */
 async function installAvailable(page: Page, id: string): Promise<void> {
   await page.getByTestId(`install-available-${id}`).click();
   await expect(page.getByTestId(`plugin-${id}`)).toBeVisible();
   await expect(page.getByTestId(`available-installed-${id}`)).toBeVisible();
+  await expect(page.getByTestId(`plugin-enable-${id}`).getByRole('switch')).not.toBeChecked();
+}
+
+async function setEnabled(page: Page, id: string, on: boolean): Promise<void> {
   const toggle = page.getByTestId(`plugin-enable-${id}`).getByRole('switch');
-  await expect(toggle).not.toBeChecked();
   await toggle.click();
-  await expect(toggle).toBeChecked();
+  if (on) await expect(toggle).toBeChecked();
+  else await expect(toggle).not.toBeChecked();
 }
 
 async function shaderNames(page: Page): Promise<string[]> {
@@ -96,13 +124,34 @@ test('Shadertoy Import: discovered, installed off, paste and API imports, kept, 
 
   await openStudio(page);
 
-  // The old shortcut leads to Plugins, with the package to install picked out.
+  // Without the plugin, nothing offers to import from Shadertoy.
+  expect(await importExportItems(page)).not.toContainEqual(expect.stringMatching(/Shadertoy/));
+  await menuItem(page, /New shader/);
+  await expect(page.getByRole('dialog')).toContainText('New shader');
+  await expect(page.getByRole('dialog').getByRole('button', { name: /Shadertoy/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  // Installed but still off: still nothing.
+  await openPlugins(page);
+  await expect(page.getByTestId(`available-${WALLPAPER}`)).toBeVisible();
+  await installAvailable(page, SHADERTOY);
+  await backToEditor(page);
+  expect(await importExportItems(page)).not.toContainEqual(expect.stringMatching(/Shadertoy/));
+
+  // Switched on: the menu and the New shader dialog both lead to its form in Plugins.
+  await openPlugins(page);
+  await setEnabled(page, SHADERTOY, true);
+  await backToEditor(page);
+  await menuItem(page, /New shader/);
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: /Import from Shadertoy/ })
+    .click();
+  await expect(page).toHaveURL(`/plugins?use=${SHADERTOY}`);
+  await backToEditor(page);
   await menuItem(page, /Import from Shadertoy/);
   await expect(page).toHaveURL(`/plugins?use=${SHADERTOY}`);
-  await expect(page.getByTestId(`available-${SHADERTOY}`)).toHaveClass(/focused/);
-  await expect(page.getByTestId(`available-${WALLPAPER}`)).toBeVisible();
-
-  await installAvailable(page, SHADERTOY);
+  await expect(page.getByTestId(`plugin-${SHADERTOY}`)).toHaveClass(/focused/);
 
   // Paste: one Image pass becomes a new shader, created whole.
   await page.getByTestId(`mode-paste-${IMPORTER}`).check();
@@ -145,16 +194,22 @@ test('Shadertoy Import: discovered, installed off, paste and API imports, kept, 
   expect(await shaderNames(page)).toEqual(
     expect.arrayContaining(['Pasted Waves', 'Parity fixture']),
   );
+  // …and takes its menu entry with it.
+  await backToEditor(page);
+  expect(await importExportItems(page)).not.toContainEqual(expect.stringMatching(/Shadertoy/));
 });
 
-test('Wallpaper Engine Export: shortcut leads to Plugins, then exports the open draft as a ZIP', async ({
+test('Wallpaper Engine Export: offered only while on, exports the open draft as a ZIP', async ({
   page,
 }) => {
   await openStudio(page);
 
-  await menuItem(page, /Export to Wallpaper Engine/);
-  await expect(page).toHaveURL(`/plugins?use=${WALLPAPER}`);
+  expect(await importExportItems(page)).not.toContainEqual(
+    expect.stringMatching(/Wallpaper Engine/),
+  );
+  await openPlugins(page);
   await installAvailable(page, WALLPAPER);
+  await setEnabled(page, WALLPAPER, true);
 
   const download = page.waitForEvent('download');
   await page.getByTestId(`run-${EXPORTER}`).click();
@@ -169,17 +224,17 @@ test('Wallpaper Engine Export: shortcut leads to Plugins, then exports the open 
   expect(listing).toContain('wallpaperPropertyListener');
   await expect(page.getByTestId('plugin-message')).toContainText(`Exported to ${stem}.zip.`);
 
-  // With the plugin on, the menu shortcut runs it directly.
-  await page.getByRole('link', { name: /back to the editor/i }).click();
-  await expect(page.locator('mat-toolbar.toolbar')).toBeVisible();
+  // With the plugin on, its menu entry runs it directly.
+  await backToEditor(page);
   const again = page.waitForEvent('download');
   await menuItem(page, /Export to Wallpaper Engine/);
   expect((await again).suggestedFilename()).toBe(`${stem}.zip`);
 
-  // Switched off, the shortcut leads back to Plugins instead of exporting.
-  await page.getByTestId('open-plugins').click();
-  await page.getByTestId(`plugin-enable-${WALLPAPER}`).getByRole('switch').click();
-  await page.getByRole('link', { name: /back to the editor/i }).click();
-  await menuItem(page, /Export to Wallpaper Engine/);
-  await expect(page).toHaveURL(`/plugins?use=${WALLPAPER}`);
+  // Switched off, the entry is gone rather than leading anywhere.
+  await openPlugins(page);
+  await setEnabled(page, WALLPAPER, false);
+  await backToEditor(page);
+  expect(await importExportItems(page)).not.toContainEqual(
+    expect.stringMatching(/Wallpaper Engine/),
+  );
 });

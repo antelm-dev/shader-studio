@@ -34,6 +34,16 @@ export interface ProviderField {
   remember?: 'shadertoyApiKey';
 }
 
+/**
+ * How the app's menus offer a contribution that uses an adapter: host text,
+ * translated, and a Material icon. The adapter is the app's, so its wording is
+ * too — a plugin's own name is used only when no adapter describes it.
+ */
+export interface AdapterCommand {
+  label: TranslationKey;
+  icon: string;
+}
+
 /** The bounded document a provider fetched, as it goes to the Worker. */
 export interface ProviderSource {
   /** The canonical id of what was fetched, e.g. a Shadertoy shader id. */
@@ -49,6 +59,7 @@ export interface ProviderSource {
  */
 export interface SourceProvider {
   readonly id: SourceProviderId;
+  readonly command?: AdapterCommand;
   readonly fields: readonly ProviderField[];
   /** Fetch the source document for these form values. */
   fetchSource(
@@ -80,6 +91,7 @@ export interface RuntimeOutput {
  */
 export interface ExportRuntime {
   readonly id: ExportRuntimeId;
+  readonly command?: AdapterCommand;
   assemble(data: unknown, textures: readonly RuntimeTexture[]): Result<RuntimeOutput>;
 }
 

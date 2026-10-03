@@ -26,6 +26,7 @@ import {
 import { AppThemes } from '../../themes/app-themes';
 import { ShaderStore } from '../../workspace/shader-store';
 import { DocumentStatus } from '../editor/document-status';
+import { PluginCommands, type PluginCommand } from '../../plugins/plugin-commands';
 import { MenuCommands, type MenuCommand } from '../menu-commands';
 import { WorkspaceActions } from '../workspace-actions';
 import { AppTitlebar } from './app-titlebar';
@@ -51,6 +52,8 @@ function stubCommand(id: string): MenuCommand {
 
 describe('AppTitlebar Help and View menus', () => {
   const language = signal({ language: 'en' as 'en' | 'fr' });
+  const pluginImports = signal<PluginCommand[]>([]);
+  const pluginExports = signal<PluginCommand[]>([]);
   const openKeyboardShortcuts = vi.fn();
   const checkForUpdates = vi.fn();
   const openAboutShadergrove = vi.fn();
@@ -159,12 +162,15 @@ describe('AppTitlebar Help and View menus', () => {
           },
         },
         {
+          provide: PluginCommands,
+          useValue: { imports: pluginImports, exports: pluginExports },
+        },
+        {
           provide: MenuCommands,
           useValue: {
             newShader: stubCommand('new'),
             import: (_mode: unknown, _key: string) => stubCommand(`import-${_key}`),
             exportShader: stubCommand('export'),
-            exportWallpaper: stubCommand('wallpaper'),
             exportAll: stubCommand('export-all'),
             toggleEditor: stubCommand('toggle-editor'),
             zenMode: stubCommand('zen-mode'),
@@ -218,6 +224,40 @@ describe('AppTitlebar Help and View menus', () => {
 
     items.at(-1)!.click();
     expect(toggleDevTools).toHaveBeenCalledOnce();
+  });
+
+  it('lists no plugin command in File while no plugin contributes one', () => {
+    pluginImports.set([]);
+    pluginExports.set([]);
+    const labels = labelsOf(openMenu(mount(), 'File'));
+    expect(labels).not.toContain('Import from Shadertoy…');
+    expect(labels).not.toContain('Export to Wallpaper Engine…');
+  });
+
+  it('follows the active plugins: their commands appear in place and leave with them', () => {
+    const plugin = (id: string, label: string): PluginCommand => ({
+      ...stubCommand(id),
+      ref: `pkg/${id}`,
+      label: () => label,
+    });
+    pluginImports.set([plugin('shadertoy', 'Import from Shadertoy…')]);
+    pluginExports.set([plugin('wallpaper', 'Export to Wallpaper Engine…')]);
+    const fixture = mount();
+    const labels = labelsOf(openMenu(fixture, 'File'));
+    expect(labels.indexOf('Import from Shadertoy…')).toBe(
+      labels.indexOf('import-action.importReplace') + 1,
+    );
+    expect(labels.indexOf('Export to Wallpaper Engine…')).toBe(labels.indexOf('export') + 1);
+
+    // Switched off: the open menu loses the rows at once.
+    pluginImports.set([]);
+    pluginExports.set([]);
+    fixture.detectChanges();
+    const after = labelsOf(
+      Array.from(document.querySelectorAll('.cdk-overlay-container button[mat-menu-item]')),
+    );
+    expect(after).not.toContain('Import from Shadertoy…');
+    expect(after).not.toContain('Export to Wallpaper Engine…');
   });
 
   it('orders Help menu with a divider before update/About actions', () => {
