@@ -1,0 +1,3 @@
+{
+  "description": "Import a Shadertoy shader into a new shader: by URL or ID with your own API key (buffers, Common, feedback and textures), or by pasting an Image pass."
+}

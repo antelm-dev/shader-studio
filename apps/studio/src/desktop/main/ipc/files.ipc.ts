@@ -1,12 +1,17 @@
 import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { defineIpcModule, handle } from 'electron-ipc-module';
 
 import { PLUGIN_LIMITS } from '@shadergrove/shared';
 import { parseBundle } from '@shadergrove/shared/validate';
 import type { DialogResult } from '../../contracts/contracts';
+import {
+  ProjectFolderSessions,
+  ProjectWriteCancelled,
+  sanitizeProjectStem,
+} from './project-folder';
 
 // A textured shader's bundle inlines its channel images as base64, and a
 // collection can hold many shaders — comfortably larger than the old
@@ -61,12 +66,13 @@ interface VideoSession {
 
 const videos = new Map<string, VideoSession>();
 
+const projectFolders = new ProjectFolderSessions();
+
 /** No frame of a shader render has any business being this big; a 4K PNG is a few MB. */
 const MAX_FRAME_BYTES = 64 * 1024 * 1024;
 const MAX_SEQUENCE_FRAMES = 100_000;
 /** A few minutes of 4K VP9 can land here; past this the renderer should have streamed. */
 const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;
-const MAX_WALLPAPER_BYTES = 256 * 1024 * 1024;
 
 /** Whatever the shader was called, reduced to something that is only ever a file name. */
 function sanitizeStem(stem: string): string {
@@ -289,32 +295,43 @@ export function createFilesIpc() {
         }
       },
     ),
-    'save-wallpaper': handle(
-      async (event, filename: string, bytes: Uint8Array): Promise<DialogResult<null>> => {
-        if (
-          !(bytes instanceof Uint8Array) ||
-          bytes.byteLength < 16 ||
-          bytes.byteLength > MAX_WALLPAPER_BYTES ||
-          bytes[0] !== 0x3c
-        ) {
-          return { status: 'error', message: 'Invalid or oversized wallpaper HTML document' };
-        }
+    /**
+     * An export runtime's project (e.g. a Wallpaper Engine web wallpaper),
+     * delivered as a new folder inside one the user picks, in three steps so
+     * the renderer can cancel at any point: pick the parent (`begin`), send the
+     * files (`write`: paths and sizes checked again here, an existing folder
+     * never overwritten, the folder committed only once every file is written),
+     * or `cancel`, which stops a write before its next file or its commit.
+     */
+    'begin-project-folder': handle(
+      async (event, stem: string): Promise<DialogResult<{ id: string }>> => {
         const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
         const options: OpenDialogOptions = {
-          title: 'Choose where to create the Wallpaper Engine project folder',
+          title: 'Choose where to create the project folder',
+          buttonLabel: 'Create here',
           properties: ['openDirectory', 'createDirectory'],
         };
         const picked = owner
           ? await dialog.showOpenDialog(owner, options)
           : await dialog.showOpenDialog(options);
         if (picked.canceled || !picked.filePaths[0]) return { status: 'cancelled' };
+        const sender = event.sender.id;
+        const id = projectFolders.begin(sender, sanitizeProjectStem(stem), picked.filePaths[0]);
+        event.sender.once('destroyed', () => projectFolders.forget(sender));
+        return { status: 'ok', value: { id } };
+      },
+    ),
+    'write-project-folder': handle(
+      async (
+        event,
+        id: string,
+        files: { path: string; bytes: Uint8Array }[],
+      ): Promise<DialogResult<{ path: string }>> => {
         try {
-          const stem = sanitizeStem(filename.replace(/\.html$/i, ''));
-          const directory = join(picked.filePaths[0], stem);
-          await mkdir(directory, { recursive: true });
-          await atomicWrite(join(directory, 'index.html'), bytes);
-          return { status: 'ok', value: null };
+          const path = await projectFolders.write(String(id), event.sender.id, files);
+          return { status: 'ok', value: { path } };
         } catch (error) {
+          if (error instanceof ProjectWriteCancelled) return { status: 'cancelled' };
           return {
             status: 'error',
             message: error instanceof Error ? error.message : String(error),
@@ -322,6 +339,9 @@ export function createFilesIpc() {
         }
       },
     ),
+    'cancel-project-folder': handle(async (event, id: string): Promise<void> => {
+      projectFolders.cancel(String(id), event.sender.id);
+    }),
     'begin-video': handle(
       async (event, stem: string): Promise<DialogResult<{ id: string; path: string }>> => {
         const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;

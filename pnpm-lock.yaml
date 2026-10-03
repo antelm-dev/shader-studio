@@ -23,6 +23,9 @@ importers:
       '@nx/nest':
         specifier: 23.1.0
         version: 23.1.0(@babel/traverse@7.29.7)(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(@nx/jest@23.1.0(@babel/traverse@7.29.7)(@types/node@24.13.3)(babel-plugin-macros@3.1.0)(nx@23.1.0)(typescript@6.0.3))(@types/node@24.13.3)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(chokidar@5.0.0)(eslint@10.8.0(jiti@2.7.0))(express@5.2.1)(nx@23.1.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typescript@6.0.3)
+      '@shadergrove/shared':
+        specifier: workspace:*
+        version: link:libs/shared
       nx:
         specifier: 23.1.0
         version: 23.1.0
@@ -373,6 +376,9 @@ importers:
       '@types/node':
         specifier: ^20.17.19
         version: 20.19.43
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
       playwright:
         specifier: ^1.57.0
         version: 1.61.1

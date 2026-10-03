@@ -15,6 +15,9 @@ import { HttpShaderApi, ShaderApi } from './api/shader-api';
 import { authInterceptor } from './auth/auth.interceptor';
 import { HttpI18nCatalog } from './i18n/catalog';
 import { provideI18n } from './i18n/provide-i18n';
+import { provideHostAdapters } from './plugins/host-adapters';
+import { ShadertoyApiProvider } from './plugins/providers/shadertoy-provider';
+import { WallpaperWebRuntime } from './rendering/wallpaper-runtime';
 import { provideAppThemes } from './themes/provide-app-themes';
 
 export const appConfig: ApplicationConfig = {
@@ -28,6 +31,11 @@ export const appConfig: ApplicationConfig = {
     HttpShaderApi,
     { provide: ShaderApi, useExisting: HttpShaderApi },
     provideI18n(HttpI18nCatalog),
+    // The host halves of the official plugins: what their manifests may name, nothing more.
+    provideHostAdapters({
+      sourceProviders: [ShadertoyApiProvider],
+      exportRuntimes: [WallpaperWebRuntime],
+    }),
     // Paints the chosen theme — built-in, or a plugin's once the plugins have loaded.
     provideAppThemes(),
     // Icons are ligatures in the bundled Material Symbols font, not legacy Material Icons.

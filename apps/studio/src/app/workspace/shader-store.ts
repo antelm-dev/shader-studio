@@ -706,27 +706,21 @@ export class ShaderStore {
   }
 
   /**
-   * Fetches a shader from Shadertoy and imports it the same way a `.shader.json`
-   * bundle is: buffers, the Common tab and channel wiring survive because the
-   * mapper (`@shadergrove/shared/shadertoy-api`) already produced a full
-   * bundle — this just runs it through the existing import pipeline.
+   * Imports one shader a project-importer plugin produced, already resolved
+   * and validated as a bundle by the host: in one library call, so it is
+   * created whole or not at all. Opens it and says so; `false` if it failed.
    */
-  async importShadertoyShader(idOrUrl: string, apiKey: string): Promise<void> {
+  async importProjectBundle(bundle: unknown, notice: string): Promise<boolean> {
     try {
-      const { bundle, warnings } = await this.api.importShadertoy(idOrUrl, apiKey);
       const result = await this.api.importBundle(bundle, 'rename');
       await this.refreshList();
-
       const first = result.imported[0];
       if (first) await this.forceSelect(first.id);
-
-      const suffix = warnings.length ? ` ${warnings.join(' ')}` : '';
-      this.documentState.notify(
-        `Imported “${first?.name ?? 'shader'}” from Shadertoy.${suffix}`,
-        false,
-      );
+      this.documentState.notify(notice, false);
+      return true;
     } catch (error) {
       this.report(error);
+      return false;
     }
   }
 

@@ -1,64 +1,127 @@
-import type {
-  ParamValue,
-  ShaderControl,
-  ShaderParams,
-  ShaderPayload,
-  TextureChannelPayload,
-} from '@shadergrove/shared/model';
-import { buildFullGlsl, expandMacros } from '@shadergrove/shared/glsl-export';
-import { composePass } from '@shadergrove/shared/pass-source';
-import { resolvePassOrder, type RenderPass, type ShaderProject } from '@shadergrove/shared/project';
-import { mimeFromExt } from '@shadergrove/shared/validate';
+/**
+ * The `wallpaper-web/v1` export runtime: host code that turns a Wallpaper
+ * Engine plugin's validated data into a web-wallpaper project.
+ *
+ * Everything executable here is the host's: the HTML shell and the WebGL
+ * player below are fixed templates, and the plugin's data — GLSL strings,
+ * pass wiring, property definitions — is only ever embedded as escaped JSON.
+ * Textures come from the host's own bytes, inlined as data URIs so the project
+ * needs nothing from the network or from outside its folder.
+ *
+ * Output, all relative to the project folder:
+ * - `index.html` — the wallpaper,
+ * - `project.json` — Wallpaper Engine's project file: `type: "web"`, the
+ *   entry file and one user property per control, with the same keys, types
+ *   and defaults the player's `wallpaperPropertyListener` reads.
+ */
+import { Injectable } from '@angular/core';
 
-export interface WallpaperExportInput {
-  name: string;
-  author?: string;
-  project: ShaderProject;
-  controls: readonly ShaderControl[];
-  params: ShaderParams;
-  channels: ShaderPayload['channels'];
-  /** Whether the shader's post-processing chain would alter the frame — any generic warning is about this, not any one effect. */
-  postProcessingActive: boolean;
+import {
+  WALLPAPER_WEB_RUNTIME,
+  validateWallpaperWebData,
+  type WallpaperWebData,
+} from '@shadergrove/shared/plugin';
+import { fail, mimeFromExt, ok, type Result } from '@shadergrove/shared/validate';
+
+import type { ExportRuntime, RuntimeOutput, RuntimeTexture } from '../plugins/host-adapters';
+
+/** The most a project may weigh: four 4 MiB textures inlined as base64, and the code, fit easily. */
+export const MAX_WALLPAPER_PROJECT_BYTES = 64 * 1024 * 1024;
+const TEXTURE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
+
+@Injectable()
+export class WallpaperWebRuntime implements ExportRuntime {
+  readonly id = WALLPAPER_WEB_RUNTIME;
+
+  assemble(data: unknown, textures: readonly RuntimeTexture[]): Result<RuntimeOutput> {
+    return assembleWallpaper(data, textures);
+  }
 }
 
-interface WallpaperChannel {
-  path: string | null;
-  wrap: TextureChannelPayload['wrap'];
-  filter: TextureChannelPayload['filter'];
-  flipY: boolean;
+export function assembleWallpaper(
+  input: unknown,
+  textures: readonly RuntimeTexture[],
+): Result<RuntimeOutput> {
+  const parsed = validateWallpaperWebData(input);
+  if (!parsed.ok) return parsed;
+  const data = parsed.value;
+
+  const channels = [0, 1, 2, 3].map((slot) => {
+    const sampling = data.channels.find((channel) => channel.slot === slot);
+    const texture = textures.find((entry) => entry.slot === slot);
+    if (!sampling || !texture || !TEXTURE_EXTENSIONS.has(texture.ext)) {
+      return { path: null, wrap: 'clamp', filter: 'linear', flipY: true };
+    }
+    return {
+      path: `data:${mimeFromExt(texture.ext)};base64,${base64(texture.bytes)}`,
+      wrap: sampling.wrap,
+      filter: sampling.filter,
+      flipY: sampling.flipY,
+    };
+  });
+
+  const player = {
+    format: 'shadergrove-wallpaper/v2',
+    vertex: data.vertex,
+    passes: data.passes,
+    // Every uniform with the draft's exact value; properties only override them.
+    uniforms: data.uniforms.map(({ uniform, kind }) => ({ uniform, kind })),
+    params: Object.fromEntries(data.uniforms.map(({ uniform, value }) => [uniform, value])),
+    controls: data.properties.map(({ key, uniform, type }) => ({ key, uniform, type })),
+    channels,
+  };
+
+  const encoder = new TextEncoder();
+  const html = encoder.encode(indexHtml(data.title, player));
+  const project = encoder.encode(`${JSON.stringify(projectJson(data), null, 2)}\n`);
+  if (html.byteLength + project.byteLength > MAX_WALLPAPER_PROJECT_BYTES) {
+    return fail('The wallpaper project is too large');
+  }
+  return ok({
+    stem: safeStem(data.title),
+    files: [
+      { path: 'index.html', bytes: html },
+      { path: 'project.json', bytes: project },
+    ],
+  });
 }
 
-interface WallpaperPass {
-  id: string;
-  name: string;
-  kind: 'image' | 'buffer';
-  fragment: string;
-  channels: RenderPass['channels'];
-  resolution: RenderPass['resolution'];
-  filter: RenderPass['filter'];
-  wrap: RenderPass['wrap'];
+/** Wallpaper Engine's `project.json` for a web wallpaper. */
+export function projectJson(data: WallpaperWebData): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  for (const property of data.properties) {
+    const base = { order: property.order, text: property.text, type: property.type };
+    switch (property.type) {
+      case 'slider':
+        properties[property.key] = {
+          ...base,
+          value: property.value,
+          min: property.min,
+          max: property.max,
+          step: property.step,
+          precision: property.precision,
+          fraction: property.precision > 0,
+        };
+        break;
+      case 'combo':
+        properties[property.key] = { ...base, value: property.value, options: property.options };
+        break;
+      default:
+        properties[property.key] = { ...base, value: property.value };
+    }
+  }
+  return {
+    file: 'index.html',
+    type: 'web',
+    title: data.title,
+    description: data.author
+      ? `${data.title} by ${data.author}, exported from Shadergrove.`
+      : `${data.title}, exported from Shadergrove.`,
+    general: { properties },
+  };
 }
 
-type WallpaperControl = ShaderControl & { wallpaperKey: string };
-
-interface WallpaperProject {
-  format: 'shader-studio-wallpaper/v1';
-  name: string;
-  author?: string;
-  vertex: string;
-  passes: WallpaperPass[];
-  controls: WallpaperControl[];
-  params: ShaderParams;
-  channels: WallpaperChannel[];
-}
-
-export interface WallpaperDocument {
-  document: Blob;
-  filename: string;
-  warnings: readonly string[];
-}
-
-function safeStem(value: string): string {
+export function safeStem(value: string): string {
   const stem = value
     .normalize('NFKD')
     .replace(/[^a-zA-Z0-9._-]+/g, '-')
@@ -67,56 +130,26 @@ function safeStem(value: string): string {
   return stem || 'shader-wallpaper';
 }
 
-function propertyKeys(controls: readonly ShaderControl[]): Map<string, string> {
-  const keys = new Map<string, string>();
-  const used = new Set<string>();
-
-  for (const control of controls) {
-    const normalized = control.key.replace(/[^a-zA-Z0-9]/g, '');
-    const base = normalized ? `ss${normalized}` : 'sscontrol';
-    let key = base;
-    let suffix = 2;
-    while (used.has(key.toLowerCase())) key = `${base}${suffix++}`;
-    used.add(key.toLowerCase());
-    keys.set(control.key, key);
-  }
-
-  return keys;
-}
-
-function javascriptAssignment(value: unknown): string {
-  const json = JSON.stringify(value, null, 2)
-    .replaceAll('<', '\\u003c')
-    .replaceAll('\u2028', '\\u2028')
-    .replaceAll('\u2029', '\\u2029');
-  return `window.__SHADER_STUDIO_WALLPAPER__ = ${json};\n`;
-}
-
-const EXTENSION_DIRECTIVE = /^\s*#extension[^\r\n]*$/gm;
-const FLOAT_PRECISION = /^\s*precision\s+(?:lowp|mediump|highp)\s+float\s*;/m;
-const DERIVATIVE_CALL = /\b(?:dFdx|dFdy|fwidth)\s*\(/;
-
-/** Put WebGL 1 directives and float precision before generated uniform declarations. */
-export function prepareWallpaperFragment(source: string): string {
-  const extensions: string[] = source.match(EXTENSION_DIRECTIVE) ?? [];
-  if (
-    DERIVATIVE_CALL.test(source) &&
-    !extensions.some((line) => line.includes('GL_OES_standard_derivatives'))
-  ) {
-    extensions.unshift('#extension GL_OES_standard_derivatives : enable');
-  }
-
-  const precision = source.match(FLOAT_PRECISION)?.[0].trim() ?? 'precision highp float;';
-  const body = source.replace(EXTENSION_DIRECTIVE, '').replace(FLOAT_PRECISION, '').trimStart();
-  return [...extensions.map((line) => line.trim()), precision, body].join('\n');
-}
-
-function indexHtml(name: string, project: WallpaperProject): string {
-  const escaped = name
+function escapeHtml(value: string): string {
+  return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+}
+
+/** JSON that cannot close the `<script>` it sits in, nor break a JS string. */
+function scriptJson(value: unknown): string {
+  return JSON.stringify(value)
+    .replaceAll('<', '\\u003c')
+    .replaceAll('>', '\\u003e')
+    .replaceAll('&', '\\u0026')
+    .replaceAll(' ', '\\u2028')
+    .replaceAll(' ', '\\u2029');
+}
+
+function indexHtml(title: string, player: unknown): string {
+  const escaped = escapeHtml(title);
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -134,90 +167,30 @@ function indexHtml(name: string, project: WallpaperProject): string {
   <body>
     <canvas id="shader" aria-label="${escaped}"></canvas>
     <pre id="error" hidden></pre>
-    <script>${javascriptAssignment(project)}</script>
-    <script>${WALLPAPER_RUNTIME}</script>
+    <script>window.__SHADERGROVE_WALLPAPER__ = ${scriptJson(player)};</script>
+    <script>${WALLPAPER_PLAYER}</script>
   </body>
 </html>
 `;
 }
 
-/**
- * Packages one shader as a dependency-free live WebGL document. Runtime,
- * project and textures are inline so the downloaded HTML itself can be dropped
- * onto Wallpaper Engine's Create Wallpaper target without an extraction step.
- */
-export function buildWallpaperDocument(input: WallpaperExportInput): WallpaperDocument {
-  const ordered = resolvePassOrder(input.project);
-  if (ordered.errors.length > 0) {
-    throw new Error(ordered.errors.map((error) => error.message).join(' '));
+function base64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
   }
-
-  const passes: WallpaperPass[] = ordered.order.map((pass) => {
-    const composed = composePass(input.project, pass);
-    if (composed.errors.length > 0) {
-      throw new Error(composed.errors.map((error) => error.message).join(' '));
-    }
-    return {
-      id: pass.id,
-      name: pass.name,
-      kind: pass.kind === 'image' ? 'image' : 'buffer',
-      fragment: prepareWallpaperFragment(buildFullGlsl(composed.source, input.controls)),
-      channels: pass.channels,
-      resolution: pass.resolution,
-      filter: pass.filter,
-      wrap: pass.wrap,
-    };
-  });
-
-  const keys = propertyKeys(input.controls);
-  const controls = input.controls.map(
-    (control): WallpaperControl => ({ ...control, wallpaperKey: keys.get(control.key)! }),
-  );
-  const params = Object.fromEntries(
-    input.controls.map((control) => [
-      control.key,
-      (input.params[control.key] ?? control.default) as ParamValue,
-    ]),
-  );
-
-  const channels: WallpaperChannel[] = input.channels.map((channel) => ({
-    path:
-      channel.ext && channel.data
-        ? `data:${mimeFromExt(channel.ext)};base64,${channel.data}`
-        : null,
-    wrap: channel.wrap,
-    filter: channel.filter,
-    flipY: channel.flipY,
-  }));
-  const project: WallpaperProject = {
-    format: 'shader-studio-wallpaper/v1',
-    name: input.name,
-    ...(input.author ? { author: input.author } : {}),
-    vertex: expandMacros(input.project.vertex),
-    passes,
-    controls,
-    params,
-    channels,
-  };
-
-  const warnings = input.postProcessingActive
-    ? [
-        'Post-processing is not included; the exported wallpaper renders the shader passes without it.',
-      ]
-    : [];
-
-  return {
-    document: new Blob([indexHtml(input.name, project)], { type: 'text/html' }),
-    filename: `${safeStem(input.name)}-wallpaper-engine.html`,
-    warnings,
-  };
+  return btoa(binary);
 }
 
-/** A small native-WebGL player kept as source so the exported ZIP has no CDN dependency. */
-export const WALLPAPER_RUNTIME = String.raw`(function () {
+/**
+ * The host's WebGL 1 player, kept as source so the project has no CDN
+ * dependency. Property values from Wallpaper Engine are coerced by the type
+ * the host recorded, never trusted as given.
+ */
+export const WALLPAPER_PLAYER = String.raw`(function () {
   "use strict";
 
-  var project = window.__SHADER_STUDIO_WALLPAPER__;
+  var project = window.__SHADERGROVE_WALLPAPER__;
   var canvas = document.getElementById("shader");
   var errorBox = document.getElementById("error");
   var gl = canvas.getContext("webgl", { alpha: false, antialias: true, preserveDrawingBuffer: false });
@@ -273,14 +246,21 @@ export const WALLPAPER_RUNTIME = String.raw`(function () {
   window.wallpaperPropertyListener = {
     applyUserProperties: function (properties) {
       project.controls.forEach(function (control) {
-        var property = properties[control.wallpaperKey];
-        if (!property) return;
-        params[control.key] = property.value;
+        var property = properties[control.key];
+        if (!property || !("value" in property)) return;
+        params[control.uniform] = coerce(control.type, property.value, params[control.uniform]);
       });
     }
   };
 
   requestAnimationFrame(frame);
+
+  function coerce(type, value, fallback) {
+    if (type === "bool") return value === true || value === "true";
+    if (type === "color") return typeof value === "string" ? value : fallback;
+    var number = Number(value);
+    return isFinite(number) ? number : fallback;
+  }
 
   function fail(message) {
     if (errorBox) { errorBox.hidden = false; errorBox.textContent = String(message); }
@@ -293,7 +273,7 @@ export const WALLPAPER_RUNTIME = String.raw`(function () {
 
   function vertexSource(source) {
     var declarations = [];
-    if (!/^\\s*precision\\s+\\w+\\s+float\\s*;/m.test(source)) declarations.push("precision highp float;");
+    if (!/^\s*precision\s+\w+\s+float\s*;/m.test(source)) declarations.push("precision highp float;");
     [["position", "attribute vec3 position;"], ["uv", "attribute vec2 uv;"],
      ["modelMatrix", "uniform mat4 modelMatrix;"], ["modelViewMatrix", "uniform mat4 modelViewMatrix;"],
      ["projectionMatrix", "uniform mat4 projectionMatrix;"], ["viewMatrix", "uniform mat4 viewMatrix;"],
@@ -333,7 +313,6 @@ export const WALLPAPER_RUNTIME = String.raw`(function () {
   }
 
   function set1f(compiled, name, value) { var at = location(compiled, name); if (at !== null) gl.uniform1f(at, Number(value)); }
-  function set1i(compiled, name, value) { var at = location(compiled, name); if (at !== null) gl.uniform1i(at, value ? 1 : 0); }
   function set2f(compiled, name, x, y) { var at = location(compiled, name); if (at !== null) gl.uniform2f(at, x, y); }
   function set4f(compiled, name, a, b, c, d) { var at = location(compiled, name); if (at !== null) gl.uniform4f(at, a, b, c, d); }
 
@@ -351,11 +330,11 @@ export const WALLPAPER_RUNTIME = String.raw`(function () {
   }
 
   function color(value) {
-    if (typeof value === "string" && value.indexOf(" ") >= 0) return value.split(/\\s+/).map(Number).slice(0, 3);
-    var hex = String(value || "#ffffff").replace("#", "");
-    if (hex.length === 3) hex = hex.split("").map(function (part) { return part + part; }).join("");
-    var number = parseInt(hex, 16);
-    return [((number >> 16) & 255) / 255, ((number >> 8) & 255) / 255, (number & 255) / 255];
+    var parts = String(value || "1 1 1").trim().split(/\s+/).map(Number);
+    return [0, 1, 2].map(function (index) {
+      var part = parts[index];
+      return isFinite(part) ? Math.min(1, Math.max(0, part)) : 1;
+    });
   }
 
   function applyUniforms(compiled, width, height) {
@@ -365,12 +344,12 @@ export const WALLPAPER_RUNTIME = String.raw`(function () {
     set2f(compiled, "iMouseVel", velocity[0], velocity[1]);
     var clickAt = location(compiled, "u_clickData");
     if (clickAt !== null) gl.uniform3fv(clickAt, clicks);
-    project.controls.forEach(function (control) {
-      var value = params[control.key];
-      var at = location(compiled, "u_" + control.key);
+    project.uniforms.forEach(function (entry) {
+      var value = params[entry.uniform];
+      var at = location(compiled, "u_" + entry.uniform);
       if (at === null) return;
-      if (control.type === "boolean") gl.uniform1i(at, value ? 1 : 0);
-      else if (control.type === "color") gl.uniform3fv(at, color(value));
+      if (entry.kind === "bool") gl.uniform1i(at, value ? 1 : 0);
+      else if (entry.kind === "color") gl.uniform3fv(at, color(value));
       else gl.uniform1f(at, Number(value));
     });
   }
@@ -515,7 +494,7 @@ export const WALLPAPER_RUNTIME = String.raw`(function () {
       sampling(channel, image.width, image.height, gl.UNSIGNED_BYTE);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     };
-    image.onerror = function () { console.warn("Could not load texture", channel.path); };
+    image.onerror = function () { console.warn("Could not load a texture"); };
     image.src = channel.path;
     return texture;
   }

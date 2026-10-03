@@ -501,7 +501,7 @@ export class ShadersController {
     let result: { payload: ShaderPayload; warnings: string[] };
     try {
       const { importShadertoyShader } = await import('@shadergrove/shared/shadertoy-api');
-      result = await importShadertoyShader(idOrUrl, apiKey, { fetch });
+      result = await importShadertoyShader(idOrUrl, apiKey, { fetch: shadertoyFetch });
     } catch (error) {
       this.logger.warn(`shadertoy import of "${idOrUrl}" failed: ${String(error)}`);
       throw new StorageError('io', error instanceof Error ? error.message : String(error));
@@ -515,6 +515,82 @@ export class ShadersController {
       .status(201)
       .json({ bundle: buildShaderBundle(result.payload), warnings: result.warnings });
   }
+
+  @ApiTags('transfer')
+  @ApiOperation({
+    summary: 'Fetch a Shadertoy source document',
+    description:
+      'The `shadertoy-api/v1` source provider of the installed Shadertoy plugin: fetches ' +
+      '`api/v1/shaders/{id}` with the caller’s own key and returns the JSON document, ' +
+      'bounded to 2 MiB. Nothing is stored and nothing is converted here.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['idOrUrl', 'apiKey'],
+      properties: {
+        idOrUrl: { type: 'string', example: 'https://www.shadertoy.com/view/Ms2SD1' },
+        apiKey: { type: 'string', description: 'Your Shadertoy API key. Never stored.' },
+      },
+    },
+  })
+  @ApiErrors(400, 500)
+  @Post('import/shadertoy/source')
+  @HttpCode(200)
+  async shadertoySource(@Body() body: JsonBody | undefined): Promise<unknown> {
+    const input = body ?? {};
+    const idOrUrl = requiredString(input, 'idOrUrl');
+    const apiKey = requiredString(input, 'apiKey');
+    const { fetchShadertoySource } = await import('@shadergrove/shared/shadertoy-api');
+    try {
+      return await fetchShadertoySource(idOrUrl, apiKey, { fetch: shadertoyFetch });
+    } catch (error) {
+      this.logger.warn(`shadertoy source "${idOrUrl.slice(0, 120)}" failed: ${messageOf(error)}`);
+      throw new StorageError('io', messageOf(error));
+    }
+  }
+
+  @ApiTags('transfer')
+  @ApiOperation({
+    summary: 'Fetch a Shadertoy texture',
+    description:
+      'Fetches one Shadertoy media file (`/media/a/…`, `/presets/…`; PNG, JPEG or WebP) for ' +
+      'the Shadertoy plugin, bounded to the texture limit. Any other path is refused.',
+  })
+  @ApiQuery({ name: 'path', example: '/media/a/52d2a8f5.jpg' })
+  @ApiProduces('application/octet-stream')
+  @ApiErrors(400, 500)
+  @Get('import/shadertoy/asset')
+  async shadertoyAsset(@Query('path') path: string, @Res() response: Response): Promise<void> {
+    const { fetchShadertoyAsset, isShadertoyAssetPath } =
+      await import('@shadergrove/shared/shadertoy-api');
+    if (!isShadertoyAssetPath(path)) {
+      throw new StorageError('invalid', 'That is not a Shadertoy texture path');
+    }
+    let bytes: Uint8Array;
+    try {
+      bytes = await fetchShadertoyAsset(path, { fetch: shadertoyFetch });
+    } catch (error) {
+      throw new StorageError('io', messageOf(error));
+    }
+    // Served as opaque bytes: the client sniffs the image itself, the browser never renders it here.
+    response
+      .status(200)
+      .setHeader('Content-Type', 'application/octet-stream')
+      .setHeader('X-Content-Type-Options', 'nosniff')
+      .setHeader('Cache-Control', 'private, no-store')
+      .end(Buffer.from(bytes));
+  }
+}
+
+const SHADERTOY_TIMEOUT_MS = 15_000;
+
+/** Node's fetch with a per-request deadline; the Shadertoy fetchers pick everything else. */
+const shadertoyFetch = (url: string, init?: { redirect?: 'manual' }) =>
+  fetch(url, { ...init, signal: AbortSignal.timeout(SHADERTOY_TIMEOUT_MS) });
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function attachmentName(name: string): string {

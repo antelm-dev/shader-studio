@@ -287,4 +287,56 @@ describe('PluginInstallations', () => {
     draft.set(null);
     expect(adoption.adopt(candidate)).toEqual({ ok: false, reason: 'no-shader' });
   });
+  it('gives operations a context that goes stale on disable, update, removal or sign-in', async () => {
+    const installations = setup();
+    await settle();
+    await installations.install(okReview(installations));
+    expect(installations.context('dev.example.tint')).toBeNull();
+    await installations.setEnabled('dev.example.tint', true);
+
+    const context = installations.context('dev.example.tint')!;
+    expect(context).toMatchObject({ profile: 'anonymous', version: '1.0.0' });
+    expect(installations.isCurrent(context)).toBe(true);
+
+    const work = installations.begin('dev.example.tint');
+    await installations.setEnabled('dev.example.tint', false);
+    expect(work.signal.aborted).toBe(true);
+    expect(installations.isCurrent(context)).toBe(false);
+
+    await installations.setEnabled('dev.example.tint', true);
+    const again = installations.context('dev.example.tint')!;
+    const update = installations.begin('dev.example.tint');
+    await installations.installReviewedUpdate(
+      okReview(installations, packageText({ version: '1.1.0' })),
+    );
+    expect(update.signal.aborted).toBe(true);
+    expect(installations.isCurrent(again)).toBe(false);
+    expect(installations.find('dev.example.tint')?.active).toBe(false);
+
+    await installations.setEnabled('dev.example.tint', true);
+    const signedIn = installations.context('dev.example.tint')!;
+    const pending = installations.begin('dev.example.tint');
+    user.set({ id: 'bob' });
+    status.set('authenticated');
+    await settle();
+    expect(pending.signal.aborted).toBe(true);
+    expect(installations.isCurrent(signedIn)).toBe(false);
+  });
+
+  it('never installs a catalogue version over itself, and keeps the old one when an update fails', async () => {
+    const installations = setup();
+    await settle();
+    await installations.install(okReview(installations));
+    await expect(installations.installReviewedUpdate(okReview(installations))).rejects.toThrow(
+      /already installed/,
+    );
+
+    const failing = installations.review(bytes(packageText({ version: '2.0.0' })));
+    if (!failing.ok) throw new Error();
+    stores.byProfile.get('anonymous')!.set = () => {
+      throw new Error('disk full');
+    };
+    await expect(installations.installReviewedUpdate(failing)).rejects.toThrow(/disk full/);
+    expect(installations.find('dev.example.tint')?.plugin?.manifest.version).toBe('1.0.0');
+  });
 });

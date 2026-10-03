@@ -54,6 +54,7 @@ import { ShaderBrowser } from './ui/browser/shader-browser';
 import { TransportBar } from './ui/layout/transport-bar';
 import { StartupCoordinator } from './workspace/startup-coordinator';
 import { WorkspaceActions } from './ui/workspace-actions';
+import { PluginEntryPoints } from './plugins/plugin-entry-points';
 import { I18n, LANGUAGE_OPTIONS, type AppLocale } from './i18n/i18n';
 import { TranslatePipe } from './i18n/translate.pipe';
 import { AuthService } from './auth/auth.service';
@@ -100,6 +101,7 @@ export class App {
   protected readonly preferences = inject(Preferences);
   protected readonly themes = inject(AppThemes);
   protected readonly workspace = inject(WorkspaceActions);
+  private readonly pluginEntries = inject(PluginEntryPoints);
   protected readonly desktop = inject(DesktopPlatform);
   protected readonly status = inject(DocumentStatus);
   protected readonly commands = inject(MenuCommands);
@@ -302,7 +304,8 @@ export class App {
       id: 'import-shadertoy',
       icon: () => 'public',
       label: () => this.i18n.t('action.importShadertoy'),
-      action: () => void this.workspace.importShadertoy(),
+      // Opens the enabled Shadertoy importer plugin in Plugins, or Plugins to install it.
+      action: () => void this.pluginEntries.openShadertoyImport(),
     },
     this.commands.exportShader,
     this.commands.exportWallpaper,

@@ -16,6 +16,7 @@
     "apps/studio-e2e/.auth/**",
     "apps/studio/src/desktop/contracts/ipc-bridge.ts",
     "tools/workspace/fixtures/plugins/isf/isf.sgplugin.json",
+    "apps/studio/src/plugins/*.sgplugin.json",
     ".angular/**",
     "**/.next/**",
     "apps/website/out/**",

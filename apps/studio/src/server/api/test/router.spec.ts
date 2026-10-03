@@ -362,6 +362,8 @@ describe('authentication', () => {
     ['GET', '/api/export'],
     ['POST', '/api/import'],
     ['POST', '/api/import/shadertoy'],
+    ['POST', '/api/import/shadertoy/source'],
+    ['GET', '/api/import/shadertoy/asset?path=/media/a/x.png'],
   ];
 
   it('rejects every protected endpoint without a session', async () => {
@@ -673,5 +675,26 @@ describe('audit log', () => {
       const token = new URL(mail.link).searchParams.get('token');
       if (token) expect(serialised).not.toContain(token);
     }
+  });
+});
+
+describe('Shadertoy source provider routes', () => {
+  it('refuses anything but a Shadertoy media path, without fetching it', async () => {
+    const network = vi.spyOn(globalThis, 'fetch');
+    for (const path of ['https://evil.example/x.png', '/media/a/../x.png', '/api/v1/shaders/x']) {
+      const response = await authFetch(
+        alice,
+        `/api/import/shadertoy/asset?path=${encodeURIComponent(path)}`,
+      );
+      expect(`${path} → ${response.status}`).toBe(`${path} → 400`);
+    }
+    // Only the test's own requests to this server went out; nothing to Shadertoy or elsewhere.
+    expect(network.mock.calls.every(([url]) => String(url).startsWith(base))).toBe(true);
+    network.mockRestore();
+  });
+
+  it('requires an id and a key before fetching a source document', async () => {
+    const response = await postJson(alice, '/api/import/shadertoy/source', { idOrUrl: 'abc' });
+    expect(response.status).toBe(400);
   });
 });

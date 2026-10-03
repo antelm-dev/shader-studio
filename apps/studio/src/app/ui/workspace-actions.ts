@@ -1,12 +1,8 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, Injector, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 
-import {
-  hasActivePostProcessing,
-  type ImportMode,
-  type ShaderBundle,
-} from '@shadergrove/shared/model';
+import type { ImportMode } from '@shadergrove/shared/model';
 import { composePass } from '@shadergrove/shared/pass-source';
 import { imagePass } from '@shadergrove/shared/project';
 import type { SyncRemoveMode, SyncRemoveResult } from '../../desktop/contracts/contracts';
@@ -18,16 +14,14 @@ import { DesktopUpdater } from '../desktop/desktop-updater';
 import { ShaderStore, type EditorDocument } from '../workspace/shader-store';
 import { I18n } from '../i18n/i18n';
 import { buildFullGlsl } from '@shadergrove/shared/glsl-export';
-import { convertShadertoy } from '@shadergrove/shared/shadertoy-import';
 import type { ConfirmDialogData } from './dialogs/confirm-dialog';
 import type { DeleteLinkedDialogData } from './dialogs/delete-linked-dialog';
 import type { NewShaderDialogResult } from './dialogs/new-shader-dialog';
 import type { PromptDialogData, PromptDialogResult } from './dialogs/prompt-dialog';
-import type { ShadertoyImportDialogResult } from './dialogs/shadertoy-import-dialog';
 import type { UnsavedChoice } from './dialogs/unsaved-changes-dialog';
 import type { ExplorerContextCommand, ExplorerReorderIntent } from './file-explorer/contract';
 import { OpenDocuments } from './editor/open-documents';
-import { buildWallpaperDocument } from '../rendering/wallpaper-export';
+import { PluginEntryPoints } from '../plugins/plugin-entry-points';
 
 const ABOUT_DIALOG_ID = 'about-shader-studio';
 const SHORTCUTS_DIALOG_ID = 'keyboard-shortcuts';
@@ -51,6 +45,8 @@ export class WorkspaceActions {
   private readonly auth = inject(AuthService);
   private readonly sync = inject(DesktopSync);
   private readonly account = inject(DesktopAccount);
+  // Resolved on use: the plugin entry points reach back here for the unsaved-changes guard.
+  private readonly injector = inject(Injector);
   private transitionInFlight: Promise<boolean> | null = null;
 
   guardedTransition(action: () => void | Promise<void>): Promise<boolean> {
@@ -200,7 +196,8 @@ export class WorkspaceActions {
     );
     if (!result) return;
     if (result.action === 'shadertoy') {
-      await this.importShadertoy();
+      // Importing from Shadertoy is the Shadertoy plugin's: its form lives in Plugins.
+      await this.injector.get(PluginEntryPoints).openShadertoyImport();
       return;
     }
     await this.guardedTransition(() => this.store.create(result.name));
@@ -498,53 +495,6 @@ export class WorkspaceActions {
 
   // --- Import / export ----------------------------------------------------
 
-  async importShadertoy(): Promise<void> {
-    const { ShadertoyImportDialog } = await import('./dialogs/shadertoy-import-dialog');
-    const input = await firstValueFrom(
-      this.dialog
-        .open<InstanceType<typeof ShadertoyImportDialog>, never, ShadertoyImportDialogResult>(
-          ShadertoyImportDialog,
-          { width: '800px', maxWidth: '94vw' },
-        )
-        .afterClosed(),
-    );
-    if (!input) return;
-
-    if (input.mode === 'api') {
-      // The importer fetches the shader, its buffers/Common tab/channel wiring
-      // and its textures, then imports the resulting bundle directly — there is
-      // no intermediate "create, then fill in" step like the paste flow below.
-      await this.guardedTransition(() =>
-        this.store.importShadertoyShader(input.idOrUrl, input.apiKey),
-      );
-      return;
-    }
-
-    let converted;
-    try {
-      converted = convertShadertoy(input.source);
-    } catch (error) {
-      this.store.notice.set({
-        text: this.i18n.t('notice.shadertoyFailed', { error: (error as Error).message }),
-        error: true,
-      });
-      return;
-    }
-
-    await this.guardedTransition(async () => {
-      const previousId = this.store.selectedId();
-      await this.store.create(input.name);
-      if (!this.store.selectedId() || this.store.selectedId() === previousId) return;
-      this.store.setFragment(converted.fragment);
-      if (!(await this.store.save())) return;
-      const suffix = converted.warnings.length ? ` ${converted.warnings.join(' ')}` : '';
-      this.store.notice.set({
-        text: this.i18n.t('notice.shadertoyImported', { name: input.name, suffix }),
-        error: false,
-      });
-    });
-  }
-
   async exportShader(id: string, name: string): Promise<void> {
     try {
       const bundle = await this.store.exportShader(id);
@@ -557,44 +507,6 @@ export class WorkspaceActions {
     } catch (error) {
       this.store.notice.set({
         text: this.i18n.t('notice.exportFailed', { error: String(error) }),
-        error: true,
-      });
-    }
-  }
-
-  async exportWallpaper(): Promise<void> {
-    const record = this.store.record();
-    const draft = this.store.draft();
-    if (!record || !draft) return;
-
-    try {
-      // The bundle supplies texture bytes. Editable parts come from the draft,
-      // so exporting is a snapshot and never forces an unrelated save.
-      const bundle = (await this.store.exportShader(record.id)) as ShaderBundle;
-      const wallpaper = buildWallpaperDocument({
-        name: record.name,
-        ...(record.author ? { author: record.author } : {}),
-        project: draft.project,
-        controls: this.store.controls(),
-        params: this.store.params(),
-        channels: bundle.shader.channels,
-        postProcessingActive: hasActivePostProcessing(draft.render),
-      });
-
-      if (this.desktop.available) {
-        if (!(await this.desktop.saveWallpaper(wallpaper.filename, wallpaper.document))) return;
-      } else {
-        this.downloadBlob(wallpaper.document, wallpaper.filename);
-      }
-
-      const warning = wallpaper.warnings.length > 0 ? ` ${wallpaper.warnings.join(' ')}` : '';
-      this.store.notice.set({
-        text: this.i18n.t('notice.wallpaperExported', { name: record.name, warning }),
-        error: false,
-      });
-    } catch (error) {
-      this.store.notice.set({
-        text: this.i18n.t('notice.wallpaperExportFailed', { error: String(error) }),
         error: true,
       });
     }

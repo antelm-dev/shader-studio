@@ -14,9 +14,14 @@
 import type { ShaderParams } from '@shadergrove/shared/model';
 import {
   PLUGIN_LIMITS,
+  PROJECT_LIMITS,
   exporterMethod,
   importerMethod,
+  projectExporterMethod,
+  projectImporterMethod,
   utf8Bytes,
+  validateProjectCandidate,
+  validateProjectExportEnvelope,
   type ExporterContribution,
   type ExporterInput,
   type ExporterResult,
@@ -24,6 +29,12 @@ import {
   type ImporterInput,
   type ImporterResult,
   type PluginPackage,
+  type ProjectCandidate,
+  type ProjectExportInput,
+  type ProjectExportResult,
+  type ProjectExporterContribution,
+  type ProjectImportInput,
+  type ProjectImporterContribution,
 } from '@shadergrove/shared/plugin';
 import { sanitizeParams } from '@shadergrove/shared/validate';
 
@@ -133,9 +144,100 @@ export class PluginHost {
     return validateExport(result, contribution);
   }
 
+  /**
+   * Run a `projectImporter` on one host-rendered input: pasted text, or the
+   * source document a host provider fetched. The input is a plain-data copy
+   * bounded before it crosses; credentials are never part of it. The reply is
+   * validated here — a malformed candidate rejects, and nothing is adopted.
+   */
+  async importProject(
+    contributionId: string,
+    input: ProjectImportInput,
+    options: CallOptions = {},
+  ): Promise<ProjectCandidate> {
+    const contribution = this.contribution(contributionId, 'projectImporter');
+    if (!contribution.modes.includes(input.mode)) {
+      throw new PluginCallError('input-invalid', `${contribution.name} has no ${input.mode} mode`);
+    }
+    let sent: ProjectImportInput;
+    if (input.mode === 'paste') {
+      if (typeof input.text !== 'string' || utf8Bytes(input.text) > PROJECT_LIMITS.pasteBytes) {
+        throw new PluginCallError(
+          'input-too-large',
+          'Pasted text is larger than a plugin may read',
+        );
+      }
+      sent = { mode: 'paste', name: String(input.name ?? '').slice(0, 64), text: input.text };
+    } else {
+      if (input.provider !== contribution.provider) {
+        throw new PluginCallError(
+          'input-invalid',
+          `${contribution.name} does not use that provider`,
+        );
+      }
+      const source = jsonCopy(input.source, PROJECT_LIMITS.sourceBytes);
+      sent = {
+        mode: 'provider',
+        provider: input.provider,
+        sourceId: String(input.sourceId).slice(0, 128),
+        source,
+      };
+    }
+    const size = serializedBytes(sent)!;
+    if (size > Math.min(contribution.maxInputBytes, PLUGIN_LIMITS.callInputBytes)) {
+      throw new PluginCallError('input-too-large', 'Input exceeds the importer limit');
+    }
+    const result = await this.run(
+      projectImporterMethod(contributionId),
+      sent,
+      [],
+      contribution.maxOutputBytes,
+      options,
+    );
+    const candidate = validateProjectCandidate(result);
+    if (!candidate.ok) {
+      throw new PluginCallError('output-invalid', candidate.errors[0] ?? 'Invalid project');
+    }
+    return candidate.value;
+  }
+
+  /**
+   * Run a `projectExporter` on a snapshot of the draft. Texture bytes stay
+   * here: the snapshot carries their metadata only. The reply's `data` is the
+   * runtime's to validate; only its envelope is checked here.
+   */
+  async exportProject(
+    contributionId: string,
+    snapshot: ProjectExportInput,
+    options: CallOptions = {},
+  ): Promise<ProjectExportResult> {
+    const contribution = this.contribution(contributionId, 'projectExporter');
+    const input = jsonCopy(
+      snapshot,
+      Math.min(contribution.maxInputBytes, PLUGIN_LIMITS.callInputBytes),
+    );
+    const result = await this.run(
+      projectExporterMethod(contributionId),
+      input,
+      [],
+      contribution.maxOutputBytes,
+      options,
+    );
+    const envelope = validateProjectExportEnvelope(result);
+    if (!envelope.ok) {
+      throw new PluginCallError('output-invalid', envelope.errors[0] ?? 'Invalid export');
+    }
+    return envelope.value;
+  }
+
   private contribution(id: string, kind: 'importer'): ImporterContribution;
   private contribution(id: string, kind: 'exporter'): ExporterContribution;
-  private contribution(id: string, kind: 'importer' | 'exporter') {
+  private contribution(id: string, kind: 'projectImporter'): ProjectImporterContribution;
+  private contribution(id: string, kind: 'projectExporter'): ProjectExporterContribution;
+  private contribution(
+    id: string,
+    kind: 'importer' | 'exporter' | 'projectImporter' | 'projectExporter',
+  ) {
     const found = this.plugin.manifest.contributions.find((c) => c.id === id && c.kind === kind);
     if (!found || !this.plugin.code) {
       throw new PluginCallError('unknown-contribution', `No ${kind} "${id}" in this package`);

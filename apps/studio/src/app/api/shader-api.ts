@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, fromEvent, takeUntil, type Observable } from 'rxjs';
 
 import type {
   ApiErrorBody,
@@ -91,11 +91,24 @@ export abstract class ShaderApi {
   abstract setTexture(id: string, channel: number, upload: TextureUpload): Promise<ShaderRecord>;
   abstract clearTexture(id: string, channel: number): Promise<ShaderRecord>;
   abstract setThumbnail(id: string, upload: ThumbnailUpload): Promise<ShaderRecord>;
-  /** Fetches a shader from Shadertoy and returns it as an importable bundle. */
-  abstract importShadertoy(
+  /** The Shadertoy JSON document for an id or URL (the `shadertoy-api/v1` provider). */
+  abstract fetchShadertoySource(
     idOrUrl: string,
     apiKey: string,
-  ): Promise<{ bundle: Bundle; warnings: string[] }>;
+    signal?: AbortSignal,
+  ): Promise<{ sourceId: string; source: unknown }>;
+  /** One Shadertoy media file by path (the `shadertoy-api/v1` provider). */
+  abstract fetchShadertoyAsset(path: string, signal?: AbortSignal): Promise<Uint8Array>;
+}
+
+/** An observable that stops — so its request is cancelled — when `signal` aborts. */
+export function abortable<T>(source: Observable<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return firstValueFrom(source);
+  signal.throwIfAborted();
+  return firstValueFrom(source.pipe(takeUntil(fromEvent(signal, 'abort')))).catch((error) => {
+    signal.throwIfAborted();
+    throw error;
+  });
 }
 
 @Injectable()
@@ -197,14 +210,33 @@ export class HttpShaderApi extends ShaderApi {
     return this.post<ImportResult>('/import', { bundle, mode });
   }
 
-  override importShadertoy(
+  override fetchShadertoySource(
     idOrUrl: string,
     apiKey: string,
-  ): Promise<{ bundle: Bundle; warnings: string[] }> {
-    return this.post<{ bundle: Bundle; warnings: string[] }>('/import/shadertoy', {
-      idOrUrl,
-      apiKey,
-    });
+    signal?: AbortSignal,
+  ): Promise<{ sourceId: string; source: unknown }> {
+    return this.request(
+      abortable(
+        this.http.post<{ sourceId: string; source: unknown }>(
+          this.url('/import/shadertoy/source'),
+          { idOrUrl, apiKey },
+        ),
+        signal,
+      ),
+    );
+  }
+
+  override async fetchShadertoyAsset(path: string, signal?: AbortSignal): Promise<Uint8Array> {
+    const buffer = await this.request(
+      abortable(
+        this.http.get(this.url('/import/shadertoy/asset'), {
+          params: { path },
+          responseType: 'arraybuffer',
+        }),
+        signal,
+      ),
+    );
+    return new Uint8Array(buffer);
   }
 
   // --- Textures -------------------------------------------------------------

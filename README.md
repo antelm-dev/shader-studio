@@ -32,8 +32,9 @@ last valid version running and places compiler diagnostics in the editor.
   on desktop or PostgreSQL on the web, with transactional writes and portable exports.
 - **Portable by design** — export one shader or the complete collection to a
   versioned JSON bundle and import it elsewhere.
-- **Wallpaper Engine HTML** — export the current shader as one self-contained,
-  live WebGL document and drag it directly into Wallpaper Engine.
+- **Official plugins** — import from Shadertoy and export to Wallpaper Engine
+  with two packages from **Plugins → Available**; they run in the isolated
+  plugin sandbox, and the app has no hidden built-in copy of either.
 - **Interactive previews** — pointer velocity, click ripples, pause, screenshots,
   a configurable post-processing chain (Bloom, Vignette), render scaling, and
   texture inputs are built in.
@@ -805,27 +806,57 @@ UI asks before it overwrites.
 Bundles are validated on the way in, and a bundle with a broken id but a usable
 name is recovered rather than rejected — hand-edited files are expected.
 
-### Wallpaper Engine HTML
+### Official plugins: Shadertoy Import and Wallpaper Engine Export
 
-**Import & export → Export Wallpaper Engine HTML…** downloads one standalone
-`.html` file. The desktop app creates a dedicated project folder containing
-`index.html`; after a web download, put the HTML in its own folder yourself. Then
-drag `index.html` onto Wallpaper Engine's **Create Wallpaper** target. This matters
-because Wallpaper Engine copies the selected file's whole directory. The document
-contains its WebGL runtime, composed Image and buffer passes, current parameter
-values, and base64-embedded channel textures; it has no CDN or network dependency.
+Importing from Shadertoy and exporting to Wallpaper Engine are plugins. Both
+ship with each release and are listed under **Plugins → Available**; install
+one (it arrives switched off), switch it on, and use it from its card under
+**Installed**. The old shortcuts — **Import from Shadertoy…**, the New shader
+dialog's Shadertoy button and **Export to Wallpaper Engine…** — lead to that card,
+or run the exporter directly when it is on. Removing a plugin never touches a
+shader it imported. Plugin authors: see [`plugins/official/README.md`](plugins/official/README.md).
 
-Time, resolution, pointer velocity, click ripples, texture sampling, fixed/scaled
-buffer resolutions, and multipass feedback are supported. The post-processing
-chain (Bloom, Vignette) is not currently reproduced by the standalone runtime,
-and the export reports one generic compatibility warning whenever the source
-shader has any post-processing effect enabled.
+**Shadertoy Import** (`dev.shadergrove.shadertoy`) creates a new shader either
+from a Shadertoy URL or ID with your own API key — the Image pass, Common,
+buffers with feedback, channel wiring, samplers and up to four textures — or
+from one pasted Image pass. Your key is kept in this app's preferences and sent
+only to Shadergrove's own server (or the desktop main process), which fetches the
+shader from `www.shadertoy.com` and nothing else; it never reaches the plugin.
+Sound and cubemap passes and keyboard, video, webcam, music, microphone, volume
+and cubemap inputs are dropped with a warning, as before. Imported content keeps
+its author's rights and licence.
 
-Shader controls are exported with stable Wallpaper Engine property keys. Their
-current values work immediately. To expose a control in Wallpaper Engine's user
-interface, add a matching property under **Edit → Change Project settings**:
-Slider for number/select, Checkbox for boolean, or Color for color. The generated
-HTML contains the key mapping in `window.__SHADER_STUDIO_WALLPAPER__.controls`.
+**Wallpaper Engine Export** (`dev.shadergrove.wallpaper-engine`) exports the
+open shader as it is — unsaved edits included, nothing saved — as a Wallpaper
+Engine web-wallpaper project:
+
+- `index.html` — a live WebGL player with the composed Image and buffer passes,
+  current parameter values and base64-embedded textures; no CDN or network use.
+- `project.json` — `"type": "web"`, `"file": "index.html"`, and one user
+  property per control: Slider for number, Checkbox (`bool`) for boolean, Color
+  for colour and Combo for select, keyed `ss<key>` with the draft's values as
+  defaults. The page's `wallpaperPropertyListener` reads the same keys.
+
+In the browser the project downloads as `<name>.zip` holding one `<name>/`
+folder; extract it. The desktop app asks for a parent folder and creates
+`<name>/` inside it (`<name>-2/`… if taken; an existing folder is never
+overwritten, and it only appears once every file is written). In Wallpaper
+Engine, open the editor, choose **Create Wallpaper** and select `index.html` from
+that folder. Time, resolution, pointer velocity, click ripples, texture sampling,
+fixed/scaled buffer resolutions and multipass feedback are supported; the
+post-processing chain (Bloom, Vignette) is not reproduced, and the export says so
+whenever the shader has a post effect enabled.
+
+> **Not yet verified in Wallpaper Engine itself.** Whether Wallpaper Engine keeps
+> the supplied `project.json` properties when it imports the folder, rather than
+> writing its own, has not been confirmed on an installed copy. If it does not,
+> the wallpaper still renders with the exported values; add the properties under
+> **Edit → Change Project settings** with the keys from `project.json`.
+
+**Rolling back.** Disable or remove either plugin from Plugins at any time; its
+shaders stay. The HTTP `POST /api/import/shadertoy` and desktop
+`shader.import-shadertoy` IPC conversions remain for other clients, running the
+same converter host-side without any plugin code.
 
 ---
 
@@ -859,6 +890,9 @@ Readiness failures return `503` with a generic `internal` error.
 | `GET`    | `/api/shaders/:id/export`            | Export one                                      |
 | `GET`    | `/api/export`                        | Export everything                               |
 | `POST`   | `/api/import`                        | Import a bundle                                 |
+| `POST`   | `/api/import/shadertoy`              | Convert a Shadertoy shader to a bundle          |
+| `POST`   | `/api/import/shadertoy/source`       | Shadertoy JSON for the Shadertoy plugin         |
+| `GET`    | `/api/import/shadertoy/asset`        | One Shadertoy texture for the Shadertoy plugin  |
 
 Preset values are sanitized against the shader's schema on save, so a preset can
 never carry a value for a control that does not exist.
@@ -964,6 +998,9 @@ pnpm test
 - **`editor/glsl-format.spec.ts`** — indentation depth, braces that are only
   part of a comment, and idempotence.
 - **`rendering/shadertoy-import.spec.ts`** — the Shadertoy source rewrite.
+- **`plugins/shadertoy-plugin.spec.ts`, `plugins/wallpaper-plugin.spec.ts`** —
+  the official packages as shipped, through the real plugin host, against the
+  parity fixtures in `plugins/official/*/fixtures`.
 
 ---
 
@@ -977,8 +1014,9 @@ pnpm test
   deletion in both directions.
 - **No public shader publishing or Explore feed.** Web libraries are private to
   their accounts, alongside shared read-only example templates.
-- **Plugins are a sandbox prototype.** The isolated Worker host is exercised by
-  smoke tests; there is no user-facing plugin manager or stable extension API.
+- **Plugins are local and official only.** Packages come from a file or from the
+  catalogue that ships with the release; there is no hosted marketplace,
+  publisher signing or automatic update, and the protocol is versioned but young.
 - **MCP production setup is explicit.** Packaged builds need application
   configuration to enable the bridge; there is no pairing screen yet.
 - **Bloom and Vignette are the only built-in post effects**, at most one

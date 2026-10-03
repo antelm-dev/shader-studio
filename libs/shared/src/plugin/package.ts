@@ -29,11 +29,26 @@ import { LIMITS } from '../validate/limits';
 import { isCleanString, isRecord } from '../validate/primitives';
 import { fail, ok, type Result } from '../validate/result';
 import { CONTRIBUTION_ID_PATTERN, PACKAGE_ID_PATTERN } from './ids';
+import {
+  validateProjectContributionFields,
+  type ProjectExporterContribution,
+  type ProjectImporterContribution,
+} from './project';
 import { validateThemeFields, type ThemeContribution } from './themes';
 
 export * from './themes';
+export * from './project';
+export * from './texture-requests';
+export * from './wallpaper-web';
+export * from './catalogue';
 
-export const PLUGIN_PROTOCOL_VERSION = 1;
+/** The newest protocol this host speaks. */
+export const PLUGIN_PROTOCOL_VERSION = 2;
+/**
+ * Every protocol this host accepts. Protocol 1 packages keep working
+ * unchanged; protocol 2 adds `projectImporter`/`projectExporter` (see `project`).
+ */
+export const SUPPORTED_PLUGIN_PROTOCOLS: readonly number[] = [1, 2];
 
 const KiB = 1024;
 const MiB = 1024 * KiB;
@@ -56,7 +71,16 @@ export const PLUGIN_LIMITS = {
   callTimeoutMs: 10_000,
 } as const;
 
-export type PluginContributionKind = 'effect' | 'importer' | 'exporter' | 'theme';
+export type PluginContributionKind =
+  | 'effect'
+  | 'importer'
+  | 'exporter'
+  | 'theme'
+  | 'projectImporter'
+  | 'projectExporter';
+
+/** Kinds that exist only from protocol 2 on. */
+const PROTOCOL_2_KINDS: readonly PluginContributionKind[] = ['projectImporter', 'projectExporter'];
 
 interface ContributionBase {
   id: string;
@@ -95,11 +119,16 @@ export type PluginContribution =
   | EffectContribution
   | ImporterContribution
   | ExporterContribution
-  | ThemeContribution;
+  | ThemeContribution
+  | ProjectImporterContribution
+  | ProjectExporterContribution;
 
 /** The kinds whose work runs as JS in the plugin Worker, and so need `code`. */
 export const isCodeContribution = (contribution: PluginContribution): boolean =>
-  contribution.kind === 'importer' || contribution.kind === 'exporter';
+  contribution.kind === 'importer' ||
+  contribution.kind === 'exporter' ||
+  contribution.kind === 'projectImporter' ||
+  contribution.kind === 'projectExporter';
 
 export interface PluginManifest {
   id: string;
@@ -232,7 +261,7 @@ const MANIFEST_KEYS = [
   'license',
   'contributions',
 ];
-const CONTRIBUTION_KEYS: Record<Exclude<PluginContributionKind, 'theme'>, string[]> = {
+const CONTRIBUTION_KEYS: Record<'effect' | 'importer' | 'exporter', string[]> = {
   effect: ['kind', 'id', 'name', 'controls'],
   importer: [
     'kind',
@@ -295,7 +324,9 @@ export function validatePluginPackage(input: unknown): Result<PluginPackage> {
   const needsCode = manifest.value.contributions.some(isCodeContribution);
   if (needsCode && !code)
     return fail('package.code is required by importer/exporter contributions');
-  if (!needsCode && code !== undefined) return fail('package.code is only for importer/exporter');
+  if (!needsCode && code !== undefined) {
+    return fail('package.code is only for importer/exporter contributions');
+  }
 
   const glslInput = input['glsl'] ?? {};
   if (!isRecord(glslInput)) return fail('package.glsl must be an object');
@@ -335,9 +366,12 @@ function validateManifest(input: unknown): Result<PluginManifest> {
   if (typeof version !== 'string' || !VERSION_PATTERN.test(version)) {
     return fail('manifest.version must be a semantic version like 1.0.0');
   }
-  if (protocolVersion !== PLUGIN_PROTOCOL_VERSION) {
+  if (
+    typeof protocolVersion !== 'number' ||
+    !SUPPORTED_PLUGIN_PROTOCOLS.includes(protocolVersion)
+  ) {
     return fail(
-      `manifest.protocolVersion ${String(protocolVersion)} is not supported (this app speaks ${PLUGIN_PROTOCOL_VERSION})`,
+      `manifest.protocolVersion ${String(protocolVersion)} is not supported (this app speaks ${SUPPORTED_PLUGIN_PROTOCOLS.join(' and ')})`,
     );
   }
   if (typeof appVersionRange !== 'string' || parseRange(appVersionRange) === null) {
@@ -363,6 +397,11 @@ function validateManifest(input: unknown): Result<PluginManifest> {
   for (const [index, entry] of contributions.entries()) {
     const result = validateContribution(entry, `manifest.contributions[${index}]`);
     if (!result.ok) return result;
+    if (protocolVersion < 2 && PROTOCOL_2_KINDS.includes(result.value.kind)) {
+      return fail(
+        `manifest.contributions[${index}].kind "${result.value.kind}" needs protocolVersion 2`,
+      );
+    }
     if (seen.has(result.value.id)) {
       return fail(`manifest.contributions[${index}].id "${result.value.id}" is duplicated`);
     }
@@ -385,12 +424,19 @@ function validateManifest(input: unknown): Result<PluginManifest> {
 function validateContribution(input: unknown, at: string): Result<PluginContribution> {
   if (!isRecord(input)) return fail(`${at} must be an object`);
   const kind = input['kind'];
-  if (kind !== 'effect' && kind !== 'importer' && kind !== 'exporter' && kind !== 'theme') {
+  if (
+    kind !== 'effect' &&
+    kind !== 'importer' &&
+    kind !== 'exporter' &&
+    kind !== 'theme' &&
+    kind !== 'projectImporter' &&
+    kind !== 'projectExporter'
+  ) {
     return fail(
-      `${at}.kind "${String(kind)}" is not supported (effect, importer, exporter or theme)`,
+      `${at}.kind "${String(kind)}" is not supported (effect, importer, exporter, theme, projectImporter or projectExporter)`,
     );
   }
-  if (kind !== 'theme') {
+  if (kind === 'effect' || kind === 'importer' || kind === 'exporter') {
     const unknownKey = firstUnknownKey(input, CONTRIBUTION_KEYS[kind]);
     if (unknownKey) return fail(`${at}.${unknownKey} is not a known field`);
   }
@@ -404,6 +450,9 @@ function validateContribution(input: unknown, at: string): Result<PluginContribu
   const base = { id, name: name.value };
 
   if (kind === 'theme') return validateThemeFields(input, at, base);
+  if (kind === 'projectImporter' || kind === 'projectExporter') {
+    return validateProjectContributionFields(input, at, base);
+  }
 
   if (kind === 'effect') {
     const controls = controlList(input['controls'], `${at}.controls`, PLUGIN_LIMITS.effectControls);
@@ -516,8 +565,13 @@ function parseRange(range: string): { op: string; version: Triple }[] | null {
 
 /** Whether the package targets this app release. Independent of `protocolVersion`. */
 export function isPluginCompatible(manifest: PluginManifest, appVersion: string): boolean {
+  return isAppVersionInRange(manifest.appVersionRange, appVersion);
+}
+
+/** Whether `appVersion` satisfies an `appVersionRange` such as `>=1.4.0 <2.0.0`. */
+export function isAppVersionInRange(appVersionRange: string, appVersion: string): boolean {
   const app = triple(appVersion);
-  const range = parseRange(manifest.appVersionRange);
+  const range = parseRange(appVersionRange);
   if (!app || !range) return false;
   return range.every(({ op, version }) => {
     const order = compare(app, version);

@@ -33,6 +33,11 @@
                 "glob": "plugin-sandbox.js",
                 "input": "src",
                 "output": "/"
+              },
+              {
+                "glob": "*.json",
+                "input": "src/plugins",
+                "output": "/plugins"
               }
             ],
             "styles": [
@@ -132,6 +137,11 @@
                 "glob": "plugin-sandbox.js",
                 "input": "src",
                 "output": "/"
+              },
+              {
+                "glob": "*.json",
+                "input": "src/plugins",
+                "output": "/plugins"
               }
             ],
             "styles": [
