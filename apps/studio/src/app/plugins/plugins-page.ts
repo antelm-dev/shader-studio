@@ -1,10 +1,11 @@
-import { NgTemplateOutlet } from '@angular/common';
+import { NgTemplateOutlet, isPlatformBrowser } from '@angular/common';
 import {
   Component,
   ElementRef,
   afterNextRender,
   computed,
   effect,
+  PLATFORM_ID,
   inject,
   signal,
   untracked,
@@ -39,7 +40,7 @@ import { Preferences } from '../prefs/preferences';
 import { PAGE_STYLES } from '../publications/page';
 import { AppThemes } from '../themes/app-themes';
 import { ShaderStore } from '../workspace/shader-store';
-import { EffectAdoption, type AdoptionResult } from './effect-adoption';
+import { EffectAdoption, adoptionMessage, type AdoptionResult } from './effect-adoption';
 import { HostAdapters, type ProviderField } from './host-adapters';
 import { PluginCatalogueService } from './plugin-catalogue';
 import {
@@ -817,7 +818,10 @@ export class PluginsPage {
     effect(() => {
       this.installations.plugins();
       this.available();
-      if (this.focus() && !this.scrolled) untracked(() => setTimeout(() => this.scrollToFocus()));
+      // Only in the browser: a server render has no page to scroll (nor `CSS`).
+      if (this.focus() && !this.scrolled && isPlatformBrowser(this.platform)) {
+        untracked(() => setTimeout(() => this.scrollToFocus()));
+      }
     });
   }
 
@@ -1023,6 +1027,7 @@ export class PluginsPage {
   }
 
   private scrolled = false;
+  private readonly platform = inject(PLATFORM_ID);
 
   private scrollToFocus(): void {
     const id = this.focus();
@@ -1215,31 +1220,8 @@ export class PluginsPage {
   }
 
   private report(result: AdoptionResult, name: string): void {
-    if (result.ok) {
-      this.say('plugins.added', { name });
-      return;
-    }
-    switch (result.reason) {
-      case 'no-shader':
-        this.say('plugins.noShader', {}, true);
-        return;
-      case 'chain-full':
-        this.say('plugins.chainFull', {}, true);
-        return;
-      case 'no-renderer':
-        this.say('plugins.noRenderer', {}, true);
-        return;
-      case 'compile': {
-        const first = result.diagnostics[0];
-        const message = first
-          ? first.line > 0
-            ? `${first.line}: ${first.message}`
-            : first.message
-          : '';
-        this.say('plugins.compileFailed', { message }, true);
-        return;
-      }
-    }
+    const { key, params, error } = adoptionMessage(result, name);
+    this.say(key, params, error);
   }
 
   private async run(key: string, action: () => Promise<void>): Promise<void> {

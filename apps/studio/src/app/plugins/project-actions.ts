@@ -64,7 +64,7 @@ export class ProjectPluginActions {
   private readonly store = inject(ShaderStore);
   private readonly desktop = inject(DesktopPlatform);
   private readonly i18n = inject(I18n);
-  // Resolved on use: the workspace verbs reach back here for their plugin entry points.
+  // Resolved on use: the workspace opens dialogs that offer these importers in turn.
   private readonly injector = inject(Injector);
 
   private readonly runningSignal = signal<RunningProjectAction | null>(null);
@@ -89,16 +89,6 @@ export class ProjectPluginActions {
       ({ contribution }) => this.adapters.runtime(contribution.runtime) !== null,
     ),
   );
-
-  /** The first active importer using a provider, e.g. `shadertoy-api/v1`. */
-  importerFor(provider: string): ProjectContributionRef<ProjectImporterContribution> | null {
-    return this.importers().find(({ contribution }) => contribution.provider === provider) ?? null;
-  }
-
-  /** The first active exporter for a runtime, e.g. `wallpaper-web/v1`. */
-  exporterFor(runtime: string): ProjectContributionRef<ProjectExporterContribution> | null {
-    return this.exporters().find(({ contribution }) => contribution.runtime === runtime) ?? null;
-  }
 
   cancel(): void {
     this.cancelCurrent?.abort(new Error('Cancelled'));

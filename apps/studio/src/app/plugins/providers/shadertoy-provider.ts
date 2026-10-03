@@ -20,6 +20,7 @@ export class ShadertoyApiProvider implements SourceProvider {
   private readonly api = inject(ShaderApi);
 
   readonly id = 'shadertoy-api/v1' as const;
+  readonly command = { label: 'action.importShadertoy', icon: 'public' } as const;
   readonly fields = [
     {
       key: 'idOrUrl',

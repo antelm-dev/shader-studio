@@ -54,7 +54,7 @@ import { ShaderBrowser } from './ui/browser/shader-browser';
 import { TransportBar } from './ui/layout/transport-bar';
 import { StartupCoordinator } from './workspace/startup-coordinator';
 import { WorkspaceActions } from './ui/workspace-actions';
-import { PluginEntryPoints } from './plugins/plugin-entry-points';
+import { PluginCommands } from './plugins/plugin-commands';
 import { I18n, LANGUAGE_OPTIONS, type AppLocale } from './i18n/i18n';
 import { TranslatePipe } from './i18n/translate.pipe';
 import { AuthService } from './auth/auth.service';
@@ -101,7 +101,7 @@ export class App {
   protected readonly preferences = inject(Preferences);
   protected readonly themes = inject(AppThemes);
   protected readonly workspace = inject(WorkspaceActions);
-  private readonly pluginEntries = inject(PluginEntryPoints);
+  private readonly pluginCommands = inject(PluginCommands);
   protected readonly desktop = inject(DesktopPlatform);
   protected readonly status = inject(DocumentStatus);
   protected readonly commands = inject(MenuCommands);
@@ -297,20 +297,19 @@ export class App {
     this.commands.duplicateShader,
   ];
 
-  protected readonly importExportCommands: readonly MenuCommand[] = [
+  /**
+   * The file commands, with what the active plugins add in between: their
+   * importers after the app's own, their exporters after Export shader. A
+   * plugin that is missing or switched off adds nothing.
+   */
+  protected readonly importExportCommands = computed<readonly MenuCommand[]>(() => [
     this.commands.import('rename', 'action.importShader'),
     this.commands.import('overwrite', 'action.importReplace'),
-    {
-      id: 'import-shadertoy',
-      icon: () => 'public',
-      label: () => this.i18n.t('action.importShadertoy'),
-      // Opens the enabled Shadertoy importer plugin in Plugins, or Plugins to install it.
-      action: () => void this.pluginEntries.openShadertoyImport(),
-    },
+    ...this.pluginCommands.imports(),
     this.commands.exportShader,
-    this.commands.exportWallpaper,
+    ...this.pluginCommands.exports(),
     this.commands.exportAll,
-  ];
+  ]);
 
   private readonly deleteShader: MenuCommand = {
     id: 'delete-shader',
@@ -321,13 +320,13 @@ export class App {
   };
 
   /** The context menu on the document title. It only opens over a shader. */
-  protected readonly documentCommands: readonly MenuCommand[] = [
+  protected readonly documentCommands = computed<readonly MenuCommand[]>(() => [
     this.commands.renameShader,
     this.commands.duplicateShader,
     this.commands.exportShader,
-    this.commands.exportWallpaper,
+    ...this.pluginCommands.exports(),
     this.deleteShader,
-  ];
+  ]);
 
   /** What the Settings section keeps behind submenus and dialogs, flattened for the palette. */
   private readonly settingsCommands: readonly MenuCommand[] = [
@@ -373,12 +372,12 @@ export class App {
         { label: this.i18n.t('menu.view'), commands: this.viewCommands },
         {
           label: this.i18n.t('menu.shader'),
-          commands: [...this.shaderCommands, this.deleteShader],
+          commands: [...this.shaderCommands, this.deleteShader, ...this.pluginCommands.effects()],
         },
-        { label: this.i18n.t('menu.importExport'), commands: this.importExportCommands },
+        { label: this.i18n.t('menu.importExport'), commands: this.importExportCommands() },
         {
           label: this.i18n.t('menu.settings'),
-          commands: [...this.settingsCommands, ...this.pluginThemeCommands()],
+          commands: [...this.settingsCommands, ...this.pluginCommands.themeCommands()],
         },
       ],
     };
@@ -510,16 +509,6 @@ export class App {
 
   protected setLanguage(language: AppLocale): void {
     this.i18n.setLocale(language);
-  }
-
-  /** The installed themes, as they are when the palette opens. */
-  private pluginThemeCommands(): MenuCommand[] {
-    return this.themes.entries().map((entry) => ({
-      id: `theme-${entry.ref}`,
-      icon: () => 'palette',
-      label: () => `${this.i18n.t('menu.theme')}: ${entry.theme.name}`,
-      action: () => this.themes.selectPlugin(entry.ref),
-    }));
   }
 
   protected toggleBrowser(): void {

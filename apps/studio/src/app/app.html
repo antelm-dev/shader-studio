@@ -297,8 +297,13 @@
   </mat-toolbar>
 
   <mat-menu #shaderMenu="matMenu">
-    @for (item of documentCommands; track item.id) {
-    <button mat-menu-item type="button" (click)="item.action()">
+    @for (item of documentCommands(); track item.id) {
+    <button
+      mat-menu-item
+      type="button"
+      [disabled]="item.disabled?.() ?? false"
+      (click)="item.action()"
+    >
       <mat-icon>{{ item.icon() }}</mat-icon>
       <span>{{ item.label() }}</span>
     </button>
@@ -378,7 +383,7 @@
     <mat-divider />
 
     <h3 class="menu-section">{{ 'menu.importExport' | translate }}</h3>
-    @for (item of importExportCommands; track item.id) {
+    @for (item of importExportCommands(); track item.id) {
     <button
       mat-menu-item
       type="button"

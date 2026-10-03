@@ -811,10 +811,14 @@ name is recovered rather than rejected — hand-edited files are expected.
 Importing from Shadertoy and exporting to Wallpaper Engine are plugins. Both
 ship with each release and are listed under **Plugins → Available**; install
 one (it arrives switched off), switch it on, and use it from its card under
-**Installed**. The old shortcuts — **Import from Shadertoy…**, the New shader
-dialog's Shadertoy button and **Export to Wallpaper Engine…** — lead to that card,
-or run the exporter directly when it is on. Removing a plugin never touches a
-shader it imported. Plugin authors: see [`plugins/official/README.md`](plugins/official/README.md).
+**Installed**. Menu entries follow the plugins that are switched on: while a
+plugin is missing or off, nothing offers it; once it is on, **Import from
+Shadertoy…** (in Import & export, the desktop File menu and the New shader
+dialog) leads to its card, and **Export to Wallpaper Engine…** (also on the
+shader's own menu) exports the open shader directly, dimmed while none is open.
+Every other plugin's project importers and exporters, effects and themes are
+offered the same way, in the command palette too. Removing a plugin never
+touches a shader it imported. Plugin authors: see [`plugins/official/README.md`](plugins/official/README.md).
 
 **Shadertoy Import** (`dev.shadergrove.shadertoy`) creates a new shader either
 from a Shadertoy URL or ID with your own API key — the Image pass, Common,

@@ -1,4 +1,4 @@
-import { Injectable, Injector, inject } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 
@@ -21,7 +21,6 @@ import type { PromptDialogData, PromptDialogResult } from './dialogs/prompt-dial
 import type { UnsavedChoice } from './dialogs/unsaved-changes-dialog';
 import type { ExplorerContextCommand, ExplorerReorderIntent } from './file-explorer/contract';
 import { OpenDocuments } from './editor/open-documents';
-import { PluginEntryPoints } from '../plugins/plugin-entry-points';
 
 const ABOUT_DIALOG_ID = 'about-shader-studio';
 const SHORTCUTS_DIALOG_ID = 'keyboard-shortcuts';
@@ -45,8 +44,6 @@ export class WorkspaceActions {
   private readonly auth = inject(AuthService);
   private readonly sync = inject(DesktopSync);
   private readonly account = inject(DesktopAccount);
-  // Resolved on use: the plugin entry points reach back here for the unsaved-changes guard.
-  private readonly injector = inject(Injector);
   private transitionInFlight: Promise<boolean> | null = null;
 
   guardedTransition(action: () => void | Promise<void>): Promise<boolean> {
@@ -195,9 +192,9 @@ export class WorkspaceActions {
         .afterClosed(),
     );
     if (!result) return;
-    if (result.action === 'shadertoy') {
-      // Importing from Shadertoy is the Shadertoy plugin's: its form lives in Plugins.
-      await this.injector.get(PluginEntryPoints).openShadertoyImport();
+    if (result.action === 'plugin') {
+      // A plugin importer chosen instead: its own command takes it from here.
+      result.command.action();
       return;
     }
     await this.guardedTransition(() => this.store.create(result.name));

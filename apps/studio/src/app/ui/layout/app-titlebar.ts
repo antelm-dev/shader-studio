@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -12,6 +12,7 @@ import { ShaderStore } from '../../workspace/shader-store';
 import { I18n } from '../../i18n/i18n';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { DocumentStatus } from '../editor/document-status';
+import { PluginCommands } from '../../plugins/plugin-commands';
 import { MenuCommands, type MenuCommand } from '../menu-commands';
 import { SurfaceLayoutService } from '../../surfaces';
 import { WorkspaceActions } from '../workspace-actions';
@@ -94,7 +95,7 @@ import { WorkspaceActions } from '../workspace-actions';
         </button>
       }
       <mat-divider />
-      @for (item of importExportCommands; track item.id) {
+      @for (item of importExportCommands(); track item.id) {
         <button
           mat-menu-item
           type="button"
@@ -329,6 +330,7 @@ export class AppTitlebar {
   protected readonly status = inject(DocumentStatus);
   protected readonly i18n = inject(I18n);
   private readonly commands = inject(MenuCommands);
+  private readonly pluginCommands = inject(PluginCommands);
   private readonly layout = inject(SurfaceLayoutService);
 
   protected readonly themes = inject(AppThemes);
@@ -340,13 +342,15 @@ export class AppTitlebar {
 
   protected readonly newCommands: readonly MenuCommand[] = [this.commands.newShader];
 
-  protected readonly importExportCommands: readonly MenuCommand[] = [
+  /** The app's file commands and, between them, what the active plugins add. */
+  protected readonly importExportCommands = computed<readonly MenuCommand[]>(() => [
     this.commands.import('rename', 'action.import'),
     this.commands.import('overwrite', 'action.importReplace'),
+    ...this.pluginCommands.imports(),
     this.commands.exportShader,
-    this.commands.exportWallpaper,
+    ...this.pluginCommands.exports(),
     this.commands.exportAll,
-  ];
+  ]);
 
   protected readonly viewCommands: readonly MenuCommand[] = [
     {
